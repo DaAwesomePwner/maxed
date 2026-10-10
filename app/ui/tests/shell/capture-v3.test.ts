@@ -1,0 +1,123 @@
+import { fireEvent, render, screen } from '@testing-library/svelte';
+import { afterEach, expect, it, vi } from 'vitest';
+import { tick } from 'svelte';
+import LiveStatusCard from '../../src/lib/shell/LiveStatusCard.svelte';
+import { railView } from '../../src/lib/shell/rail';
+import { setDebugMode } from '../../src/lib/debug/debug';
+import { homeSnapshot } from '../home-v2/fixtures';
+
+afterEach(() => { vi.useRealTimers(); setDebugMode(false); });
+it('has one toggle, counts observed Live time, pauses recovery, and keeps diagnostics debug-only', async () => {
+  vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+  vi.setSystemTime(new Date('2030-01-01T12:00:00Z'));
+  const intervals = vi.spyOn(globalThis, 'setInterval');
+  const snapshot = homeSnapshot(), view = railView(snapshot);
+  const onStart = vi.fn(), onStop = vi.fn(), onRetry = vi.fn();
+  const props = { view, capture: snapshot.capture, busy: false, error: '', onStart, onStop, onRetry };
+  const page = render(LiveStatusCard, props); await tick();
+  expect(screen.getAllByRole('button')).toHaveLength(1);
+  await fireEvent.click(screen.getByRole('button', { name: 'Stop Capture' }));
+  expect(onStop).toHaveBeenCalledOnce();
+  for (let i = 0; i < 4; i++) {
+    await page.rerender({ ...props, capture: { ...snapshot.capture }, view: railView({ ...snapshot, at: String(6000000 + i * 250000) }) });
+    await vi.advanceTimersByTimeAsync(250); await tick();
+  }
+  await vi.advanceTimersByTimeAsync(64000); await tick();
+  expect(intervals).toHaveBeenCalledTimes(1);
+  expect(screen.getByLabelText('Capture live elapsed').textContent).toBe('1:05');
+  await page.rerender({ ...props, capture: { ...snapshot.capture, state: 'Recovering' } });
+  await vi.advanceTimersByTimeAsync(5000); await tick();
+  expect(screen.getByLabelText('Capture live elapsed').textContent).toBe('1:05');
+  expect(screen.queryByText('Details')).toBeNull();
+  setDebugMode(true); await tick();
+  expect(screen.getByText('Details')).toBeTruthy();
+  expect(screen.getByText(snapshot.capture.message)).toBeTruthy();
+  await page.rerender({ ...props, capture: { ...snapshot.capture, state: 'Stopped' } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Capture' }));
+  expect(onStart).toHaveBeenCalledOnce();
+  expect(screen.queryByLabelText('Capture live elapsed')).toBeNull();
+});
+it('pauses Live elapsed while the view is stale and resumes with the partial second preserved', async () => {
+  vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+  vi.setSystemTime(new Date('2030-01-01T12:00:00Z'));
+  const snapshot = homeSnapshot();
+  const view = railView(snapshot);
+  const page = render(LiveStatusCard, { view, capture: snapshot.capture, busy: false, error: '',
+    onStart: vi.fn(), onStop: vi.fn(), onRetry: vi.fn() });
+  await tick();
+  const elapsed = () => screen.getByLabelText('Capture live elapsed').textContent;
+  await vi.advanceTimersByTimeAsync(1750); await tick();
+  expect(elapsed()).toBe('0:01');
+  await page.rerender({ view: { ...view, stale: true } });
+  expect(screen.getByRole('status').textContent).toBe('Paused');
+  await vi.advanceTimersByTimeAsync(5000); await tick();
+  expect(elapsed()).toBe('0:01');
+  expect(vi.getTimerCount()).toBe(0);
+  await page.rerender({ view });
+  expect(screen.getByRole('status').textContent).toBe('Live');
+  expect(elapsed()).toBe('0:01');
+  await vi.advanceTimersByTimeAsync(1000); await tick();
+  expect(elapsed()).toBe('0:02');
+  await vi.advanceTimersByTimeAsync(250);
+  await page.rerender({ view: { ...view, stale: true } });
+  expect(elapsed()).toBe('0:03');
+  page.unmount();
+});
+
+it('retains busy, preview, recoverable failure, subscription retry and permanent-failure guards', async () => {
+  const snapshot = homeSnapshot();
+  const onStart = vi.fn(), onStop = vi.fn(), onRetry = vi.fn();
+  const props = { view: railView(snapshot), capture: snapshot.capture, busy: false, error: '', preview: false, onStart, onStop, onRetry };
+  const page = render(LiveStatusCard, { ...props, busy: true });
+  await fireEvent.click(screen.getByRole('button')); expect(onStop).not.toHaveBeenCalled();
+  await page.rerender({ ...props, preview: true });
+  await fireEvent.click(screen.getByRole('button')); expect(onStop).not.toHaveBeenCalled();
+  await page.rerender({ ...props, capture: { ...snapshot.capture, state: 'PermissionDenied' } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry Capture' }));
+  expect(onStart).toHaveBeenCalledOnce();
+  await page.rerender({ ...props, capture: null, error: 'Capture status unavailable.' });
+  await fireEvent.click(screen.getByRole('button', { name: 'Reconnect Capture' }));
+  expect(onRetry).toHaveBeenCalledOnce();
+  await page.rerender({ ...props, capture: { ...snapshot.capture, state: 'Failed', message: 'Capture worker failed; restart Maxed' } });
+  expect(screen.getByText('Restart Maxed')).toBeTruthy();
+  expect(screen.getAllByRole('button')).toHaveLength(1);
+  expect(screen.getByRole('button').getAttribute('aria-disabled')).toBe('true');
+  await fireEvent.click(screen.getByRole('button'));
+  expect(onStart).toHaveBeenCalledOnce(); expect(onStop).not.toHaveBeenCalled();
+});
+
+it('preserves partial Live seconds across pauses, resets streams and failures, and never clocks preview', async () => {
+  vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+  vi.setSystemTime(new Date('2030-01-01T12:00:00Z'));
+  const snapshot = homeSnapshot();
+  const props = { view: railView(snapshot), capture: snapshot.capture, busy: false, error: '', preview: false,
+    onStart: vi.fn(), onStop: vi.fn(), onRetry: vi.fn() };
+  const page = render(LiveStatusCard, props); await tick();
+  const elapsed = () => screen.getByLabelText('Capture live elapsed').textContent;
+  await vi.advanceTimersByTimeAsync(750);
+  await page.rerender({ capture: { ...snapshot.capture, state: 'WaitingForGame' } });
+  await vi.advanceTimersByTimeAsync(5000); await tick();
+  expect(elapsed()).toBe('0:00');
+  await page.rerender({ capture: snapshot.capture });
+  await vi.advanceTimersByTimeAsync(1250);
+  await page.rerender({ capture: { ...snapshot.capture, state: 'Recovering' } });
+  expect(elapsed()).toBe('0:02');
+  await vi.advanceTimersByTimeAsync(5000); await tick();
+  expect(elapsed()).toBe('0:02');
+  await page.rerender({ ...props, view: railView({ ...snapshot, stream_id: 'replacement' }) });
+  expect(elapsed()).toBe('0:00');
+  await vi.advanceTimersByTimeAsync(1000); await tick();
+  expect(elapsed()).toBe('0:01');
+  await page.rerender({ capture: { ...snapshot.capture, state: 'PermissionDenied' } });
+  expect(screen.queryByLabelText('Capture live elapsed')).toBeNull();
+  await page.rerender({ capture: snapshot.capture });
+  expect(elapsed()).toBe('0:00');
+  await page.rerender({ preview: true });
+  await vi.advanceTimersByTimeAsync(10000); await tick();
+  expect(elapsed()).toBe('—');
+  expect(vi.getTimerCount()).toBe(0);
+  await page.rerender({ preview: false });
+  expect(elapsed()).toBe('0:00');
+  page.unmount();
+  expect(vi.getTimerCount()).toBe(0);
+});

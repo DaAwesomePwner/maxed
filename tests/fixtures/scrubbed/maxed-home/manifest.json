@@ -1,0 +1,60 @@
+{
+  "source_sha256": "fbbf9044a7c913c6594d2648b64f5c9a2556355b272b9f7573e17f3b19437f67",
+  "offset_seconds": 1772949595,
+  "clock": "2026-03-08T05:59:55Z; Chicago midnight occurs at story +5 seconds",
+  "identities": [
+    "DemoHero",
+    "DemoAccount",
+    "DemoAlly",
+    "DemoAllyAccount"
+  ],
+  "credentials": "None. Source requires no HELLO, passwords or tokens.",
+  "cases": [
+    {
+      "name": "complete",
+      "kind": "packet-replay",
+      "cutoff_microseconds": null,
+      "sha256": "f8b4459e90e6100b9464383c258c5ff875746dc06ed71d120ffa9bf74fe13f69",
+      "expectation": "Realm to dungeon to Nexus; 300 dungeon damage, null DPS (under three seconds), one bag, clear"
+    },
+    {
+      "name": "disconnected",
+      "kind": "packet-replay",
+      "cutoff_microseconds": 8030000,
+      "sha256": "96598bab31300e0acbbf3403491deb6959f3393c0b24df02dafc6524a0f37b3b",
+      "expectation": "Packet prefix stopped before bag or victory; terminal partial run"
+    },
+    {
+      "name": "zero-duration",
+      "kind": "packet-replay",
+      "cutoff_microseconds": 6030000,
+      "sha256": "7e3a038f2ec5d4e6ebd0157fc8075f1abb35ea204ec0f6636d2083e882625215",
+      "expectation": "Packet prefix with only first hit; known damage, no elapsed DPS denominator"
+    },
+    {
+      "name": "recovery-missing-identity",
+      "kind": "typed-dto",
+      "expectation": "Midstream/stream-gap issues, unverified self, recovery grace; no claimed decoder coverage"
+    },
+    {
+      "name": "death-after-clear",
+      "kind": "typed-dto",
+      "expectation": "Separate completion and death timestamps; one run and one local death"
+    },
+    {
+      "name": "consecutive-sessions",
+      "kind": "typed-dto",
+      "expectation": "Different session IDs select disjoint runs; no wall-clock session inference"
+    },
+    {
+      "name": "zero-players",
+      "kind": "typed-dto",
+      "expectation": "No self, denominator, rank or share"
+    },
+    {
+      "name": "late-counter-revision",
+      "kind": "decoded-packet-injection",
+      "expectation": "Real decoded base packets omit victory; injected decoded CREATE_SUCCESS counter revises Left to Cleared"
+    }
+  ]
+}

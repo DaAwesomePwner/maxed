@@ -1,0 +1,14 @@
+[package]
+name = "maxed-stream"
+description = "TCP stream reassembly for Maxed passive capture."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+[dependencies]
+[dev-dependencies]
+serde_json.workspace = true
+[dependencies.maxed-types]
+path = "../maxed-types"

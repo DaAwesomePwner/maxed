@@ -1,0 +1,22 @@
+{
+  "base_clock": "1800000000000000",
+  "window": "UTC event date plus six previous UTC dates",
+  "alerts": 11,
+  "personal_bests": 1,
+  "deaths": 2,
+  "death_alerts": 0,
+  "white_bags": 10,
+  "ordinary_fights": 400,
+  "ordinals": {
+    "bag-1292-0": 1,
+    "bag-1293-0": 1,
+    "bag-1292-1": 2,
+    "bag-1292-2": 3,
+    "bag-1292-3": 4,
+    "bag-1292-4": 5,
+    "bag-1292-5": 6,
+    "bag-1292-6": 7,
+    "bag-1293-6": 2,
+    "bag-1292-7": 7
+  }
+}

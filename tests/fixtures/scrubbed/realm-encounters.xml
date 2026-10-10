@@ -1,0 +1,25 @@
+<!-- Hand-authored minimal regression metadata; no sprites, captures or full game assets.
+     Encounter roles and IDs verified against installed client XML on 2026-10-03. -->
+<Objects>
+  <Object type="0x5682" id="New LH Lost Sentry"><DisplayId>Lost Sentry</DisplayId><Class>Character</Class><Enemy/><Encounter terrain="SanguineForest,RunicTundra"/><Labels>ENEMY,MINION,ENCOUNTER,LH Lost Sentry,VETERAN_ENCOUNTER</Labels></Object>
+  <Object type="0xb030" id="LH Lost Sentry"><DisplayId>Lost Sentry</DisplayId><Class>Character</Class><Enemy/><Encounter oldRealmOnly="1"/></Object>
+  <Object type="0x8705" id="Maze Minotaur"><Class>Character</Class><Enemy/><Encounter terrain="Abandoned"/></Object>
+  <Object type="0xbb3a" id="Big Barnacle"><DisplayId>Man-eating Barnacle</DisplayId><Class>Character</Class><Enemy/><Encounter terrain="CoralReefs"/><Labels>ADEPT_ENCOUNTER</Labels></Object>
+  <Object type="0x5dc5" id="Legion General"><Class>Character</Class><Enemy/><Encounter terrain="Abandoned"/></Object>
+  <Object type="0x8706" id="Maze Minotaur Pillar Object"><Class>Character</Class></Object>
+  <Object type="0x8709" id="Maze Minotaur Wall Object"><Class>Character</Class></Object>
+  <Object type="0x8707" id="Maze Minotaur Anchor"><Class>Character</Class></Object>
+  <Object type="0x5dca" id="Legion Centre Anchor"><Class>Character</Class></Object>
+  <Object type="0x5dc6" id="Legion Footsoldier"><Class>Character</Class><Enemy/></Object>
+  <Object type="0x5dc7" id="Legion Major"><Class>Character</Class><Enemy/></Object>
+  <Object type="0xbb3b" id="Barnacle Rock"><DisplayId>Larvae Rock</DisplayId><Class>Character</Class><Enemy/><Labels>ENEMY</Labels></Object>
+  <!-- Legacy variant whose DisplayId differs from its XML id; the current one is allowlisted by name. -->
+  <Object type="0x0d50" id="Lord of the Lost Lands"><DisplayId>Lord of the Lol 0</DisplayId><Class>Character</Class><Enemy/><Encounter oldRealmOnly="1"/></Object>
+  <Object type="0x55ec" id="Synthetic Current Lost Lands"><DisplayId>Lord of the Lost Lands</DisplayId><Class>Character</Class><Enemy/></Object>
+  <!-- Synthetic sentinels exercise the rule independently of the known names. -->
+  <Object type="10" id="Synthetic New Encounter"><Class>Character</Class><Enemy/><Encounter/></Object>
+  <Object type="11" id="Synthetic Encounter Controller"><Class>Character</Class><Enemy/><Encounter/><Invincible/></Object>
+  <Object type="12" id="Synthetic Nested Encounter"><Class>Character</Class><Enemy/><Presentation><Encounter/></Presentation></Object>
+  <Object type="13" id="Synthetic Nonenemy Encounter"><Class>Character</Class><Encounter/></Object>
+  <Object type="14" id="Synthetic Equipment"><Class>Equipment</Class><Enemy/><Encounter/></Object>
+</Objects>

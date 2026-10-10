@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.ico binary
+*.png binary
+*.pcap binary
+*.wav binary
+THIRD-PARTY-NOTICES.md -whitespace
+docs/release/vendor/** -whitespace

@@ -1,0 +1,30 @@
+# Tracked paths left out of the public source snapshot. See
+# scripts/release/Export-PublicSnapshot.ps1 and docs/release/UPDATES.md.
+#
+# One repository-relative path per line. A trailing slash excludes a whole
+# directory. Wildcards are not supported. Every entry must exist in the
+# exported commit, so delete stale entries when their files move or go away.
+# Untracked and ignored files never reach the snapshot, so they need no entry.
+#
+# The snapshot is for reading and building the release. Tests that read an
+# excluded fixture, and the workflow-policy suite, fail there by design.
+
+# Instructions for AI coding agents.
+AGENTS.md
+CLAUDE.md
+
+# Internal design specs and implementation plans.
+docs/superpowers/
+
+# Scrubbed real captures without recorded publication approval
+# (docs/development/fixtures.md). Remove an entry only after approval.
+tests/fixtures/scrubbed/maxed-nexus-key-pop/
+tests/fixtures/scrubbed/maxed-realm-dungeon-return/
+tests/fixtures/scrubbed/maxed-realm-focus/
+tests/fixtures/scrubbed/maxed-realm-plague-doctor/
+tests/fixtures/scrubbed/maxed-shaitan-run/
+
+# CI and dependency automation run only in the private build repository; the
+# public copy is not a place to run signing or open dependency pull requests.
+.github/workflows/
+.github/dependabot.yml

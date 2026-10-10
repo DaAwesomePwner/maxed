@@ -1,0 +1,18 @@
+[package]
+name = "maxed-capture"
+description = "Passive packet capture and adapter selection for Maxed."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true
+crossbeam-channel.workspace = true
+libloading.workspace = true
+[dev-dependencies]
+serde_json.workspace = true
+[dependencies.maxed-types]
+path = "../maxed-types"

@@ -1,0 +1,10 @@
+{
+  "blank_issues_enabled": false,
+  "contact_links": [
+    {
+      "name": "Report a security vulnerability privately",
+      "url": "https://github.com/DaAwesomePwner/maxed/security/advisories/new",
+      "about": "Use a private security advisory instead of a public issue for vulnerabilities or exposed sensitive data."
+    }
+  ]
+}

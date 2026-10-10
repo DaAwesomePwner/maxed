@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "client_fingerprint": "synthetic-maxed-demo-v1",
+  "items": [
+    {
+      "object_type": 256,
+      "name": "Demo Sword",
+      "tier": "UT",
+      "slot_type": 1,
+      "projectiles": [
+        { "index": 0, "min_damage": 100, "max_damage": 100, "armor_piercing": false, "lifetime_millis": 2000 }
+      ],
+      "scaling": null,
+      "sprite_key": null
+    }
+  ],
+  "objects": [
+    { "object_type": 100, "name": "Demo Knight", "is_player": true, "is_boss": false, "is_miniboss": false, "sprite_key": null },
+    { "object_type": 257, "name": "Demo Serpent", "is_player": false, "is_boss": true, "is_miniboss": false, "sprite_key": null },
+    { "object_type": 258, "name": "Demo Realm Foe", "is_player": false, "is_boss": false, "is_miniboss": false, "sprite_key": null }
+  ],
+  "classes": [ { "object_type": 100, "stat_caps": [] } ],
+  "enchants": [ { "id": 1, "name": "Demo Enchant", "description": "Synthetic recorded enchant; no real gameplay effect asserted." } ],
+  "dungeons": [
+    { "name": "Nexus", "aliases": [], "kind": "nexus", "completion_index": null },
+    { "name": "Realm", "aliases": [], "kind": "realm", "completion_index": null },
+    { "name": "Snake Pit", "aliases": [], "kind": "dungeon", "completion_index": 65 }
+  ],
+  "bags": [ { "object_type": 1292, "name": "Demo White Bag", "base_type": 1292, "is_white": true, "rank": 255, "capture": true } ],
+  "sprites": [],
+  "tiles": [],
+  "crucible_bonuses": []
+}

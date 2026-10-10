@@ -1,0 +1,70 @@
+<script lang="ts">
+  import DebugNote from '../debug/DebugNote.svelte';
+  import SpriteImage from '../components/SpriteImage.svelte';
+  import ItemTile from '../components/ItemTile.svelte';
+  import VitalBar from '../components/VitalBar.svelte';
+  import StatPanel from './StatPanel.svelte';
+  import type { SpriteRef } from '../bindings/SpriteRef';
+  import type { RailView } from './rail';
+  let { view, sheetUrl = null, resolveSpriteUrl }: {
+    view: RailView; sheetUrl?: string | null; resolveSpriteUrl?: (sprite: SpriteRef) => string | null;
+  } = $props();
+  const known = (n: number | null | undefined): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
+  let fame = $derived(view.character?.fame);
+  let goal = $derived(view.character?.stats.find(s => s.stat_id === 58)?.value);
+  let hasGoal = $derived(known(goal) && goal > 0);
+  let fameText = $derived(!known(fame) ? '—' : hasGoal ? `${fame}/${goal}` : String(fame));
+  let fameFill = $derived(!known(fame) ? 0 : hasGoal ? fame / goal! * 100 : 100);
+</script>
+
+<section class="compact-hero" aria-label="Character summary">
+  <div class="hero-body" class:stale={view.stale}>
+    <div class="hero-top">
+      <div class="avatar"><SpriteImage sprite={view.sprite} {sheetUrl} fit={60} alt={view.className} /></div>
+      <div class="identity">
+        <h2 class="cname" title={view.name}>{view.name}</h2>
+        <p class="cclass" title={view.character ? `${view.className} · Lv ${view.character.level ?? '—'}` : undefined}><span>{view.character ? view.className : '—'}</span> · Lv {#if view.character?.level == null}{@render unavailable()}{:else}{view.character.level}{/if}</p>
+        <p class="maxed">{#if view.character?.maxed == null}{@render unavailable()}{:else}{view.character.maxed}/8{/if} <span>maxed</span></p>
+      </div>
+    </div>
+    {#if view.character}
+      {#if view.stale}<DebugNote text="Last seen" />{/if}
+      <ul class="equipment" aria-label="Equipment">
+        {#each view.equipment as item (item.slot)}
+          {@const name = item.name ?? item.label}
+          <li data-slot={item.slot} data-item-type={item.itemType} title={name}>
+            <ItemTile sprite={item.sprite} {resolveSpriteUrl} fit={32} alt={name} enchant={item.enchant} />
+          </li>
+        {/each}
+      </ul>
+      <VitalBar kind="fame" label="Fame" text={fameText} fill={fameFill} tone="max" />
+      <StatPanel panel={view.character.stat_panel} stale={view.stale} />
+      {#if view.provisional}<DebugNote text="Unverified identity" />{/if}
+      {#if view.died}<p class="death">Death</p>{/if}
+    {/if}
+  </div>
+</section>
+{#snippet unavailable()}<span aria-hidden="true">—</span><span class="sr-only">Unavailable</span>{/snippet}
+
+<style>
+  .compact-hero { flex: 0 0 auto; min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: var(--hero-radial); --rail-vital-size: 12px; --rail-label-size: 12px; --rail-stat-size: 14px; }
+  .hero-body { display: grid; gap: 5px; min-width: 0; }
+  .hero-top { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: 8px; align-items: center; }
+  .avatar { width: 60px; height: 60px; display: grid; place-items: center; background: #0c0b11; border-radius: 8px; }
+  .identity { min-width: 0; }
+  .cname { overflow: hidden; text-overflow: ellipsis; margin: 0; font-size: 14px; font-weight: 700; white-space: nowrap; }
+  p { margin: 0; }
+  .cclass { overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
+  .maxed { color: var(--gold); font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .maxed span { font-weight: 400; font-size: 11px; color: var(--text-secondary); }
+  .equipment { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+  .equipment li { min-width: 0; height: 40px; display: grid; place-items: center; background: #0c0b11; border: 1px solid var(--border); border-radius: 6px; }
+  .stale { opacity: .7; }
+  .death { color: var(--danger); font-size: 11px; }
+  @media (max-width: 900px) {
+    .compact-hero { padding: 4px; --rail-vital-size: 10px; --rail-label-size: 10px; --rail-stat-size: 11px; }
+    .hero-top { gap: 5px; }
+    .cname { font-size: 10.5px; letter-spacing: -.02em; }
+    .cclass { font-size: 9px; }
+  }
+</style>

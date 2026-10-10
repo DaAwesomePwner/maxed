@@ -1,0 +1,868 @@
+[
+  {
+    "stream_id": "live-fixture",
+    "sequence": "1",
+    "at": "1800000000000000",
+    "event": {
+      "session_updated": {
+        "id": "alerts-session",
+        "started": "1800000000000000",
+        "last_traffic": "1800691200000000",
+        "ended": null,
+        "issues": []
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "2",
+    "at": "1800000000000000",
+    "event": {
+      "character_updated": {
+        "id": "alerts-self",
+        "name": "Demo Knight",
+        "class_id": 100,
+        "level": 20,
+        "maxed": null,
+        "fame": 1250,
+        "stats": [
+          {
+            "stat_id": 20,
+            "value": 50
+          }
+        ],
+        "equipment": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            }
+          }
+        ],
+        "observed_at": "1800000000000000",
+        "identity_verified": true,
+        "died_at": null,
+        "issues": [],
+        "stat_panel": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "3",
+    "at": "1800000180000000",
+    "event": {
+      "fight_ended": {
+        "id": "baseline",
+        "run_id": null,
+        "session_id": "alerts-session",
+        "target_id": 2,
+        "target_generation": 0,
+        "boss_type": 42,
+        "target_type": 300,
+        "max_hp": null,
+        "started": "1800000000000000",
+        "ended": "1800000180000000",
+        "first_hit": "1800000001000000",
+        "last_hit": "1800000002000000",
+        "end_reason": "map_changed",
+        "players": [
+          {
+            "object_id": 1,
+            "player_id": "alerts-self",
+            "name": "Demo Knight",
+            "class_id": 100,
+            "is_local": true,
+            "damage": 100.0,
+            "hits": 2,
+            "biggest_hit": 200.0,
+            "deaths": 0,
+            "dps": 100.0,
+            "share": 1.0,
+            "rank": 1,
+            "sources": [
+              {
+                "item_type": 200,
+                "ability": false,
+                "kind": "weapon",
+                "enchant": {
+                  "state": "missing",
+                  "slots": null,
+                  "applied": null,
+                  "ids": []
+                },
+                "damage": 300.0,
+                "hits": 2,
+                "biggest_hit": 200.0,
+                "estimated": false,
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "total_damage": 300.0,
+        "unattributed_damage": 0.0,
+        "buckets": [
+          {
+            "from": "2000000",
+            "until": "3000000",
+            "total": 100.0,
+            "local": 100.0
+          },
+          {
+            "from": "3000000",
+            "until": "4000001",
+            "total": 200.0,
+            "local": 200.0
+          }
+        ],
+        "complete_capture": true,
+        "issues": [],
+        "kill": null,
+        "target_hp": null,
+        "target_kind": null,
+        "player_series": null,
+        "dps_basis": "player_active_window_v1"
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "4",
+    "at": "1800000180000000",
+    "event": {
+      "fight_ended": {
+        "id": "strict-pb",
+        "run_id": null,
+        "session_id": "alerts-session",
+        "target_id": 2,
+        "target_generation": 0,
+        "boss_type": 42,
+        "target_type": 300,
+        "max_hp": null,
+        "started": "1800000000000000",
+        "ended": "1800000180000000",
+        "first_hit": "1800000001000000",
+        "last_hit": "1800000002000000",
+        "end_reason": "map_changed",
+        "players": [
+          {
+            "object_id": 1,
+            "player_id": "alerts-self",
+            "name": "Demo Knight",
+            "class_id": 100,
+            "is_local": true,
+            "damage": 120.0,
+            "hits": 2,
+            "biggest_hit": 200.0,
+            "deaths": 0,
+            "dps": 120.0,
+            "share": 1.0,
+            "rank": 1,
+            "sources": [
+              {
+                "item_type": 200,
+                "ability": false,
+                "kind": "weapon",
+                "enchant": {
+                  "state": "missing",
+                  "slots": null,
+                  "applied": null,
+                  "ids": []
+                },
+                "damage": 300.0,
+                "hits": 2,
+                "biggest_hit": 200.0,
+                "estimated": false,
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "total_damage": 300.0,
+        "unattributed_damage": 0.0,
+        "buckets": [
+          {
+            "from": "2000000",
+            "until": "3000000",
+            "total": 100.0,
+            "local": 100.0
+          },
+          {
+            "from": "3000000",
+            "until": "4000001",
+            "total": 200.0,
+            "local": 200.0
+          }
+        ],
+        "complete_capture": true,
+        "issues": [],
+        "kill": null,
+        "target_hp": null,
+        "target_kind": null,
+        "player_series": null,
+        "dps_basis": "player_active_window_v1"
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "5",
+    "at": "1800000180000000",
+    "event": {
+      "fight_ended": {
+        "id": "partial",
+        "run_id": null,
+        "session_id": "alerts-session",
+        "target_id": 2,
+        "target_generation": 0,
+        "boss_type": 42,
+        "target_type": 300,
+        "max_hp": null,
+        "started": "1800000000000000",
+        "ended": "1800000180000000",
+        "first_hit": "1800000001000000",
+        "last_hit": "1800000002000000",
+        "end_reason": "map_changed",
+        "players": [
+          {
+            "object_id": 1,
+            "player_id": "alerts-self",
+            "name": "Demo Knight",
+            "class_id": 100,
+            "is_local": true,
+            "damage": 200.0,
+            "hits": 2,
+            "biggest_hit": 200.0,
+            "deaths": 0,
+            "dps": 200.0,
+            "share": 1.0,
+            "rank": 1,
+            "sources": [
+              {
+                "item_type": 200,
+                "ability": false,
+                "kind": "weapon",
+                "enchant": {
+                  "state": "missing",
+                  "slots": null,
+                  "applied": null,
+                  "ids": []
+                },
+                "damage": 300.0,
+                "hits": 2,
+                "biggest_hit": 200.0,
+                "estimated": false,
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "total_damage": 300.0,
+        "unattributed_damage": 0.0,
+        "buckets": [
+          {
+            "from": "2000000",
+            "until": "3000000",
+            "total": 100.0,
+            "local": 100.0
+          },
+          {
+            "from": "3000000",
+            "until": "4000001",
+            "total": 200.0,
+            "local": 200.0
+          }
+        ],
+        "complete_capture": false,
+        "issues": [],
+        "kill": null,
+        "target_hp": null,
+        "target_kind": null,
+        "player_series": null,
+        "dps_basis": "player_active_window_v1"
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "6",
+    "at": "1800000180000000",
+    "event": {
+      "fight_ended": {
+        "id": "estimated",
+        "run_id": null,
+        "session_id": "alerts-session",
+        "target_id": 2,
+        "target_generation": 0,
+        "boss_type": 42,
+        "target_type": 300,
+        "max_hp": null,
+        "started": "1800000000000000",
+        "ended": "1800000180000000",
+        "first_hit": "1800000001000000",
+        "last_hit": "1800000002000000",
+        "end_reason": "map_changed",
+        "players": [
+          {
+            "object_id": 1,
+            "player_id": "alerts-self",
+            "name": "Demo Knight",
+            "class_id": 100,
+            "is_local": true,
+            "damage": 300.0,
+            "hits": 2,
+            "biggest_hit": 200.0,
+            "deaths": 0,
+            "dps": 300.0,
+            "share": 1.0,
+            "rank": 1,
+            "sources": [
+              {
+                "item_type": 200,
+                "ability": false,
+                "kind": "weapon",
+                "enchant": {
+                  "state": "missing",
+                  "slots": null,
+                  "applied": null,
+                  "ids": []
+                },
+                "damage": 300.0,
+                "hits": 2,
+                "biggest_hit": 200.0,
+                "estimated": true,
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "total_damage": 300.0,
+        "unattributed_damage": 0.0,
+        "buckets": [
+          {
+            "from": "2000000",
+            "until": "3000000",
+            "total": 100.0,
+            "local": 100.0
+          },
+          {
+            "from": "3000000",
+            "until": "4000001",
+            "total": 200.0,
+            "local": 200.0
+          }
+        ],
+        "complete_capture": true,
+        "issues": [],
+        "kill": null,
+        "target_hp": null,
+        "target_kind": null,
+        "player_series": null,
+        "dps_basis": "player_active_window_v1"
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "7",
+    "at": "1800000009000000",
+    "event": {
+      "bag_dropped": {
+        "id": "bag-1292-0",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800000009000000",
+        "bag_type": 1292,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "8",
+    "at": "1800000009000000",
+    "event": {
+      "bag_dropped": {
+        "id": "bag-1293-0",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800000009000000",
+        "bag_type": 1293,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "9",
+    "at": "1800086409000000",
+    "event": {
+      "bag_dropped": {
+        "id": "bag-1292-1",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800086409000000",
+        "bag_type": 1292,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "10",
+    "at": "1800172809000000",
+    "event": {
+      "bag_dropped": {
+        "id": "bag-1292-2",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800172809000000",
+        "bag_type": 1292,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "11",
+    "at": "1800259209000000",
+    "event": {
+      "bag_dropped": {
+        "id": "bag-1292-3",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800259209000000",
+        "bag_type": 1292,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "12",
+    "at": "1800345609000000",
+    "event": {
+      "bag_dropped": {
+        "id": "bag-1292-4",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800345609000000",
+        "bag_type": 1292,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "13",
+    "at": "1800432009000000",
+    "event": {
+      "bag_dropped": {
+        "id": "bag-1292-5",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800432009000000",
+        "bag_type": 1292,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "14",
+    "at": "1800518409000000",
+    "event": {
+      "bag_dropped": {
+        "id": "bag-1292-6",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800518409000000",
+        "bag_type": 1292,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "15",
+    "at": "1800518409000000",
+    "event": {
+      "bag_dropped": {
+        "id": "bag-1293-6",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800518409000000",
+        "bag_type": 1293,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "16",
+    "at": "1800604809000000",
+    "event": {
+      "bag_dropped": {
+        "id": "bag-1292-7",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800604809000000",
+        "bag_type": 1292,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "17",
+    "at": "1800604810000000",
+    "event": {
+      "drop_updated": {
+        "id": "bag-1292-7",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800604809000000",
+        "bag_type": 1292,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": 42,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": true,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "18",
+    "at": "1800604811000000",
+    "event": {
+      "run_ended": {
+        "id": "cleared-died",
+        "session_id": "alerts-session",
+        "character_id": "alerts-self",
+        "dungeon": "Synthetic Sanctum",
+        "area_kind": "dungeon",
+        "started": "1000000",
+        "ended": "1800000011000000",
+        "completed_at": "1800000010000000",
+        "died_at": null,
+        "outcome": "cleared",
+        "evidence": [
+          {
+            "at": "5000000",
+            "evidence": "victory"
+          }
+        ],
+        "party_size": 1,
+        "party_size_estimated": true,
+        "complete_capture": true,
+        "issues": [],
+        "context": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "19",
+    "at": "1800604812000000",
+    "event": {
+      "player_died": {
+        "at": "1800604812000000",
+        "character_id": null,
+        "run_id": null
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "20",
+    "at": "1800604813000000",
+    "event": {
+      "player_died": {
+        "at": "1800604813000000",
+        "character_id": "alerts-self",
+        "run_id": "cleared-died"
+      }
+    }
+  },
+  {
+    "stream_id": "live-fixture",
+    "sequence": "16",
+    "at": "1800604809000000",
+    "event": {
+      "bag_dropped": {
+        "id": "bag-1292-7",
+        "session_id": "alerts-session",
+        "run_id": null,
+        "at": "1800604809000000",
+        "bag_type": 1292,
+        "items": [],
+        "enchant": null,
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 200,
+            "quantity": 1,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null,
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": null
+      }
+    }
+  }
+]

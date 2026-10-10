@@ -1,0 +1,71 @@
+<script lang="ts">
+  import HeroCard from './HeroCard.svelte';
+  import LiveStatusCard from './LiveStatusCard.svelte';
+  import NavigationControls from './NavigationControls.svelte';
+  import { getContext, type Snippet } from 'svelte';
+  import { readable } from 'svelte/store';
+  import { SHELL_CONNECTION, type ShellConnection } from './context';
+  import { emptyHomeLiveWindow } from '../home/v2/live';
+  import { railView, type RailView } from './rail';
+  import type { CaptureStatus } from '../bindings/CaptureStatus';
+  import type { SpriteRef } from '../bindings/SpriteRef';
+  import type { Features, Route } from '../navigation/routes';
+  let { view, capture, route, features, preview, busy, error, snapshotError = '', missingCatalog = false, onStart, onStop, onRetry, resolveSpriteUrl, canBack = false, canForward = false, back = () => {}, forward = () => {}, statusExtra }: {
+    view: RailView; capture: CaptureStatus | null; route: Route; features: Features; preview: boolean;
+    busy: boolean; error: string; onStart: () => void; onStop: () => void; onRetry: () => void;
+    resolveSpriteUrl?: (sprite: SpriteRef) => string | null;
+    snapshotError?: string;
+    missingCatalog?: boolean;
+    canBack?: boolean; canForward?: boolean; back?: () => void; forward?: () => void; statusExtra?: Snippet;
+  } = $props();
+  const connection = getContext<ShellConnection | undefined>(SHELL_CONNECTION);
+  const homeWindow = connection?.homeWindow ?? readable(emptyHomeLiveWindow());
+  let focusedView = $derived(railView(view.snapshot, view.visuals, view.stale,
+    $homeWindow.focusedFightId ?? null, $homeWindow));
+  let section = $derived(['run', 'fight', 'player'].includes(route.kind) ? 'runs' : route.kind === 'item' ? 'loot' : route.kind);
+</script>
+
+<aside class="character-rail" aria-label="Character">
+  <div class="rail-top">
+    <div class="brand">Maxed <span aria-hidden="true">&#10022;</span></div>
+    <NavigationControls {canBack} {canForward} {back} {forward} />
+  </div>
+  <div class="rail-cards">
+    {#if snapshotError}<p class="data-unavailable">{snapshotError}</p>
+      {#if !snapshotError.includes('Restart Maxed')}<button onclick={onRetry}>Reconnect</button>{/if}
+    {/if}
+    <HeroCard {view} {resolveSpriteUrl} sheetUrl={view.sprite ? resolveSpriteUrl?.(view.sprite) ?? null : null} />
+    <LiveStatusCard view={focusedView} {capture} {preview} {busy} {error} {onStart} {onStop} {onRetry} />
+    {#if statusExtra}<div class="rail-status-extra">{@render statusExtra()}</div>{/if}
+    {#if missingCatalog}
+      <p class="data-unavailable"><a href="#/setup">Open Setup</a></p>
+    {/if}
+  </div>
+  <nav aria-label="Navigation">
+    <a href="#/" aria-current={section === 'home' ? 'page' : undefined}>Home</a>
+    <a href="#/runs" aria-current={section === 'runs' ? 'page' : undefined}>Runs</a>
+    {#if features.lootBrowsing}<a href="#/loot" aria-current={section === 'loot' ? 'page' : undefined}>Loot</a>{/if}
+    {#if features.logs}<a href="#/logs" aria-current={section === 'logs' ? 'page' : undefined}>Logs</a>
+    {:else}<a href="#/alerts" aria-current={section === 'alerts' ? 'page' : undefined}>Alerts</a>{/if}
+    {#if features.stats}<a href="#/stats" aria-current={section === 'stats' ? 'page' : undefined}>Stats</a>{/if}
+  </nav>
+  <a class="settings-link" href="#/settings" aria-current={section === 'settings' ? 'page' : undefined}>Settings</a>
+</aside>
+
+<style>
+  /* Only cards surrender space. Navigation never enters a scrolling ancestor. */
+  .character-rail { min-height: 0; min-width: 0; height: 100%; overflow: hidden; padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); border-right: 1px solid var(--border); background: var(--surface-canvas); }
+  .rail-cards > button { min-height: var(--target-min); flex: 0 0 auto; font-size: var(--text-label); }
+  .brand { flex: 0 0 auto; font-size: var(--text-title); line-height: var(--leading-body); font-weight: var(--weight-bold); }
+  .brand span { color: var(--gold); }
+  .data-unavailable { flex: 0 0 auto; margin: 0; color: var(--text-secondary); font-size: var(--text-label); line-height: var(--leading-label); }
+  .rail-cards { flex: 0 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: var(--space-1); }
+  nav { flex: 0 0 auto; display: grid; gap: 0; }
+  a { display: flex; align-items: center; min-height: var(--target-min); padding: var(--space-1) var(--space-3); border-radius: var(--radius-control); color: var(--text-secondary); text-decoration: none; font-size: var(--text-body); line-height: var(--leading-body); }
+  a:hover { background: var(--surface-hover); }
+  a[aria-current] { background: var(--surface-raised); color: var(--violet-text); box-shadow: inset 3px 0 var(--violet); }
+  .settings-link { flex: 0 0 auto; margin-top: auto; }
+  .rail-top { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 28px; }
+  .rail-status-extra { flex: 0 0 auto; display: grid; gap: 4px; min-width: 0; }
+  @media (max-width: 900px) { .character-rail { padding: 8px; } }
+</style>

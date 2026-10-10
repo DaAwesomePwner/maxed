@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Maxed channel manifest (S2)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "notes", "platforms"],
+  "properties": {
+    "version": { "type": "string", "maxLength": 128, "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$" },
+    "notes": { "type": "string", "maxLength": 8192, "description": "Plain text; additionally enforce 8192 UTF-8 bytes. Never execute markup." },
+    "pub_date": { "type": "string", "format": "date-time" },
+    "platforms": {
+      "type": "object", "additionalProperties": false, "required": ["windows-x86_64-nsis"],
+      "properties": {
+        "windows-x86_64-nsis": {
+          "type": "object", "additionalProperties": false, "required": ["url", "signature"],
+          "properties": {
+            "url": { "type": "string", "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/releases/download/v[^/]+/Maxed_[^/]+_x64-setup\\.exe$", "description": "Repository and both versions must exactly match the explicit release inputs; enforced by metadata tooling." },
+            "signature": { "type": "string", "minLength": 1, "maxLength": 8192, "pattern": "^[A-Za-z0-9+/]+={0,2}$", "description": "Tauri .sig contents, never a URL; verified against artifact and configured public key." }
+          }
+        }
+      }
+    }
+  }
+}

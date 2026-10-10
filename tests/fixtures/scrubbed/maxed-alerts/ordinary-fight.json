@@ -1,0 +1,72 @@
+{
+  "id": "ordinary-template",
+  "run_id": null,
+  "session_id": "alerts-session",
+  "target_id": 2,
+  "target_generation": 0,
+  "boss_type": null,
+  "target_type": 300,
+  "max_hp": null,
+  "started": "1800000000000000",
+  "ended": "1800000180000000",
+  "first_hit": "1800000001000000",
+  "last_hit": "1800000002000000",
+  "end_reason": "map_changed",
+  "players": [
+    {
+      "object_id": 1,
+      "player_id": "alerts-self",
+      "name": "Demo Knight",
+      "class_id": 100,
+      "is_local": true,
+      "damage": 100.0,
+      "hits": 2,
+      "biggest_hit": 200.0,
+      "deaths": 0,
+      "dps": 100.0,
+      "share": 1.0,
+      "rank": 1,
+      "sources": [
+        {
+          "item_type": 200,
+          "ability": false,
+          "kind": "weapon",
+          "enchant": {
+            "state": "missing",
+            "slots": null,
+            "applied": null,
+            "ids": []
+          },
+          "damage": 300.0,
+          "hits": 2,
+          "biggest_hit": 200.0,
+          "estimated": false,
+          "reasons": []
+        }
+      ]
+    }
+  ],
+  "total_damage": 300.0,
+  "unattributed_damage": 0.0,
+  "buckets": [
+    {
+      "from": "2000000",
+      "until": "3000000",
+      "total": 100.0,
+      "local": 100.0
+    },
+    {
+      "from": "3000000",
+      "until": "4000001",
+      "total": 200.0,
+      "local": 200.0
+    }
+  ],
+  "complete_capture": true,
+  "issues": [],
+  "kill": null,
+  "target_hp": null,
+  "target_kind": null,
+  "player_series": null,
+  "dps_basis": "player_active_window_v1"
+}

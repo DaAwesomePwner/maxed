@@ -1,0 +1,667 @@
+{
+  "catalog": {
+    "bags": [
+      {
+        "base_type": 400,
+        "capture": true,
+        "is_white": false,
+        "name": "Synthetic Bag",
+        "object_type": 400,
+        "rank": null
+      }
+    ],
+    "classes": [
+      {
+        "object_type": 100,
+        "stat_caps": [
+          {
+            "stat_id": 20,
+            "value": 75
+          }
+        ]
+      }
+    ],
+    "client_fingerprint": "synthetic-contract-v1",
+    "crucible_bonuses": [],
+    "dungeons": [
+      {
+        "aliases": [],
+        "completion_index": null,
+        "kind": "dungeon",
+        "name": "Synthetic Sanctum"
+      }
+    ],
+    "enchants": [],
+    "format_version": 1,
+    "items": [
+      {
+        "name": "Synthetic Sword",
+        "object_type": 200,
+        "projectiles": [
+          {
+            "armor_piercing": false,
+            "index": 0,
+            "lifetime_millis": null,
+            "max_damage": 200,
+            "min_damage": 100
+          }
+        ],
+        "scaling": null,
+        "slot_type": 1,
+        "soulbound": null,
+        "sprite_key": null,
+        "stat_bonuses": null,
+        "tier": null
+      }
+    ],
+    "objects": [
+      {
+        "class_name": null,
+        "dungeon_name": null,
+        "event_boss": null,
+        "is_boss": false,
+        "is_miniboss": false,
+        "is_player": true,
+        "name": "Demo Knight",
+        "object_type": 100,
+        "sprite_key": null
+      },
+      {
+        "class_name": null,
+        "dungeon_name": null,
+        "event_boss": null,
+        "is_boss": true,
+        "is_miniboss": false,
+        "is_player": false,
+        "name": "Synthetic Guardian",
+        "object_type": 300,
+        "sprite_key": null
+      }
+    ],
+    "sprites": [],
+    "tiles": []
+  },
+  "home_summary": {
+    "best_drop": null,
+    "clears": 1,
+    "deaths": 0,
+    "dungeon_stats": null,
+    "fame": [
+      {
+        "at": "1000000",
+        "character_id": "demo-character",
+        "fame": 1250
+      }
+    ],
+    "fame_delta": null,
+    "fame_missing_baselines": 1,
+    "fame_sampled": false,
+    "issues": [
+      "missing_identity",
+      "missing_stats"
+    ],
+    "recent_details": [
+      {
+        "issues": [
+          "missing_identity",
+          "missing_stats"
+        ],
+        "local_share": null,
+        "loot": [
+          {
+            "at": "5000000",
+            "bag_rank": null,
+            "bag_type": 400,
+            "capture_scope": null,
+            "contents": [
+              {
+                "enchant": {
+                  "applied": null,
+                  "ids": [],
+                  "slots": null,
+                  "state": "missing"
+                },
+                "item_type": 200,
+                "quantity": 1,
+                "slot": 0,
+                "taken_observed_at": null
+              }
+            ],
+            "contents_known": true,
+            "enchant": null,
+            "id": "demo-drop",
+            "issues": [],
+            "items": [
+              200
+            ],
+            "run_id": "demo-run",
+            "session_id": "demo-session",
+            "source_enemy": null,
+            "source_estimated": false,
+            "source_reason": null
+          }
+        ],
+        "loot_preview_limited": false,
+        "observed_drop_count": 1,
+        "run_id": "demo-run",
+        "share_partial": true
+      }
+    ],
+    "recent_runs": [
+      {
+        "area_kind": "dungeon",
+        "character_id": "demo-character",
+        "complete_capture": false,
+        "completed_at": "5000000",
+        "context": null,
+        "died_at": null,
+        "dungeon": "Synthetic Sanctum",
+        "ended": "6000000",
+        "evidence": [
+          {
+            "at": "5000000",
+            "evidence": "victory"
+          },
+          {
+            "at": "6000000",
+            "evidence": "observed_exit"
+          }
+        ],
+        "id": "demo-run",
+        "issues": [
+          "missing_identity",
+          "missing_stats"
+        ],
+        "outcome": "cleared",
+        "party_size": 1,
+        "party_size_estimated": true,
+        "session_id": "demo-session",
+        "started": "1000000"
+      }
+    ],
+    "runs": 1,
+    "top_fight": {
+      "boss_type": 300,
+      "buckets": [
+        {
+          "from": "2000000",
+          "local": 100.0,
+          "total": 100.0,
+          "until": "3000000"
+        },
+        {
+          "from": "3000000",
+          "local": 200.0,
+          "total": 200.0,
+          "until": "4000001"
+        }
+      ],
+      "complete_capture": false,
+      "dps_basis": "player_active_window_v1",
+      "end_reason": "map_changed",
+      "ended": "6000000",
+      "first_hit": "2000000",
+      "id": "demo-fight",
+      "is_current_quest": false,
+      "issues": [
+        "missing_identity",
+        "missing_stats"
+      ],
+      "kill": null,
+      "last_hit": "4000000",
+      "local_last_hit": null,
+      "max_hp": null,
+      "pending_local_reconciliation": false,
+      "player_series": null,
+      "players": [
+        {
+          "biggest_hit": 200.0,
+          "class_id": 100,
+          "damage": 300.0,
+          "deaths": 0,
+          "dps": 150.0,
+          "hits": 2,
+          "is_local": true,
+          "name": "Demo Knight",
+          "object_id": 1,
+          "player_id": "demo-character",
+          "rank": 1,
+          "share": 1.0,
+          "sources": [
+            {
+              "ability": false,
+              "biggest_hit": 200.0,
+              "damage": 300.0,
+              "enchant": {
+                "applied": null,
+                "ids": [],
+                "slots": null,
+                "state": "missing"
+              },
+              "estimated": false,
+              "hits": 2,
+              "item_type": 200,
+              "kind": "weapon",
+              "reasons": []
+            }
+          ]
+        }
+      ],
+      "run_id": "demo-run",
+      "session_id": "demo-session",
+      "started": "2000000",
+      "target_generation": 0,
+      "target_hp": null,
+      "target_id": 2,
+      "target_kind": null,
+      "target_type": 300,
+      "total_damage": 300.0,
+      "unattributed_damage": 0.0
+    },
+    "unranked_drop_count": 1
+  },
+  "run_page": {
+    "details": null,
+    "next": null,
+    "rows": [
+      {
+        "area_kind": "dungeon",
+        "character_id": "demo-character",
+        "complete_capture": false,
+        "completed_at": "5000000",
+        "context": null,
+        "died_at": null,
+        "dungeon": "Synthetic Sanctum",
+        "ended": "6000000",
+        "evidence": [
+          {
+            "at": "5000000",
+            "evidence": "victory"
+          },
+          {
+            "at": "6000000",
+            "evidence": "observed_exit"
+          }
+        ],
+        "id": "demo-run",
+        "issues": [
+          "missing_identity",
+          "missing_stats"
+        ],
+        "outcome": "cleared",
+        "party_size": 1,
+        "party_size_estimated": true,
+        "session_id": "demo-session",
+        "started": "1000000"
+      }
+    ],
+    "summary": null
+  },
+  "run_story": {
+    "boss_fights": null,
+    "boss_fights_limited": null,
+    "character": {
+      "class_id": 100,
+      "died_at": null,
+      "equipment": [
+        {
+          "enchant": {
+            "applied": null,
+            "ids": [],
+            "slots": null,
+            "state": "missing"
+          },
+          "item_type": 200,
+          "slot": 0
+        }
+      ],
+      "fame": 1250,
+      "id": "demo-character",
+      "identity_verified": false,
+      "issues": [
+        "missing_identity",
+        "missing_stats"
+      ],
+      "level": 20,
+      "maxed": null,
+      "name": "Demo Knight",
+      "observed_at": "1000000",
+      "stat_panel": null,
+      "stats": [
+        {
+          "stat_id": 20,
+          "value": 50
+        }
+      ]
+    },
+    "comparison": null,
+    "drops": [
+      {
+        "at": "5000000",
+        "bag_rank": null,
+        "bag_type": 400,
+        "capture_scope": null,
+        "contents": [
+          {
+            "enchant": {
+              "applied": null,
+              "ids": [],
+              "slots": null,
+              "state": "missing"
+            },
+            "item_type": 200,
+            "quantity": 1,
+            "slot": 0,
+            "taken_observed_at": null
+          }
+        ],
+        "contents_known": true,
+        "enchant": null,
+        "id": "demo-drop",
+        "issues": [],
+        "items": [
+          200
+        ],
+        "run_id": "demo-run",
+        "session_id": "demo-session",
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null
+      }
+    ],
+    "events": null,
+    "events_limited": null,
+    "fights": [
+      {
+        "boss_type": 300,
+        "ended": "6000000",
+        "estimated": false,
+        "first_hit": "2000000",
+        "id": "demo-fight",
+        "last_hit": "4000000",
+        "local_damage": null,
+        "local_dps": null,
+        "local_rank": null,
+        "ordinal": 1,
+        "partial": true,
+        "player_count": 1,
+        "started": "2000000",
+        "target_kind": null,
+        "target_name": null,
+        "target_type": 300,
+        "total_damage": 300.0
+      }
+    ],
+    "newer_run_id": null,
+    "older_run_id": null,
+    "run": {
+      "area_kind": "dungeon",
+      "character_id": "demo-character",
+      "complete_capture": false,
+      "completed_at": "5000000",
+      "context": null,
+      "died_at": null,
+      "dungeon": "Synthetic Sanctum",
+      "ended": "6000000",
+      "evidence": [
+        {
+          "at": "5000000",
+          "evidence": "victory"
+        },
+        {
+          "at": "6000000",
+          "evidence": "observed_exit"
+        }
+      ],
+      "id": "demo-run",
+      "issues": [
+        "missing_identity",
+        "missing_stats"
+      ],
+      "outcome": "cleared",
+      "party_size": 1,
+      "party_size_estimated": true,
+      "session_id": "demo-session",
+      "started": "1000000"
+    },
+    "timeline": [
+      {
+        "at": "1000000",
+        "explanation": "Entered Synthetic Sanctum",
+        "id": "demo-timeline-entry",
+        "kind": "entered",
+        "related_id": "demo-run"
+      },
+      {
+        "at": "2000000",
+        "explanation": "Observed target damage",
+        "id": "demo-timeline-fight",
+        "kind": "fight",
+        "related_id": "demo-fight"
+      },
+      {
+        "at": "5000000",
+        "explanation": "Observed a bag; pickup is unknown",
+        "id": "demo-timeline-drop",
+        "kind": "drop",
+        "related_id": "demo-drop"
+      },
+      {
+        "at": "5000000",
+        "explanation": "Observed Victory",
+        "id": "demo-timeline-completion",
+        "kind": "completion",
+        "related_id": "demo-run"
+      },
+      {
+        "at": "6000000",
+        "explanation": "Observed area exit",
+        "id": "demo-timeline-exit",
+        "kind": "exit",
+        "related_id": "demo-run"
+      }
+    ],
+    "totals": null
+  },
+  "snapshot": {
+    "area_kind": "dungeon",
+    "at": "5000000",
+    "capture": {
+      "decode_failures": 0,
+      "dropped_frames": 0,
+      "message": "Synthetic contract preview; capture stopped",
+      "state": "Stopped",
+      "unknown_packets": 0
+    },
+    "character": {
+      "class_id": 100,
+      "died_at": null,
+      "equipment": [
+        {
+          "enchant": {
+            "applied": null,
+            "ids": [],
+            "slots": null,
+            "state": "missing"
+          },
+          "item_type": 200,
+          "slot": 0
+        }
+      ],
+      "fame": 1250,
+      "id": "demo-character",
+      "identity_verified": false,
+      "issues": [
+        "missing_identity",
+        "missing_stats"
+      ],
+      "level": 20,
+      "maxed": null,
+      "name": "Demo Knight",
+      "observed_at": "1000000",
+      "stat_panel": null,
+      "stats": [
+        {
+          "stat_id": 20,
+          "value": 50
+        }
+      ]
+    },
+    "drops": [
+      {
+        "at": "5000000",
+        "bag_rank": null,
+        "bag_type": 400,
+        "capture_scope": null,
+        "contents": [
+          {
+            "enchant": {
+              "applied": null,
+              "ids": [],
+              "slots": null,
+              "state": "missing"
+            },
+            "item_type": 200,
+            "quantity": 1,
+            "slot": 0,
+            "taken_observed_at": null
+          }
+        ],
+        "contents_known": true,
+        "enchant": null,
+        "id": "demo-drop",
+        "issues": [],
+        "items": [
+          200
+        ],
+        "run_id": "demo-run",
+        "session_id": "demo-session",
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": null
+      }
+    ],
+    "fights": [
+      {
+        "boss_type": 300,
+        "buckets": [
+          {
+            "from": "2000000",
+            "local": 100.0,
+            "total": 100.0,
+            "until": "3000000"
+          },
+          {
+            "from": "3000000",
+            "local": 200.0,
+            "total": 200.0,
+            "until": "4000001"
+          }
+        ],
+        "complete_capture": false,
+        "dps_basis": "player_active_window_v1",
+        "end_reason": null,
+        "ended": null,
+        "first_hit": "2000000",
+        "id": "demo-fight",
+        "is_current_quest": false,
+        "issues": [
+          "missing_identity",
+          "missing_stats"
+        ],
+        "kill": null,
+        "last_hit": "4000000",
+        "local_last_hit": null,
+        "max_hp": null,
+        "pending_local_reconciliation": false,
+        "player_series": null,
+        "players": [
+          {
+            "biggest_hit": 200.0,
+            "class_id": 100,
+            "damage": 300.0,
+            "deaths": 0,
+            "dps": 150.0,
+            "hits": 2,
+            "is_local": true,
+            "name": "Demo Knight",
+            "object_id": 1,
+            "player_id": "demo-character",
+            "rank": 1,
+            "share": 1.0,
+            "sources": [
+              {
+                "ability": false,
+                "biggest_hit": 200.0,
+                "damage": 300.0,
+                "enchant": {
+                  "applied": null,
+                  "ids": [],
+                  "slots": null,
+                  "state": "missing"
+                },
+                "estimated": false,
+                "hits": 2,
+                "item_type": 200,
+                "kind": "weapon",
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "run_id": "demo-run",
+        "session_id": "demo-session",
+        "started": "2000000",
+        "target_generation": 0,
+        "target_hp": null,
+        "target_id": 2,
+        "target_kind": null,
+        "target_type": 300,
+        "total_damage": 300.0,
+        "unattributed_damage": 0.0
+      }
+    ],
+    "instance": null,
+    "issues": [
+      "missing_identity",
+      "missing_stats"
+    ],
+    "map": "Synthetic Sanctum",
+    "run": {
+      "area_kind": "dungeon",
+      "character_id": "demo-character",
+      "complete_capture": false,
+      "completed_at": "5000000",
+      "context": null,
+      "died_at": null,
+      "dungeon": "Synthetic Sanctum",
+      "ended": null,
+      "evidence": [
+        {
+          "at": "5000000",
+          "evidence": "victory"
+        }
+      ],
+      "id": "demo-run",
+      "issues": [
+        "missing_identity",
+        "missing_stats"
+      ],
+      "outcome": "cleared",
+      "party_size": 1,
+      "party_size_estimated": true,
+      "session_id": "demo-session",
+      "started": "1000000"
+    },
+    "run_totals": null,
+    "sequence": "12",
+    "session": {
+      "ended": null,
+      "id": "demo-session",
+      "issues": [],
+      "last_traffic": "5000000",
+      "started": "1000000"
+    },
+    "stream_id": "demo-stream"
+  }
+}

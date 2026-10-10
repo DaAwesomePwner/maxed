@@ -1,0 +1,22 @@
+[package]
+name = "maxed-assets"
+description = "Local game asset extraction and catalog caching for Maxed."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+maxed-types = { path = "../maxed-types" }
+png = "0.18.1"
+quick-xml = "0.42.0"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"

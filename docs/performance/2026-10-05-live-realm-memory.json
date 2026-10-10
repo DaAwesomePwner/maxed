@@ -1,0 +1,1091 @@
+{
+  "schema": 2,
+  "issue": 40,
+  "base": "4eacecf",
+  "real_game_retest": false,
+  "environment": {
+    "os": {
+      "Caption": "Microsoft Windows 11 Pro",
+      "Version": "10.0.26200",
+      "BuildNumber": "26200"
+    },
+    "cpu": {
+      "Name": "Intel(R) Core(TM) Ultra 7 265U",
+      "NumberOfCores": 12,
+      "NumberOfLogicalProcessors": 14
+    },
+    "physical_memory_bytes": 16597598208,
+    "rust": "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "node": "v26.7.0",
+    "npm": "11.19.0",
+    "webview2": "154.0.4258.53",
+    "acceleration": "off"
+  },
+  "payload": {
+    "fight_events": {
+      "after_mean_bytes": 4052.342115459124,
+      "after_peak_bytes": 15818,
+      "after_total_bytes": 104590950,
+      "before_mean_bytes": 8627.352576520729,
+      "before_peak_bytes": 61377,
+      "before_total_bytes": 222671970,
+      "count": 25810
+    },
+    "initial_filtered_full_bytes": 114295,
+    "snapshots": [
+      {
+        "delta_bytes": 117397,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 2122107,
+        "live_fights": 5,
+        "seconds": 0.0,
+        "unchanged_delta_bytes": 2796
+      },
+      {
+        "delta_bytes": 18432,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 2578362,
+        "live_fights": 5,
+        "seconds": 60.0,
+        "unchanged_delta_bytes": 2798
+      },
+      {
+        "delta_bytes": 25061,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 3055361,
+        "live_fights": 5,
+        "seconds": 120.0,
+        "unchanged_delta_bytes": 2800
+      },
+      {
+        "delta_bytes": 23550,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 3557398,
+        "live_fights": 5,
+        "seconds": 180.0,
+        "unchanged_delta_bytes": 2802
+      },
+      {
+        "delta_bytes": 32247,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 3996023,
+        "live_fights": 5,
+        "seconds": 240.0,
+        "unchanged_delta_bytes": 2802
+      },
+      {
+        "delta_bytes": 36272,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 4346992,
+        "live_fights": 5,
+        "seconds": 300.0,
+        "unchanged_delta_bytes": 2802
+      },
+      {
+        "delta_bytes": 25883,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 4431746,
+        "live_fights": 5,
+        "seconds": 360.0,
+        "unchanged_delta_bytes": 2802
+      },
+      {
+        "delta_bytes": 40047,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 4789549,
+        "live_fights": 5,
+        "seconds": 420.0,
+        "unchanged_delta_bytes": 2802
+      },
+      {
+        "delta_bytes": 36723,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 5323431,
+        "live_fights": 5,
+        "seconds": 480.0,
+        "unchanged_delta_bytes": 2802
+      },
+      {
+        "delta_bytes": 34938,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 5797471,
+        "live_fights": 5,
+        "seconds": 540.0,
+        "unchanged_delta_bytes": 2802
+      },
+      {
+        "delta_bytes": 43567,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 6233567,
+        "live_fights": 5,
+        "seconds": 600.0,
+        "unchanged_delta_bytes": 2802
+      },
+      {
+        "delta_bytes": 30463,
+        "engine_fights": 1536,
+        "full_snapshot_bytes": 6295101,
+        "live_fights": 5,
+        "seconds": 609.75,
+        "unchanged_delta_bytes": 2802
+      }
+    ],
+    "synthetic_clock_only": true
+  },
+  "measurements": [
+    {
+      "mode": "before",
+      "diagnostic": true,
+      "machine_quiet": true,
+      "executable_sha256": "6927626acde2eceb5152a9be8da1bf6de7167482c1c15194bc38cd19a881499b",
+      "workload": {
+        "busy_seconds": 62.2019239,
+        "bags": 320,
+        "players": 24,
+        "fights": 1536,
+        "hits_per_second": 24
+      },
+      "collector_memory_result": "measured",
+      "collector_cpu_result": "measured",
+      "phases": [
+        {
+          "phase": "busy",
+          "samples": 47,
+          "sampled_seconds": 61.1035666,
+          "renderer_peak_bytes": 1893556224,
+          "maxed_peak_bytes": 69529600,
+          "combined_peak_bytes": 2010578944,
+          "renderer_mean_cores": 0.8970425631422961,
+          "gate": {
+            "result": "not_measured",
+            "threshold_bytes": 200000000,
+            "reason": "Short busy duration and CDP diagnostic; not release-budget evidence."
+          }
+        },
+        {
+          "phase": "idle",
+          "samples": 110,
+          "sampled_seconds": 143.1932424,
+          "renderer_peak_bytes": 502571008,
+          "maxed_peak_bytes": 42799104,
+          "combined_peak_bytes": 608620544,
+          "renderer_mean_cores": 0.010584472944374085,
+          "gate": {
+            "result": "not_measured",
+            "threshold_bytes": 150000000,
+            "reason": "CDP diagnostic; not release-budget evidence."
+          }
+        }
+      ],
+      "run": "before-short-2",
+      "machine_load": {
+        "preflight_heavy_counts": [
+          0
+        ],
+        "note": "Quiet at launch; diagnostic retry",
+        "cpu_load_confounded": false,
+        "preflight_samples": [
+          {
+            "utc": "2026-10-05T17:26:51.2300078Z",
+            "attempt": 0,
+            "heavy_count": 0,
+            "names": [],
+            "free_physical_bytes": 5595045888
+          }
+        ]
+      },
+      "uia_observation": "repeated phase observations",
+      "rendered": {
+        "busy": true,
+        "subscription_failed": false,
+        "idle": true
+      }
+    },
+    {
+      "mode": "before",
+      "diagnostic": true,
+      "machine_quiet": false,
+      "executable_sha256": "6927626acde2eceb5152a9be8da1bf6de7167482c1c15194bc38cd19a881499b",
+      "workload": {
+        "busy_seconds": 65.3877899,
+        "bags": 320,
+        "players": 24,
+        "fights": 1536,
+        "hits_per_second": 24
+      },
+      "collector_memory_result": "measured",
+      "collector_cpu_result": "measured",
+      "phases": [
+        {
+          "phase": "busy",
+          "samples": 48,
+          "sampled_seconds": 64.8058875,
+          "renderer_peak_bytes": 1919385600,
+          "maxed_peak_bytes": 73367552,
+          "combined_peak_bytes": 2052493312,
+          "renderer_mean_cores": 1.0825598214359768,
+          "gate": {
+            "result": "not_measured",
+            "threshold_bytes": 200000000,
+            "reason": "Short busy duration and CDP diagnostic; not release-budget evidence."
+          }
+        },
+        {
+          "phase": "idle",
+          "samples": 89,
+          "sampled_seconds": 143.0326917,
+          "renderer_peak_bytes": 1617801216,
+          "maxed_peak_bytes": 45441024,
+          "combined_peak_bytes": 1725169664,
+          "renderer_mean_cores": 0.07002332740131186,
+          "gate": {
+            "result": "not_measured",
+            "threshold_bytes": 150000000,
+            "reason": "CDP diagnostic; not release-budget evidence."
+          }
+        }
+      ],
+      "run": "before-short-idle",
+      "machine_load": {
+        "preflight_heavy_counts": [
+          2
+        ],
+        "note": "Diagnostic retry, own checks active",
+        "cpu_load_confounded": true,
+        "preflight_samples": [
+          {
+            "utc": "2026-10-05T17:35:09.3034936Z",
+            "attempt": 0,
+            "heavy_count": 2,
+            "names": [
+              "cargo",
+              "cargo"
+            ],
+            "free_physical_bytes": 6576893952
+          }
+        ]
+      },
+      "uia_observation": "repeated phase observations",
+      "rendered": {
+        "busy": true,
+        "subscription_failed": false,
+        "idle": true
+      }
+    },
+    {
+      "mode": "after",
+      "diagnostic": false,
+      "machine_quiet": true,
+      "executable_sha256": "06ccb2e7ca1033fb85618bfe3368571fcb30c639fddf774071d2a26c0d1b012b",
+      "workload": {
+        "busy_seconds": 671.656848,
+        "bags": 320,
+        "players": 24,
+        "fights": 1536,
+        "hits_per_second": 24
+      },
+      "collector_memory_result": "measured",
+      "collector_cpu_result": "measured",
+      "phases": [
+        {
+          "phase": "busy",
+          "samples": 442,
+          "sampled_seconds": 669.1838505999999,
+          "renderer_peak_bytes": 691609600,
+          "maxed_peak_bytes": 90730496,
+          "combined_peak_bytes": 815357952,
+          "renderer_mean_cores": 0.17136079254928752,
+          "gate": {
+            "result": "fail",
+            "threshold_bytes": 200000000,
+            "reason": null
+          }
+        },
+        {
+          "phase": "idle",
+          "samples": 53,
+          "sampled_seconds": 114.74789799999999,
+          "renderer_peak_bytes": 412200960,
+          "maxed_peak_bytes": 48992256,
+          "combined_peak_bytes": 521605120,
+          "renderer_mean_cores": 0.009123260802563897,
+          "gate": {
+            "result": "fail",
+            "threshold_bytes": 150000000,
+            "reason": null
+          }
+        }
+      ],
+      "run": "after-final",
+      "machine_load": {
+        "preflight_heavy_counts": [
+          6,
+          2,
+          3,
+          2,
+          0
+        ],
+        "note": "About 8 minutes preflight; compilation began during busy",
+        "cpu_load_confounded": true,
+        "preflight_samples": [
+          {
+            "utc": "2026-10-05T17:51:04.2668561Z",
+            "attempt": 0,
+            "heavy_count": 6,
+            "names": [
+              "cargo",
+              "cargo",
+              "cargo",
+              "cargo",
+              "rustc",
+              "rustc"
+            ],
+            "free_physical_bytes": 5712809984
+          },
+          {
+            "utc": "2026-10-05T17:53:04.6406304Z",
+            "attempt": 1,
+            "heavy_count": 2,
+            "names": [
+              "cargo",
+              "cargo"
+            ],
+            "free_physical_bytes": 5916401664
+          },
+          {
+            "utc": "2026-10-05T17:55:04.9134507Z",
+            "attempt": 2,
+            "heavy_count": 3,
+            "names": [
+              "cargo",
+              "cargo",
+              "node"
+            ],
+            "free_physical_bytes": 5440241664
+          },
+          {
+            "utc": "2026-10-05T17:57:05.1277273Z",
+            "attempt": 3,
+            "heavy_count": 2,
+            "names": [
+              "cargo",
+              "cargo"
+            ],
+            "free_physical_bytes": 6167216128
+          },
+          {
+            "utc": "2026-10-05T17:59:05.3422113Z",
+            "attempt": 4,
+            "heavy_count": 0,
+            "names": [],
+            "free_physical_bytes": 6406823936
+          }
+        ]
+      },
+      "uia_observation": "repeated phase observations",
+      "rendered": {
+        "busy": true,
+        "subscription_failed": false,
+        "idle": true
+      }
+    },
+    {
+      "mode": "after",
+      "diagnostic": false,
+      "machine_quiet": true,
+      "executable_sha256": "9f0711f1ec39498514a05b1d3504f1eebf1488d7680eaf1dc6ed9604a5e9347e",
+      "workload": {
+        "busy_seconds": 612.339748,
+        "bags": 320,
+        "players": 24,
+        "fights": 1536,
+        "hits_per_second": 24
+      },
+      "collector_memory_result": "measured",
+      "collector_cpu_result": "measured",
+      "phases": [
+        {
+          "phase": "busy",
+          "samples": 480,
+          "sampled_seconds": 610.7929429,
+          "renderer_peak_bytes": 327507968,
+          "maxed_peak_bytes": 77754368,
+          "combined_peak_bytes": 487919616,
+          "renderer_mean_cores": 0.18643797595193207,
+          "gate": {
+            "result": "fail",
+            "threshold_bytes": 200000000,
+            "reason": null
+          }
+        },
+        {
+          "phase": "idle",
+          "samples": 114,
+          "sampled_seconds": 144.3286378,
+          "renderer_peak_bytes": 105639936,
+          "maxed_peak_bytes": 47869952,
+          "combined_peak_bytes": 215904256,
+          "renderer_mean_cores": 0.006712112126648229,
+          "gate": {
+            "result": "fail",
+            "threshold_bytes": 150000000,
+            "reason": null
+          }
+        }
+      ],
+      "run": "after-channel",
+      "machine_load": {
+        "preflight_heavy_counts": [
+          2,
+          3,
+          0
+        ],
+        "note": "About 4 minutes preflight; quiet at launch",
+        "cpu_load_confounded": false,
+        "preflight_samples": [
+          {
+            "utc": "2026-10-05T18:16:19.7271631Z",
+            "attempt": 0,
+            "heavy_count": 2,
+            "names": [
+              "cargo",
+              "cargo"
+            ],
+            "free_physical_bytes": 7592329216
+          },
+          {
+            "utc": "2026-10-05T18:18:20.0115290Z",
+            "attempt": 1,
+            "heavy_count": 3,
+            "names": [
+              "cargo",
+              "cargo",
+              "node"
+            ],
+            "free_physical_bytes": 8099352576
+          },
+          {
+            "utc": "2026-10-05T18:20:20.3625473Z",
+            "attempt": 2,
+            "heavy_count": 0,
+            "names": [],
+            "free_physical_bytes": 8144699392
+          }
+        ]
+      },
+      "uia_observation": "repeated phase observations",
+      "rendered": {
+        "busy": true,
+        "subscription_failed": false,
+        "idle": true
+      }
+    },
+    {
+      "mode": "after",
+      "diagnostic": false,
+      "machine_quiet": true,
+      "executable_sha256": "9f0711f1ec39498514a05b1d3504f1eebf1488d7680eaf1dc6ed9604a5e9347e",
+      "workload": {
+        "busy_seconds": 612.7525271999999,
+        "bags": 320,
+        "players": 24,
+        "fights": 1536,
+        "hits_per_second": 24
+      },
+      "collector_memory_result": "measured",
+      "collector_cpu_result": "measured",
+      "phases": [
+        {
+          "phase": "busy",
+          "samples": 476,
+          "sampled_seconds": 611.3658118999999,
+          "renderer_peak_bytes": 467701760,
+          "maxed_peak_bytes": 80207872,
+          "combined_peak_bytes": 594735104,
+          "renderer_mean_cores": 0.12265058585295095,
+          "gate": {
+            "result": "fail",
+            "threshold_bytes": 200000000,
+            "reason": null
+          }
+        },
+        {
+          "phase": "idle",
+          "samples": 111,
+          "sampled_seconds": 143.4576453,
+          "renderer_peak_bytes": 105369600,
+          "maxed_peak_bytes": 50434048,
+          "combined_peak_bytes": 219209728,
+          "renderer_mean_cores": 0.004574520923075544,
+          "gate": {
+            "result": "fail",
+            "threshold_bytes": 150000000,
+            "reason": null
+          }
+        }
+      ],
+      "run": "after-channel-boundary",
+      "machine_load": {
+        "preflight_heavy_counts": [
+          0
+        ],
+        "note": "Quiet at preflight; compilation began during busy",
+        "cpu_load_confounded": true,
+        "preflight_samples": [
+          {
+            "utc": "2026-10-05T18:24:57.2594296Z",
+            "attempt": 0,
+            "heavy_count": 0,
+            "names": [],
+            "free_physical_bytes": 6942232576
+          }
+        ]
+      },
+      "uia_observation": "one successful observation per phase",
+      "rendered": {
+        "busy": true,
+        "subscription_failed": false,
+        "idle": true
+      }
+    }
+  ],
+  "status": "completed; busy and idle memory gates FAIL; Refs #40 remains open",
+  "idle_heap_diagnostic": {
+    "diagnostic_only": true,
+    "before": {
+      "usedSize": 703446532,
+      "totalSize": 826839040,
+      "embedderHeapUsedSize": 4841896,
+      "backingStorageSize": 440047
+    },
+    "after": {
+      "usedSize": 4936384,
+      "totalSize": 7868416,
+      "embedderHeapUsedSize": 2136432,
+      "backingStorageSize": 433790
+    },
+    "dom": {
+      "documents": 2,
+      "nodes": 1111,
+      "jsEventListeners": 27
+    },
+    "heap_nodes": 94254,
+    "shallow_bytes": 7302339,
+    "string_bytes": 277440,
+    "wire_string_count": 6,
+    "wire_string_bytes": 14812,
+    "dto_counts": {
+      "fights": 64,
+      "snapshots": 1,
+      "player_series": 3
+    },
+    "retainers": [
+      {
+        "kind": "FightView",
+        "shallow_bytes": 120,
+        "path": [
+          {
+            "type": "synthetic",
+            "name": "<structural>"
+          },
+          {
+            "via": "<structural>"
+          },
+          {
+            "type": "native",
+            "name": "<structural>"
+          },
+          {
+            "via": "<element>"
+          },
+          {
+            "type": "native",
+            "name": "<structural>"
+          },
+          {
+            "via": "<element>"
+          },
+          {
+            "type": "native",
+            "name": "<structural>"
+          },
+          {
+            "via": "<element>"
+          },
+          {
+            "type": "native",
+            "name": "<structural>"
+          },
+          {
+            "via": "<structural>"
+          },
+          {
+            "type": "object",
+            "name": "Object"
+          },
+          {
+            "via": "<structural>"
+          },
+          {
+            "type": "closure",
+            "name": "<structural>"
+          },
+          {
+            "via": "context"
+          },
+          {
+            "type": "object",
+            "name": "<structural>"
+          },
+          {
+            "via": "<structural>"
+          },
+          {
+            "type": "closure",
+            "name": "<structural>"
+          },
+          {
+            "via": "<structural>"
+          },
+          {
+            "type": "closure",
+            "name": "<structural>"
+          },
+          {
+            "via": "context"
+          },
+          {
+            "type": "object",
+            "name": "<structural>"
+          },
+          {
+            "via": "<structural>"
+          },
+          {
+            "type": "object",
+            "name": "Map"
+          },
+          {
+            "via": "<structural>"
+          },
+          {
+            "type": "array",
+            "name": "<structural>"
+          },
+          {
+            "via": "<structural>"
+          },
+          {
+            "type": "object",
+            "name": "Object"
+          },
+          {
+            "via": "window"
+          },
+          {
+            "type": "object",
+            "name": "Object"
+          },
+          {
+            "via": "fights"
+          },
+          {
+            "type": "object",
+            "name": "Array"
+          },
+          {
+            "via": "<element>"
+          },
+          {
+            "type": "object",
+            "name": "Object"
+          }
+        ]
+      },
+      {
+        "kind": "wire-script-string",
+        "shallow_bytes": 10096,
+        "path": [
+          {
+            "type": "synthetic",
+            "name": "(Global handles)"
+          },
+          {
+            "via": "<structural>"
+          },
+          {
+            "type": "native",
+            "name": "<structural>"
+          },
+          {
+            "via": "<structural>"
+          },
+          {
+            "type": "object",
+            "name": "<structural>"
+          },
+          {
+            "via": "<structural>"
+          },
+          {
+            "type": "closure",
+            "name": "value"
+          },
+          {
+            "via": "shared"
+          },
+          {
+            "type": "code",
+            "name": "<structural>"
+          },
+          {
+            "via": "script"
+          },
+          {
+            "type": "code",
+            "name": "<structural>"
+          },
+          {
+            "via": "source"
+          },
+          {
+            "type": "string",
+            "name": "<structural>"
+          }
+        ]
+      }
+    ]
+  },
+  "rebased_onto": "8503329",
+  "selected_candidate": {
+    "measured_commit": "4cae79f",
+    "rebased_commit": "dc11454",
+    "transport": "fetch-backed UTF-8 JSON byte channels",
+    "remeasured_after_rebase": false,
+    "best_run": "after-channel",
+    "repeat": "after-channel-boundary",
+    "representative_combined_busy_bytes": 594735104,
+    "representative_combined_idle_bytes": 219209728,
+    "busy_gate": "fail",
+    "idle_gate": "fail",
+    "reduced_uia_busy_difference_bytes": 106815488,
+    "reduced_uia_idle_difference_bytes": 3305472,
+    "uia_inflation_supported": false
+  },
+  "owner_decision": {
+    "date": "2026-10-05",
+    "failing_gates_accepted_for_this_pr": true,
+    "issue_remains_open": true,
+    "further_measurements_stopped": true,
+    "unmeasured_sprite_experiment_reverted": true
+  },
+  "retention_audit": {
+    "fixture": "maxed-realm-dungeon-return",
+    "expected_boss_kills": 9,
+    "full_final_baseline_retained": 1,
+    "bounded_final_baseline_retained": 1,
+    "all_events_included": true,
+    "every_250ms_snapshot_simulated": false,
+    "existing_64_row_eviction": "deferred; unchanged in audited stream"
+  },
+  "limitations": [
+    "No matched ten-minute before or untouched baseline executable",
+    "Before CDP diagnostics are not acceptance evidence",
+    "CPU comparisons confounded by different durations and overlapping compilation as recorded per run",
+    "Synthetic live writer does not populate Nexus saved-history read context",
+    "Original owner session and installed package not verified",
+    "Private-memory retention is not fully attributed or fixed",
+    "Rebased integration tested but not remeasured by owner instruction"
+  ],
+  "recommended_next_steps": [
+    "Attribute remaining native WebView, allocator and decoded-image private memory",
+    "Measure bounded sprite tiles or crops with catalog invalidation",
+    "Retain compact boss-kill visit history independently of ordinary fight-row eviction",
+    "Owner 30+ minute real realm retest with focus, kill, visit, DPS, bag, PB and reconnect checks"
+  ],
+  "deterministic_validation": {
+    "base": "8503329",
+    "checks": [
+      {
+        "command": "cargo test --offline -p maxed-types --test export_bindings",
+        "result": "pass",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "unexpected_generated_drift": false
+      },
+      {
+        "command": "cargo check --offline --workspace --all-targets",
+        "result": "pass"
+      },
+      {
+        "command": "cargo test --offline --workspace",
+        "result": "pass",
+        "passed": 1272,
+        "failed": 0,
+        "ignored": 26,
+        "result_blocks": 137
+      },
+      {
+        "command": "cargo fmt --all -- --check",
+        "result": "pass"
+      },
+      {
+        "command": "cargo clippy --offline --workspace --all-targets -- -D warnings",
+        "result": "pass"
+      },
+      {
+        "command": "npm.cmd --prefix app/ui test",
+        "result": "pass",
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "command": "npm.cmd --prefix app/ui run test:ui -- --maxWorkers=2",
+        "result": "pass",
+        "passed": 1138,
+        "failed": 0,
+        "files": 125,
+        "seconds": 144.51
+      },
+      {
+        "command": "npm.cmd --prefix app/ui run check",
+        "result": "pass",
+        "files": 446,
+        "errors": 0,
+        "warnings": 0
+      },
+      {
+        "command": "npm.cmd --prefix app/ui run check:tests",
+        "result": "pass",
+        "files": 770,
+        "errors": 0,
+        "warnings": 0
+      },
+      {
+        "command": "npm.cmd --prefix app/ui run build",
+        "result": "pass"
+      },
+      {
+        "command": "git diff --check",
+        "result": "pass"
+      }
+    ],
+    "application_control_4551_reruns": 0,
+    "perf_feature_runtime_tests": {
+      "passed": 2,
+      "failed": 0
+    },
+    "perf_feature_clippy": "pass",
+    "smoke_replay_rust": {
+      "passed": 2,
+      "failed": 0
+    },
+    "smoke_replay_ui": {
+      "passed": 1,
+      "failed": 0
+    }
+  },
+  "review1": {
+    "code_commits": [
+      "680160e",
+      "570b716",
+      "3d07cd6",
+      "84f4c58"
+    ],
+    "new_memory_measurements": false,
+    "bindings_changed": false,
+    "interactive_release_reload_verified": false,
+    "fixes": [
+      "Purge label-owned subscriptions on document load start and owning WebviewWindow destruction; isolate dead sends and evict oldest at capacity",
+      "Select live player series only among live-visible fights without changing domain selection",
+      "Compile and lint perf-live in the manual offline locked CI workflow",
+      "Replay actual native presentation compaction and assert the unchanged one-of-nine kill retention result"
+    ],
+    "deterministic_validation": {
+      "base": "8503329",
+      "checks": [
+        {
+          "command": "cargo test --offline -p maxed-types --test export_bindings",
+          "result": "pass",
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0,
+          "unexpected_generated_drift": false
+        },
+        {
+          "command": "cargo check --offline --workspace --all-targets",
+          "result": "pass"
+        },
+        {
+          "command": "cargo test --offline --workspace",
+          "result": "pass",
+          "passed": 1277,
+          "failed": 0,
+          "ignored": 26,
+          "result_blocks": 137
+        },
+        {
+          "command": "cargo fmt --all -- --check",
+          "result": "pass"
+        },
+        {
+          "command": "cargo clippy --offline --workspace --all-targets -- -D warnings",
+          "result": "pass"
+        },
+        {
+          "command": "npm.cmd --prefix app/ui test",
+          "result": "pass",
+          "passed": 4,
+          "failed": 0,
+          "skipped": 0
+        },
+        {
+          "command": "npm.cmd --prefix app/ui run test:ui -- --maxWorkers=2",
+          "result": "pass",
+          "passed": 1138,
+          "failed": 0,
+          "files": 125,
+          "seconds": 145.84
+        },
+        {
+          "command": "npm.cmd --prefix app/ui run check",
+          "result": "pass",
+          "files": 446,
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "command": "npm.cmd --prefix app/ui run check:tests",
+          "result": "pass",
+          "files": 770,
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "command": "npm.cmd --prefix app/ui run build",
+          "result": "pass"
+        },
+        {
+          "command": "git diff --check",
+          "result": "pass"
+        }
+      ],
+      "application_control_4551_reruns": 0,
+      "perf_feature_runtime_tests": {
+        "passed": 2,
+        "failed": 0
+      },
+      "perf_feature_clippy": "pass",
+      "smoke_replay_rust": {
+        "passed": 2,
+        "failed": 0
+      },
+      "smoke_replay_ui": {
+        "passed": 1,
+        "failed": 0
+      },
+      "code_head": "84f4c58",
+      "perf_feature_check": "pass",
+      "workflow_policy_checks": {
+        "passed": 26,
+        "failed": 0
+      }
+    }
+  },
+  "review2": {
+    "code_commits": [
+      "a5f8614",
+      "4632f05"
+    ],
+    "new_memory_measurements": false,
+    "bindings_changed": false,
+    "domain_snapshot_series_policy_changed": false,
+    "chart_payload_bound": "max(120, contiguous input run count)",
+    "engine_chart_input_bound": 1800,
+    "renderer_display_bound": 120,
+    "all_input_runs_preserved": true,
+    "limitations": [
+      "Gaps already lost by pre-existing domain coarsening above 1800 observations cannot be recovered by live presentation"
+    ],
+    "red_before_green": [
+      "Intermittent chart compaction crossed run endpoints",
+      "Many-gap compaction swallowed complete observed runs",
+      "Newer visible ordinary hits starved EventBoss series",
+      "Newer ordinary and remote boss hits displaced the last boss hit locally"
+    ],
+    "deterministic_validation": {
+      "code_head": "4632f05",
+      "checks": [
+        {
+          "command": "cargo test --offline -p maxed-types --test export_bindings",
+          "result": "pass",
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0,
+          "unexpected_generated_drift": false
+        },
+        {
+          "command": "cargo check --offline --workspace --all-targets",
+          "result": "pass"
+        },
+        {
+          "command": "cargo test --offline --workspace",
+          "result": "pass",
+          "passed": 1281,
+          "failed": 0,
+          "ignored": 26,
+          "result_blocks": 137
+        },
+        {
+          "command": "cargo fmt --all -- --check",
+          "result": "pass"
+        },
+        {
+          "command": "cargo clippy --offline --workspace --all-targets -- -D warnings",
+          "result": "pass"
+        },
+        {
+          "command": "npm.cmd --prefix app/ui test",
+          "result": "pass",
+          "passed": 4,
+          "failed": 0,
+          "skipped": 0
+        },
+        {
+          "command": "npm.cmd --prefix app/ui run test:ui -- --maxWorkers=2",
+          "result": "pass",
+          "passed": 1138,
+          "failed": 0,
+          "files": 125,
+          "seconds": 154.28
+        },
+        {
+          "command": "npm.cmd --prefix app/ui run check",
+          "result": "pass",
+          "files": 446,
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "command": "npm.cmd --prefix app/ui run check:tests",
+          "result": "pass",
+          "files": 770,
+          "errors": 0,
+          "warnings": 0
+        },
+        {
+          "command": "npm.cmd --prefix app/ui run build",
+          "result": "pass"
+        },
+        {
+          "command": "git diff --check",
+          "result": "pass"
+        }
+      ],
+      "perf_feature_clippy": "pass",
+      "application_control_4551_reruns": 0
+    }
+  }
+}

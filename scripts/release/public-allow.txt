@@ -1,0 +1,28 @@
+# Reviewed snapshot findings that are allowed to ship. See
+# scripts/release/Export-PublicSnapshot.ps1 and docs/release/UPDATES.md.
+#
+# One "<rule> <path> <blob>" entry per line, where <rule> is a built-in rule id
+# printed by a failed export and <blob> is the reviewed git blob
+# (git rev-parse <commit>:<path>). Any change to an allowed file fails the
+# export until the file is reviewed again and its blob updated. Allow only
+# invented test values and synthetic or publication-approved captures, never
+# real data. Every entry must still produce its finding, so delete stale ones.
+
+# Invented canaries that the bundle audit self-test must detect.
+private-key tests/packaging/audit-bundle.ps1 1302430aacdd3262407016adbbadeac5b38cd831
+signing-key tests/packaging/audit-bundle.ps1 1302430aacdd3262407016adbbadeac5b38cd831
+user-path tests/packaging/audit-bundle.ps1 1302430aacdd3262407016adbbadeac5b38cd831
+
+# Invented canaries that the network audit self-test must redact.
+user-path tests/packaging/network-audit.ps1 718b1ec45ba70b125f5b8339c7b95bbcf1b85dfb
+
+# Synthetic captures (docs/development/fixtures.md). Scrubbed-real captures
+# stay excluded until their publication approval is recorded.
+capture tests/fixtures/scrubbed/maxed-demo/story.pcap 08542ca1d79607de8dac4c2692a236b16168046b
+capture tests/fixtures/scrubbed/maxed-home/complete.pcap f4bab00e6897346ddb434c1d802239e256c434ea
+capture tests/fixtures/scrubbed/maxed-home/disconnected.pcap 7250d842b082e7ef1f7ae1c2698e1546602b4a76
+capture tests/fixtures/scrubbed/maxed-home/zero-duration.pcap b5c49f5fad02b1c323341a7ff08bd09cb0f4f571
+capture tests/fixtures/scrubbed/maxed-runs/complete.pcap f4bab00e6897346ddb434c1d802239e256c434ea
+capture tests/fixtures/scrubbed/maxed-runs/demo.pcap 08542ca1d79607de8dac4c2692a236b16168046b
+capture tests/fixtures/scrubbed/maxed-runs/disconnected.pcap 7250d842b082e7ef1f7ae1c2698e1546602b4a76
+capture tests/fixtures/scrubbed/maxed-runs/zero-duration.pcap b5c49f5fad02b1c323341a7ff08bd09cb0f4f571

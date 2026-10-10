@@ -1,0 +1,32 @@
+.run-story { overflow-anchor: none; min-width: 0; height: 100%; }
+.area-home.run-screen { grid-template-rows: auto auto auto minmax(min-content, 1fr) auto;
+  grid-template-areas: 'crumbs crumbs' 'head head' 'kpis kpis' 'fight loot' 'timeline timeline'; }
+.run-screen .run-crumbs { grid-area: crumbs; min-width: 0; }
+.run-screen .run-heading { min-width: 0; }
+.run-screen .run-controls { margin-left: auto; }
+.run-screen .run-heading h2, .run-screen .run-heading p { overflow-wrap: anywhere; }
+.run-screen .run-controls, .run-screen .run-controls nav { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+.run-screen .outcome, .run-screen .quiet-tag { white-space: nowrap; font-size: 11px; color: var(--text-muted); }
+.run-screen .outcome { border: 1px solid currentColor; border-radius: 99px; padding: 3px 9px; }
+.run-screen [data-outcome='cleared'] { color: var(--success); background: #75dfa114; }
+.run-screen [data-outcome='died'] { color: var(--danger); }
+.run-screen [data-outcome='open'] { color: var(--gold); }
+.run-screen .warning { color: var(--warning); }
+.run-screen .area-header { flex-wrap: wrap; }
+.run-screen .area-card h3 { text-transform: uppercase; }
+.run-screen .area-loot { overflow: hidden; max-height: 640px; }
+.run-screen .open-fight { color: var(--violet-text); text-decoration: none; margin-left: auto; }
+.run-screen .other-targets { overflow-y: auto; max-height: 480px; }
+.run-screen .other-row { display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr); gap: 8px;
+  min-height: 30px; align-items: center; border-bottom: 1px solid var(--border); color: var(--text-secondary); text-decoration: none; font-variant-numeric: tabular-nums; }
+.run-screen .other-row > span { min-width: 0; overflow-wrap: anywhere; }
+.run-screen .other-row a { color: inherit; text-decoration: none; }
+.run-screen .other-row > span:not(:first-child) { text-align: right; }
+.run-screen .other-row small { display: block; color: var(--text-muted); }
+.run-screen .run-death { grid-column: 1 / -1; }
+.run-screen .fight-tabs .more { height: 26px; min-height: 26px; }
+@media (max-width: 950px) {
+  .area-home.run-screen { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto auto auto;
+    grid-template-areas: 'crumbs' 'head' 'kpis' 'fight' 'loot' 'timeline'; }
+  .run-screen .area-loot { height: 420px; } .run-screen .fight-panel { min-height: 390px; }
+}

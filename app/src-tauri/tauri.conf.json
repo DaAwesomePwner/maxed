@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Maxed",
+  "version": "0.1.1",
+  "identifier": "com.maxed.companion",
+  "build": {
+    "beforeDevCommand": "npm --prefix ui run dev",
+    "beforeBuildCommand": "npm --prefix ui run build",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../ui/dist"
+  },
+  "app": {
+    "windows": [
+      { "label": "main", "create": false, "title": "Maxed", "width": 1100, "height": 760, "minWidth": 800, "minHeight": 560 }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' data: http://maxed-sprite.localhost",
+      "devCsp": "default-src 'self'; connect-src ipc: http://ipc.localhost http://127.0.0.1:1420 ws://127.0.0.1:1420; style-src 'self' 'unsafe-inline'; img-src 'self' data: http://maxed-sprite.localhost"
+    }
+  },
+  "plugins": {
+    "updater": { "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJGMTU3MEMwRTlBQUJGMUIKUldRYnY2cnB3SEFWdjRSdzY5M1JTZGxIelVjU3FneHN6K1hLRXo0RHV0aElMQzRvMjl1YktFem4K" }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "installer/npcap-guidance.nsh"
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": false
+      }
+    },
+    "resources": {
+      "../../tests/fixtures/scrubbed/maxed-demo/story.pcap": "demo/story.pcap",
+      "../../tests/fixtures/scrubbed/maxed-demo/catalog.json": "demo/catalog.json",
+      "../../LICENSE": "LICENSE",
+      "../../NOTICE.md": "NOTICE.md",
+      "../../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md"
+    }
+  }
+}

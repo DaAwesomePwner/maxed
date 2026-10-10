@@ -1,0 +1,87 @@
+[package]
+name = "maxed-app"
+description = "Windows desktop shell for the Maxed RotMG companion."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+default-run = "maxed"
+
+[lib]
+name = "maxed_app"
+path = "src/lib.rs"
+crate-type = ["rlib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "maxed"
+path = "src/main.rs"
+
+# Local release validation utility; never a Tauri externalBin or bundle resource.
+[[bin]]
+name = "maxed-update-verify"
+path = "src/updater/package_verify.rs"
+required-features = ["updater-signing-tool"]
+
+# Invented performance corpus exporter; examples are never packaged.
+[[example]]
+name = "memory-history"
+path = "../../tests/performance/memory-history.rs"
+
+[[example]]
+name = "catalog-memory"
+path = "../../tests/performance/catalog-memory.rs"
+
+[[example]]
+name = "live-payload-sizes"
+path = "../../tests/performance/live-payload-sizes.rs"
+required-features = ["perf-live"]
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+updater-signing-tool = []
+perf-live = ["maxed-engine/perf-live"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+chrono = { version = "=0.4.45", default-features = false, features = ["clock"] }
+tokio = { version = "1", features = ["sync", "time"] }
+tauri = { version = "2", features = [] }
+serde.workspace = true
+crossbeam-channel.workspace = true
+serde_json.workspace = true
+getrandom = "0.3.4"
+maxed-recording = { path = "../../crates/maxed-recording" }
+maxed-types = { path = "../../crates/maxed-types" }
+maxed-capture = { path = "../../crates/maxed-capture" }
+maxed-stream = { path = "../../crates/maxed-stream" }
+maxed-protocol = { path = "../../crates/maxed-protocol" }
+maxed-engine = { version = "0.1.1", path = "../../crates/maxed-engine" }
+maxed-store = { version = "0.1.1", path = "../../crates/maxed-store" }
+maxed-assets = { version = "0.1.1", path = "../../crates/maxed-assets" }
+reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider", "stream"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+rustls-native-certs = "=0.8.4"
+minisign-verify = "=0.2.5"
+base64 = "=0.22.1"
+semver = "=1.0.28"
+bytes = "=1.12.1"
+thiserror.workspace = true
+tempfile = "=3.27.0"
+rodio = { version = "=0.22.2", default-features = false, features = ["playback", "wav"] }
+tauri-plugin-notification = { version = "=2.5.1", default-features = false }
+tauri-plugin-dialog = "=2.8.1"
+sha2.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+tauri-winrt-notification = "=0.8.1"
+windows = { version = "=0.62.2", features = ["UI_Notifications"] }
+winreg = "=0.55.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+tokio = { version = "1", features = ["rt", "test-util"] }

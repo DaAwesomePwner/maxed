@@ -1,0 +1,64 @@
+{
+  "provenance": "Invented maxed-demo bytes and admitted maxed-home timestamp/prefix derivatives only; no owner data.",
+  "generator_sha256": "4361e172225884ed412da32ec5709519329425f0d36043c519072ed89c1935b3",
+  "inputs": {
+    "maxed-demo/story.pcap": "fbbf9044a7c913c6594d2648b64f5c9a2556355b272b9f7573e17f3b19437f67",
+    "maxed-home/complete.pcap": "f8b4459e90e6100b9464383c258c5ff875746dc06ed71d120ffa9bf74fe13f69",
+    "maxed-home/disconnected.pcap": "96598bab31300e0acbbf3403491deb6959f3393c0b24df02dafc6524a0f37b3b",
+    "maxed-home/zero-duration.pcap": "7e3a038f2ec5d4e6ebd0157fc8075f1abb35ea204ec0f6636d2083e882625215",
+    "maxed-demo/catalog.json": "6d39065758db58797b946431a61432a00cf7532dea465d6f3b7592e902220d8d"
+  },
+  "outputs": {
+    "demo.pcap": "fbbf9044a7c913c6594d2648b64f5c9a2556355b272b9f7573e17f3b19437f67",
+    "complete.pcap": "f8b4459e90e6100b9464383c258c5ff875746dc06ed71d120ffa9bf74fe13f69",
+    "disconnected.pcap": "96598bab31300e0acbbf3403491deb6959f3393c0b24df02dafc6524a0f37b3b",
+    "zero-duration.pcap": "7e3a038f2ec5d4e6ebd0157fc8075f1abb35ea204ec0f6636d2083e882625215",
+    "catalog.json": "6d39065758db58797b946431a61432a00cf7532dea465d6f3b7592e902220d8d"
+  },
+  "transformations": "Byte-for-byte copies. Home inputs shift demo timestamps by 1772949595 seconds; disconnected ends at original 8030000 us, zero-duration at 6030000 us. No packet body changes.",
+  "identities": [
+    "DemoHero",
+    "DemoAccount",
+    "DemoAlly",
+    "DemoAllyAccount"
+  ],
+  "credentials": "No HELLO, password, token, or account request. Documentation IPs only.",
+  "expected": {
+    "demo": {
+      "started": 5000000,
+      "damage": 300,
+      "dps": null,
+      "drops": 1,
+      "outcome": "cleared"
+    },
+    "complete": {
+      "started": 1772949600000000,
+      "damage": 300,
+      "dps": null,
+      "drops": 1,
+      "outcome": "cleared"
+    },
+    "disconnected": {
+      "started": 1772949600000000,
+      "damage": 300,
+      "dps": null,
+      "drops": 0,
+      "outcome": "unknown"
+    },
+    "zero-duration": {
+      "started": 1772949600000000,
+      "damage": 100,
+      "dps": null,
+      "drops": 0,
+      "outcome": "unknown"
+    }
+  },
+  "scenarios": {
+    "replay_run_fight_player_matches_stored_sources": "packet replay: parse/stream/protocol/engine/writer/native reads",
+    "late_counter_revision_reopens_one_story": "decoded injection: omit Victory, next-area CREATE_SUCCESS plus identity UPDATE; observed comparison revision uses typed domain events",
+    "saved_death_and_partial_story_evidence": "typed domain events, not DEATH packet decoding",
+    "story_waits_for_writer_retry_and_survives_stop": "packet prefix plus adapter AppClosed and actual SQLite write lock; native read-error seam",
+    "reconstruction_counters_do_not_become_run_counts": "decoded injection into Engine, real store persistence; not encrypted pcap"
+  },
+  "ui_fixtures": "None in C1; no UI acceptance claimed."
+}

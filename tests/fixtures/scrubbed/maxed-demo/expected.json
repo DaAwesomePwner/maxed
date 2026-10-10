@@ -1,0 +1,1794 @@
+[
+  {
+    "stream_id": "demo-v1",
+    "sequence": "1",
+    "at": "100000",
+    "event": {
+      "session_updated": {
+        "id": "demo-v1:session:1",
+        "started": "100000",
+        "last_traffic": "100000",
+        "ended": null,
+        "issues": []
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "2",
+    "at": "100000",
+    "event": {
+      "map_entered": {
+        "realm_instance_key": null,
+        "at": "100000",
+        "name": "Nexus",
+        "kind": "nexus"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "3",
+    "at": "1000000",
+    "event": {
+      "map_entered": {
+        "realm_instance_key": "[\"Realm\",\"\",1,0]",
+        "at": "1000000",
+        "name": "Realm",
+        "kind": "realm"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "4",
+    "at": "1010000",
+    "event": {
+      "character_updated": {
+        "id": "demo-v1:provisional:2:1",
+        "name": null,
+        "class_id": null,
+        "level": null,
+        "maxed": null,
+        "fame": null,
+        "stats": [],
+        "equipment": [
+          {
+            "slot": 0,
+            "item_type": null,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            }
+          },
+          {
+            "slot": 1,
+            "item_type": null,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            }
+          },
+          {
+            "slot": 2,
+            "item_type": null,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            }
+          },
+          {
+            "slot": 3,
+            "item_type": null,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            }
+          }
+        ],
+        "observed_at": "1010000",
+        "identity_verified": false,
+        "died_at": null,
+        "issues": [
+          "missing_identity",
+          "missing_stats"
+        ],
+        "stat_panel": null
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "5",
+    "at": "1020000",
+    "event": {
+      "character_updated": {
+        "id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "name": "DemoHero",
+        "class_id": 100,
+        "level": 20,
+        "maxed": null,
+        "fame": 100,
+        "stats": [
+          {
+            "stat_id": 7,
+            "value": 20
+          },
+          {
+            "stat_id": 20,
+            "value": 25
+          },
+          {
+            "stat_id": 29,
+            "value": 0
+          },
+          {
+            "stat_id": 57,
+            "value": 100
+          },
+          {
+            "stat_id": 96,
+            "value": 0
+          },
+          {
+            "stat_id": 113,
+            "value": 1000
+          }
+        ],
+        "equipment": [
+          {
+            "slot": 0,
+            "item_type": 256,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "slot": 1,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "slot": 2,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "slot": 3,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          }
+        ],
+        "observed_at": "1020000",
+        "identity_verified": true,
+        "died_at": null,
+        "issues": [
+          "missing_stats"
+        ],
+        "stat_panel": {
+          "lines": [
+            {
+              "stat_id": 0,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 3,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 20,
+              "total": 25,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 21,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 22,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 26,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 27,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 28,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            }
+          ],
+          "conditions": [],
+          "breakdown_provisional": true
+        }
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "6",
+    "at": "1020000",
+    "event": {
+      "character_merged": {
+        "provisional_id": "demo-v1:provisional:2:1",
+        "verified_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "7",
+    "at": "1020000",
+    "event": {
+      "fame_changed": {
+        "at": "1020000",
+        "character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "fame": 100
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "8",
+    "at": "2020000",
+    "event": {
+      "fight_started": {
+        "id": "demo-v1:fight:2:4:2",
+        "run_id": null,
+        "session_id": "demo-v1:session:1",
+        "target_id": 4,
+        "target_generation": 2,
+        "boss_type": null,
+        "target_type": 258,
+        "max_hp": 10000,
+        "started": "2000000",
+        "ended": null,
+        "first_hit": "2000000",
+        "last_hit": "2000000",
+        "end_reason": null,
+        "players": [
+          {
+            "object_id": 1,
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "name": "DemoHero",
+            "class_id": 100,
+            "is_local": true,
+            "damage": 50.0,
+            "hits": 1,
+            "biggest_hit": 50.0,
+            "deaths": 0,
+            "dps": null,
+            "share": 1.0,
+            "rank": 1,
+            "sources": [
+              {
+                "item_type": 256,
+                "ability": false,
+                "kind": "weapon",
+                "enchant": {
+                  "state": "recorded_empty",
+                  "slots": 0,
+                  "applied": 0,
+                  "ids": []
+                },
+                "damage": 50.0,
+                "hits": 1,
+                "biggest_hit": 50.0,
+                "estimated": false,
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "dps_basis": "player_active_window_v1",
+        "total_damage": 50.0,
+        "unattributed_damage": 0.0,
+        "buckets": [
+          {
+            "from": "2000000",
+            "until": "3000000",
+            "total": 50.0,
+            "local": 50.0
+          }
+        ],
+        "complete_capture": true,
+        "pending_local_reconciliation": true,
+        "issues": [],
+        "kill": null,
+        "target_hp": 10000,
+        "target_kind": "ordinary",
+        "is_current_quest": false,
+        "local_last_hit": "2000000",
+        "player_series": [
+          {
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "object_id": 1,
+            "is_local": true,
+            "points": [
+              50.0
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "9",
+    "at": "5000000",
+    "event": {
+      "fight_ended": {
+        "id": "demo-v1:fight:2:4:2",
+        "run_id": null,
+        "session_id": "demo-v1:session:1",
+        "target_id": 4,
+        "target_generation": 2,
+        "boss_type": null,
+        "target_type": 258,
+        "max_hp": 10000,
+        "started": "2000000",
+        "ended": "5000000",
+        "first_hit": "2000000",
+        "last_hit": "2000000",
+        "end_reason": "map_changed",
+        "players": [
+          {
+            "object_id": 1,
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "name": "DemoHero",
+            "class_id": 100,
+            "is_local": true,
+            "damage": 50.0,
+            "hits": 1,
+            "biggest_hit": 50.0,
+            "deaths": 0,
+            "dps": null,
+            "share": 1.0,
+            "rank": 1,
+            "sources": [
+              {
+                "item_type": 256,
+                "ability": false,
+                "kind": "weapon",
+                "enchant": {
+                  "state": "recorded_empty",
+                  "slots": 0,
+                  "applied": 0,
+                  "ids": []
+                },
+                "damage": 50.0,
+                "hits": 1,
+                "biggest_hit": 50.0,
+                "estimated": false,
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "dps_basis": "player_active_window_v1",
+        "total_damage": 50.0,
+        "unattributed_damage": 0.0,
+        "buckets": [
+          {
+            "from": "2000000",
+            "until": "3000000",
+            "total": 50.0,
+            "local": 50.0
+          }
+        ],
+        "complete_capture": true,
+        "pending_local_reconciliation": false,
+        "issues": [],
+        "kill": null,
+        "target_hp": 10000,
+        "target_kind": "ordinary",
+        "is_current_quest": false,
+        "local_last_hit": "2000000",
+        "player_series": [
+          {
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "object_id": 1,
+            "is_local": true,
+            "points": [
+              50.0
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "10",
+    "at": "5000000",
+    "event": {
+      "map_entered": {
+        "realm_instance_key": null,
+        "at": "5000000",
+        "name": "Snake Pit",
+        "kind": "dungeon"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "11",
+    "at": "5000000",
+    "event": {
+      "run_started": {
+        "id": "demo-v1:run:3",
+        "session_id": "demo-v1:session:1",
+        "character_id": null,
+        "dungeon": "Snake Pit",
+        "area_kind": "dungeon",
+        "started": "5000000",
+        "ended": null,
+        "completed_at": null,
+        "died_at": null,
+        "outcome": null,
+        "evidence": [],
+        "party_size": null,
+        "party_size_estimated": true,
+        "complete_capture": true,
+        "issues": [],
+        "context": {
+          "instance_cap": 85,
+          "realm_name": null,
+          "entered_from_realm": false,
+          "difficulty": 0.0,
+          "game_opened_epoch_s": null,
+          "instance_age_micros": null,
+          "modifiers": [],
+          "grade": null
+        }
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "12",
+    "at": "5010000",
+    "event": {
+      "character_updated": {
+        "id": "demo-v1:provisional:3:2",
+        "name": null,
+        "class_id": null,
+        "level": null,
+        "maxed": null,
+        "fame": null,
+        "stats": [],
+        "equipment": [
+          {
+            "slot": 0,
+            "item_type": null,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            }
+          },
+          {
+            "slot": 1,
+            "item_type": null,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            }
+          },
+          {
+            "slot": 2,
+            "item_type": null,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            }
+          },
+          {
+            "slot": 3,
+            "item_type": null,
+            "enchant": {
+              "state": "missing",
+              "slots": null,
+              "applied": null,
+              "ids": []
+            }
+          }
+        ],
+        "observed_at": "5010000",
+        "identity_verified": false,
+        "died_at": null,
+        "issues": [
+          "missing_identity",
+          "missing_stats"
+        ],
+        "stat_panel": null
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "13",
+    "at": "5010000",
+    "event": {
+      "run_updated": {
+        "id": "demo-v1:run:3",
+        "session_id": "demo-v1:session:1",
+        "character_id": "demo-v1:provisional:3:2",
+        "dungeon": "Snake Pit",
+        "area_kind": "dungeon",
+        "started": "5000000",
+        "ended": null,
+        "completed_at": null,
+        "died_at": null,
+        "outcome": null,
+        "evidence": [],
+        "party_size": null,
+        "party_size_estimated": true,
+        "complete_capture": true,
+        "issues": [],
+        "context": {
+          "instance_cap": 85,
+          "realm_name": null,
+          "entered_from_realm": false,
+          "difficulty": 0.0,
+          "game_opened_epoch_s": null,
+          "instance_age_micros": null,
+          "modifiers": [],
+          "grade": null
+        }
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "14",
+    "at": "5020000",
+    "event": {
+      "character_updated": {
+        "id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "name": "DemoHero",
+        "class_id": 100,
+        "level": 20,
+        "maxed": null,
+        "fame": 100,
+        "stats": [
+          {
+            "stat_id": 7,
+            "value": 20
+          },
+          {
+            "stat_id": 20,
+            "value": 25
+          },
+          {
+            "stat_id": 29,
+            "value": 0
+          },
+          {
+            "stat_id": 57,
+            "value": 100
+          },
+          {
+            "stat_id": 96,
+            "value": 0
+          },
+          {
+            "stat_id": 113,
+            "value": 1000
+          }
+        ],
+        "equipment": [
+          {
+            "slot": 0,
+            "item_type": 256,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "slot": 1,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "slot": 2,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "slot": 3,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          }
+        ],
+        "observed_at": "5020000",
+        "identity_verified": true,
+        "died_at": null,
+        "issues": [
+          "missing_stats"
+        ],
+        "stat_panel": {
+          "lines": [
+            {
+              "stat_id": 0,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 3,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 20,
+              "total": 25,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 21,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 22,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 26,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 27,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 28,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            }
+          ],
+          "conditions": [],
+          "breakdown_provisional": true
+        }
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "15",
+    "at": "5020000",
+    "event": {
+      "character_merged": {
+        "provisional_id": "demo-v1:provisional:3:2",
+        "verified_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "16",
+    "at": "5020000",
+    "event": {
+      "run_updated": {
+        "id": "demo-v1:run:3",
+        "session_id": "demo-v1:session:1",
+        "character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "dungeon": "Snake Pit",
+        "area_kind": "dungeon",
+        "started": "5000000",
+        "ended": null,
+        "completed_at": null,
+        "died_at": null,
+        "outcome": null,
+        "evidence": [],
+        "party_size": null,
+        "party_size_estimated": true,
+        "complete_capture": true,
+        "issues": [],
+        "context": {
+          "instance_cap": 85,
+          "realm_name": null,
+          "entered_from_realm": false,
+          "difficulty": 0.0,
+          "game_opened_epoch_s": null,
+          "instance_age_micros": null,
+          "modifiers": [],
+          "grade": null
+        }
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "17",
+    "at": "5020000",
+    "event": {
+      "run_updated": {
+        "id": "demo-v1:run:3",
+        "session_id": "demo-v1:session:1",
+        "character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "dungeon": "Snake Pit",
+        "area_kind": "dungeon",
+        "started": "5000000",
+        "ended": null,
+        "completed_at": null,
+        "died_at": null,
+        "outcome": null,
+        "evidence": [],
+        "party_size": 2,
+        "party_size_estimated": true,
+        "complete_capture": true,
+        "issues": [],
+        "context": {
+          "instance_cap": 85,
+          "realm_name": null,
+          "entered_from_realm": false,
+          "difficulty": 0.0,
+          "game_opened_epoch_s": null,
+          "instance_age_micros": null,
+          "modifiers": [],
+          "grade": null
+        }
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "18",
+    "at": "6020000",
+    "event": {
+      "fight_started": {
+        "id": "demo-v1:fight:3:2:3",
+        "run_id": "demo-v1:run:3",
+        "session_id": "demo-v1:session:1",
+        "target_id": 2,
+        "target_generation": 3,
+        "boss_type": 257,
+        "target_type": 257,
+        "max_hp": 10000,
+        "started": "6000000",
+        "ended": null,
+        "first_hit": "6000000",
+        "last_hit": "6000000",
+        "end_reason": null,
+        "players": [
+          {
+            "object_id": 1,
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "name": "DemoHero",
+            "class_id": 100,
+            "is_local": true,
+            "damage": 100.0,
+            "hits": 1,
+            "biggest_hit": 100.0,
+            "deaths": 0,
+            "dps": null,
+            "share": 1.0,
+            "rank": 1,
+            "sources": [
+              {
+                "item_type": 256,
+                "ability": false,
+                "kind": "weapon",
+                "enchant": {
+                  "state": "recorded_empty",
+                  "slots": 0,
+                  "applied": 0,
+                  "ids": []
+                },
+                "damage": 100.0,
+                "hits": 1,
+                "biggest_hit": 100.0,
+                "estimated": false,
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "dps_basis": "player_active_window_v1",
+        "total_damage": 100.0,
+        "unattributed_damage": 0.0,
+        "buckets": [
+          {
+            "from": "6000000",
+            "until": "7000000",
+            "total": 100.0,
+            "local": 100.0
+          }
+        ],
+        "complete_capture": true,
+        "pending_local_reconciliation": true,
+        "issues": [],
+        "kill": null,
+        "target_hp": 10000,
+        "target_kind": "boss",
+        "is_current_quest": false,
+        "local_last_hit": "6000000",
+        "player_series": [
+          {
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "object_id": 1,
+            "is_local": true,
+            "points": [
+              100.0
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "19",
+    "at": "8000000",
+    "event": {
+      "character_updated": {
+        "id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "name": "DemoHero",
+        "class_id": 100,
+        "level": 20,
+        "maxed": null,
+        "fame": 125,
+        "stats": [
+          {
+            "stat_id": 7,
+            "value": 20
+          },
+          {
+            "stat_id": 20,
+            "value": 25
+          },
+          {
+            "stat_id": 29,
+            "value": 0
+          },
+          {
+            "stat_id": 57,
+            "value": 125
+          },
+          {
+            "stat_id": 96,
+            "value": 0
+          },
+          {
+            "stat_id": 113,
+            "value": 1000
+          }
+        ],
+        "equipment": [
+          {
+            "slot": 0,
+            "item_type": 256,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "slot": 1,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "slot": 2,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "slot": 3,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          }
+        ],
+        "observed_at": "8000000",
+        "identity_verified": true,
+        "died_at": null,
+        "issues": [
+          "missing_stats"
+        ],
+        "stat_panel": {
+          "lines": [
+            {
+              "stat_id": 0,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 3,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 20,
+              "total": 25,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 21,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 22,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 26,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 27,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            },
+            {
+              "stat_id": 28,
+              "total": null,
+              "base": null,
+              "cap": null,
+              "at_cap": null,
+              "boost": null,
+              "gear": null,
+              "exalt": null,
+              "other": null,
+              "current": null
+            }
+          ],
+          "conditions": [],
+          "breakdown_provisional": true
+        }
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "20",
+    "at": "8000000",
+    "event": {
+      "fame_changed": {
+        "at": "8000000",
+        "character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "fame": 125
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "21",
+    "at": "9000000",
+    "event": {
+      "fight_updated": {
+        "id": "demo-v1:fight:3:2:3",
+        "run_id": "demo-v1:run:3",
+        "session_id": "demo-v1:session:1",
+        "target_id": 2,
+        "target_generation": 3,
+        "boss_type": 257,
+        "target_type": 257,
+        "max_hp": 10000,
+        "started": "6000000",
+        "ended": null,
+        "first_hit": "6000000",
+        "last_hit": "8000000",
+        "end_reason": null,
+        "players": [
+          {
+            "object_id": 1,
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "name": "DemoHero",
+            "class_id": 100,
+            "is_local": true,
+            "damage": 300.0,
+            "hits": 2,
+            "biggest_hit": 200.0,
+            "deaths": 0,
+            "dps": null,
+            "share": 1.0,
+            "rank": 1,
+            "sources": [
+              {
+                "item_type": 256,
+                "ability": false,
+                "kind": "weapon",
+                "enchant": {
+                  "state": "recorded_empty",
+                  "slots": 0,
+                  "applied": 0,
+                  "ids": []
+                },
+                "damage": 300.0,
+                "hits": 2,
+                "biggest_hit": 200.0,
+                "estimated": false,
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "dps_basis": "player_active_window_v1",
+        "total_damage": 300.0,
+        "unattributed_damage": 0.0,
+        "buckets": [
+          {
+            "from": "6000000",
+            "until": "7000000",
+            "total": 100.0,
+            "local": 100.0
+          },
+          {
+            "from": "8000000",
+            "until": "9000000",
+            "total": 200.0,
+            "local": 200.0
+          }
+        ],
+        "complete_capture": true,
+        "pending_local_reconciliation": true,
+        "issues": [],
+        "kill": null,
+        "target_hp": 10000,
+        "target_kind": "boss",
+        "is_current_quest": false,
+        "local_last_hit": "8000000",
+        "player_series": [
+          {
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "object_id": 1,
+            "is_local": true,
+            "points": [
+              100.0,
+              200.0
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "22",
+    "at": "9000000",
+    "event": {
+      "bag_dropped": {
+        "id": "demo-v1:bag:3:5:3",
+        "session_id": "demo-v1:session:1",
+        "run_id": "demo-v1:run:3",
+        "at": "9000000",
+        "bag_type": 1292,
+        "items": [],
+        "enchant": null,
+        "contents": [],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": "source-not-observed",
+        "contents_known": false,
+        "bag_rank": 255,
+        "issues": [
+          "missing_stats"
+        ],
+        "capture_scope": "realm_shark"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "23",
+    "at": "9000000",
+    "event": {
+      "drop_updated": {
+        "id": "demo-v1:bag:3:5:3",
+        "session_id": "demo-v1:session:1",
+        "run_id": "demo-v1:run:3",
+        "at": "9000000",
+        "bag_type": 1292,
+        "items": [
+          256
+        ],
+        "enchant": "Uncommon",
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 256,
+            "quantity": 1,
+            "enchant": {
+              "state": "recorded",
+              "slots": 1,
+              "applied": 1,
+              "ids": [
+                1
+              ]
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": "source-not-observed",
+        "contents_known": true,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": "realm_shark"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "24",
+    "at": "10000000",
+    "event": {
+      "fight_updated": {
+        "id": "demo-v1:fight:3:2:3",
+        "run_id": "demo-v1:run:3",
+        "session_id": "demo-v1:session:1",
+        "target_id": 2,
+        "target_generation": 3,
+        "boss_type": 257,
+        "target_type": 257,
+        "max_hp": 10000,
+        "started": "6000000",
+        "ended": null,
+        "first_hit": "6000000",
+        "last_hit": "8000000",
+        "end_reason": null,
+        "players": [
+          {
+            "object_id": 1,
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "name": "DemoHero",
+            "class_id": 100,
+            "is_local": true,
+            "damage": 300.0,
+            "hits": 2,
+            "biggest_hit": 200.0,
+            "deaths": 0,
+            "dps": null,
+            "share": 1.0,
+            "rank": 1,
+            "sources": [
+              {
+                "item_type": 256,
+                "ability": false,
+                "kind": "weapon",
+                "enchant": {
+                  "state": "recorded_empty",
+                  "slots": 0,
+                  "applied": 0,
+                  "ids": []
+                },
+                "damage": 300.0,
+                "hits": 2,
+                "biggest_hit": 200.0,
+                "estimated": false,
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "dps_basis": "player_active_window_v1",
+        "total_damage": 300.0,
+        "unattributed_damage": 0.0,
+        "buckets": [
+          {
+            "from": "6000000",
+            "until": "7000000",
+            "total": 100.0,
+            "local": 100.0
+          },
+          {
+            "from": "8000000",
+            "until": "9000000",
+            "total": 200.0,
+            "local": 200.0
+          }
+        ],
+        "complete_capture": true,
+        "pending_local_reconciliation": true,
+        "issues": [],
+        "kill": {
+          "at": "10000000",
+          "evidence": "victory_sole_boss",
+          "provisional": true
+        },
+        "target_hp": 10000,
+        "target_kind": "boss",
+        "is_current_quest": false,
+        "local_last_hit": "8000000",
+        "player_series": [
+          {
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "object_id": 1,
+            "is_local": true,
+            "points": [
+              100.0,
+              200.0
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "25",
+    "at": "10000000",
+    "event": {
+      "run_updated": {
+        "id": "demo-v1:run:3",
+        "session_id": "demo-v1:session:1",
+        "character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "dungeon": "Snake Pit",
+        "area_kind": "dungeon",
+        "started": "5000000",
+        "ended": null,
+        "completed_at": "10000000",
+        "died_at": null,
+        "outcome": "cleared",
+        "evidence": [
+          {
+            "at": "10000000",
+            "evidence": "victory"
+          }
+        ],
+        "party_size": 2,
+        "party_size_estimated": true,
+        "complete_capture": true,
+        "issues": [],
+        "context": {
+          "instance_cap": 85,
+          "realm_name": null,
+          "entered_from_realm": false,
+          "difficulty": 0.0,
+          "game_opened_epoch_s": null,
+          "instance_age_micros": null,
+          "modifiers": [],
+          "grade": null
+        }
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "26",
+    "at": "12000000",
+    "event": {
+      "fight_updated": {
+        "id": "demo-v1:fight:3:2:3",
+        "run_id": "demo-v1:run:3",
+        "session_id": "demo-v1:session:1",
+        "target_id": 2,
+        "target_generation": 3,
+        "boss_type": 257,
+        "target_type": 257,
+        "max_hp": 10000,
+        "started": "6000000",
+        "ended": null,
+        "first_hit": "6000000",
+        "last_hit": "8000000",
+        "end_reason": null,
+        "players": [
+          {
+            "object_id": 1,
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "name": "DemoHero",
+            "class_id": 100,
+            "is_local": true,
+            "damage": 300.0,
+            "hits": 2,
+            "biggest_hit": 200.0,
+            "deaths": 0,
+            "dps": null,
+            "share": 1.0,
+            "rank": 1,
+            "sources": [
+              {
+                "item_type": 256,
+                "ability": false,
+                "kind": "weapon",
+                "enchant": {
+                  "state": "recorded_empty",
+                  "slots": 0,
+                  "applied": 0,
+                  "ids": []
+                },
+                "damage": 300.0,
+                "hits": 2,
+                "biggest_hit": 200.0,
+                "estimated": false,
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "dps_basis": "player_active_window_v1",
+        "total_damage": 300.0,
+        "unattributed_damage": 0.0,
+        "buckets": [
+          {
+            "from": "6000000",
+            "until": "7000000",
+            "total": 100.0,
+            "local": 100.0
+          },
+          {
+            "from": "8000000",
+            "until": "9000000",
+            "total": 200.0,
+            "local": 200.0
+          }
+        ],
+        "complete_capture": true,
+        "pending_local_reconciliation": true,
+        "issues": [],
+        "kill": {
+          "at": "10000000",
+          "evidence": "victory_sole_boss",
+          "provisional": true
+        },
+        "target_hp": 10000,
+        "target_kind": "boss",
+        "is_current_quest": false,
+        "local_last_hit": "8000000",
+        "player_series": [
+          {
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "object_id": 1,
+            "is_local": true,
+            "points": [
+              100.0,
+              200.0
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "27",
+    "at": "12000000",
+    "event": {
+      "run_ended": {
+        "id": "demo-v1:run:3",
+        "session_id": "demo-v1:session:1",
+        "character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "dungeon": "Snake Pit",
+        "area_kind": "dungeon",
+        "started": "5000000",
+        "ended": "12000000",
+        "completed_at": "10000000",
+        "died_at": null,
+        "outcome": "cleared",
+        "evidence": [
+          {
+            "at": "10000000",
+            "evidence": "victory"
+          },
+          {
+            "at": "12000000",
+            "evidence": "observed_exit"
+          }
+        ],
+        "party_size": 2,
+        "party_size_estimated": true,
+        "complete_capture": true,
+        "issues": [],
+        "context": {
+          "instance_cap": 85,
+          "realm_name": null,
+          "entered_from_realm": false,
+          "difficulty": 0.0,
+          "game_opened_epoch_s": null,
+          "instance_age_micros": null,
+          "modifiers": [],
+          "grade": null
+        }
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "28",
+    "at": "12000000",
+    "event": {
+      "fight_ended": {
+        "id": "demo-v1:fight:3:2:3",
+        "run_id": "demo-v1:run:3",
+        "session_id": "demo-v1:session:1",
+        "target_id": 2,
+        "target_generation": 3,
+        "boss_type": 257,
+        "target_type": 257,
+        "max_hp": 10000,
+        "started": "6000000",
+        "ended": "12000000",
+        "first_hit": "6000000",
+        "last_hit": "8000000",
+        "end_reason": "map_changed",
+        "players": [
+          {
+            "object_id": 1,
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "name": "DemoHero",
+            "class_id": 100,
+            "is_local": true,
+            "damage": 300.0,
+            "hits": 2,
+            "biggest_hit": 200.0,
+            "deaths": 0,
+            "dps": null,
+            "share": 1.0,
+            "rank": 1,
+            "sources": [
+              {
+                "item_type": 256,
+                "ability": false,
+                "kind": "weapon",
+                "enchant": {
+                  "state": "recorded_empty",
+                  "slots": 0,
+                  "applied": 0,
+                  "ids": []
+                },
+                "damage": 300.0,
+                "hits": 2,
+                "biggest_hit": 200.0,
+                "estimated": false,
+                "reasons": []
+              }
+            ]
+          }
+        ],
+        "dps_basis": "player_active_window_v1",
+        "total_damage": 300.0,
+        "unattributed_damage": 0.0,
+        "buckets": [
+          {
+            "from": "6000000",
+            "until": "7000000",
+            "total": 100.0,
+            "local": 100.0
+          },
+          {
+            "from": "8000000",
+            "until": "9000000",
+            "total": 200.0,
+            "local": 200.0
+          }
+        ],
+        "complete_capture": true,
+        "pending_local_reconciliation": false,
+        "issues": [],
+        "kill": {
+          "at": "10000000",
+          "evidence": "victory_sole_boss",
+          "provisional": true
+        },
+        "target_hp": 10000,
+        "target_kind": "boss",
+        "is_current_quest": false,
+        "local_last_hit": "8000000",
+        "player_series": [
+          {
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "object_id": 1,
+            "is_local": true,
+            "points": [
+              100.0,
+              200.0
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "29",
+    "at": "12000000",
+    "event": {
+      "drop_updated": {
+        "id": "demo-v1:bag:3:5:3",
+        "session_id": "demo-v1:session:1",
+        "run_id": "demo-v1:run:3",
+        "at": "9000000",
+        "bag_type": 1292,
+        "items": [
+          256
+        ],
+        "enchant": "Uncommon",
+        "contents": [
+          {
+            "slot": 0,
+            "item_type": 256,
+            "quantity": 1,
+            "enchant": {
+              "state": "recorded",
+              "slots": 1,
+              "applied": 1,
+              "ids": [
+                1
+              ]
+            },
+            "taken_observed_at": null
+          }
+        ],
+        "source_enemy": null,
+        "source_estimated": false,
+        "source_reason": "source-not-observed",
+        "contents_known": true,
+        "bag_rank": 255,
+        "issues": [],
+        "capture_scope": "realm_shark"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "30",
+    "at": "12000000",
+    "event": {
+      "map_entered": {
+        "realm_instance_key": null,
+        "at": "12000000",
+        "name": "Nexus",
+        "kind": "nexus"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "31",
+    "at": "12000000",
+    "event": {
+      "session_updated": {
+        "id": "demo-v1:session:1",
+        "started": "100000",
+        "last_traffic": "12000000",
+        "ended": "12000000",
+        "issues": []
+      }
+    }
+  }
+]

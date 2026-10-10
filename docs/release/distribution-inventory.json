@@ -1,0 +1,57 @@
+[
+    {
+        "file":  "$PLUGINSDIR/modern-wizard.bmp",
+        "license":  "Zlib",
+        "sha256":  "3ad2dc318056d0a2024af1804ea741146cfc18cc404649a44610cbf8b2056cf2"
+    },
+    {
+        "file":  "$PLUGINSDIR/nsDialogs.dll",
+        "license":  "Zlib",
+        "sha256":  "b1350f487692057c8ffde75dcc55287a52a3272240d4d4912f24464b27551fc0"
+    },
+    {
+        "file":  "$PLUGINSDIR/nsis_tauri_utils.dll",
+        "license":  "MIT OR Apache-2.0",
+        "sha256":  "5ba143b5db4a87d32d6e7802e033330aae56cbceabe0d1e3ba41948385ad4709"
+    },
+    {
+        "file":  "$PLUGINSDIR/NSISdl.dll",
+        "license":  "Zlib",
+        "sha256":  "ddf40229dd9d6b268902d8dea88c8a04aacf1af218dd29f6dcd35babc54ac08d"
+    },
+    {
+        "file":  "$PLUGINSDIR/StartMenu.dll",
+        "license":  "Zlib",
+        "sha256":  "fe330320459637d8dd2b5d84d07925c38ec264152ffd3b1760a4d44d76536caa"
+    },
+    {
+        "file":  "$PLUGINSDIR/System.dll",
+        "license":  "Zlib",
+        "sha256":  "8b4c47c4cf5e76ec57dd5a050d5acd832a0d532ee875d7b44f6cdaf68f90d37c"
+    },
+    {
+        "file":  "demo/catalog.json",
+        "license":  "MIT",
+        "sha256":  "6d39065758db58797b946431a61432a00cf7532dea465d6f3b7592e902220d8d"
+    },
+    {
+        "file":  "demo/story.pcap",
+        "license":  "MIT",
+        "sha256":  "fbbf9044a7c913c6594d2648b64f5c9a2556355b272b9f7573e17f3b19437f67"
+    },
+    {
+        "file":  "LICENSE",
+        "license":  "MIT",
+        "sha256":  "1ba64892a4c25a8426169eec6944692cc2bd8d930f5309f51a21c6fd433c9a8f"
+    },
+    {
+        "file":  "NOTICE.md",
+        "license":  "MIT",
+        "sha256":  "28432ed2cf49646a3bdedcaca1cf5b53f703ed71e2316373091eb2a6b89f4f1c"
+    },
+    {
+        "file":  "THIRD-PARTY-NOTICES.md",
+        "license":  "LicenseRef-ThirdPartyNotices",
+        "sha256":  "7858137dcbacf2d344f8a5cb461524d52a901afad02d5d85348f23afefec0fb4"
+    }
+]
