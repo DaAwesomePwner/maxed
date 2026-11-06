@@ -842,6 +842,10 @@ pub(crate) fn build_cancellable(
                                 kind,
                                 completion_index: None,
                                 portal_type: None,
+                                difficulty: None,
+                                exalt: false,
+                                exalt_gateway: false,
+                                category: None,
                             });
                         }
                     }
@@ -988,6 +992,16 @@ pub(crate) fn build_cancellable(
     // Several portals can open one dungeon (event, test and art variants), so
     // the choice depends only on catalog data, never on file order.
     for d in &mut c.dungeons {
+        if let Some(meta) = maxed_types::dungeon_meta(&d.name).or_else(|| {
+            d.aliases
+                .iter()
+                .find_map(|alias| maxed_types::dungeon_meta(alias))
+        }) {
+            d.difficulty = Some(meta.difficulty);
+            d.exalt = meta.exalt;
+            d.exalt_gateway = meta.exalt_gateway;
+            d.category = Some(meta.category);
+        }
         d.portal_type = c
             .objects
             .iter()

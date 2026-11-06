@@ -397,6 +397,10 @@ pub fn demo_catalog() -> Catalog {
             kind: AreaKind::Dungeon,
             completion_index: None,
             portal_type: None,
+            difficulty: None,
+            exalt: false,
+            exalt_gateway: false,
+            category: None,
         }],
         bags: vec![BagDef {
             object_type: 400,
