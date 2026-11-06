@@ -7,6 +7,8 @@ mod character_contracts;
 mod chat;
 #[path = "../contracts.rs"]
 mod contracts;
+#[path = "../dungeon_meta.rs"]
+mod dungeon_meta;
 #[path = "../home_contracts.rs"]
 mod home_contracts;
 #[path = "../home_v2_contracts.rs"]

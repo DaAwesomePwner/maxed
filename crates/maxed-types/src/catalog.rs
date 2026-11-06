@@ -118,6 +118,14 @@ pub struct EnchantDef {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct DungeonDef {
+    #[serde(default)]
+    pub difficulty: Option<f32>,
+    #[serde(default)]
+    pub exalt: bool,
+    #[serde(default)]
+    pub exalt_gateway: bool,
+    #[serde(default)]
+    pub category: Option<crate::DungeonCategory>,
     pub name: String,
     pub aliases: Vec<String>,
     pub kind: AreaKind,

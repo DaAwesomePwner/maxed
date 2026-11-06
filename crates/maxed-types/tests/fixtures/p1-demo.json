@@ -26,7 +26,11 @@
     "dungeons": [
       {
         "aliases": [],
+        "category": null,
         "completion_index": null,
+        "difficulty": null,
+        "exalt": false,
+        "exalt_gateway": false,
         "kind": "dungeon",
         "name": "Synthetic Sanctum"
       }

@@ -1798,6 +1798,10 @@ fn adapter_applies_roster_presence_and_profiles_without_events_or_receipts() {
             aliases: vec![],
             completion_index: None,
             portal_type: None,
+            difficulty: None,
+            exalt: false,
+            exalt_gateway: false,
+            category: None,
         });
         let seen = Arc::new(Mutex::new(Vec::new()));
         let received = seen.clone();

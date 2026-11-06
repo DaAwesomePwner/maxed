@@ -160,7 +160,7 @@ export function createFixtureTransport(initial: LiveSnapshot, visuals?: VisualPa
     party: { presets: [], default_preset_id: null },
     loot: structuredClone(preview.lootSettings ?? { chase: [] }),
     chat: { store: { public: true, guild: true, party: true, whisper: true }, retention_days: 90, hidden_senders: [], hidden_keywords: [], filter_spam: true },
-    alerts: { whisper: 'toast', guild_message: 'quiet_log_only', party_message: 'quiet_log_only', white_bag: 'banner', personal_best: 'banner', key_popped: 'off', key_pop_dungeons: [], key_pop_excluded_dungeons: [], death: 'banner', flawless_run: 'off', muted: false, windows_notifications: false, volume_percent: 35 },
+    alerts: { whisper: 'toast', guild_message: 'quiet_log_only', party_message: 'quiet_log_only', white_bag: 'banner', personal_best: 'banner', key_popped: 'off', key_pop_dungeons: [], key_pop_excluded_dungeons: [], key_pop_min_difficulty: null, key_pop_exalt_only: false, death: 'banner', flawless_run: 'off', muted: false, windows_notifications: false, volume_percent: 35 },
     version: 1, adapter_id: null, assets_path: null, save_recordings: false,
     recording_limit_bytes: 1_000_000_000, update_channel: 'stable', hardware_acceleration: false,
   };
@@ -520,6 +520,7 @@ export function createFixtureTransport(initial: LiveSnapshot, visuals?: VisualPa
     update_settings: unavailable,
     list_catalog_dungeon_options: async () => (preview.catalogDungeons ?? []).map(name => ({
       name, aliases: [], kind: 'dungeon', completion_index: null, portal_type: null,
+      difficulty: null, exalt: false, exalt_gateway: false, category: null,
     })),
     // Only explicitly supplied synthetic dungeon definitions are available.
     list_catalog_dungeons: async () => structuredClone(preview.catalogDungeons ?? []),
