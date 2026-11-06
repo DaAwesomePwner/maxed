@@ -85,6 +85,7 @@ it('exposes a failed initial preferences read beside the panel and retries visib
   await flush();
   // Settings also reads app settings; fail the Shell's initial alert-policy read first.
   await follow('#/settings', primary());
+  await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   expect(page.client.querySettings).toHaveBeenCalledTimes(3);
   expect(screen.getByRole('status', { name: 'Background activity' }).textContent).toBe('');
   expect(screen.getByText("Couldn't load alert preferences. Retry.").closest('.preferences')).toBeTruthy();

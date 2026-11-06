@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import { settingsHref } from '../navigation/routes';
   import { onDestroy, onMount, setContext, tick, untrack, type Snippet } from 'svelte';
   import { readonly, writable } from 'svelte/store';
   import type { Client } from '../bridge/client';
@@ -569,7 +570,7 @@
 <StatusOverlay registry={statusRegistry} />
 
 {#snippet railStatusExtra()}
-  {#if recordingIndicator}<span class="recording-indicator" class:recording-stopped={$recordingSession.status?.state === 'failed'} role="status"><a href="#/settings">{recordingIndicator}</a></span>{/if}
+  {#if recordingIndicator}<span class="recording-indicator" class:recording-stopped={$recordingSession.status?.state === 'failed'} role="status"><a href={settingsHref('data')}>{recordingIndicator}</a></span>{/if}
 {/snippet}
 
 <style>

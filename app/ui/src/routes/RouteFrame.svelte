@@ -61,7 +61,7 @@
 {:else if route.kind === 'alerts'}<Alerts {onHistoryApplied} {client} {preview} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {scopeKey} {required} {store} {savedState} {onStateChange} {entryKey} {onRowsReady} />
 {:else if route.kind === 'settings' || route.kind === 'setup'}
   {#if client}
-    {#if route.kind === 'settings' && settingsClient}<Settings client={settingsClient} {preview} {features} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {store} />{:else}<Setup {client} {preview} />{/if}
+    {#if route.kind === 'settings' && settingsClient}<Settings tab={route.tab} client={settingsClient} {preview} {features} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {store} />{:else}<Setup {client} {preview} />{/if}
   {:else}<EmptyState state="unavailable" heading="No Connection" />{/if}
 {:else if route.kind === 'not-found'}
   <EmptyState state="error" heading="Page Not Found">

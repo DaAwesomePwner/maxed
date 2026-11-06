@@ -51,7 +51,7 @@ it('reads only portals, filters from the ranking and removable chip, and strikes
   await fireEvent.click(rank); await fireEvent.click(rank);
   await waitFor(() => expect(rank.getAttribute('aria-pressed')).toBe('false'));
   expect(client.getEventSummary).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole('link', { name: 'Alert settings ›' }).getAttribute('href')).toBe('#/settings');
+  expect(screen.getByRole('link', { name: 'Alert settings ›' }).getAttribute('href')).toBe('#/settings?tab=notifications');
 });
 it('filters local openers on the server and debounces opener search without refetching summary', async () => {
   vi.useFakeTimers(); const client = setup(); render(KeyPopsView, { client }); await flush();
