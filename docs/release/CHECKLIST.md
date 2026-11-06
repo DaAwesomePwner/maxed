@@ -15,7 +15,7 @@ Record version, source revision, exact artifact hashes, environment, result and 
 
 ## Package and update integrity
 
-- [ ] Verify updater public key and artifact configuration; restrict release tags and the protected signing environment as described in [signing](signing.md). The `release-signing` environment has no required reviewers and release tags have no rulesets yet; configure and verify both before publication.
+- [ ] Verify updater public key and artifact configuration; restrict release tags and the protected signing environment as described in [signing](signing.md). `release-signing` accepts only `v*` tag deployments and has no required reviewers; the "Protect version tags" ruleset blocks updating or deleting `v*` tags, so a pushed tag cannot be redone. Verify both before tagging.
 - [ ] Build with `scripts/build-release.ps1 -Package`; verify exact installer signature, authenticated version and size without exposing signing secrets.
 - [ ] Inspect `bundle-manifest.json`, the resource allowlist, all three legal files, synthetic demo resources and NSIS support files. No raw captures, game assets, databases or private exports may ship.
 - [ ] Generate staging metadata and run `tests/packaging/audit-bundle.ps1` against the actual installer and staged download manifest. Preserve exact verified bytes.
