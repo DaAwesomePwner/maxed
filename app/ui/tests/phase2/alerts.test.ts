@@ -21,7 +21,7 @@ it('phase2_alert_policy_disabled_os_and_history', async () => {
   expect(logRows()).toHaveLength(50);
   expect(new Set(logRows().map(row => row.dataset.rowId)).size).toBe(50);
   expect(page.listAlerts).toHaveBeenCalledTimes(1);
-  await follow('#/settings', primary());
+  await follow('#/settings', primary()); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   for (const name of [/white bag/i, /personal best/i]) {
     const select = main().getByRole('combobox', { name });
     expect([...select.querySelectorAll('option')].map(option => option.value)).toEqual(['off', 'quiet_log_only', 'toast', 'banner']);
@@ -132,7 +132,7 @@ it('phase2_alert_preferences_revision_and_destinations', async () => {
   expect(hrefs).toContain('#/runs/run-1/fights/fight-1'); expect(hrefs).toContain('#/runs/run-1/death');
   expect(hrefs).toContain('#/runs/run-1'); expect(hrefs.some(href => href?.includes('/loot'))).toBe(false);
   expect(log().querySelector('img[src="x"]')).toBeNull(); expect(log().textContent).not.toContain('<img src=x onerror=alert(1)>');
-  await follow('#/settings', primary());
+  await follow('#/settings', primary()); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   const loudness = main().getByRole('combobox', { name: /personal best/i });
   await fireEvent.change(loudness, { target: { value: 'toast' } }); await click('Save');
   await fireEvent.change(loudness, { target: { value: 'quiet_log_only' } });
@@ -143,7 +143,7 @@ it('phase2_alert_preferences_revision_and_destinations', async () => {
 });
 
 it.each([true, false])('all test actions guard preview/demo and unsupported native delivery (demo=%s)', async demo => {
-  const page = mountPhase2({ hash: '#/settings', demo }); await flush();
+  const page = mountPhase2({ hash: '#/settings', demo }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   const tests = main().getAllByRole('button', { name: /test/i });
   expect(tests.length).toBeGreaterThanOrEqual(4);
   for (const button of tests) { expect(disabled(button)).toBe(true); await fireEvent.click(button); }
@@ -161,7 +161,7 @@ it('eligible live per-kind tests use only the existing guarded native command', 
     client.testAlertDelivery = vi.fn(async () => ({ permission: 'unavailable' as const, sound_available: true,
       message: 'Synthetic guarded sound accepted', flawless_unavailable: 'Flawless evidence is unavailable.' }));
   } }); await flush();
-  await follow('#/settings', primary());
+  await follow('#/settings', primary()); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   for (const [label, kind] of [[/test.*white bag/i, 'white_bag'], [/test.*personal best/i, 'personal_best'], [/test.*key popped/i, 'key_popped']] as const) {
     const button = main().getByRole('button', { name: label }); expect(disabled(button)).toBe(false);
     await fireEvent.click(button); await flush();
@@ -183,7 +183,7 @@ it('available Windows Notifications save the toggle and test through guarded nat
   const page = mountPhase2({ hash: '#/settings', configure: client => {
     client.queryAlertDelivery = vi.fn(async () => status);
     client.testAlertDelivery = vi.fn(async () => status);
-  } }); await flush();
+  } }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   const windows = main().getByRole('checkbox', { name: /Windows Notifications/i });
   expect(disabled(windows)).toBe(false);
   const test = main().getByRole('button', { name: /^Test Notification$/ });
@@ -210,7 +210,7 @@ it('available Windows Notifications save the toggle and test through guarded nat
 });
 
 it('accepted alert preferences reconfigure the mounted host without replaying history', async () => {
-  const page = mountPhase2({ hash: '#/settings' }); await flush();
+  const page = mountPhase2({ hash: '#/settings' }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   page.event({ alert_fired: alert({ id: 'visible-before-save', explanation: 'Visible live moment' }) }, '13');
   page.event({ alert_fired: alert({ id: 'waiting-before-save', explanation: 'Waiting live moment' }) }, '14'); await flush();
   expect(screen.getByRole('button', { name: /dismiss/i })).toBeTruthy();
@@ -220,7 +220,7 @@ it('accepted alert preferences reconfigure the mounted host without replaying hi
   await fireEvent.change(main().getByRole('combobox', { name: /personal best/i }), { target: { value: 'banner' } });
   await click('Save'); await advance(9000);
   expect(screen.queryByRole('button', { name: /dismiss/i })).toBeNull();
-  await follow('#/logs/alerts'); await follow('#/settings', primary());
+  await follow('#/logs/alerts'); await follow('#/settings', primary()); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   expect(screen.queryByRole('button', { name: /dismiss/i })).toBeNull();
   expect(page.client.updateSettings).not.toHaveBeenCalled();
   for (const listener of page.listeners) expect(listener).toHaveBeenCalledTimes(1);
@@ -229,7 +229,7 @@ it('accepted alert preferences reconfigure the mounted host without replaying hi
 it('Death has no preference or Test entry while legacy history still renders', async () => {
   mountPhase2({ hash: '#/alerts', alerts: async () => ready({ rows: [alert({ kind: 'death', details: { type: 'death', character_id: null } })], next: null }) }); await flush();
   expect(log().textContent).toContain('Death');
-  await follow('#/settings', primary());
+  await follow('#/settings', primary()); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   expect(main().queryByRole('combobox', { name: /^death/i })).toBeNull();
   expect(main().queryByRole('button', { name: /test.*death/i })).toBeNull();
 });
@@ -239,7 +239,7 @@ it('Key popped exposes loudness, catalog dungeon selection and a guarded Test', 
     client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void'].map(name => ({ name, aliases: [], kind: 'dungeon' as const, completion_index: null })));
     client.queryAlertDelivery = vi.fn(async () => ({ permission: 'unavailable' as const, sound_available: true,
       message: null, flawless_unavailable: 'Flawless evidence is unavailable.' }));
-  } }); await flush();
+  } }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   const level = main().getByRole('combobox', { name: 'Key Popped' });
   const filter = main().getByRole('combobox', { name: /key popped dungeons/i });
   expect((filter as HTMLSelectElement).value).toBe('all');
@@ -267,7 +267,7 @@ it('Key Popped Kind survives Back navigation', async () => {
 it('saving a dungeon filter removes visible and queued key-pop banners without removing PB', async () => {
   const page = mountPhase2({ hash: '#/settings', configure: client => {
     client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void'].map(name => ({ name, aliases: [], kind: 'dungeon' as const, completion_index: null })));
-  } }); await flush();
+  } }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   await fireEvent.change(main().getByRole('combobox', { name: 'Key Popped' }), { target: { value: 'banner' } });
   await click('Save');
   const key = { kind: 'key_popped' as const, details: { type: 'key_popped' as const, dungeon: 'Lost Halls' }, run_id: null };

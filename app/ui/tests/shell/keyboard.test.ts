@@ -61,52 +61,51 @@ describe('document keyboard order', () => {
     const delivery = screen.getByText('Delivery', { selector: 'summary' });
     const assets = screen.getByText('Assets Path', { selector: 'summary' });
     const recovery = screen.getByText('Recovery', { selector: 'summary' });
-    const chatOrder = [
-      ...['All', 'Guild', 'Party', 'Whisper'].map(channel => screen.getByRole('checkbox', { name: `Store ${channel} chat` })),
-      screen.getByRole('spinbutton', { name: 'Keep chat for (days)' }),
-      screen.getByRole('checkbox', { name: 'Filter spam ads and repeated public messages' }),
-      screen.getByRole('textbox', { name: 'Add keyword' }), button('Add'),
-      button('Save chat settings'), button('Clear chat history'),
-    ];
-    const defaultOrder = [
-      setupLink,
-      screen.getByRole('combobox', { name: 'Capture Adapter' }), button('Retry Adapters'),
-      button('Refresh storage'), button('Estimate receipt storage'), screen.getByRole('checkbox', { name: 'Save Recordings' }), button('Retry Recording'),
-      ...chatOrder, button('Clear party history'),
-      screen.getByRole('checkbox', { name: 'Hardware Acceleration' }), assets,
-      screen.getByRole('combobox', { name: 'Update Channel' }),
-      button('Check Updates'), button('Retry Updates'),
-      screen.getByRole('switch', { name: 'Demo Mode' }), screen.getByRole('checkbox', { name: /Debug [Mm]ode/ }), delivery, button('Apply'),
-      screen.getByRole('link', { name: 'Alert history' }), recovery,
-    ];
-    await tabOrder(defaultOrder);
     const user = userEvent.setup();
-    for (const summary of [assets, recovery]) {
-      await user.click(summary);
-      expect((summary.parentElement as HTMLDetailsElement).open).toBe(true);
+    for (const expanded of [false, true]) {
+      if (expanded) {
+        await user.click(screen.getByRole('tab', { name: 'Game assets' }));
+        for (const summary of [assets, recovery]) {
+          await user.click(summary);
+          expect((summary.parentElement as HTMLDetailsElement).open).toBe(true);
+        }
+      }
+      for (const name of ['General', 'Data & history', 'Game assets', 'Notifications']) {
+        const tab = screen.getByRole('tab', { name });
+        await user.click(tab);
+        const panel = screen.getByRole('tabpanel', { name });
+        const content = name === 'General' ? [
+          screen.getByRole('combobox', { name: 'Capture Adapter' }), button('Retry Adapters'),
+          screen.getByRole('checkbox', { name: 'Hardware Acceleration' }),
+          screen.getByRole('combobox', { name: 'Update Channel' }), button('Check Updates'), button('Retry Updates'),
+          screen.getByRole('switch', { name: 'Demo Mode' }), screen.getByRole('checkbox', { name: /Debug [Mm]ode/ }),
+        ] : name === 'Data & history' ? [
+          button('Refresh storage'), button('Estimate receipt storage'), screen.getByRole('checkbox', { name: 'Save Recordings' }), button('Retry Recording'),
+          ...['All', 'Guild', 'Party', 'Whisper'].map(channel => screen.getByRole('checkbox', { name: `Store ${channel} chat` })),
+          screen.getByRole('spinbutton', { name: 'Keep chat for (days)' }),
+          screen.getByRole('checkbox', { name: 'Filter spam ads and repeated public messages' }),
+          screen.getByRole('textbox', { name: 'Add keyword' }), button('Add'),
+          button('Save chat settings'), button('Clear chat history'), button('Clear party history'),
+        ] : name === 'Game assets' ? [
+          assets, ...(expanded ? [screen.getByRole('textbox', { name: 'Assets Path' }), button('Extract'), button('Retry Detection')] : []),
+        ] : [delivery];
+        const order = [setupLink, tab, panel, ...content, button('Apply'),
+          screen.getByRole('link', { name: 'Alert history' }), recovery,
+          ...(expanded ? [button('Retry Settings'), button('Retry Checks')] : [])];
+        order[0].focus();
+        for (const element of order.slice(1)) {
+          await user.tab(); expect(document.activeElement).toBe(element);
+        }
+        for (const element of order.slice(0, -1).reverse()) {
+          await user.tab({ shift: true }); expect(document.activeElement).toBe(element);
+        }
+        expect(document.querySelector('[tabindex]:not([tabindex="0"]):not([tabindex="-1"])')).toBeNull();
+      }
     }
-    const expandedOrder = [
-      setupLink,
-      screen.getByRole('combobox', { name: 'Capture Adapter' }), button('Retry Adapters'),
-      button('Refresh storage'), button('Estimate receipt storage'), screen.getByRole('checkbox', { name: 'Save Recordings' }), button('Retry Recording'),
-      ...chatOrder, button('Clear party history'),
-      screen.getByRole('checkbox', { name: 'Hardware Acceleration' }), assets,
-      screen.getByRole('textbox', { name: 'Assets Path' }), button('Extract'), button('Retry Detection'),
-      screen.getByRole('combobox', { name: 'Update Channel' }), button('Check Updates'), button('Retry Updates'),
-      screen.getByRole('switch', { name: 'Demo Mode' }), screen.getByRole('checkbox', { name: /Debug [Mm]ode/ }), delivery, button('Apply'),
-      screen.getByRole('link', { name: 'Alert history' }), recovery,
-      button('Retry Settings'), button('Retry Checks'),
-    ];
-    expandedOrder[0].focus();
-    for (const element of expandedOrder.slice(1)) {
-      await user.tab(); expect(document.activeElement).toBe(element);
-    }
-    for (const element of expandedOrder.slice(0, -1).reverse()) {
-      await user.tab({ shift: true }); expect(document.activeElement).toBe(element);
-    }
-    expect(document.querySelector('[tabindex]:not([tabindex="0"]):not([tabindex="-1"])')).toBeNull();
     expect((within(button('Apply').closest('form')!).getByRole('button', { name: 'Revert' }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole('tab', { name: 'Game assets' }));
     expect((button('Cancel') as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole('tab', { name: 'Data & history' }));
     expect((screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement).disabled).toBe(false);
   });
 
