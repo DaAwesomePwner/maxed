@@ -33,7 +33,8 @@ Windows gameplay and installed-release acceptance remain incomplete.
 
 - The v4 Home is the production default; `homeRedesign` remains for rollback.
   Phase 2 adds saved dungeon, death and realm-visit recaps and copy image under
-  that same flag. Journey and Progress are later work.
+  that same flag; the owner accepted it from use on 2026-11-06. Journey and
+  Progress are later work.
 - Party average is the mean DPS of the other players in the same fight whose
   DPS is established. It excludes the local player and unattributed damage.
   The live party line divides attributed non-local bucket damage by non-local
@@ -58,8 +59,9 @@ Windows gameplay and installed-release acceptance remain incomplete.
 - Synthetic previews and browser layout checks do not verify live Npcap,
   game-client observations, Windows WebView2 or installer behavior.
 - The isolated [clipboard spike](development/recap-clipboard-spike.md) verified
-  a WebView2 PNG write. Copying with real sprites, pasting into Discord and
-  Segoe UI Variable rendering still need owner acceptance.
+  a WebView2 PNG write. The owner accepted copying with real sprites and pasting
+  into Discord from use on 2026-11-06. Segoe UI Variable rendering in the copied
+  image still needs owner acceptance.
 
 ## Party
 
@@ -100,21 +102,24 @@ Stats is on in production; live fame and visit tracking across real Windows play
 
 ## Implemented behavior awaiting live acceptance
 
+The owner accepted boss closure and kill announcements, departures, personal-best
+alerts and realm → dungeon → realm continuity from Windows use on 2026-11-06. That
+is in-use acceptance without recorded evidence artifacts; [kill evidence](parity/kill-evidence.md)
+and [personal-best rules](architecture/personal-bests.md) still describe what each
+decision relies on. HP1 alone and a quest switch remain insufficient kill evidence,
+and history caps still mark a realm visit partial.
+
 The open gameplay reports include behaviors covered by deterministic fixes.
 The following evidence limits remain; the original symptoms are not claims that
 the corresponding fixes are absent.
 
 | Area | Supported behavior and remaining impact | Workaround or interpretation |
 | --- | --- | --- |
-| Logs live updates | Chat and instance-event invalidation and the New messages control have synthetic coverage; live updates and channel rules await Windows acceptance. | Verify real guild/party/whisper traffic, capture-running/stopped clear and long-session retention. Chat-cue ear-approval remains pending. |
-| Loot live updates | Feed, Item history, Stats and Collection refresh from durable observations and ended-run changes. New bags appearing across these views during real Windows play are not yet verified. | Synthetic tests do not establish live capture or WebView2 acceptance. |
-| Boss closure and kill announcements | Confirmed kills end fights at the kill timestamp; recognized Oryx `.death.N`/`.killed.N` announcements plus target removal can confirm a kill despite positive final HP. Windows acceptance of boss HP/timeline closure remains incomplete. | HP1 alone and a quest switch are insufficient evidence; filled-text fixtures cannot prove an announcement. See [kill evidence](parity/kill-evidence.md). |
-| Departures | Only departures before Victory count as Left; a matched death cancels a departure. Live and stored counts still need a full-run check. | Treat the filled Shaitan victim case separately; its extra pre-Victory departure is a fixture limit. |
+| Logs live updates | Chat and instance-event invalidation and the New messages control have synthetic coverage; live updates and channel rules await Windows acceptance. | Verify real guild/party/whisper traffic, capture-running/stopped clear and long-session retention. The owner approved the chat cue on 2026-11-06. |
+| Loot live updates | Feed, Item history, Stats and Collection refresh from durable observations and ended-run changes. The owner reports new bags appear during real Windows play (2026-11-06), but the item shown as a bag's best is inconsistent. | Open the bag to see every item; do not rely on the highlighted best item until this is fixed. |
 | Consumable ranking | Catalog consumable/stack metadata keeps ordinary potions from outranking equipment merely because game labels say UT. Actual-client best-bag display still needs acceptance. | Re-extract stale assets and inspect the item type rather than assuming UT means equipment. |
-| Personal bests | DPS eligibility distinguishes known neutral reconstruction from uncertain inputs; terminal revisions and run-time PBs have regression coverage. Fully observed real-catalog alert acceptance remains incomplete. | Start capture before character selection. First eligible records establish silent baselines; incomplete or estimated DPS remains ineligible. See [personal-best rules](architecture/personal-bests.md). |
 | DPS basis and display | Product player DPS uses each player's active window and is unavailable below three seconds; current UI formatting uses whole numbers. Run DPS retains its separate window. Live comparisons across surfaces still need acceptance. | Do not compare legacy whole-target stored rates or reference export rates with current player-window rates. |
 | Realm kill history | Ordinary traffic no longer evicts early kills: compact visit history retains up to 500 fight kills and 500 announcement rows, independently of the 64 detailed fights. Realm loot retains up to 512 bags. Long-visit live acceptance remains incomplete. | Exceeding a history cap marks the visit partial with a specific reason. |
-| Realm return | Same-instance continuity retains visits across dungeon trips, subject to bounded visit/history storage. Live realm → dungeon → realm acceptance remains incomplete. | A new realm identity starts a new visit; compact kill history and loot survive same-instance returns within their explicit caps. |
 | Key-pop delivery | Dungeon filtering, local-pop suppression, sound and native delivery have regression coverage. Installed display/listening and real capture acceptance remain separate. | Save preferences and use Test for delivery; demo/replay stays silent and a reconnect-only fixture does not prove full identity/capture. |
 | In-app alerts | Banners and toasts overlay the top of the content pane without moving route content; Key Popped uses local portal art when available. Windows/WebView2 layout, motion and narrow-width acceptance remain incomplete. | Unknown dungeons or missing catalogs/portal art show no icon. Check scrolling, reduced motion and Dismiss access at 900 px and 440 px on Windows. |
 | Refresh status | Transient refresh/loading status uses a bottom-right overlay; actionable errors stay inline. Actual Windows layout, focus and screen-reader behavior remain unverified. | Use the panel's retry action for errors. |
@@ -134,20 +139,23 @@ Diagnostic path redaction is incomplete for some paths with spaces, so local
 reports need inspection before sharing. Installer Npcap guidance is not
 selectable; the [installation guide](release/INSTALL.md) provides the link.
 
-The [release checklist](release/CHECKLIST.md) remains incomplete: clean
-install/update/uninstall, real capture, recording under volume pressure, network
-coverage, Windows input/DPI/accessibility and performance acceptance are not
-established. Public readiness also requires rights review, fixture publication
-approval, a Code of Conduct contact, private reporting and legal-notice
-reconciliation.
+The [release checklist](release/CHECKLIST.md) remains incomplete. On 2026-11-06
+the owner reported that clean install/update/uninstall worked when needed, and
+assessed real capture, recording under low disk space, network audit coverage,
+Windows input/DPI/accessibility, performance, and the public-readiness items
+(rights review, fixture publication approval, a Code of Conduct contact, private
+reporting and legal-notice reconciliation) as "all good from what I can tell".
+That is a qualified owner assessment, not the recorded audits, measurements and
+approvals the checklist requires; its boxes stay unchecked until that evidence
+is recorded.
 
-## Character (live acceptance pending)
+## Character
 
 - `character` is on in production, approved by the owner on 2026-10-20 before
-  Task 11. Windows live acceptance is still pending and is being verified in use:
-  weapon/regen values versus the client, state transitions, 100%/150% scaling
-  and keyboard behavior. Synthetic preview and browser geometry checks do not
-  verify live Npcap, game-client or WebView2 behavior.
+  Task 11. On 2026-11-06 the owner accepted weapon/regen values versus the
+  client, 100%/150% scaling and keyboard behavior from Windows use. The Task 11
+  checklist in [Character live acceptance](development/character-live-acceptance.md)
+  is still not recorded item by item.
 - Gate U was accepted PASS by the owner on 2026-10-17 in
   private-repo PR 176 (archived, not public), with the evidence in
   [Character live acceptance](development/character-live-acceptance.md).

@@ -55,3 +55,13 @@ it('sizes stat values to their grid when a classic scrollbar consumes rail width
   expect(value).not.toContain('white-space: nowrap');
   expect(value).not.toMatch(/overflow:|text-overflow:|line-clamp:/);
 });
+
+it('puts exalt on its own wrapping line with an 11px minimum, including below vital meters', () => {
+  const stats = read('shell/StatPanel.svelte');
+  const exalt = stats.match(/\.exalt\s*\{([^}]+)\}/)![1];
+  expect(exalt).toContain('display: block');
+  expect(exalt).toContain('font-size: max(11px, .85em)');
+  expect(exalt).toContain('overflow-wrap: anywhere');
+  expect(exalt).not.toContain('white-space: nowrap');
+  expect(stats).toMatch(/<VitalBar[^]*?\/>\s*\{#if exalt !== null\}\s*<span class="exalt vital-exalt"/);
+});

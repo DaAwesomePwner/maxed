@@ -235,6 +235,39 @@ fn reconnect() {
     );
 }
 #[test]
+fn owner_object_id_stat_is_distinct_from_exaltation_packet() {
+    let body = w()
+        .int(1)
+        .int(200)
+        .int(200)
+        .short(0)
+        .short(1)
+        .byte(1) // synthetic carrier object ID
+        .pos()
+        .byte(1) // stat count
+        .byte(114)
+        .byte(2) // synthetic owner object ID
+        .byte(0)
+        .0;
+    check(
+        10,
+        S,
+        &body,
+        json!({"tickId":1,"tickTime":200,"serverRealTimeMS":200,"serverLastTimeRTTMS":0,
+            "status":[{"objectId":1,"pos":pos(),"stats":[{
+                "statTypeNum":114,"statType":"OWNER_OBJECT_ID","statValue":2,
+                "stringStatValue":null,"statValueTwo":0}]}]}),
+    );
+    assert_eq!(
+        decode_packet(114, S, &w().short(-1).raw(&[0x41; 8]).0)
+            .unwrap()
+            .0
+            .name(),
+        "EXALTATION_BONUS_CHANGED"
+    );
+}
+
+#[test]
 fn exaltation() {
     check(
         114,
