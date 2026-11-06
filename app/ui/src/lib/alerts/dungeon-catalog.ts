@@ -47,6 +47,7 @@ export function watchDungeonCatalog(client: Client, changed?: () => void): () =>
   };
 }
 
+const asciiLower = (value: string) => value.replace(/[A-Z]/g, letter => letter.toLowerCase());
 export function dungeonMetadata(name: string, rows = get(dungeonCatalog)) {
-  return rows === undefined ? undefined : rows.find(row => row.name === name) ?? null;
+  return rows === undefined ? undefined : rows.find(row => asciiLower(row.name) === asciiLower(name)) ?? null;
 }

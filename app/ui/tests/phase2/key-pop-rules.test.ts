@@ -42,6 +42,9 @@ it('preserves lists in presets, produces half steps and previews unknown difficu
   let p = preferences({ key_pop_excluded_dungeons: ['Elsewhere'] });
   const edits = vi.fn(patch => { p = { ...p, ...patch }; });
   const view = render(KeyPopRules, { preferences: p, onEdit: edits });
+  expect(screen.queryByText(/with unknown difficulty/)).toBeNull();
+  expect(screen.getByText('Fungal Cavern counts as the gateway to Crystal Cavern.')).toBeTruthy();
+  expect(screen.getByRole('combobox', { name: 'Minimum difficulty' })).toBeTruthy();
   await fireEvent.change(screen.getByLabelText('Preset'), { target: { value: 'exalt' } });
   expect(p.key_pop_exalt_only).toBe(true); expect(p.key_pop_min_difficulty).toBeNull();
   expect(p.key_pop_excluded_dungeons).toEqual(['Elsewhere']);
@@ -51,13 +54,22 @@ it('preserves lists in presets, produces half steps and previews unknown difficu
   expect(p.key_pop_exalt_only).toBe(false); expect(p.key_pop_min_difficulty).toBeNull();
   await fireEvent.change(screen.getByLabelText('Preset'), { target: { value: 'custom' } });
   await view.rerender({ preferences: p });
+  expect(screen.getByText('7+ / 10')).toBeTruthy();
+  expect(screen.getByRole('slider').getAttribute('aria-valuetext')).toBe('7+ / 10');
   expect(screen.getByText(/2 of 3 dungeons will notify/)).toBeTruthy();
   expect(screen.getByText(/1 with unknown difficulty/)).toBeTruthy();
   await fireEvent.input(screen.getByRole('slider'), { target: { value: '7.3' } });
   expect(p.key_pop_min_difficulty).toBe(7.5);
   await view.rerender({ preferences: { ...p, key_pop_dungeons: ['High'] } });
   expect(screen.getByLabelText('Preset').closest('fieldset')?.disabled).toBe(true);
-  expect(screen.getByText(/selected list overrides/)).toBeTruthy();
+  const explanation = screen.getByText(/selected list overrides/);
+  expect(screen.getByRole('group', { name: 'Notify for' }).getAttribute('aria-describedby')).toBe(explanation.id);
+  await view.rerender({ preferences: p });
+  await fireEvent.change(screen.getByRole('combobox', { name: 'Minimum difficulty' }), { target: { value: 'off' } });
+  expect(p.key_pop_min_difficulty).toBeNull();
+  await view.rerender({ preferences: p });
+  expect((screen.getByRole('slider') as HTMLInputElement).disabled).toBe(true);
+  expect(screen.queryByText(/with unknown difficulty/)).toBeNull();
 });
 it('keeps local rules through a concurrent mute and applies both new fields', async () => {
   const store = writable(preferences());
@@ -83,6 +95,12 @@ it('shows picker difficulty, exalt badges and rule-filtered rows', async () => {
   expect(screen.getByText('Exalt gateway')).toBeTruthy();
   expect(screen.getByText('Exalt')).toBeTruthy();
   expect(screen.getByText('Filtered by rules')).toBeTruthy();
+  expect(screen.getByText('difficulty unknown')).toBeTruthy();
+  const checkbox = screen.getByRole('checkbox', { name: 'Low' });
+  const description = document.getElementById(checkbox.getAttribute('aria-describedby')!);
+  expect(description?.textContent).toContain('6 / 10');
+  expect(description?.textContent).toContain('Exalt gateway');
+  expect(description?.textContent).toContain('Filtered by rules');
 });
 
 it('saves the panel fields through the settings editor', async () => {
@@ -107,12 +125,17 @@ it('labels rule-filtered saved alerts instead of offering an ineffective Unmute'
 it('disables the banner mute for a rule-filtered dungeon and explains it', async () => {
   const { default: MuteDungeon } = await import('../../src/lib/alerts/MuteDungeon.svelte');
   const { DUNGEON_MUTE, createDungeonMute } = await import('../../src/lib/alerts/dungeon-mute');
-  const session: AlertSession = { preferences: writable(preferences({ key_pop_exalt_only: true })), status: writable('ready'), update: vi.fn(), refresh: async () => {}, dispose() {} };
+  const policy = writable(preferences({ key_pop_exalt_only: true }));
+  const session: AlertSession = { preferences: policy, status: writable('ready'), update: vi.fn(), refresh: async () => {}, dispose() {} };
   const mute = createDungeonMute(session, () => true);
   dungeonCatalog.set([dungeonDef({ name: 'Synthetic', difficulty: 7, exalt: false })]);
   render(MuteDungeon, { props: { dungeon: 'Synthetic' }, context: new Map([[DUNGEON_MUTE, mute]]) });
   expect(screen.getByText('Filtered by rules')).toBeTruthy();
   expect((screen.getByRole('button', { name: 'Mute Synthetic' }) as HTMLButtonElement).disabled).toBe(true);
+  policy.set(preferences({ key_pop_excluded_dungeons: ['Synthetic'] }));
+  await flush();
+  expect(screen.getByText('Muted')).toBeTruthy();
+  expect(screen.queryByText('Filtered by rules')).toBeNull();
   mute.dispose();
 });
 

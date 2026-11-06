@@ -7,6 +7,7 @@
     client?: Client; preferences: AlertPreferences; disabled?: boolean;
     onEdit: (patch: Partial<AlertPreferences>) => void;
   } = $props();
+  const id = $props.id();
   $effect(() => { if (client) return watchDungeonCatalog(client); });
   let selected = $derived(preferences.key_pop_dungeons !== null);
   let preset = $derived(preferences.key_pop_min_difficulty != null ? 'custom' : preferences.key_pop_exalt_only ? 'exalt' : 'everything');
@@ -19,8 +20,8 @@
 </script>
 <section aria-label="Key-pop rules">
   <h4>Dungeon rules</h4>
-  {#if selected}<p>Only selected: the selected list overrides these rules.</p>{/if}
-  <fieldset disabled={disabled || selected}>
+  {#if selected}<p id={`${id}-selected`}>Only selected: the selected list overrides these rules.</p>{/if}
+  <fieldset aria-describedby={selected ? `${id}-selected` : undefined} disabled={disabled || selected}>
     <legend>Notify for</legend>
     <label>Preset
       <select value={preset} onchange={event => {
@@ -30,7 +31,7 @@
       }}><option value="everything">Everything</option><option value="exalt">Exalt dungeons</option><option value="custom">Custom</option></select>
     </label>
     <label>Minimum difficulty
-      <select aria-label="Difficulty threshold" value={preferences.key_pop_min_difficulty == null ? 'off' : 'on'} onchange={event => onEdit({ key_pop_min_difficulty: event.currentTarget.value === 'off' ? null : 7 })}><option value="off">Off</option><option value="on">At least</option></select>
+      <select aria-label="Minimum difficulty" value={preferences.key_pop_min_difficulty == null ? 'off' : 'on'} onchange={event => onEdit({ key_pop_min_difficulty: event.currentTarget.value === 'off' ? null : 7 })}><option value="off">Off</option><option value="on">At least</option></select>
     </label>
     <label class="slider">Minimum difficulty rating
       <input aria-label="Minimum difficulty rating" aria-valuetext={preferences.key_pop_min_difficulty == null ? 'Off' : `${preferences.key_pop_min_difficulty}+ / 10`} type="range" min="0" max="10" step="0.5" disabled={preferences.key_pop_min_difficulty == null} value={preferences.key_pop_min_difficulty ?? 0} oninput={event => threshold(event.currentTarget.value)} />
@@ -40,7 +41,7 @@
     <p>Fungal Cavern counts as the gateway to Crystal Cavern.</p>
   </fieldset>
   <p aria-live="polite">{#if $dungeonCatalog}{allowed?.length} of {$dungeonCatalog.length} dungeons will notify.
-    {unknown} with unknown difficulty still notify under a threshold.
+    {#if preferences.key_pop_min_difficulty != null}{unknown} with unknown difficulty still notify under a threshold.{/if}
     {:else}Dungeon preview unavailable until the catalog loads.{/if}</p>
 </section>
 <style>

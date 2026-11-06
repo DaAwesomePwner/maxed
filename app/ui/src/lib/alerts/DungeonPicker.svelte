@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { loadDungeonCatalog, watchDungeonCatalog } from './dungeon-catalog';
+  import { loadDungeonCatalog, watchDungeonCatalog, dungeonMetadata } from './dungeon-catalog';
   import { filteredByRules } from './preferences';
   import { untrack } from 'svelte';
   import type { Client } from '../bridge/client';
@@ -12,6 +12,7 @@
     client?: Client; preferences: AlertPreferences; disabled: boolean;
     onEdit: (patch: Partial<AlertPreferences>) => void;
   } = $props();
+  const id = $props.id();
   type Mode = 'all' | 'except' | 'selected';
   const modeOf = (p: AlertPreferences): Mode => p.key_pop_dungeons !== null ? 'selected'
     : p.key_pop_excluded_dungeons.length ? 'except' : 'all';
@@ -145,12 +146,12 @@
     <input id="dungeon-search" type="search" bind:value={query} />
     <div class="actions"><button type="button" onclick={() => select([...new Set([...selected, ...visible])])}>Select all</button><button type="button" onclick={() => select(selected.filter(name => !visible.includes(name)))}>Clear</button></div>
     <div class="results">
-      {#each visible as dungeon (dungeon)}
-        {@const meta = catalog.find(row => row.name === dungeon)}
-        <label class="choice"><input aria-label={dungeon} type="checkbox" checked={selected.includes(dungeon)} onchange={event => { if (!select(event.currentTarget.checked ? [...selected, dungeon] : selected.filter(name => name !== dungeon))) event.currentTarget.checked = selected.includes(dungeon); }} /><DungeonPortal portal={portals.get(dungeon) ?? fallbackPortals.get(dungeon) ?? null} />{dungeon}
-          <small>{meta?.difficulty == null ? 'difficulty unknown' : `${meta.difficulty} / 10`}</small>
+      {#each visible as dungeon, index (dungeon)}
+        {@const meta = dungeonMetadata(dungeon, catalog)}
+        <label class="choice"><input aria-label={dungeon} aria-describedby={`${id}-metadata-${index}`} type="checkbox" checked={selected.includes(dungeon)} onchange={event => { if (!select(event.currentTarget.checked ? [...selected, dungeon] : selected.filter(name => name !== dungeon))) event.currentTarget.checked = selected.includes(dungeon); }} /><DungeonPortal portal={portals.get(dungeon) ?? fallbackPortals.get(dungeon) ?? null} />{dungeon}
+          <span id={`${id}-metadata-${index}`}><small>{meta?.difficulty == null ? 'difficulty unknown' : `${meta.difficulty} / 10`}</small>
           {#if meta?.exalt}<small>Exalt</small>{:else if meta?.exalt_gateway}<small>Exalt gateway</small>{/if}
-          {#if filteredByRules(preferences, dungeon, catalogStatus === 'ready' ? meta ?? null : undefined)}<small>Filtered by rules</small>{/if}
+          {#if filteredByRules(preferences, dungeon, catalogStatus === 'ready' ? meta ?? null : undefined)}<small>Filtered by rules</small>{/if}</span>
         </label>
       {/each}
       {#if !visible.length}<p>No matching dungeons.</p>{/if}
