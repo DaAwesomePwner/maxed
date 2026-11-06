@@ -39,6 +39,23 @@ export function statCapUnavailableReason(line: StatLine): string | null {
   if (evidence.reasons.includes('unverified_placement')) return 'exalt placement unverified';
   return 'base or cap unavailable';
 }
+// Exalt is already scaled by the engine (HP/MP ×5); never treat it as a level.
+export function statExalt(line: StatLine | null | undefined): number | null {
+  const exalt = line?.exalt;
+  return Number.isSafeInteger(exalt) && exalt! > 0 ? exalt! : null;
+}
+
+export function statBoost(line: StatLine | null | undefined): number | null {
+  const boost = line?.boost ?? null;
+  const exalt = statExalt(line);
+  const evidence = line?.split_evidence;
+  // Keep the raw observation when placement is provisional or evidence conflicts.
+  if (exalt === null || !known(boost) || evidence?.placement !== 'verified_inside_boost'
+    || evidence.reasons.some(reason => ['unverified_placement', 'invalid_exalt',
+      'negative_other', 'negative_base', 'overflow'].includes(reason))) return boost;
+  return boost - exalt;
+}
+
 export function statTone(atCap: boolean, boost: number | null): 'max' | 'boosted' | 'plain' {
   return atCap ? 'max' : known(boost) && boost !== 0 ? 'boosted' : 'plain';
 }

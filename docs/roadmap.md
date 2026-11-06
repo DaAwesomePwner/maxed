@@ -18,19 +18,19 @@ RealmHound that are not yet scheduled.
 
 | Tab | Status | Feature flag | Notes |
 | --- | --- | --- | --- |
-| Home | Redesign phase 2 merged, owner acceptance pending | `homeRedesign`, on | Home keeps its live screen with a 15-second recap-ready banner and persistent Last recap; phase 2 awaits live recap, chain, Discord paste and sprite copy acceptance. Journey and Progress are next |
+| Home | Redesign phase 2 accepted by the owner (2026-11-06) | `homeRedesign`, on | Home keeps its live screen with a 15-second recap-ready banner and persistent Last recap. Journey and Progress are next |
 | Runs | Shipped | — | Run story and fight drill-downs; run-level player view with gear, stats and DPS timelines |
 | Alerts | Shipped | — | Now the **Logs › Alerts** sub-view; `#/alerts` redirects there |
 | Settings | Shipped | — | Pinned at the bottom of the rail |
 | **Loot** | Shipped (private-repo PR 87) | `lootBrowsing`, on | Feed, item pages, statistics, collection and chase list |
 | **Logs** | Shipped (private-repo PR 89) | `logs`, on | Chat, key pops, events, alerts. Chat storage and Settings › Chat are active regardless of the flag |
 | **Stats / Sessions** | Shipped (private-repo PR 94) | `stats`, on | Fame per hour by map, sessions, lifetime dungeon record, CSV export |
-| **Character** | Implemented, in owner use | `character`, on | Own-character calculator; Windows live acceptance pending, Gate P open and exalt damage deferred. See [live acceptance](development/character-live-acceptance.md) |
+| **Character** | Implemented, accepted in owner use (2026-11-06) | `character`, on | Own-character calculator; Gate P open and exalt damage deferred. See [live acceptance](development/character-live-acceptance.md) |
 | **Party / Parse** | Implemented, in owner use | `party`, on | Live roster, saved-run Party, player history with marks/notes and requirement presets; migration 014. See [UI architecture](architecture/ui.md#party) and [preview](development/ui-preview.md#party-preview) |
 
-Not in scope for these tabs: Daily Quests, Pets, Exalts / account sync (needs the login token and network),
-theme and font menus. Observed-only quests and pets have a passive data path; see
-[Open decisions](#open-decisions). Account sync is deferred, not ruled out; see
+Not in scope for these tabs: account-synced Daily Quests and Pets, Exalts / account sync (needs the login token and
+network), theme and font menus. Observed-only quests and pets are in scope by owner decision (2026-11-06) and
+await their own specs. Account sync is deferred, not ruled out; see
 [Later: opt-in account sync](#later-opt-in-account-sync).
 
 ## Rail
@@ -103,8 +103,8 @@ Each needs an owner decision before it is planned.
 
 | Idea | Seen in | Data path | Note |
 | --- | --- | --- | --- |
-| Tinkerer quests: requirements, rewards, completed quests hidden | Both | `QUEST_FETCH_RESPONSE` when the player visits the quest room; not decoded | Out of scope today; see open decisions |
-| Pet Yard viewer and feed calculator | RealmShark | Pet objects in `UPDATE` while in the Pet Yard | Out of scope today; feed formulas need checking |
+| Tinkerer quests: requirements, rewards, completed quests hidden | Both | `QUEST_FETCH_RESPONSE` when the player visits the quest room; not decoded | In scope (observed only) since 2026-11-06; needs a spec |
+| Pet Yard viewer and feed calculator | RealmShark | Pet objects in `UPDATE` while in the Pet Yard | In scope (observed only) since 2026-11-06; needs a spec; feed formulas need checking |
 | Observed vault, gift chest and potion storage with a last-seen time, and a potion maxing planner | Both | `VAULT_UPDATE` / vault content while the vault is open; not decoded | Never account-complete; show what is missing |
 | Copy a formatted dungeon or realm-event callout to the clipboard | RealmHound | `MAPINFO`, realm events | Nothing is sent to the game |
 | Capture health: traffic, packet types, decode failures, server latency | RealmShark | Capture counters; `NEWTICK` timing fields are decoded but unused | Partly covered by Setup and Settings |
@@ -187,6 +187,10 @@ These appear in one or both tools but break Maxed's rules (passive capture, no u
 
 | Date | Decision |
 | --- | --- |
+| 2026-11-06 | Observed-only Daily Quests (Tinkerer) and Pets are in scope, built from passive capture with no token. Each needs its own spec before it is built; neither is scheduled yet |
+| 2026-11-06 | Opt-in account sync stays deferred until DECA has been asked about the exact design in [Later: opt-in account sync](#later-opt-in-account-sync) |
+| 2026-11-06 | No candidate features are scheduled for now |
+| 2026-11-06 | Owner acceptance from use: Home redesign phase 2 (live recap, chains, Discord paste, sprite copy), Character weapon/regen values, 100%/150% scaling and keyboard behavior, the shared chat cue, boss closure, departures, realm return and personal-best alerts. Clean install/update/uninstall worked. Gate P stays open and exalt damage stays deferred |
 | 2026-10-20 | Character: the owner approved the production `character` flag before Task 11. Windows live weapon/regen values, state transitions, scaling and keyboard behavior are being verified in use; Gate P remains open and exalt damage remains deferred |
 | 2026-10-16 | Home recap no longer takes over Nexus: show a compact banner for 15 seconds of visible Home time, paused on hover/focus, hidden on dungeon/realm entry. Last recap retains the latest finished run/visit in memory until replacement or stream reset; Back returns to the current live area |
 | 2026-10-15 | Exalt stat bonuses (+1 per level; +5 HP/MP) are in scope for v1; exalt damage stays deferred |
@@ -240,8 +244,7 @@ answer is given.
 | Tab | Question | Recommendation |
 | --- | --- | --- |
 | Character | Resolved 2026-10-15: exalt damage multiplier deferred | Keep the 2026-10-05 "ships without exalt multipliers" decision. Show unavailable until an all-stat-exalted character, including life/mana, supplies evidence; follow the [Character verification plan](superpowers/specs/2026-10-15-character-tab-design.md#exalt-verification-gate-later) |
-| — | Daily Quests and Pets are out of scope, but observed-only versions need no token. Bring them in? | Limit "not in scope" to account-synced versions and reconsider observed quests and pets after Party |
-| — | When passive capture is built out, add opt-in account sync? DECA's terms leave permission unresolved; see [Later: opt-in account sync](#later-opt-in-account-sync) | Decide after the passive tabs ship. Ask DECA about this exact design before building it |
+| — | Opt-in account sync, once DECA has answered? Deferred 2026-11-06 until DECA is asked; see [Later: opt-in account sync](#later-opt-in-account-sync) | Ask DECA about this exact design before building it |
 
 ## Rules for every tab
 
