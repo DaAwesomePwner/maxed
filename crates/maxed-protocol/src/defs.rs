@@ -557,7 +557,7 @@ pub fn stat_name(id: u8) -> Option<&'static str> {
         111 => Some("EXALTED_HP"),
         112 => Some("EXALTED_MP"),
         113 => Some("EXALTATION_BONUS_DAMAGE"),
-        114 => Some("EXALTATIONICREDUCTION"),
+        114 => Some("OWNER_OBJECT_ID"),
         115 => Some("GRAVE_ACCOUNT_ID"),
         116 => Some("POTION_ONE_TYPE"),
         117 => Some("POTION_TWO_TYPE"),

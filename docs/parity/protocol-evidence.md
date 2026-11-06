@@ -24,6 +24,41 @@ The current detector uses [kill evidence](kill-evidence.md), including announcem
 
 The earlier research used three private captures decoded at `72475aa` on 2026-10-02. Their sample population, portal timing and difficulty values were not universal guarantees. Public replay cases and their exact limitations are documented under [fixtures](../development/fixtures.md). Unknown grave behavior, modifier/grade meaning and exaltation interpretation need independent evidence before becoming UI facts.
 
+## Stat 114: owner object reference (2026-11-06)
+
+Reproduced for [issue #2](https://github.com/daplabs/maxed/issues/2) by running
+`maxed-cli decode <fixture.pcap> --output recordings/<private.jsonl>` on the three
+committed scrubbed fixtures below. Count every stat 114 in UPDATE `newObjects`
+and NEWTICK `status`, including repeated observations. Canonical JSONL omits
+connection IDs: join packet receipt timestamps to the fixture's TCP endpoint
+pairs (all joins were unambiguous), then resolve stat values against objects
+with NAME_STAT (31) in that same connection. CREATE_SUCCESS identifies the local
+player. Player membership uses the full observed connection, not only objects
+already named at the instant of the stat observation.
+
+| Fixture under `tests/fixtures/scrubbed/` | Connections | UPDATE observations | NEWTICK observations | Values resolving to named players | Values referencing local player | Named-player carriers | Local-player carriers |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `maxed-realm-focus/realm-visit.pcap` | 1 | 103 | 113 | 216 / 216 | 5 | 0 | 0 |
+| `maxed-realm-dungeon-return/realm-visit-dungeon-return.pcap` | 3 | 102 | 75 | 177 / 177 | 8 | 0 | 0 |
+| `maxed-nexus-key-pop/nexus-key-pop.pcap` | 1 | 98 | 32 | 130 / 130 | 1 | 0 | 0 |
+
+The issue's 103 realm-focus observations count UPDATE only; including NEWTICK
+gives 216. Across all three fixtures, all 523 values resolve to named players in
+the same connection, and no carrier is a named or local player. This supports
+the label `OWNER_OBJECT_ID` instead of an exaltation-reduction interpretation.
+It is an inferred owner reference, not independently verified ownership or
+damage attribution. Carrier object types include 32644, 17655, 32614, 35250,
+32641, 32574, 32592 and 32608. Fifteen Nexus NEWTICK observations have no carrier
+type available from UPDATE; their referenced players still resolve.
+
+No installed game catalog was available locally, and the installed-client/oracle
+environment variables were unset. The repository's catalogs are synthetic, so
+classification as pets, summons or other objects remains unverified. No engine
+consumer is added. Stat 114 remains named, preserving the scrubber's distinction
+between known and unmapped numeric stats. Packet ID 114 is a separate namespace:
+`EXALTATION_BONUS_CHANGED` and its layout are unchanged. Fixture decode exports
+were compared before and after the rename; only stat 114's label changed.
+
 ## Other players' weapon shots (2026-10-10)
 
 The owner's private capture covered 25 maps and 4,730 other-player sightings; the scrubbed Shaitan fixture covered 16 other players. These are aggregate observations, with no identities recorded here.

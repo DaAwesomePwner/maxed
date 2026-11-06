@@ -5,6 +5,11 @@
 
 No parity exceptions are approved yet.
 
+Maxed labels stat 114 `OWNER_OBJECT_ID`, differing from RealmShark's
+`EXALTATIONICREDUCTION`; all 523 observed values in three scrubbed fixtures
+reference named players in the same connection. See the [evidence and limits](protocol-evidence.md#stat-114-owner-object-reference-2026-11-06).
+This label difference adds no engine behavior or executable parity suppression.
+
 ## Per-player fight DPS
 
 RealmShark's domain export divides each player's damage by the whole target
