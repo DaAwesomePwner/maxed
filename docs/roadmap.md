@@ -22,9 +22,9 @@ RealmHound that are not yet scheduled.
 | Runs | Shipped | — | Run story and fight drill-downs; run-level player view with gear, stats and DPS timelines |
 | Alerts | Shipped | — | Now the **Logs › Alerts** sub-view; `#/alerts` redirects there |
 | Settings | Shipped | — | Pinned at the bottom of the rail |
-| **Loot** | Shipped ([#87](https://github.com/DaAwesomePwner/maxed-rotmg/pull/87)) | `lootBrowsing`, on | Feed, item pages, statistics, collection and chase list |
-| **Logs** | Shipped ([#89](https://github.com/DaAwesomePwner/maxed-rotmg/pull/89)) | `logs`, on | Chat, key pops, events, alerts. Chat storage and Settings › Chat are active regardless of the flag |
-| **Stats / Sessions** | Shipped ([#94](https://github.com/DaAwesomePwner/maxed-rotmg/pull/94)) | `stats`, on | Fame per hour by map, sessions, lifetime dungeon record, CSV export |
+| **Loot** | Shipped (private-repo PR 87) | `lootBrowsing`, on | Feed, item pages, statistics, collection and chase list |
+| **Logs** | Shipped (private-repo PR 89) | `logs`, on | Chat, key pops, events, alerts. Chat storage and Settings › Chat are active regardless of the flag |
+| **Stats / Sessions** | Shipped (private-repo PR 94) | `stats`, on | Fame per hour by map, sessions, lifetime dungeon record, CSV export |
 | **Character** | Implemented, in owner use | `character`, on | Own-character calculator; Windows live acceptance pending, Gate P open and exalt damage deferred. See [live acceptance](development/character-live-acceptance.md) |
 | **Party / Parse** | Implemented, in owner use | `party`, on | Live roster, saved-run Party, player history with marks/notes and requirement presets; migration 014. See [UI architecture](architecture/ui.md#party) and [preview](development/ui-preview.md#party-preview) |
 

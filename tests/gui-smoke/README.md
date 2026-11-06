@@ -394,4 +394,5 @@ tests and the new native Restart Manager coverage require Windows. The earlier
 NUC CDP/screenshot success does not validate these cleanup changes; a fresh
 GitHub-hosted `windows-2022` run is required. The display-independent smoke
 changes also need validation in that hosted session, including a deliberately
-failed mount to inspect the new report. These hosted checks remain unverified. No live Npcap, game-client or installer behavior is claimed.
+failed mount to inspect the new report. These hosted checks remain unverified. No
+live Npcap, game-client or installer behavior is claimed.
