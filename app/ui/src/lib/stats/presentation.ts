@@ -1,11 +1,13 @@
 const whole = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const tenth = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const loot = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
 export const NO_VALUE = '—';
 const date = (at: string) => new Date(Number(BigInt(at) / 1000n));
 
 /** "≥" marks a total that includes a character with no earlier fame sample, as on Home. */
 export const fameText = (fame: number, missing: boolean) => `${missing ? '≥ ' : ''}${whole.format(fame)}`;
-export const rateText = (rate: number | null) => rate === null ? NO_VALUE : tenth.format(rate);
+export const rateText = (rate: number | null) => rate === null ? NO_VALUE : whole.format(rate);
+/** Keep sparse loot rates visible without adding trailing zeroes. */
+export const lootRateText = (rate: number | null) => rate === null ? NO_VALUE : (rate < 10 ? loot : whole).format(rate);
 export function durationText(micros: number): string {
   const minutes = Math.floor(micros / 60_000_000);
   return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m` : `${minutes}m`;

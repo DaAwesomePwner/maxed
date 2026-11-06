@@ -145,6 +145,7 @@
         ],
         "equipment": [
           {
+            "observed_empty": false,
             "slot": 0,
             "item_type": 256,
             "enchant": {
@@ -155,6 +156,7 @@
             }
           },
           {
+            "observed_empty": true,
             "slot": 1,
             "item_type": null,
             "enchant": {
@@ -165,6 +167,7 @@
             }
           },
           {
+            "observed_empty": true,
             "slot": 2,
             "item_type": null,
             "enchant": {
@@ -175,6 +178,7 @@
             }
           },
           {
+            "observed_empty": true,
             "slot": 3,
             "item_type": null,
             "enchant": {
@@ -194,6 +198,15 @@
         "stat_panel": {
           "lines": [
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 0,
               "total": null,
               "base": null,
@@ -206,6 +219,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 3,
               "total": null,
               "base": null,
@@ -218,6 +240,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 20,
               "total": 25,
               "base": null,
@@ -230,6 +261,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 21,
               "total": null,
               "base": null,
@@ -242,6 +282,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 22,
               "total": null,
               "base": null,
@@ -254,6 +303,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 26,
               "total": null,
               "base": null,
@@ -266,6 +324,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 27,
               "total": null,
               "base": null,
@@ -278,6 +345,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 28,
               "total": null,
               "base": null,
@@ -380,7 +456,9 @@
             "from": "2000000",
             "until": "3000000",
             "total": 50.0,
-            "local": 50.0
+            "local": 50.0,
+            "others_damage": 0.0,
+            "others_presence": 0.0
           }
         ],
         "complete_capture": true,
@@ -391,6 +469,7 @@
         "target_kind": "ordinary",
         "is_current_quest": false,
         "local_last_hit": "2000000",
+        "local_active_micros": 0,
         "player_series": [
           {
             "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
@@ -400,13 +479,91 @@
               50.0
             ]
           }
-        ]
+        ],
+        "scope_id": "demo-v1:map:2"
       }
     }
   },
   {
     "stream_id": "demo-v1",
     "sequence": "9",
+    "at": "5000000",
+    "event": {
+      "player_observed": {
+        "scope_id": "demo-v1:map:2",
+        "run_id": null,
+        "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "object_id": 1,
+        "is_local": true,
+        "name": "DemoHero",
+        "class_id": 100,
+        "level": 20,
+        "stars": null,
+        "fame": 100,
+        "skin_id": null,
+        "guild": null,
+        "stats": [
+          {
+            "stat_id": 20,
+            "value": 25
+          }
+        ],
+        "maxed": null,
+        "maxed_stats": [],
+        "equipment": [
+          {
+            "observed_empty": false,
+            "slot": 0,
+            "item_type": 256,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 1,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 2,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 3,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          }
+        ],
+        "first_seen": "1020000",
+        "last_seen": "1020000"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "10",
     "at": "5000000",
     "event": {
       "fight_ended": {
@@ -465,7 +622,9 @@
             "from": "2000000",
             "until": "3000000",
             "total": 50.0,
-            "local": 50.0
+            "local": 50.0,
+            "others_damage": 0.0,
+            "others_presence": 0.0
           }
         ],
         "complete_capture": true,
@@ -476,6 +635,7 @@
         "target_kind": "ordinary",
         "is_current_quest": false,
         "local_last_hit": "2000000",
+        "local_active_micros": 0,
         "player_series": [
           {
             "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
@@ -485,13 +645,46 @@
               50.0
             ]
           }
-        ]
+        ],
+        "scope_id": "demo-v1:map:2"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "10",
+    "sequence": "11",
+    "at": "5000000",
+    "event": {
+      "scope_timeline_updated": {
+        "scope_id": "demo-v1:map:2",
+        "run_id": null,
+        "buckets": [
+          {
+            "from": "2000000",
+            "until": "3000000",
+            "party_total": 50.0,
+            "party_active": 1
+          }
+        ],
+        "players": [
+          {
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "object_id": 1,
+            "is_local": true,
+            "points": [
+              50.0
+            ]
+          }
+        ],
+        "full": true,
+        "compacted": false,
+        "disabled": false
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "12",
     "at": "5000000",
     "event": {
       "map_entered": {
@@ -504,7 +697,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "11",
+    "sequence": "13",
     "at": "5000000",
     "event": {
       "run_started": {
@@ -517,6 +710,7 @@
         "ended": null,
         "completed_at": null,
         "died_at": null,
+        "death": null,
         "outcome": null,
         "evidence": [],
         "party_size": null,
@@ -538,7 +732,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "12",
+    "sequence": "14",
     "at": "5010000",
     "event": {
       "character_updated": {
@@ -604,7 +798,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "13",
+    "sequence": "15",
     "at": "5010000",
     "event": {
       "run_updated": {
@@ -617,6 +811,7 @@
         "ended": null,
         "completed_at": null,
         "died_at": null,
+        "death": null,
         "outcome": null,
         "evidence": [],
         "party_size": null,
@@ -638,7 +833,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "14",
+    "sequence": "16",
     "at": "5020000",
     "event": {
       "character_updated": {
@@ -676,6 +871,7 @@
         ],
         "equipment": [
           {
+            "observed_empty": false,
             "slot": 0,
             "item_type": 256,
             "enchant": {
@@ -686,6 +882,7 @@
             }
           },
           {
+            "observed_empty": true,
             "slot": 1,
             "item_type": null,
             "enchant": {
@@ -696,6 +893,7 @@
             }
           },
           {
+            "observed_empty": true,
             "slot": 2,
             "item_type": null,
             "enchant": {
@@ -706,6 +904,7 @@
             }
           },
           {
+            "observed_empty": true,
             "slot": 3,
             "item_type": null,
             "enchant": {
@@ -725,6 +924,15 @@
         "stat_panel": {
           "lines": [
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 0,
               "total": null,
               "base": null,
@@ -737,6 +945,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 3,
               "total": null,
               "base": null,
@@ -749,6 +966,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 20,
               "total": 25,
               "base": null,
@@ -761,6 +987,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 21,
               "total": null,
               "base": null,
@@ -773,6 +1008,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 22,
               "total": null,
               "base": null,
@@ -785,6 +1029,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 26,
               "total": null,
               "base": null,
@@ -797,6 +1050,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 27,
               "total": null,
               "base": null,
@@ -809,6 +1071,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 28,
               "total": null,
               "base": null,
@@ -829,7 +1100,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "15",
+    "sequence": "17",
     "at": "5020000",
     "event": {
       "character_merged": {
@@ -840,7 +1111,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "16",
+    "sequence": "18",
     "at": "5020000",
     "event": {
       "run_updated": {
@@ -853,6 +1124,7 @@
         "ended": null,
         "completed_at": null,
         "died_at": null,
+        "death": null,
         "outcome": null,
         "evidence": [],
         "party_size": null,
@@ -874,7 +1146,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "17",
+    "sequence": "19",
     "at": "5020000",
     "event": {
       "run_updated": {
@@ -887,6 +1159,7 @@
         "ended": null,
         "completed_at": null,
         "died_at": null,
+        "death": null,
         "outcome": null,
         "evidence": [],
         "party_size": 2,
@@ -908,7 +1181,161 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "18",
+    "sequence": "20",
+    "at": "6000000",
+    "event": {
+      "player_observed": {
+        "scope_id": "demo-v1:run:3",
+        "run_id": "demo-v1:run:3",
+        "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "object_id": 1,
+        "is_local": true,
+        "name": "DemoHero",
+        "class_id": 100,
+        "level": 20,
+        "stars": null,
+        "fame": 100,
+        "skin_id": null,
+        "guild": null,
+        "stats": [
+          {
+            "stat_id": 20,
+            "value": 25
+          }
+        ],
+        "maxed": null,
+        "maxed_stats": [],
+        "equipment": [
+          {
+            "observed_empty": false,
+            "slot": 0,
+            "item_type": 256,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 1,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 2,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 3,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          }
+        ],
+        "first_seen": "5020000",
+        "last_seen": "5020000"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "21",
+    "at": "6000000",
+    "event": {
+      "player_observed": {
+        "scope_id": "demo-v1:run:3",
+        "run_id": "demo-v1:run:3",
+        "player_id": "demo-v1:player:3:3:3",
+        "object_id": 3,
+        "is_local": false,
+        "name": "DemoAlly",
+        "class_id": 100,
+        "level": 20,
+        "stars": null,
+        "fame": 100,
+        "skin_id": null,
+        "guild": null,
+        "stats": [
+          {
+            "stat_id": 20,
+            "value": 25
+          }
+        ],
+        "maxed": null,
+        "maxed_stats": [],
+        "equipment": [
+          {
+            "observed_empty": false,
+            "slot": 0,
+            "item_type": 256,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 1,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 2,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 3,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          }
+        ],
+        "first_seen": "5020000",
+        "last_seen": "5020000"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "22",
     "at": "6020000",
     "event": {
       "fight_started": {
@@ -967,7 +1394,9 @@
             "from": "6000000",
             "until": "7000000",
             "total": 100.0,
-            "local": 100.0
+            "local": 100.0,
+            "others_damage": 0.0,
+            "others_presence": 0.0
           }
         ],
         "complete_capture": true,
@@ -978,6 +1407,7 @@
         "target_kind": "boss",
         "is_current_quest": false,
         "local_last_hit": "6000000",
+        "local_active_micros": 0,
         "player_series": [
           {
             "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
@@ -987,13 +1417,14 @@
               100.0
             ]
           }
-        ]
+        ],
+        "scope_id": "demo-v1:run:3"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "19",
+    "sequence": "23",
     "at": "8000000",
     "event": {
       "character_updated": {
@@ -1031,6 +1462,7 @@
         ],
         "equipment": [
           {
+            "observed_empty": false,
             "slot": 0,
             "item_type": 256,
             "enchant": {
@@ -1041,6 +1473,7 @@
             }
           },
           {
+            "observed_empty": true,
             "slot": 1,
             "item_type": null,
             "enchant": {
@@ -1051,6 +1484,7 @@
             }
           },
           {
+            "observed_empty": true,
             "slot": 2,
             "item_type": null,
             "enchant": {
@@ -1061,6 +1495,7 @@
             }
           },
           {
+            "observed_empty": true,
             "slot": 3,
             "item_type": null,
             "enchant": {
@@ -1080,6 +1515,15 @@
         "stat_panel": {
           "lines": [
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 0,
               "total": null,
               "base": null,
@@ -1092,6 +1536,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 3,
               "total": null,
               "base": null,
@@ -1104,6 +1557,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 20,
               "total": 25,
               "base": null,
@@ -1116,6 +1578,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 21,
               "total": null,
               "base": null,
@@ -1128,6 +1599,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 22,
               "total": null,
               "base": null,
@@ -1140,6 +1620,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 26,
               "total": null,
               "base": null,
@@ -1152,6 +1641,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 27,
               "total": null,
               "base": null,
@@ -1164,6 +1662,15 @@
               "current": null
             },
             {
+              "split_evidence": {
+                "placement": "provisional_inside_boost",
+                "cap_eligible": false,
+                "reasons": [
+                  "missing_exalt",
+                  "unverified_placement",
+                  "missing_operands"
+                ]
+              },
               "stat_id": 28,
               "total": null,
               "base": null,
@@ -1184,7 +1691,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "20",
+    "sequence": "24",
     "at": "8000000",
     "event": {
       "fame_changed": {
@@ -1196,7 +1703,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "21",
+    "sequence": "25",
     "at": "9000000",
     "event": {
       "fight_updated": {
@@ -1255,13 +1762,17 @@
             "from": "6000000",
             "until": "7000000",
             "total": 100.0,
-            "local": 100.0
+            "local": 100.0,
+            "others_damage": 0.0,
+            "others_presence": 0.0
           },
           {
             "from": "8000000",
             "until": "9000000",
             "total": 200.0,
-            "local": 200.0
+            "local": 200.0,
+            "others_damage": 0.0,
+            "others_presence": 0.0
           }
         ],
         "complete_capture": true,
@@ -1272,6 +1783,7 @@
         "target_kind": "boss",
         "is_current_quest": false,
         "local_last_hit": "8000000",
+        "local_active_micros": 2000000,
         "player_series": [
           {
             "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
@@ -1282,13 +1794,91 @@
               200.0
             ]
           }
-        ]
+        ],
+        "scope_id": "demo-v1:run:3"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "22",
+    "sequence": "26",
+    "at": "9000000",
+    "event": {
+      "player_observed": {
+        "scope_id": "demo-v1:run:3",
+        "run_id": "demo-v1:run:3",
+        "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "object_id": 1,
+        "is_local": true,
+        "name": "DemoHero",
+        "class_id": 100,
+        "level": 20,
+        "stars": null,
+        "fame": 125,
+        "skin_id": null,
+        "guild": null,
+        "stats": [
+          {
+            "stat_id": 20,
+            "value": 25
+          }
+        ],
+        "maxed": null,
+        "maxed_stats": [],
+        "equipment": [
+          {
+            "observed_empty": false,
+            "slot": 0,
+            "item_type": 256,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 1,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 2,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          },
+          {
+            "observed_empty": true,
+            "slot": 3,
+            "item_type": null,
+            "enchant": {
+              "state": "recorded_empty",
+              "slots": 0,
+              "applied": 0,
+              "ids": []
+            }
+          }
+        ],
+        "first_seen": "5020000",
+        "last_seen": "8000000"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "27",
     "at": "9000000",
     "event": {
       "bag_dropped": {
@@ -1314,7 +1904,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "23",
+    "sequence": "28",
     "at": "9000000",
     "event": {
       "drop_updated": {
@@ -1355,7 +1945,46 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "24",
+    "sequence": "29",
+    "at": "10000000",
+    "event": {
+      "scope_timeline_updated": {
+        "scope_id": "demo-v1:run:3",
+        "run_id": "demo-v1:run:3",
+        "buckets": [
+          {
+            "from": "6000000",
+            "until": "7000000",
+            "party_total": 100.0,
+            "party_active": 1
+          },
+          {
+            "from": "8000000",
+            "until": "9000000",
+            "party_total": 200.0,
+            "party_active": 1
+          }
+        ],
+        "players": [
+          {
+            "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+            "object_id": 1,
+            "is_local": true,
+            "points": [
+              100.0,
+              200.0
+            ]
+          }
+        ],
+        "full": true,
+        "compacted": false,
+        "disabled": false
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "30",
     "at": "10000000",
     "event": {
       "fight_updated": {
@@ -1414,13 +2043,17 @@
             "from": "6000000",
             "until": "7000000",
             "total": 100.0,
-            "local": 100.0
+            "local": 100.0,
+            "others_damage": 0.0,
+            "others_presence": 0.0
           },
           {
             "from": "8000000",
             "until": "9000000",
             "total": 200.0,
-            "local": 200.0
+            "local": 200.0,
+            "others_damage": 0.0,
+            "others_presence": 0.0
           }
         ],
         "complete_capture": true,
@@ -1435,6 +2068,7 @@
         "target_kind": "boss",
         "is_current_quest": false,
         "local_last_hit": "8000000",
+        "local_active_micros": 2000000,
         "player_series": [
           {
             "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
@@ -1445,13 +2079,14 @@
               200.0
             ]
           }
-        ]
+        ],
+        "scope_id": "demo-v1:run:3"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "25",
+    "sequence": "31",
     "at": "10000000",
     "event": {
       "run_updated": {
@@ -1464,6 +2099,7 @@
         "ended": null,
         "completed_at": "10000000",
         "died_at": null,
+        "death": null,
         "outcome": "cleared",
         "evidence": [
           {
@@ -1490,7 +2126,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "26",
+    "sequence": "32",
     "at": "12000000",
     "event": {
       "fight_updated": {
@@ -1549,13 +2185,17 @@
             "from": "6000000",
             "until": "7000000",
             "total": 100.0,
-            "local": 100.0
+            "local": 100.0,
+            "others_damage": 0.0,
+            "others_presence": 0.0
           },
           {
             "from": "8000000",
             "until": "9000000",
             "total": 200.0,
-            "local": 200.0
+            "local": 200.0,
+            "others_damage": 0.0,
+            "others_presence": 0.0
           }
         ],
         "complete_capture": true,
@@ -1570,6 +2210,7 @@
         "target_kind": "boss",
         "is_current_quest": false,
         "local_last_hit": "8000000",
+        "local_active_micros": 2000000,
         "player_series": [
           {
             "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
@@ -1580,13 +2221,14 @@
               200.0
             ]
           }
-        ]
+        ],
+        "scope_id": "demo-v1:run:3"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "27",
+    "sequence": "33",
     "at": "12000000",
     "event": {
       "run_ended": {
@@ -1599,6 +2241,7 @@
         "ended": "12000000",
         "completed_at": "10000000",
         "died_at": null,
+        "death": null,
         "outcome": "cleared",
         "evidence": [
           {
@@ -1629,7 +2272,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "28",
+    "sequence": "34",
     "at": "12000000",
     "event": {
       "fight_ended": {
@@ -1688,13 +2331,17 @@
             "from": "6000000",
             "until": "7000000",
             "total": 100.0,
-            "local": 100.0
+            "local": 100.0,
+            "others_damage": 0.0,
+            "others_presence": 0.0
           },
           {
             "from": "8000000",
             "until": "9000000",
             "total": 200.0,
-            "local": 200.0
+            "local": 200.0,
+            "others_damage": 0.0,
+            "others_presence": 0.0
           }
         ],
         "complete_capture": true,
@@ -1709,6 +2356,7 @@
         "target_kind": "boss",
         "is_current_quest": false,
         "local_last_hit": "8000000",
+        "local_active_micros": 2000000,
         "player_series": [
           {
             "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
@@ -1719,13 +2367,14 @@
               200.0
             ]
           }
-        ]
+        ],
+        "scope_id": "demo-v1:run:3"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "29",
+    "sequence": "35",
     "at": "12000000",
     "event": {
       "drop_updated": {
@@ -1766,7 +2415,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "30",
+    "sequence": "36",
     "at": "12000000",
     "event": {
       "map_entered": {
@@ -1779,7 +2428,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "31",
+    "sequence": "37",
     "at": "12000000",
     "event": {
       "session_updated": {

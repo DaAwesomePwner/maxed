@@ -17,6 +17,333 @@ fn today() -> HomeScope {
     }
 }
 
+#[test]
+fn run_recap_validates_id() {
+    use super::history::HistoryKey;
+    use maxed_types::RunRecapRequest;
+    let root = tempfile::tempdir().unwrap();
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    for run_id in [String::new(), "x".repeat(257), "synthetic\ninvalid".into()] {
+        let request = RunRecapRequest { run_id };
+        assert!(HistoryKey::RunRecap(request.clone())
+            .validate_for_tests()
+            .is_err());
+        assert_eq!(
+            tauri::async_runtime::block_on(runtime.run_recap(request, vec![])).unwrap_err(),
+            super::history::INVALID
+        );
+    }
+    assert!(HistoryKey::RunRecap(RunRecapRequest {
+        run_id: "x".repeat(256)
+    })
+    .validate_for_tests()
+    .is_ok());
+}
+
+#[test]
+fn visit_recap_validates_id() {
+    use super::history::HistoryKey;
+    use maxed_types::VisitRecapRequest;
+    let root = tempfile::tempdir().unwrap();
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    for visit_id in [String::new(), "x".repeat(257), "synthetic\ninvalid".into()] {
+        let request = VisitRecapRequest { visit_id };
+        assert!(HistoryKey::VisitRecap(request.clone())
+            .validate_for_tests()
+            .is_err());
+        assert_eq!(
+            tauri::async_runtime::block_on(runtime.visit_recap(request)).unwrap_err(),
+            super::history::INVALID
+        );
+    }
+    assert!(HistoryKey::VisitRecap(VisitRecapRequest {
+        visit_id: "x".repeat(256)
+    })
+    .validate_for_tests()
+    .is_ok());
+}
+
+#[test]
+fn visit_recap_without_database_is_none() {
+    let root = tempfile::tempdir().unwrap();
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    assert_eq!(
+        tauri::async_runtime::block_on(runtime.visit_recap(maxed_types::VisitRecapRequest {
+            visit_id: "synthetic-stream:visit:42".into()
+        }))
+        .unwrap(),
+        HistoryReply::Ready { value: None }
+    );
+    assert!(!root.path().join("live.sqlite3").exists());
+}
+
+#[test]
+fn visit_recap_reads_through_the_history_worker() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("live.sqlite3");
+    seed(&path);
+    let db = rusqlite::Connection::open(&path).unwrap();
+    db.execute("INSERT INTO map_visits(id,stream_id,session_id,map,kind,started,ended,source,json) VALUES('synthetic-stream:visit:42','synthetic-stream','demo-session','Synthetic Realm','realm',0,1,'live','{}')", []).unwrap();
+    drop(db);
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    let reply =
+        tauri::async_runtime::block_on(runtime.visit_recap(maxed_types::VisitRecapRequest {
+            visit_id: "synthetic-stream:visit:42".into(),
+        }))
+        .unwrap();
+    let HistoryReply::Ready { value: Some(recap) } = reply else {
+        panic!("expected saved visit recap, got {reply:?}");
+    };
+    assert_eq!(recap.title, "Synthetic Realm");
+    assert_eq!(recap.periods.len(), 1);
+}
+
+#[test]
+fn run_recap_without_database_is_none() {
+    let root = tempfile::tempdir().unwrap();
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    assert_eq!(
+        tauri::async_runtime::block_on(runtime.run_recap(
+            maxed_types::RunRecapRequest {
+                run_id: "synthetic-run".into()
+            },
+            vec![]
+        ))
+        .unwrap(),
+        HistoryReply::Ready { value: None }
+    );
+    assert!(!root.path().join("live.sqlite3").exists());
+}
+
+#[test]
+fn home_streak_key_and_command_validate_dungeon_without_a_database() {
+    use super::history::HistoryKey;
+    use maxed_types::{HomeDungeonStreak, HomeDungeonStreakRequest};
+    let root = tempfile::tempdir().unwrap();
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    for dungeon in [String::new(), "x".repeat(257), "synthetic\ninvalid".into()] {
+        let request = HomeDungeonStreakRequest { dungeon };
+        assert!(HistoryKey::HomeDungeonStreak(request.clone())
+            .validate_for_tests()
+            .is_err());
+        assert_eq!(
+            tauri::async_runtime::block_on(runtime.home_dungeon_streak(request)).unwrap_err(),
+            super::history::INVALID
+        );
+    }
+    let request = HomeDungeonStreakRequest {
+        dungeon: "Synthetic Sanctum".into(),
+    };
+    assert!(HistoryKey::HomeDungeonStreak(request.clone())
+        .validate_for_tests()
+        .is_ok());
+    assert_eq!(
+        tauri::async_runtime::block_on(runtime.home_dungeon_streak(request.clone())).unwrap(),
+        HistoryReply::Ready {
+            value: HomeDungeonStreak {
+                dungeon: request.dungeon,
+                ..Default::default()
+            }
+        }
+    );
+    assert!(!root.path().join("live.sqlite3").exists());
+}
+
+#[test]
+fn home_streak_reads_through_the_history_worker() {
+    use maxed_types::{demo, EngineEvent, EventEnvelope, HomeDungeonStreakRequest, Sequence};
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("live.sqlite3");
+    seed(&path);
+    let snapshot = demo::demo_snapshot();
+    let mut bag = snapshot.drops[0].clone();
+    bag.bag_rank = Some(255);
+    let mut db = rusqlite::Connection::open(&path).unwrap();
+    maxed_store::apply_batch(
+        &mut db,
+        &[EventEnvelope {
+            fight_chart_omitted: false,
+            stream_id: "invented-home-test".into(),
+            sequence: Sequence(Timestamp(4)),
+            at: bag.at,
+            event: EngineEvent::BagDropped(bag.clone()),
+        }],
+    )
+    .unwrap();
+    let reader = maxed_store::open_reader(&path).unwrap();
+    let dungeon = snapshot.run.unwrap().dungeon;
+    let request = HomeDungeonStreakRequest { dungeon };
+    let expected = reader.home_dungeon_streak(request.clone()).unwrap();
+    assert_eq!(expected.last_white_at, Some(bag.at));
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    assert_eq!(
+        tauri::async_runtime::block_on(runtime.home_dungeon_streak(request)).unwrap(),
+        HistoryReply::Ready { value: expected }
+    );
+}
+
+#[test]
+fn home_hud_and_scope_loot_keys_preserve_catalog_limits() {
+    use super::history::HistoryKey;
+    use maxed_types::PotionStat;
+    for tiers in [
+        vec![(0, None); 65_537],
+        vec![(0, Some("a".repeat(17)))],
+        vec![(0, Some("é".repeat(9)))],
+    ] {
+        assert!(HistoryKey::HomeHud(today(), tiers.clone(), vec![])
+            .validate_for_tests()
+            .is_err());
+        assert!(HistoryKey::ScopeLoot(today(), None, 1, tiers)
+            .validate_for_tests()
+            .is_err());
+    }
+    assert!(
+        HistoryKey::HomeHud(today(), vec![], vec![(0, PotionStat::Life); 65_537])
+            .validate_for_tests()
+            .is_err()
+    );
+    let tiers = vec![(0, Some("é".repeat(8))); 65_536];
+    assert!(
+        HistoryKey::HomeHud(today(), tiers.clone(), vec![(0, PotionStat::Life); 65_536])
+            .validate_for_tests()
+            .is_ok()
+    );
+    assert!(HistoryKey::ScopeLoot(today(), None, 1, tiers)
+        .validate_for_tests()
+        .is_ok());
+}
+
+#[test]
+fn home_hud_key_rejects_invalid_scope() {
+    use super::history::HistoryKey;
+    for scope in [
+        HomeScope::Session { id: String::new() },
+        HomeScope::Session {
+            id: "synthetic\ninvalid".into(),
+        },
+        HomeScope::Session {
+            id: "a".repeat(257),
+        },
+        HomeScope::Today {
+            range: TimeRange {
+                start: Timestamp(5),
+                end: Timestamp(5),
+            },
+        },
+        HomeScope::Today {
+            range: TimeRange {
+                start: Timestamp(6),
+                end: Timestamp(5),
+            },
+        },
+        HomeScope::Today {
+            range: TimeRange {
+                start: Timestamp(0),
+                end: Timestamp(u64::MAX),
+            },
+        },
+    ] {
+        assert!(HistoryKey::HomeHud(scope, vec![], vec![])
+            .validate_for_tests()
+            .is_err());
+    }
+    assert!(HistoryKey::HomeHud(today(), vec![], vec![])
+        .validate_for_tests()
+        .is_ok());
+    assert!(HistoryKey::HomeHud(
+        HomeScope::Session {
+            id: "a".repeat(256)
+        },
+        vec![],
+        vec![]
+    )
+    .validate_for_tests()
+    .is_ok());
+}
+
+#[test]
+fn home_hud_reads_catalog_classifications_through_history_worker() {
+    use maxed_types::{demo, EngineEvent, EventEnvelope, PotionCount, PotionStat, Sequence};
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("live.sqlite3");
+    seed(&path);
+    let mut db = rusqlite::Connection::open(&path).unwrap();
+    let snapshot = demo::demo_snapshot();
+    let mut bag = snapshot.drops[0].clone();
+    let mut fight = snapshot.fights[0].clone();
+    fight.ended = Some(Timestamp(5_000_000));
+    bag.bag_rank = Some(255);
+    let item = bag.contents[0].item_type;
+    let events: Vec<_> = [
+        EngineEvent::BagDropped(bag),
+        EngineEvent::FightUpdated(fight),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(i, event)| EventEnvelope {
+        fight_chart_omitted: false,
+        stream_id: "invented-home-test".into(),
+        sequence: Sequence(Timestamp(4 + i as u64)),
+        at: Timestamp(6_000_000),
+        event,
+    })
+    .collect();
+    maxed_store::apply_batch(&mut db, &events).unwrap();
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    let reply = tauri::async_runtime::block_on(runtime.home_hud(
+        today(),
+        vec![(item, Some("UT".into()))],
+        vec![(item, PotionStat::Life)],
+    ))
+    .unwrap();
+    let HistoryReply::Ready { value } = reply else {
+        panic!("expected ready HUD")
+    };
+    assert_eq!(value.whites, 1);
+    assert_eq!(value.ut_st, [item]);
+    assert_eq!(value.ut_st_count, 1);
+    assert_eq!(
+        value.potions,
+        [PotionCount {
+            stat: PotionStat::Life,
+            count: 1
+        }]
+    );
+    assert_eq!(value.combat.unwrap().fights, 1);
+}
+
+#[test]
+fn home_hud_absent_live_history_is_empty_without_creating_a_database() {
+    let root = tempfile::tempdir().unwrap();
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    assert_eq!(
+        tauri::async_runtime::block_on(runtime.home_hud(today(), vec![], vec![])).unwrap(),
+        HistoryReply::Ready {
+            value: maxed_types::HomeHud::default()
+        },
+    );
+    assert!(!root.path().join("live.sqlite3").exists());
+}
+
 fn seed(path: &std::path::Path) {
     use maxed_types::{demo, EngineEvent, EventEnvelope, Sequence};
     let mut db = rusqlite::Connection::open(path).unwrap();
@@ -499,6 +826,11 @@ fn seed_legacy(path: &std::path::Path, version: i64) {
         }],
     )
     .unwrap();
+    super::receipt_tests::copy_to_legacy(&source);
+    assert_eq!(
+        super::receipt_tests::count_stream(&source, "invented-home-test"),
+        4
+    );
     drop(source);
     let db = rusqlite::Connection::open(path).unwrap();
     db.execute_batch(include_str!(
@@ -579,39 +911,50 @@ fn schema_version(path: &std::path::Path) -> i64 {
 }
 
 #[test]
-fn cold_v1_upgrades_at_startup_without_capture() {
-    cold_legacy_upgrades_at_startup_without_capture(1);
+fn cold_v1_upgrades_after_confirmation_without_capture() {
+    cold_legacy_upgrades_after_confirmation_without_capture(1);
 }
 
 #[test]
-fn cold_v2_upgrades_at_startup_without_capture() {
-    cold_legacy_upgrades_at_startup_without_capture(2);
+fn cold_v2_upgrades_after_confirmation_without_capture() {
+    cold_legacy_upgrades_after_confirmation_without_capture(2);
 }
 
 #[test]
-fn cold_v3_upgrades_at_startup_without_capture() {
-    cold_legacy_upgrades_at_startup_without_capture(3);
+fn cold_v3_upgrades_after_confirmation_without_capture() {
+    cold_legacy_upgrades_after_confirmation_without_capture(3);
 }
 
 #[test]
-fn cold_v4_upgrades_at_startup_without_capture() {
-    cold_legacy_upgrades_at_startup_without_capture(4);
+fn cold_v4_upgrades_after_confirmation_without_capture() {
+    cold_legacy_upgrades_after_confirmation_without_capture(4);
 }
 
 #[test]
-fn cold_v5_upgrades_at_startup_without_capture() {
-    cold_legacy_upgrades_at_startup_without_capture(5);
+fn cold_v5_upgrades_after_confirmation_without_capture() {
+    cold_legacy_upgrades_after_confirmation_without_capture(5);
 }
 
-fn cold_legacy_upgrades_at_startup_without_capture(version: i64) {
+fn cold_legacy_upgrades_after_confirmation_without_capture(version: i64) {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("live.sqlite3");
     seed_legacy(&path, version);
     assert!(maxed_store::open_reader(&path).is_err());
     let runtime = Arc::new(CaptureRuntime::default());
     runtime.initialize_home(root.path().into()).unwrap();
+    assert_eq!(
+        tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap_err(),
+        home::HISTORY_UPGRADE_REQUIRED
+    );
+    assert_eq!(schema_version(&path), version);
+    runtime
+        .backup_and_upgrade_with(
+            &super::maintenance_tests::Space(Some(u64::MAX)),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
-    assert_eq!(schema_version(&path), 12);
+    assert_eq!(schema_version(&path), maxed_store::SCHEMA_VERSION);
     assert_eq!(home(&runtime, today()).unwrap().runs, 1);
     let reader = maxed_store::open_reader(&path).unwrap();
     assert_eq!(
@@ -640,7 +983,7 @@ fn cold_legacy_upgrades_at_startup_without_capture(version: i64) {
 }
 
 #[test]
-fn read_during_backfill_waits_for_v3() {
+fn read_during_legacy_preflight_waits_then_reports_confirmation_required() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("live.sqlite3");
     seed_v1(&path);
@@ -667,11 +1010,12 @@ fn read_during_backfill_waits_for_v3() {
     assert!(maxed_store::open_reader(&path).is_err());
     assert_eq!(schema_version(&path), 1);
     release.send(()).unwrap();
-    assert!(
-        matches!(read.join().unwrap().unwrap(), HistoryReply::Ready { value } if value.runs == 1)
+    assert_eq!(
+        read.join().unwrap().unwrap_err(),
+        home::HISTORY_UPGRADE_REQUIRED
     );
-    assert_eq!(reads.load(Ordering::SeqCst), 1);
-    assert_eq!(schema_version(&path), 12);
+    assert_eq!(reads.load(Ordering::SeqCst), 0);
+    assert_eq!(schema_version(&path), 1);
 }
 
 #[test]
@@ -696,12 +1040,40 @@ fn failed_startup_upgrade_is_retryable_schema_error() {
         }
         let runtime = Arc::new(CaptureRuntime::default());
         runtime.initialize_home(app_data).unwrap();
+        let expected = if failure == "corrupt-row" {
+            home::HISTORY_UPGRADE_REQUIRED
+        } else {
+            home::SCHEMA_FAILED
+        };
         assert_eq!(
             tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap_err(),
-            home::SCHEMA_FAILED
+            expected
         );
         assert!(runtime.shared.home.context.lock().unwrap().is_none());
-        assert_eq!(home(&runtime, today()).unwrap_err(), home::SCHEMA_FAILED);
+        assert_eq!(home(&runtime, today()).unwrap_err(), expected);
+        if failure == "corrupt-row" {
+            let path = root.path().join("app/live.sqlite3");
+            let before = std::fs::read(&path).unwrap();
+            assert!(runtime
+                .backup_and_upgrade_with(
+                    &super::maintenance_tests::Space(Some(u64::MAX)),
+                    &AtomicBool::new(false)
+                )
+                .is_err());
+            assert_eq!(schema_version(&path), 1);
+            assert!(std::fs::read(&path).unwrap() == before);
+            let mut backups = maxed_store::backup::BackupStore::open(&path).unwrap();
+            let ready = backups.list().unwrap();
+            assert_eq!(ready.len(), 1);
+            assert_eq!(ready[0].slot, maxed_store::backup::Slot::Initial);
+            assert_eq!(ready[0].schema, 1);
+            assert_eq!(backups.usage().unwrap().temporary_bytes, Some(0));
+            let request = backups
+                .current_request(maxed_store::backup::DestructiveClass::LegacyUpgrade)
+                .unwrap()
+                .unwrap();
+            assert_eq!(backups.prepare_authorization(request).unwrap(), ready[0].id);
+        }
         drop(lease);
     }
 }
@@ -766,7 +1138,7 @@ fn newer_schema_is_refused_unchanged() {
     seed_v1(&path);
     rusqlite::Connection::open(&path)
         .unwrap()
-        .pragma_update(None, "user_version", 13)
+        .pragma_update(None, "user_version", maxed_store::SCHEMA_VERSION + 1)
         .unwrap();
     let before = std::fs::read(&path).unwrap();
     let runtime = Arc::new(CaptureRuntime::default());
@@ -785,6 +1157,13 @@ fn capture_start_failure_preserves_upgraded_cold_history() {
     seed_v1(&root.path().join("live.sqlite3"));
     let runtime = Arc::new(CaptureRuntime::default());
     runtime.initialize_home(root.path().into()).unwrap();
+    assert!(tauri::async_runtime::block_on(runtime.ensure_history_ready()).is_err());
+    runtime
+        .backup_and_upgrade_with(
+            &super::maintenance_tests::Space(Some(u64::MAX)),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
     // Hold the lease so capture's writer cannot open; upgraded history remains readable.
     let lease = super::storage::namespace_lease(root.path(), Namespace::Live).unwrap();
@@ -804,7 +1183,7 @@ fn capture_start_failure_preserves_upgraded_cold_history() {
 #[test]
 fn unprepared_live_context_can_reset_then_retry_history() {
     let root = tempfile::tempdir().unwrap();
-    seed_v1(&root.path().join("live.sqlite3"));
+    seed(&root.path().join("live.sqlite3"));
     let runtime = Arc::new(CaptureRuntime::default());
     let seconds = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let clock = seconds.clone();
@@ -869,7 +1248,7 @@ fn failed_preparation_retries_from_any_submission_once_per_five_seconds() {
     ));
     assert_eq!(home(&runtime, today()).unwrap_err(), home::SCHEMA_FAILED);
     // Exercise each production command against the shared preparation gate.
-    for operation in 0..12 {
+    for operation in 0..14 {
         assert_eq!(
             tauri::async_runtime::block_on(super::history_tests::command(&runtime, operation))
                 .unwrap_err(),
@@ -878,9 +1257,9 @@ fn failed_preparation_retries_from_any_submission_once_per_five_seconds() {
     }
     assert_eq!(attempts.load(Ordering::SeqCst), 1);
     seconds.store(5, Ordering::SeqCst);
-    let barrier = Arc::new(std::sync::Barrier::new(12));
-    let (completed, responses) = bounded(12);
-    let submissions: Vec<_> = (0..12)
+    let barrier = Arc::new(std::sync::Barrier::new(14));
+    let (completed, responses) = bounded(14);
+    let submissions: Vec<_> = (0..14)
         .map(|operation| {
             let runtime = runtime.clone();
             let barrier = barrier.clone();
@@ -898,7 +1277,7 @@ fn failed_preparation_retries_from_any_submission_once_per_five_seconds() {
     waiting.recv_timeout(Duration::from_secs(5)).unwrap();
     for second in [5, 11] {
         seconds.store(second, Ordering::SeqCst);
-        for operation in 0..12 {
+        for operation in 0..14 {
             assert_eq!(
                 tauri::async_runtime::block_on(super::history_tests::command(&runtime, operation))
                     .unwrap_err(),
@@ -907,7 +1286,7 @@ fn failed_preparation_retries_from_any_submission_once_per_five_seconds() {
         }
         assert_eq!(attempts.load(Ordering::SeqCst), 2);
     }
-    for _ in 0..11 {
+    for _ in 0..13 {
         assert_eq!(
             responses
                 .recv_timeout(Duration::from_secs(5))
@@ -935,7 +1314,7 @@ fn failed_preparation_retries_from_any_submission_once_per_five_seconds() {
     );
     assert_eq!(attempts.load(Ordering::SeqCst), 3);
     std::fs::remove_file(&path).unwrap();
-    seed_v1(&path);
+    seed(&path);
     seconds.store(15, Ordering::SeqCst);
     assert_eq!(
         tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap_err(),
@@ -967,7 +1346,7 @@ fn once_observed_existing_database_cannot_disappear_into_empty_history() {
 fn namespace_replacement_drains_upgrade_and_retires_its_waiters() {
     use std::future::Future;
     let root = tempfile::tempdir().unwrap();
-    seed_v1(&root.path().join("live.sqlite3"));
+    seed(&root.path().join("live.sqlite3"));
     let runtime = Arc::new(CaptureRuntime::default());
     let (entered, waiting) = bounded(1);
     let (release, resume) = bounded(1);

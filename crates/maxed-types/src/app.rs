@@ -93,6 +93,24 @@ pub enum UpdateChannel {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(default, deny_unknown_fields)]
+pub struct RecapImageSettings {
+    pub names: bool,
+    pub loot: bool,
+    pub fights: bool,
+}
+
+impl Default for RecapImageSettings {
+    fn default() -> Self {
+        Self {
+            names: true,
+            loot: true,
+            fights: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct AppSettings {
     #[serde(default)]
@@ -101,6 +119,10 @@ pub struct AppSettings {
     pub loot: crate::LootSettings,
     #[serde(default)]
     pub chat: crate::ChatSettings,
+    #[serde(default)]
+    pub party: crate::PartySettings,
+    #[serde(default)]
+    pub recap_image: RecapImageSettings,
     #[serde(deserialize_with = "settings_version")]
     pub version: u32,
     pub adapter_id: Option<String>,
@@ -135,6 +157,8 @@ impl Default for AppSettings {
             alerts: crate::AlertPreferences::default(),
             loot: crate::LootSettings::default(),
             chat: crate::ChatSettings::default(),
+            party: crate::PartySettings::default(),
+            recap_image: RecapImageSettings::default(),
             version: 1,
             adapter_id: None,
             assets_path: None,
@@ -161,4 +185,28 @@ pub struct ObjectVisual {
 pub struct VisualPage {
     pub client_fingerprint: String,
     pub objects: Vec<ObjectVisual>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct ItemDetail {
+    pub object_type: u16,
+    pub name: Option<String>,
+    pub tier: Option<String>,
+    pub slot_type: Option<u8>,
+    pub slot_label: Option<String>,
+    pub soulbound: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct EnchantInfo {
+    pub id: i32,
+    pub name: Option<String>,
+    pub description: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct ItemDetailPage {
+    pub client_fingerprint: String,
+    pub items: Vec<ItemDetail>,
+    pub enchants: Vec<EnchantInfo>,
 }

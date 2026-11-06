@@ -1,17 +1,28 @@
+-- Materialize scalar inputs before grouping; fight/player JSON can be very large.
 , page_fights AS MATERIALIZED (
-    SELECT fight.* FROM selected r CROSS JOIN fights fight INDEXED BY fights_run ON fight.run_id=r.id
+    SELECT fight.id,fight.run_id,fight.complete_capture,
+        json_extract(fight.json,'$.total_damage') AS total_damage,
+        json_extract(fight.json,'$.issues') AS issues,
+        json_array_length(fight.json,'$.issues') AS issue_count,
+        EXISTS(SELECT 1 FROM json_each(fight.json,'$.issues') WHERE value='missing_identity') AS ambiguous
+    FROM selected r CROSS JOIN fights fight INDEXED BY fights_run ON fight.run_id=r.id
+), player_inputs AS MATERIALIZED (
+    SELECT f.id,f.run_id,f.complete_capture,f.total_damage,f.issue_count,f.ambiguous,
+        json_extract(p.json,'$.is_local') AS is_local,p.damage,
+        json_extract(p.json,'$.share') AS share,
+        EXISTS(SELECT 1 FROM json_each(p.json,'$.sources') src
+            WHERE (json_extract(src.value,'$.estimated')=1
+                AND json_array_length(src.value,'$.reasons')=0)
+                OR EXISTS(SELECT 1 FROM json_each(src.value,'$.reasons') reason
+                    WHERE reason.value<>'inferred-equipped-weapon')) AS estimated
+    FROM page_fights f LEFT JOIN fight_players p ON p.fight_id=f.id
 ), players AS (
-    SELECT f.id,f.run_id,f.complete_capture,
-        json_extract(f.json,'$.total_damage') AS total_damage,
-        json_array_length(f.json,'$.issues') AS issue_count,
-        EXISTS(SELECT 1 FROM json_each(f.json,'$.issues') WHERE value='missing_identity') AS ambiguous,
-        count(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN 1 END) AS locals,
-        max(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN p.damage END) AS local_damage,
-        max(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN json_extract(p.json,'$.share') END) AS supplied_share,
-        EXISTS(SELECT 1 FROM fight_players fp, json_each(fp.json,'$.sources') src
-            WHERE fp.fight_id=f.id AND (json_extract(src.value,'$.estimated')=1
-                OR json_array_length(src.value,'$.reasons')>0)) AS estimated
-    FROM page_fights f LEFT JOIN fight_players p ON p.fight_id=f.id GROUP BY f.id
+    SELECT id,run_id,complete_capture,total_damage,issue_count,ambiguous,
+        count(CASE WHEN is_local=1 THEN 1 END) AS locals,
+        max(CASE WHEN is_local=1 THEN damage END) AS local_damage,
+        max(CASE WHEN is_local=1 THEN share END) AS supplied_share,
+        max(estimated) AS estimated
+    FROM player_inputs GROUP BY id
 ), shares AS (
     SELECT run_id,
         CASE WHEN min(CASE WHEN locals=1 AND supplied_share BETWEEN 0 AND 1
@@ -27,13 +38,13 @@
     FROM selected r CROSS JOIN drops drop_row INDEXED BY drops_run ON drop_row.run_id=r.id
 ), detail_issues AS MATERIALIZED (
     SELECT r.id AS run_id,i.value FROM selected r,json_each(r.json,'$.issues') i
-    UNION SELECT f.run_id,i.value FROM page_fights f,json_each(f.json,'$.issues') i
+    UNION SELECT f.run_id,i.value FROM page_fights f,json_each(f.issues) i
     UNION SELECT d.run_id,i.value FROM page_loot d,json_each(d.json,'$.issues') i
 ), details AS (
     SELECT r.ordinal,json_object(
         'run_id',r.id,
-        'character_name',json_extract(r.entry_character_json,'$.name'),
-        'class_id',json_extract(r.entry_character_json,'$.class_id'),
+        'character_name',coalesce(json_extract(r.entry_character_json,'$.name'),json_extract(c.json,'$.name')),
+        'class_id',coalesce(json_extract(r.entry_character_json,'$.class_id'),json_extract(c.json,'$.class_id')),
         'local_share',CASE WHEN NOT EXISTS(SELECT 1 FROM detail_issues i
             WHERE i.run_id=r.id AND i.value='missing_identity') THEN sh.local_share END,
         'share_partial',json(CASE WHEN NOT r.complete_capture OR coalesce(sh.partial,0)
@@ -52,6 +63,7 @@
         'is_personal_best',json(CASE WHEN m.is_personal_best THEN 'true' ELSE 'false' END)
     ) AS json
     FROM selected r JOIN metrics m ON m.id=r.id LEFT JOIN shares sh ON sh.run_id=r.id
+    LEFT JOIN characters c ON c.id=r.character_id
 ), result AS (
     SELECT json_group_array(json(json)) AS payload FROM (SELECT json FROM details ORDER BY ordinal)
 )

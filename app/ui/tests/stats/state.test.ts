@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { defaultStatsPosition, normalizeListState } from '../../src/lib/navigation/state';
 
 const valid = {
-  range: '30d', characterId: 'preview-alpha', mapSort: { key: 'fame', descending: false }, includeEmpty: true,
+  range: '30d', characterId: 'preview-alpha', mapSort: { key: 'fame', descending: false }, minMapRuns: 5, includeEmpty: true,
   sessions: { cursor: { started: '5', id: 's5' }, previous: [null, { started: '9', id: 's9' }] },
 };
 it('keeps a valid stats position', () => {
@@ -20,5 +20,5 @@ it.each([
 });
 it('defaults to all time, all characters, fame per hour descending', () => {
   expect(defaultStatsPosition()).toEqual({ range: 'all', characterId: null, mapSort: { key: 'rate', descending: true },
-    includeEmpty: false, sessions: { cursor: null, previous: [] } });
+    minMapRuns: 5, includeEmpty: false, sessions: { cursor: null, previous: [] } });
 });

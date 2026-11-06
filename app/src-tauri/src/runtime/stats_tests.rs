@@ -12,6 +12,107 @@ fn all() -> StatsFilter {
     }
 }
 
+#[test]
+fn home_boss_baselines_validate_before_reading_and_default_without_database() {
+    let dir = tempfile::tempdir().unwrap();
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(dir.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    let request = BossHistoryRequest {
+        range: None,
+        character_id: None,
+        target_types: None,
+    };
+    let value = ready(tauri::async_runtime::block_on(
+        runtime.home_boss_baselines(request.clone()),
+    ));
+    assert!(value.rows.is_empty());
+    assert!(!value.truncated);
+    assert!(!dir.path().join("live.sqlite3").exists());
+    for invalid in [
+        BossHistoryRequest {
+            target_types: Some((0..65).collect()),
+            ..request.clone()
+        },
+        BossHistoryRequest {
+            character_id: Some("synthetic\u{7}".into()),
+            ..request.clone()
+        },
+        BossHistoryRequest {
+            range: Some(TimeRange {
+                start: Timestamp(2),
+                end: Timestamp(1),
+            }),
+            ..request.clone()
+        },
+        BossHistoryRequest {
+            range: Some(TimeRange {
+                start: Timestamp(1),
+                end: Timestamp(1),
+            }),
+            ..request.clone()
+        },
+        BossHistoryRequest {
+            range: Some(TimeRange {
+                start: Timestamp(0),
+                end: Timestamp(i64::MAX as u64 + 1),
+            }),
+            ..request.clone()
+        },
+    ] {
+        assert!(HistoryKey::HomeBossBaselines(invalid.clone())
+            .validate_for_tests()
+            .is_err());
+        assert!(tauri::async_runtime::block_on(runtime.home_boss_baselines(invalid)).is_err());
+    }
+    assert!(HistoryKey::HomeBossBaselines(BossHistoryRequest {
+        target_types: Some((0..64).collect()),
+        ..request
+    })
+    .validate_for_tests()
+    .is_ok());
+}
+
+#[test]
+fn home_boss_baselines_return_ready_through_history_scheduler() {
+    let (dir, runtime) = setup();
+    let snapshot = demo::demo_snapshot();
+    let mut fight = snapshot.fights[0].clone();
+    fight.ended = Some(Timestamp(fight.started.0 + 120_000_000));
+    fight.players.truncate(1);
+    fight.players[0].is_local = true;
+    fight.players[0].dps = Some(1234.0);
+    let target_type = fight.target_type.unwrap();
+    let mut db = rusqlite::Connection::open(dir.path().join("live.sqlite3")).unwrap();
+    let events: Vec<_> = [
+        EngineEvent::SessionUpdated(snapshot.session.unwrap()),
+        EngineEvent::RunStarted(snapshot.run.unwrap()),
+        EngineEvent::FightUpdated(fight),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(i, event)| EventEnvelope {
+        fight_chart_omitted: false,
+        stream_id: "synthetic-baselines".into(),
+        sequence: Sequence(Timestamp(i as u64 + 1)),
+        at: snapshot.at,
+        event,
+    })
+    .collect();
+    maxed_store::apply_batch(&mut db, &events).unwrap();
+    let result = ready(tauri::async_runtime::block_on(runtime.home_boss_baselines(
+        BossHistoryRequest {
+            range: None,
+            character_id: None,
+            target_types: Some(vec![target_type]),
+        },
+    )));
+    assert_eq!(result.rows.len(), 1);
+    assert_eq!(result.rows[0].fights, 1);
+    assert_eq!(result.rows[0].avg_dps, Some(1234.0));
+    assert!(!result.truncated);
+}
+
 fn setup() -> (tempfile::TempDir, Arc<CaptureRuntime>) {
     let dir = tempfile::tempdir().unwrap();
     let snapshot = demo::demo_snapshot();
@@ -202,6 +303,199 @@ fn stats_keys_reject_invalid_input() {
     })
     .validate_for_tests()
     .is_ok());
+}
+
+#[test]
+fn boss_history_key_rejects_invalid_input() {
+    let request = BossHistoryRequest {
+        range: None,
+        character_id: None,
+        target_types: None,
+    };
+    for invalid in [
+        BossHistoryRequest {
+            range: Some(TimeRange {
+                start: Timestamp(2),
+                end: Timestamp(1),
+            }),
+            ..request.clone()
+        },
+        BossHistoryRequest {
+            range: Some(TimeRange {
+                start: Timestamp(1),
+                end: Timestamp(1),
+            }),
+            ..request.clone()
+        },
+        BossHistoryRequest {
+            range: Some(TimeRange {
+                start: Timestamp(0),
+                end: Timestamp(i64::MAX as u64 + 1),
+            }),
+            ..request.clone()
+        },
+        BossHistoryRequest {
+            target_types: Some((0..65).collect()),
+            ..request.clone()
+        },
+        BossHistoryRequest {
+            character_id: Some("synthetic\u{7}".into()),
+            ..request.clone()
+        },
+    ] {
+        let key = HistoryKey::BossHistory(invalid);
+        assert!(key.validate_for_tests().is_err(), "{key:?}");
+    }
+    assert!(HistoryKey::BossHistory(request.clone())
+        .validate_for_tests()
+        .is_ok());
+    assert!(HistoryKey::BossHistory(BossHistoryRequest {
+        range: Some(TimeRange {
+            start: Timestamp(1),
+            end: Timestamp(2)
+        }),
+        character_id: Some("synthetic-character".into()),
+        target_types: Some((0..64).collect()),
+    })
+    .validate_for_tests()
+    .is_ok());
+}
+
+#[test]
+fn boss_history_read_returns_ready_on_seeded_store() {
+    let (dir, runtime) = setup();
+    let snapshot = demo::demo_snapshot();
+    let mut fight = snapshot.fights[0].clone();
+    fight.ended = Some(Timestamp(fight.started.0 + 120_000_000));
+    fight.players.truncate(1);
+    fight.players[0].is_local = true;
+    fight.players[0].dps = Some(1234.0);
+    let target_type = fight.target_type.unwrap();
+    let mut db = rusqlite::Connection::open(dir.path().join("live.sqlite3")).unwrap();
+    let events: Vec<_> = [
+        EngineEvent::SessionUpdated(snapshot.session.unwrap()),
+        EngineEvent::RunStarted(snapshot.run.unwrap()),
+        EngineEvent::FightUpdated(fight),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(i, event)| EventEnvelope {
+        fight_chart_omitted: false,
+        stream_id: "synthetic-boss-history".into(),
+        sequence: Sequence(Timestamp(i as u64 + 1)),
+        at: snapshot.at,
+        event,
+    })
+    .collect();
+    maxed_store::apply_batch(&mut db, &events).unwrap();
+    let result = ready(tauri::async_runtime::block_on(runtime.boss_history(
+        BossHistoryRequest {
+            range: None,
+            character_id: None,
+            target_types: Some(vec![target_type]),
+        },
+    )));
+    assert_eq!(result.rows.len(), 1);
+    assert_eq!(result.rows[0].fights, 1);
+    assert_eq!(result.rows[0].avg_dps, Some(1234.0));
+    assert!(!result.truncated);
+}
+
+#[test]
+fn dungeon_profile_key_rejects_invalid_input() {
+    let request = DungeonProfileRequest {
+        dungeon: "Synthetic Dungeon".into(),
+        character_id: None,
+        range: TimeRange {
+            start: Timestamp(1),
+            end: Timestamp(2),
+        },
+    };
+    for dungeon in [
+        String::new(),
+        "x".repeat(257),
+        "é".repeat(129),
+        "Synthetic\nDungeon".into(),
+    ] {
+        assert!(HistoryKey::DungeonProfile(DungeonProfileRequest {
+            dungeon,
+            ..request.clone()
+        })
+        .validate_for_tests()
+        .is_err());
+    }
+    for character_id in [String::new(), "x".repeat(257), "synthetic\u{7}".into()] {
+        assert!(HistoryKey::DungeonProfile(DungeonProfileRequest {
+            character_id: Some(character_id),
+            ..request.clone()
+        })
+        .validate_for_tests()
+        .is_err());
+    }
+    for (start, end) in [(2, 1), (1, 1), (0, i64::MAX as u64 + 1)] {
+        assert!(HistoryKey::DungeonProfile(DungeonProfileRequest {
+            range: TimeRange {
+                start: Timestamp(start),
+                end: Timestamp(end)
+            },
+            ..request.clone()
+        })
+        .validate_for_tests()
+        .is_err());
+    }
+    assert!(HistoryKey::DungeonProfile(request.clone())
+        .validate_for_tests()
+        .is_ok());
+    assert!(HistoryKey::DungeonProfile(DungeonProfileRequest {
+        dungeon: "é".repeat(128),
+        character_id: Some("synthetic-character".into()),
+        ..request
+    })
+    .validate_for_tests()
+    .is_ok());
+}
+
+#[test]
+fn dungeon_profile_read_returns_ready_on_seeded_store() {
+    let (dir, runtime) = setup();
+    let snapshot = demo::demo_snapshot();
+    let mut run = snapshot.run.unwrap();
+    run.outcome = Some(Outcome::Cleared);
+    run.completed_at = Some(Timestamp(run.started.0 + 600_000_000));
+    run.ended = run.completed_at;
+    let request = DungeonProfileRequest {
+        dungeon: run.dungeon.clone(),
+        character_id: run.character_id.clone(),
+        range: TimeRange {
+            start: run.started,
+            end: run.ended.unwrap(),
+        },
+    };
+    let mut db = rusqlite::Connection::open(dir.path().join("live.sqlite3")).unwrap();
+    let events: Vec<_> = [
+        EngineEvent::SessionUpdated(snapshot.session.unwrap()),
+        EngineEvent::RunStarted(run),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(i, event)| EventEnvelope {
+        fight_chart_omitted: false,
+        stream_id: "synthetic-dungeon-profile".into(),
+        sequence: Sequence(Timestamp(i as u64 + 1)),
+        at: snapshot.at,
+        event,
+    })
+    .collect();
+    maxed_store::apply_batch(&mut db, &events).unwrap();
+    let result = ready(tauri::async_runtime::block_on(
+        runtime.dungeon_profile(request),
+    ));
+    assert_eq!(result.clears, 1);
+    assert_eq!(result.clear_samples, 1);
+    assert_eq!(
+        (result.usual_clear_micros, result.usual_run_dps),
+        (None, None)
+    );
 }
 
 #[test]

@@ -1,7 +1,7 @@
+use crate::common;
 use maxed_store::*;
 use maxed_types::*;
 use rusqlite::Connection;
-mod common;
 #[test]
 fn pb_alert_fires_for_killed_boss_fight() {
     check(FightEnd::MapChanged); // Positive control for fixture eligibility.

@@ -11,7 +11,7 @@ export function mutedDungeons(prefs: AlertPreferences, all: string[]): Set<strin
   return new Set(prefs.key_pop_excluded_dungeons);
 }
 
-export function keyKpis(summary: EventSummary | null, range: TimeRange | null, muted: Set<string>, now: Date): KpiCell[] {
+export function keyKpis(summary: EventSummary | null, range: TimeRange | null, muted: Set<string>, now: Date, preferences?: AlertPreferences | null): KpiCell[] {
   const known = summary !== null && summary.by_kind.portal_opened > 0;
   const count = summary?.by_kind.portal_opened ?? 0;
   const most = summary?.dungeons.reduce<EventSummary['dungeons'][number] | null>((best, row) => !best || row.pops > best.pops ? row : best, null);
@@ -24,6 +24,6 @@ export function keyKpis(summary: EventSummary | null, range: TimeRange | null, m
       sub: last ? `last: ${last.dungeon}, ${shortWhen(last.last_at, now)}` : null,
       tooltip: flagged && start && BigInt(flagged) > BigInt(start) ? `Counted since ${runDate(flagged).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : null },
     { key: 'most', label: 'Most popped', value: known && most ? most.dungeon : '—', sub: known && most ? `${most.pops.toLocaleString('en-US')} pops · ${Math.round(most.pops / count * 100)}% of all` : null },
-    { key: 'dungeons', label: 'Dungeons', value: known ? summary.dungeons.length.toLocaleString('en-US') : '—', sub: known ? `${muted.size} muted for alerts` : null },
+    { key: 'dungeons', label: 'Dungeons', value: known ? summary.dungeons.length.toLocaleString('en-US') : '—', sub: preferences?.key_popped === 'off' ? 'Key-pop alerts off' : preferences?.key_pop_dungeons?.length === 0 ? 'No dungeons selected' : known ? `${muted.size} muted for alerts` : null },
   ];
 }

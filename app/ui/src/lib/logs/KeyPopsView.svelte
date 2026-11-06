@@ -144,7 +144,7 @@
 </script>
 
 <LogsHeader view="keys" subline={countLine(summaries.allTime?.by_kind.portal_opened ?? null, 'key pops seen', summaries.allTime?.first_at ?? null)}><RangeSwitch range={filter.range} label="Logs date range" onChange={range => apply({ ...filter, range, cursor: null })} /></LogsHeader>
-<div class="key-kpis"><KpiStrip cells={keyKpis(summaries.summaryKey === rangeKey ? summaries.summary : null, filter.range, muted, new Date())} valueTitles /></div>
+<div class="key-kpis"><KpiStrip cells={keyKpis(summaries.summaryKey === rangeKey ? summaries.summary : null, filter.range, muted, new Date(), prefs)} valueTitles /></div>
 <BusyStatus message={client ? historyStatus(history, 'events') : null} />
 <div class="feed" bind:this={region}>
   <HistoryStatus {history} />

@@ -14,7 +14,7 @@ fn ciphertext_patch_preserves_length_and_keystream() {
     assert_eq!(decoded, replacement);
     assert!(rewrite_ciphertext(&cipher, original, b"shorter!").is_err());
 }
-mod support;
+use crate::support;
 use maxed_cli::{scrub::scrub, Pipeline};
 use maxed_protocol::{
     key_bytes,

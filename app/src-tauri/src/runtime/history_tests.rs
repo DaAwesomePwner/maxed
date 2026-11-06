@@ -8,6 +8,50 @@ use std::{
     task::{Context, Waker},
 };
 
+#[test]
+fn history_keys_validate_party_identifiers() {
+    for key in [
+        HistoryKey::PartyPlayer(String::new(), None),
+        HistoryKey::PartyRun(String::new()),
+        HistoryKey::PartyPlayers(
+            "x".repeat(65),
+            PartyPlayerFilter::All,
+            PartyPlayerSort::LastSeen,
+            None,
+        ),
+    ] {
+        assert_eq!(key.validate_for_tests().unwrap_err(), history::INVALID);
+    }
+    assert!(HistoryKey::PartyPlayer("synthalpha".into(), None)
+        .validate_for_tests()
+        .is_ok());
+    assert!(HistoryKey::PartyPlayers(
+        "é".repeat(64),
+        PartyPlayerFilter::All,
+        PartyPlayerSort::LastSeen,
+        None
+    )
+    .validate_for_tests()
+    .is_ok());
+}
+
+#[test]
+fn party_annotations_key_limit() {
+    assert!(HistoryKey::PartyAnnotations(vec!["synthalpha".into(); 512])
+        .validate_for_tests()
+        .is_ok());
+    let runtime = Arc::new(CaptureRuntime::default());
+    let result = tauri::async_runtime::block_on(runtime.submit_history(
+        HistoryCaller::MainWindow,
+        HistoryKey::PartyAnnotations(vec!["synthalpha".into(); 513]),
+        |_| -> Result<(), String> { panic!("invalid annotation request reached the reader") },
+    ));
+    assert_eq!(result.unwrap_err(), history::INVALID);
+    assert!(HistoryKey::PartyAnnotations(vec![String::new()])
+        .validate_for_tests()
+        .is_err());
+}
+
 fn scope() -> HomeScope {
     HomeScope::Today {
         range: TimeRange {
@@ -153,6 +197,22 @@ fn seed(path: &std::path::Path) {
             event,
         })
         .collect();
+    let mut events = events;
+    events.push(EventEnvelope {
+        fight_chart_omitted: false,
+        stream_id: "invented-b2-history".into(),
+        sequence: Sequence(Timestamp(events.len() as u64 + 1)),
+        at: Timestamp(1_000_000),
+        event: EngineEvent::ScopeTimelineUpdated(ScopeTimelineUpdate {
+            scope_id: "history-scope".into(),
+            run_id: None,
+            buckets: vec![],
+            players: vec![],
+            full: true,
+            compacted: false,
+            disabled: true,
+        }),
+    });
     maxed_store::apply_batch(&mut connection, &events).unwrap();
 }
 fn setup() -> (tempfile::TempDir, Arc<CaptureRuntime>) {
@@ -329,6 +389,19 @@ pub(super) async fn command(
                 )
                 .await?,
         ),
+        12 => json(
+            runtime
+                .get_run_player(
+                    snapshot.run.unwrap().id,
+                    snapshot.fights[0].players[0].player_id.clone(),
+                )
+                .await?,
+        ),
+        13 => json(
+            runtime
+                .get_player_context("history-scope".into(), "history-player".into(), None, None)
+                .await?,
+        ),
         _ => unreachable!(),
     })
 }
@@ -360,10 +433,23 @@ fn wait_retired(runtime: &CaptureRuntime) {
 #[test]
 fn commands_return_ready_payloads_and_missing_is_null() {
     let (_dir, runtime) = setup();
-    for index in 0..12 {
+    for index in 0..14 {
         let value = ready(tauri::async_runtime::block_on(command(&runtime, index)));
         assert!(!value.is_null(), "seeded command {index} must find data");
     }
+    assert!(ready(tauri::async_runtime::block_on(
+        runtime.get_run_player("missing".into(), "missing".into())
+    ))
+    .is_none());
+    assert!(
+        ready(tauri::async_runtime::block_on(runtime.get_player_context(
+            "missing".into(),
+            "missing".into(),
+            None,
+            None
+        )))
+        .is_none()
+    );
     assert!(ready(tauri::async_runtime::block_on(
         runtime.get_run("missing".into())
     ))
@@ -456,7 +542,7 @@ fn newer_same_key_supersedes_active_even_when_newest_pending_changes_again() {
 #[test]
 fn all_history_commands_share_namespace_retirement() {
     for namespace in [Namespace::Live, Namespace::Demo, Namespace::Replay] {
-        for index in 0..12 {
+        for index in 0..14 {
             let (dir, runtime) = setup();
             let mut options = RuntimeOptions::live(dir.path().into(), None);
             options.namespace = namespace;
@@ -472,7 +558,7 @@ fn all_history_commands_share_namespace_retirement() {
             let mut active = Box::pin(command(&runtime, index));
             pending(active.as_mut());
             entered.recv_timeout(Duration::from_secs(5)).unwrap();
-            let mut queued = Box::pin(command(&runtime, (index + 1) % 12));
+            let mut queued = Box::pin(command(&runtime, (index + 1) % 14));
             pending(queued.as_mut());
             let switching = runtime.clone();
             let transition = thread::spawn(move || {
@@ -620,7 +706,7 @@ fn caller_quotas_are_independent_and_count_invalid_attempts() {
 
 #[test]
 fn history_read_does_not_block_capture_or_advance_watermark() {
-    for index in 0..12 {
+    for index in 0..14 {
         let (_dir, runtime) = setup();
         let before = runtime.store_status();
         let (entered, release) = pause(&runtime);
@@ -687,7 +773,7 @@ fn startup_coalesces_before_any_reader_is_dispatched() {
     runtime.initialize_home(dir.path().into()).unwrap();
     entered.recv_timeout(Duration::from_secs(5)).unwrap();
     let mut previous = None;
-    for index in 0..12 {
+    for index in 0..14 {
         let mut next = Box::pin(command(&runtime, index));
         pending(next.as_mut());
         if let Some(old) = previous.replace(next) {
@@ -704,7 +790,7 @@ fn startup_coalesces_before_any_reader_is_dispatched() {
 
 #[test]
 fn schema_gate_applies_to_every_command_and_absence_is_not_corruption() {
-    for index in 0..12 {
+    for index in 0..14 {
         let dir = tempfile::tempdir().unwrap();
         let runtime = Arc::new(CaptureRuntime::default());
         runtime.initialize_home(dir.path().into()).unwrap();
@@ -715,7 +801,7 @@ fn schema_gate_applies_to_every_command_and_absence_is_not_corruption() {
             tauri::async_runtime::block_on(command(&runtime, index)).unwrap_err(),
             home::SCHEMA_FAILED
         );
-        for next in 0..12 {
+        for next in 0..14 {
             assert_eq!(
                 tauri::async_runtime::block_on(command(&runtime, next)).unwrap_err(),
                 home::SCHEMA_FAILED
@@ -807,6 +893,35 @@ fn invalid_queries_are_sanitized_before_queueing_and_size_errors_are_fixed() {
             history::INVALID
         );
     }
+    for id in ["", "private\nsecret", &"x".repeat(257)] {
+        for (scope, player) in [(id, "valid"), ("valid", id)] {
+            assert_eq!(
+                tauri::async_runtime::block_on(runtime.get_run_player(scope.into(), player.into()))
+                    .unwrap_err(),
+                history::INVALID
+            );
+            assert_eq!(
+                tauri::async_runtime::block_on(runtime.get_player_context(
+                    scope.into(),
+                    player.into(),
+                    None,
+                    None
+                ))
+                .unwrap_err(),
+                history::INVALID
+            );
+        }
+    }
+    assert_eq!(
+        tauri::async_runtime::block_on(runtime.get_player_context(
+            "valid".into(),
+            "valid".into(),
+            Some(Timestamp(2)),
+            Some(Timestamp(1))
+        ))
+        .unwrap_err(),
+        history::INVALID
+    );
     for sort_value in ["01", "+1", "-0", "-2", "9223372036854775808"] {
         let mut query = filter();
         query.cursor = Some(RunCursor {
@@ -847,12 +962,12 @@ fn failed_live_open_and_missing_playback_apply_to_every_command() {
             None
         )
         .is_err());
-    for index in 0..12 {
+    for index in 0..14 {
         ready(tauri::async_runtime::block_on(command(&runtime, index)));
     }
     std::fs::remove_file(dir.path().join("identity.key")).unwrap();
     for namespace in [Namespace::Demo, Namespace::Replay] {
-        // Each namespace is a separate burst; twelve commands would otherwise
+        // Each namespace is a separate burst; fourteen commands would otherwise
         // exhaust the shared 32-attempt budget before testing read failures.
         now += Duration::from_secs(2);
         *runtime.shared.home.clock.lock().unwrap() = Some(Arc::new(move || now));
@@ -863,7 +978,7 @@ fn failed_live_open_and_missing_playback_apply_to_every_command() {
             .shared
             .open_home(&options, &AtomicBool::new(false), Bridge::default(), None)
             .is_err());
-        for index in 0..12 {
+        for index in 0..14 {
             assert_eq!(
                 tauri::async_runtime::block_on(command(&runtime, index)).unwrap_err(),
                 home::UNAVAILABLE
@@ -877,7 +992,7 @@ fn failed_live_open_and_missing_playback_apply_to_every_command() {
             .close()
             .unwrap();
         std::fs::remove_file(options.database()).unwrap();
-        for index in 0..12 {
+        for index in 0..14 {
             assert_eq!(
                 tauri::async_runtime::block_on(command(&runtime, index)).unwrap_err(),
                 home::READ_FAILED
@@ -1216,6 +1331,29 @@ fn read_runs(runtime: &Arc<CaptureRuntime>) {
 }
 
 #[test]
+fn current_schema_kept_reader_is_reused_across_home_and_history() {
+    let (dir, runtime) = setup();
+    assert_eq!(
+        maxed_store::open_reader(&dir.path().join("live.sqlite3"))
+            .unwrap()
+            .user_version()
+            .unwrap(),
+        maxed_store::SCHEMA_VERSION
+    );
+    let opens = count_opens(&runtime);
+    let first = ready(tauri::async_runtime::block_on(
+        runtime.home_summary(scope()),
+    ));
+    assert!(runtime.shared.home.scheduler.lock().unwrap().open());
+    read_runs(&runtime);
+    let second = ready(tauri::async_runtime::block_on(
+        runtime.home_summary(scope()),
+    ));
+    assert_eq!(first, second);
+    assert_eq!(opens.load(Ordering::SeqCst), 1);
+}
+
+#[test]
 fn two_reads_in_one_generation_open_once() {
     let (_dir, runtime) = setup();
     let opens = count_opens(&runtime);
@@ -1315,7 +1453,8 @@ fn newer_user_version_on_reuse_is_schema_newer() {
     let opens = count_opens(&runtime);
     read_runs(&runtime);
     let db = rusqlite::Connection::open(dir.path().join("live.sqlite3")).unwrap();
-    db.pragma_update(None, "user_version", 13).unwrap();
+    db.pragma_update(None, "user_version", maxed_store::SCHEMA_VERSION + 1)
+        .unwrap();
     assert_eq!(
         tauri::async_runtime::block_on(runtime.list_runs(filter())).unwrap_err(),
         home::SCHEMA_NEWER

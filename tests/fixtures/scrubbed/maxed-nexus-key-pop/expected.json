@@ -1,0 +1,24 @@
+{
+  "pcap": "nexus-key-pop.pcap",
+  "pcap_sha256": "ed142339574bc2271d5d70ad478c79d5d57fc10d71ca89b5959b948aa68a9cda",
+  "source_build": "p0@a4f0e08 (capture); scrubbed with p0@4eacecf (#41: s.dungeon_opened_by key kept, opener pseudonymized consistently with NAME_STAT)",
+  "observed_catalog_sha256": "6ed62efec45097b76e9fb55fea695115af80c54da0823877b524a6d8eff27814",
+  "scrub_report": "verified=true provisional=false",
+  "export_domain_parity": "1 of 1 rows identical",
+  "connection": {
+    "map": "Nexus",
+    "about_s": 20,
+    "note": "Nexus connection immediately before the owner entered Lair of Shaitan"
+  },
+  "key_pop": {
+    "notification_us": "1791143211431886",
+    "message_key": "s.dungeon_opened_by",
+    "opener_pseudonym": "000000007",
+    "opener_is_local_player": false,
+    "portal_object_type": 28057,
+    "dungeon": "Lair of Shaitan"
+  },
+  "regression_targets": {
+    "#29": "Exactly one PortalOpened for Lair of Shaitan by another player. With Lair of Shaitan in the dungeon filter (or All) and live identity established, one key-pop alert. With the filter excluding it, none. The local player is not the opener."
+  }
+}

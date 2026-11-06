@@ -1,5 +1,4 @@
-mod common;
-mod d_support;
+use crate::d_support;
 use d_support::*;
 use maxed_assets::{build_catalog, ExtractedAssets, TextAsset};
 use maxed_engine::Engine;

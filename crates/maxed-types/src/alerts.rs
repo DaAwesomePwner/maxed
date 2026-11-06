@@ -16,8 +16,9 @@ pub enum AlertLoudness {
 pub struct AlertPreferences {
     pub white_bag: AlertLoudness,
     pub personal_best: AlertLoudness,
-    #[serde(default = "key_pop_toast")]
+    #[serde(default = "key_pop_off")]
     pub key_popped: AlertLoudness,
+    // Missing legacy filters still mean all dungeons; retain explicitly saved delivery choices.
     #[serde(default)]
     pub key_pop_dungeons: Option<Vec<String>>,
     #[serde(default = "chat_toast")]
@@ -44,8 +45,8 @@ fn chat_toast() -> AlertLoudness {
 fn chat_quiet() -> AlertLoudness {
     AlertLoudness::QuietLogOnly
 }
-fn key_pop_toast() -> AlertLoudness {
-    AlertLoudness::Toast
+fn key_pop_off() -> AlertLoudness {
+    AlertLoudness::Off
 }
 fn legacy_death_off() -> AlertLoudness {
     AlertLoudness::Off
@@ -69,8 +70,8 @@ impl Default for AlertPreferences {
         Self {
             white_bag: AlertLoudness::Banner,
             personal_best: AlertLoudness::Banner,
-            key_popped: AlertLoudness::Toast,
-            key_pop_dungeons: None,
+            key_popped: AlertLoudness::Off,
+            key_pop_dungeons: Some(Vec::new()),
             whisper: AlertLoudness::Toast,
             guild_message: AlertLoudness::QuietLogOnly,
             party_message: AlertLoudness::QuietLogOnly,

@@ -62,6 +62,8 @@ pub fn compact_live_fight(view: &mut FightView) {
                 until: chunk.last().expect("nonempty").until,
                 total: chunk.iter().map(|b| b.total).sum(),
                 local: chunk.iter().map(|b| b.local).sum(),
+                others_damage: chunk.iter().map(|b| b.others_damage).sum(),
+                others_presence: chunk.iter().map(|b| b.others_presence).sum(),
             }
         })
         .collect();

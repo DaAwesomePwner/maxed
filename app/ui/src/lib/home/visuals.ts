@@ -119,23 +119,38 @@ export { createDungeonPortal } from '../bridge/dungeon-portal';
  * one latest desired key, and no per-row subscriptions or queries. */
 export function createHomeVisuals(client: Pick<Client, 'getObjectVisuals' | 'onVisualsChanged'>, receive: (value: HomeVisuals) => void) {
   let types: number[] = [], key: string | null = null, revision = 0;
-  let active = false, pending = false, disposed = false;
+  let active = false, pending = false, disposed = false, stale = false;
+  let current = emptyHomeVisuals();
+  let fingerprint: string | undefined;
+  const objects = new Map<number, VisualPage['objects'][number]>(), loaded = new Set<number>();
+  function publish(value: HomeVisuals) { current = value; receive(value); }
   async function pump() {
     if (active || disposed || !pending) return;
     active = true; pending = false;
     const request = revision, requested = types;
-    const result: HomeVisuals = { ...emptyHomeVisuals(), phase: 'ready' };
     try {
-      for (let offset = 0; offset < requested.length; offset += 128) {
-        const page = await client.getObjectVisuals(requested.slice(offset, offset + 128));
+      let batchFingerprint: string | undefined;
+      let missing = requested.filter(type => !loaded.has(type));
+      while (missing.length) {
+        const batch = missing.slice(0, 128);
+        const page = await client.getObjectVisuals(batch);
         if (disposed || request !== revision) return;
-        if (offset > 0 && result.client_fingerprint !== page.client_fingerprint) throw new Error('Catalog changed during lookup');
-        result.client_fingerprint = page.client_fingerprint;
-        result.objects.push(...page.objects);
+        if (batchFingerprint !== undefined && batchFingerprint !== page.client_fingerprint) throw new Error('Catalog changed during lookup');
+        batchFingerprint = page.client_fingerprint;
+        if (fingerprint !== page.client_fingerprint) { objects.clear(); loaded.clear(); fingerprint = page.client_fingerprint; }
+        for (const object of page.objects) objects.set(object.object_type, object);
+        batch.forEach(type => loaded.add(type));
+        missing = requested.filter(type => !loaded.has(type));
       }
-      if (!disposed && request === revision) receive(result);
+      if (!disposed && request === revision) {
+        // Retain only the desired set, keeping memory bounded as Home windows move.
+        const retained = new Set(requested);
+        for (const type of loaded) if (!retained.has(type)) { loaded.delete(type); objects.delete(type); }
+        stale = false;
+        publish({ client_fingerprint: fingerprint ?? '', objects: requested.flatMap(type => objects.get(type) ?? []), phase: 'ready' });
+      }
     } catch {
-      if (!disposed && request === revision) receive(emptyHomeVisuals());
+      if (!disposed && request === revision) publish({ ...(stale ? emptyHomeVisuals() : current), phase: 'unavailable' });
     } finally {
       active = false;
       void pump();
@@ -144,10 +159,15 @@ export function createHomeVisuals(client: Pick<Client, 'getObjectVisuals' | 'onV
   function refresh() {
     if (disposed) return;
     revision++; pending = true;
-    receive({ ...emptyHomeVisuals(), phase: 'loading' });
+    publish({ ...(stale ? emptyHomeVisuals() : current), phase: 'loading' });
     void pump();
   }
-  const release = client.onVisualsChanged(refresh);
+  function invalidate() {
+    stale = true;
+    objects.clear(); loaded.clear(); fingerprint = undefined;
+    refresh();
+  }
+  const release = client.onVisualsChanged(invalidate);
   return {
     update(next: number[]) {
       if (disposed) return;
@@ -155,7 +175,7 @@ export function createHomeVisuals(client: Pick<Client, 'getObjectVisuals' | 'onV
       if (nextKey === key) return;
       key = nextKey; types = normalized; refresh();
     },
-    retry: refresh,
+    retry: invalidate,
     dispose() { if (disposed) return; disposed = true; revision++; release(); },
   };
 }

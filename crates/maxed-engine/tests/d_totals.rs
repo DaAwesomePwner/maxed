@@ -1,5 +1,4 @@
-mod common;
-mod d_support;
+use crate::d_support;
 use d_support::*;
 #[test]
 fn snapshot_run_totals_equal_pure_function() {

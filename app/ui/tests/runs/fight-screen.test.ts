@@ -1,13 +1,14 @@
 import { expect, it } from 'vitest';
-import { fightKpis, fightNeighbors, seriesForChart } from '../../src/lib/runs/fight-screen';
-import { fight, player } from './fixtures';
+import { fightKpis, fightNeighbors, fightSourceRows, seriesForChart } from '../../src/lib/runs/fight-screen';
+import { dpsMetric } from '../../src/lib/runs/dps-metric';
+import { fight, player, source } from './fixtures';
 import type { RunFightStripRow } from '../../src/lib/bindings/RunFightStripRow';
 
 it('uses saved personal metrics and preserves missing local identity', () => {
   const self = player();
   const cells = fightKpis(fight(), self);
   expect(cells.map(cell => cell.key)).toEqual(['duration', 'damage', 'party_dps', 'your_dps', 'best_hit']);
-  expect(cells.find(cell => cell.key === 'your_dps')).toMatchObject({ value: '17', sub: 'rank 4 of 1 · 23% share' });
+  expect(cells.find(cell => cell.key === 'your_dps')).toMatchObject({ label: 'Active DPS', tooltip: dpsMetric('player_active_window_v1').tooltip, value: '17', sub: 'rank 4 of 1 · 23% share' });
   expect(cells.find(cell => cell.key === 'best_hit')?.value).toBe('123');
   expect(fightKpis(fight(), null).slice(3).map(cell => cell.value)).toEqual(['—', '—']);
   expect(fightKpis(fight({ first_hit: null }), null)[2].value).toBe('—');
@@ -38,4 +39,25 @@ it('rejects ambiguous or misaligned player series', () => {
   const row = { player_id: self.player_id, object_id: self.object_id, is_local: true, points: [5] };
   const value = fight({ buckets: [{ from: '0', until: '1000000', total: 40, local: 10 }], player_series: [row, row] });
   expect(seriesForChart(value, [self.player_id])[0].points).toEqual([10]);
+});
+
+it('merges item damage before ranking while retaining the estimated fraction', () => {
+  const sources = [source({ damage: 68 }), source({ damage: 32, estimated: true }),
+    source({ item_type: 1001, damage: 80 }), source({ item_type: null, damage: 4, estimated: true })];
+  const before = structuredClone(sources);
+  expect(fightSourceRows(sources).map(({ item_type, damage, estimatedDamage }) => ({ item_type, damage, estimatedDamage })))
+    .toEqual([{ item_type: 1000, damage: 100, estimatedDamage: 32 },
+      { item_type: 1001, damage: 80, estimatedDamage: 0 }, { item_type: null, damage: 4, estimatedDamage: 4 }]);
+  expect(sources).toEqual(before);
+});
+it('does not assign one enchant snapshot to multiple different item copies', () => {
+  expect(fightSourceRows([source(), source({ enchant: { state: 'recorded', slots: 1, applied: 1, ids: [1] } })])[0].enchant).toBeNull();
+});
+
+it('keeps legacy and missing-basis fight values labelled as whole-fight DPS', () => {
+  for (const basis of ['whole_target_v0', undefined] as const) {
+    const value = fight({ dps_basis: basis as ReturnType<typeof fight>['dps_basis'] });
+    expect(fightKpis(value, player()).find(cell => cell.key === 'your_dps'))
+      .toMatchObject({ label: 'DPS', tooltip: expect.stringContaining('whole fight'), value: '17' });
+  }
 });

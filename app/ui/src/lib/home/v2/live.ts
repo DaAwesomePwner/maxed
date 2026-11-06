@@ -1,3 +1,4 @@
+import { damageUncertain } from '../evidence';
 import type { CaptureStatus } from '../../bindings/CaptureStatus';
 import type { CharacterView } from '../../bindings/CharacterView';
 import type { DropView } from '../../bindings/DropView';
@@ -42,15 +43,21 @@ class Rows<T> extends Map<string, Row<T>> {
 }
 
 /** Presentation only. The shell feeds ordered callbacks, never a last-event effect. */
-export function createHomeLiveWindow(receive: (window: HomeLiveWindow) => void) {
+export function createHomeLiveWindow(receive: (window: HomeLiveWindow) => void,
+  observer?: { onEvent(envelope: EventEnvelope): void; onWindow(window: HomeLiveWindow): void }) {
   let window = emptyHomeLiveWindow();
   let batching = 0, emissionPending = false;
+  let quietDepth = 0, metadataRevision = 0, projectedRevision = '';
+  let projection: HomeLiveWindow;
+  // Keep metadata separate from the cached projection so row-only changes do
+  // not invalidate it, and saved visits retain their own immutable metadata.
+  const metadata = (next: HomeLiveWindow) => { window = next; metadataRevision++; };
   let focusRevision = 0, focusKey = '';
   const invalidateFocus = () => { focusRevision++; };
   const fights = new Rows<FightView>();
   const kills = new Rows<RealmKillSummary>();
   const announcements = new Rows<InstanceEventView>();
-  const drops = new Map<string, Row<DropView>>();
+  const drops = new Rows<DropView>();
   const events = new Rows<InstanceEventView>();
   let sequencesRevision = -1, fightSequences: Record<string, string> = {};
   const boundedFights = new WeakMap<FightView, { local: ReturnType<typeof verifiedSelf>; keepSeries: boolean; value: FightView }>();
@@ -76,17 +83,18 @@ export function createHomeLiveWindow(receive: (window: HomeLiveWindow) => void) 
   let recovery: ReturnType<typeof setTimeout> | undefined;
   const reason = (text: string) => {
     if (window.partial && window.reasons.includes(text)) return;
-    window = { ...window, partial: true,
-      reasons: window.reasons.includes(text) ? window.reasons : [...window.reasons, text] };
+    metadata({ ...window, partial: true,
+      reasons: window.reasons.includes(text) ? window.reasons : [...window.reasons, text] });
   };
   function reset(message: string, streamId = window.streamId, keepVisits = false) {
+    if (!quietDepth) checkpoint();
     if (!keepVisits) { visits.clear(); visitsTruncated = false; }
     invalidateFocus();
     instanceKey = null; fameEntry = undefined; fameSequence = -1n;
     clearTimeout(recovery); recovery = undefined;
     fights.clear(); kills.clear(); announcements.clear(); drops.clear(); events.clear(); selected = null; focused = null; snapshotFights = []; observedAt = '0'; explicitSelection = false; entrySequence = null;
     if (!keepVisits) establishingIdentity = false;
-    window = { ...emptyHomeLiveWindow(), streamId, reasons: [message] };
+    metadata({ ...emptyHomeLiveWindow(), streamId, reasons: [message] });
   }
   function observeCharacter(next: CharacterView | null, sequence = -1n, sameArea = true) {
     const switched = next?.identity_verified && verifiedCharacterId !== null && next.id !== verifiedCharacterId;
@@ -108,12 +116,13 @@ export function createHomeLiveWindow(receive: (window: HomeLiveWindow) => void) 
   function updateFame(fame: number | null, sequence: bigint) {
     if (!window.realmPeriods?.length || sequence < fameSequence) return;
     fameSequence = sequence;
-    window = { ...window, realmPeriods: window.realmPeriods.map((period, i, rows) =>
-      i === rows.length - 1 ? { ...period, fame } : period) };
+    if (window.realmPeriods.at(-1)!.fame === fame) return;
+    metadata({ ...window, realmPeriods: window.realmPeriods.map((period, i, rows) =>
+      i === rows.length - 1 ? { ...period, fame } : period) });
   }
   function leaveRealm(at: string) {
     if (area !== 'realm' || instanceKey === null) return;
-    window = { ...window, realmPeriods: window.realmPeriods?.map(period => period.ended === null ? { ...period, ended: at } : period) };
+    metadata({ ...window, realmPeriods: window.realmPeriods?.map(period => period.ended === null ? { ...period, ended: at } : period) });
     visits.set(instanceKey, { window, fights: new Map(fights), kills: new Map(kills), announcements: new Map(announcements), drops: new Map(drops), events: new Map(events), focused });
     if (visits.size > 8) { visits.delete(visits.keys().next().value!); visitsTruncated = true; }
   }
@@ -126,45 +135,74 @@ export function createHomeLiveWindow(receive: (window: HomeLiveWindow) => void) 
     const saved = instanceKey === null ? undefined : visits.get(instanceKey);
     if (saved) {
       visits.delete(instanceKey!);
-      window = saved.window; focused = saved.focused;
+      metadata(saved.window); focused = saved.focused;
       for (const [id, row] of saved.fights) fights.set(id, row);
       for (const [id, row] of saved.kills) kills.set(id, row);
       for (const [id, row] of saved.announcements) announcements.set(id, row);
       for (const [id, row] of saved.drops) drops.set(id, row);
       for (const [id, row] of saved.events) events.set(id, row);
     } else {
-      window = { ...window, visitKey: `${envelope.stream_id}:${envelope.sequence}`,
-        visitStarted: map.at, partial: false, reasons: [] };
+      metadata({ ...window, visitKey: `${envelope.stream_id}:${envelope.sequence}`,
+        visitStarted: map.at, partial: false, reasons: [] });
     }
     if (area === 'realm') {
-      window = { ...window, realmPeriods: [...(window.realmPeriods ?? []), { started: map.at, ended: null, fame: null }] };
+      metadata({ ...window, realmPeriods: [...(window.realmPeriods ?? []), { started: map.at, ended: null, fame: null }] });
       if (instanceKey === null) reason('Realm instance key is missing; this entry is a partial visit.');
       if (!saved && visitsTruncated) reason('Earlier realm visits were omitted from the bounded session window.');
       if (window.realmPeriods!.length > 128) {
-        window = { ...window, realmPeriods: window.realmPeriods!.slice(-128) };
-        window = { ...window, visitStarted: window.realmPeriods![0].started };
+        metadata({ ...window, realmPeriods: window.realmPeriods!.slice(-128) });
+        metadata({ ...window, visitStarted: window.realmPeriods![0].started });
         reason('Visit segments truncated; earlier observations were omitted.');
       }
     }
+  }
+  const revisionKey = () => `${metadataRevision}:${fights.revision}:${fights.sequenceRevision}:${kills.revision}:${announcements.revision}:${drops.revision}:${events.revision}`;
+  let observedRevision = observer ? revisionKey() : '';
+  function project() {
+    const revision = revisionKey();
+    if (projectedRevision === revision) return projection;
+    if (sequencesRevision !== fights.sequenceRevision) {
+      fightSequences = Object.fromEntries(Array.from(fights, ([id, row]) => [id, row.sequence.toString()]));
+      sequencesRevision = fights.sequenceRevision;
+    }
+    projection = { ...window, focusedFightId: focused, observedAt,
+      realmKills: kills.view(), realmAnnouncements: announcements.view(),
+      fightSequences, fights: fights.view(),
+      drops: drops.view(), events: events.view() };
+    projectedRevision = revision;
+    return projection;
+  }
+  function checkpoint() {
+    if (!disposed && observer) {
+      const next = project();
+      observedRevision = projectedRevision;
+      observer.onWindow(next);
+    }
+  }
+  function nonEvent<Args extends unknown[]>(apply: (...args: Args) => void): (...args: Args) => void {
+    if (!observer) return apply;
+    return (...args) => {
+      if (disposed) return;
+      quietDepth++;
+      try {
+        // Only the outer entry observes pending input, before any mutation.
+        // A synthetic snapshot inside a batch pairs those rows with the new
+        // snapshot; production snapshots arrive outside event transactions.
+        if (quietDepth === 1 && observedRevision !== revisionKey()) checkpoint();
+        apply(...args);
+      } finally { quietDepth--; }
+    };
   }
   function emit() {
     if (disposed) return;
     if (batching) { emissionPending = true; return; }
     emissionPending = false;
-    // Sequence-only revisions do not invalidate immutable loot projections.
-    let sameDrops = window.drops.length === drops.size, index = 0;
-    if (sameDrops) for (const row of drops.values()) {
-      if (window.drops[index++] !== row.value) { sameDrops = false; break; }
-    }
-    if (sequencesRevision !== fights.sequenceRevision) {
-      fightSequences = Object.fromEntries(Array.from(fights, ([id, row]) => [id, row.sequence.toString()]));
-      sequencesRevision = fights.sequenceRevision;
-    }
-    window = { ...window, focusedFightId: focused, observedAt,
-      realmKills: kills.view(), realmAnnouncements: announcements.view(),
-      fightSequences, fights: fights.view(),
-      drops: sameDrops ? window.drops : Array.from(drops.values(), row => row.value), events: events.view() };
-    receive(window);
+    const next = project();
+    if (observer) { observedRevision = projectedRevision; observer.onWindow(next); }
+    receive(next);
+  }
+  function observeClock(at: string) {
+    if (observedAt !== at) { observedAt = at; metadataRevision++; }
   }
   function put<T extends { id: string }>(rows: Map<string, Row<T>>, value: T, sequence: bigint) {
     if ((rows.get(value.id)?.sequence ?? -1n) <= sequence) rows.set(value.id, { value, sequence });
@@ -236,7 +274,7 @@ export function createHomeLiveWindow(receive: (window: HomeLiveWindow) => void) 
         target_type: fight.target_type, target_kind: fight.target_kind, started: fight.started,
         ended: fight.ended, kill: fight.kill, self,
         partial: !fight.complete_capture || fight.issues.length > 0
-          || fight.players.some(row => row.sources.some(source => source.estimated)) };
+          || fight.players.some(row => row.sources.some(damageUncertain)) };
       killSummaries.set(fight, summary);
     }
     put(kills, summary, sequence);
@@ -272,6 +310,7 @@ export function createHomeLiveWindow(receive: (window: HomeLiveWindow) => void) 
     return value;
   }
   function bound() {
+    const previousFocus = focused, previousSelection = selected;
     const key = `${focusRevision}:${area}:${observedAt}`;
     if (key !== focusKey) {
       const candidates = area === 'realm' && window.visitKey === null ? snapshotFights : Array.from(fights.values(), row => row.value);
@@ -280,6 +319,7 @@ export function createHomeLiveWindow(receive: (window: HomeLiveWindow) => void) 
     }
     const current = focused;
     if (!explicitSelection && current) selected = current;
+    if (focused !== previousFocus || selected !== previousSelection) metadataRevision++;
     trim(fights, 64, value => value.started, [selected, current].filter((id): id is string => id != null),
       undefined, value => { if (isBossFight(value)) invalidateFocus(); });
     // Separate caps keep ordinary traffic out of visit history. These compact
@@ -302,18 +342,127 @@ export function createHomeLiveWindow(receive: (window: HomeLiveWindow) => void) 
     return area === 'realm' && window.visitKey !== null && value.run_id == null
       && inRealmVisit(window, at);
   }
-  function capture(value: CaptureStatus) {
-    if (disposed) return;
+  const applyCapture = nonEvent((value: CaptureStatus) => {
     captureState = value.state;
     if (!['Live', 'Recovering', 'WaitingForGame'].includes(value.state)) {
       reset('Capture is not live; visit observations were retired.'); paused = true; emit();
+    } else if (value.state === 'Live' && recovery !== undefined) {
+      // Resume visible and hidden windows within the grace period here,
+      // keeping both visit history and its uncertainty before any next snapshot.
+      clearTimeout(recovery); recovery = undefined;
+      paused = false; emit();
     } else if (value.state !== 'Live' && !paused) {
       paused = true;
       reason('Stale observations during capture recovery.');
-      recovery = setTimeout(() => { reset('Capture recovery exceeded the observation grace period.'); emit(); }, RECOVERY_GRACE_MS);
+      recovery = setTimeout(nonEvent(() => { reset('Capture recovery exceeded the observation grace period.'); emit(); }), RECOVERY_GRACE_MS);
       emit();
     }
+  });
+  function capture(value: CaptureStatus) {
+    if (disposed) return;
+    if (captureState === value.state && (value.state === 'Live' ? recovery === undefined
+      : paused && (value.state === 'Recovering' || value.state === 'WaitingForGame'))) return;
+    applyCapture(value);
   }
+  function applyEvent(envelope: EventEnvelope) {
+    if (window.streamId !== envelope.stream_id) {
+      reset('Source changed; visit entry was not observed.', envelope.stream_id);
+      session = null; character = null; verifiedCharacterId = null; snapshotSequence = -1n;
+    }
+    const event = envelope.event, sequence = BigInt(envelope.sequence);
+    if ('capture_state_changed' in event) { capture(event.capture_state_changed); return; }
+    if ('session_updated' in event) {
+      if (session !== event.session_updated.id || event.session_updated.ended !== null) {
+        reset('Session changed; visit entry was not observed.'); character = null; verifiedCharacterId = null;
+      }
+      session = event.session_updated.id;
+    }
+    if ('character_updated' in event) {
+      observeCharacter(event.character_updated, sequence);
+    }
+    if ('map_entered' in event) enterMap(envelope, event.map_entered);
+    if ('run_started' in event && event.run_started.session_id === session) {
+      if ((window.runId !== null && window.runId !== event.run_started.id) || area !== event.run_started.area_kind) {
+        leaveRealm(event.run_started.started);
+        reset('Run changed without an observed map entry.', window.streamId, true);
+      }
+      area = event.run_started.area_kind;
+      if (window.runId !== event.run_started.id) metadata({ ...window, runId: event.run_started.id });
+    }
+    if (!paused) {
+      const fight = 'fight_started' in event ? event.fight_started : 'fight_updated' in event ? event.fight_updated : 'fight_ended' in event ? event.fight_ended : null;
+      const drop = 'bag_dropped' in event ? event.bag_dropped : 'drop_updated' in event ? event.drop_updated : null;
+      if (fight && accepts(fight, fight.started)) {
+        putFight(envelope.fight_chart_omitted && 'fight_updated' in event
+          ? withPreviousChart(fight, envelope.stream_id) : fight, sequence);
+      }
+      if (drop && accepts(drop, drop.at)) put(drops, drop, sequence);
+      if ('instance_event' in event && accepts(event.instance_event, event.instance_event.at)) putEvent(event.instance_event, sequence);
+    }
+    if (BigInt(envelope.at) > BigInt(observedAt)) observeClock(envelope.at);
+    bound();
+  }
+  const applySnapshot = nonEvent((value: LiveSnapshot, sequence: bigint, changed: boolean) => {
+    if (changed) {
+      reset('Visit entry was not observed.', value.stream_id); snapshotSequence = -1n;
+      character = null; verifiedCharacterId = null;
+    }
+    // A delayed prior-map snapshot cannot retire a resumed visit or seed its fame.
+    if (sequence < snapshotSequence || (entrySequence !== null && sequence < entrySequence)) return;
+    session = value.session?.id ?? null; observeCharacter(value.character, sequence, value.area_kind === area);
+    if (value.session?.ended != null) { reset('Session ended.'); paused = true; emit(); return; }
+    if (value.capture.state !== 'Live') { capture(value.capture); return; }
+    if (captureState !== null && captureState !== 'Live') return;
+    if (paused) { reset('Capture resumed; earlier visit observations are incomplete.'); paused = false; }
+    clearTimeout(recovery); recovery = undefined;
+    snapshotSequence = sequence;
+    const runId = value.area_kind === 'dungeon' ? value.run?.id ?? null : null;
+    if (runId !== window.runId || value.area_kind !== area) {
+      if (area === 'realm' && instanceKey !== null) {
+        // Snapshots can overtake map events. Retain the last known realm
+        // evidence, excluding unobserved time and fame after departure.
+        reason('Realm departure was first observed in a snapshot; the segment boundary is incomplete.');
+        // Bounds are exclusive, so include the last observed microsecond.
+        leaveRealm((BigInt(observedAt) + 1n).toString());
+      }
+      reset(runId !== null ? 'Current run snapshot has partial timeline coverage.' : 'Visit entry was not observed.', window.streamId, true);
+      metadata({ ...window, runId });
+    }
+    area = value.area_kind;
+    observeClock(value.at);
+    if (area === 'realm' && entrySequence !== null && sequence >= fameSequence && value.instance?.visit_fame_delta !== undefined) {
+      updateFame(value.instance.visit_fame_delta, sequence);
+      // Anchor later character events to the engine's authoritative per-entry delta.
+      fameEntry = value.character?.fame != null && value.instance.visit_fame_delta !== null
+        ? value.character.fame - value.instance.visit_fame_delta : null;
+    }
+    const scoped = runId !== null || (area === 'realm' && entrySequence !== null && sequence >= entrySequence);
+    // Mid-visit snapshots may establish shared focus without claiming visit membership.
+    invalidateFocus();
+    snapshotFights = !scoped && area === 'realm' ? scopedFights(value) : [];
+    if (scoped) {
+      const activeIds = new Set(value.fights.map(fight => fight.id));
+      for (const [id, row] of fights) {
+        if (row.value.ended === null && row.sequence <= sequence && !activeIds.has(id)) fights.delete(id);
+      }
+      for (const fight of value.fights) {
+        if (accepts(fight, fight.started)) putFight(fight, sequence);
+      }
+      for (const drop of value.drops) {
+        // Realm snapshots can revise a received bag, never seed visit membership.
+        if (accepts(drop, drop.at) && (runId !== null || drops.has(drop.id))) put(drops, drop, sequence);
+      }
+    }
+    if ((value.instance?.events_dropped ?? 0) > 0) reason('Capture omitted instance events.');
+    bound(); emit();
+  });
+  const applyState = nonEvent((value: LiveState) => {
+    phase = value.phase;
+    if (value.phase === 'live') return;
+    reset(value.phase === 'resyncing' ? 'Live sequence gap; visit observations are incomplete.' : 'Live source retired; visit entry was not observed.');
+    if (value.phase !== 'resyncing') { session = null; character = null; verifiedCharacterId = null; area = 'unknown'; snapshotSequence = -1n; captureState = null; paused = false; }
+    emit();
+  });
   return {
     /** Keep ordered focus/eviction/visit semantics, publish the immutable view once. */
     batch(apply: () => void) {
@@ -323,114 +472,54 @@ export function createHomeLiveWindow(receive: (window: HomeLiveWindow) => void) 
     snapshot(value: LiveSnapshot) {
       if (disposed) return;
       const changed = window.streamId !== value.stream_id || session !== (value.session?.id ?? null);
-      if (changed) {
-        reset('Visit entry was not observed.', value.stream_id); snapshotSequence = -1n;
-        character = null; verifiedCharacterId = null;
-      }
       const sequence = BigInt(value.sequence);
-      // A delayed prior-map snapshot cannot retire a resumed visit or seed its fame.
-      if (sequence < snapshotSequence || (entrySequence !== null && sequence < entrySequence)) return;
-      session = value.session?.id ?? null; observeCharacter(value.character, sequence, value.area_kind === area);
-      if (value.session?.ended != null) { reset('Session ended.'); paused = true; emit(); return; }
-      if (value.capture.state !== 'Live') { capture(value.capture); return; }
-      if (captureState !== null && captureState !== 'Live') return;
-      if (paused) { reset('Capture resumed; earlier visit observations are incomplete.'); paused = false; }
-      clearTimeout(recovery); recovery = undefined;
-      snapshotSequence = sequence;
-      const runId = value.area_kind === 'dungeon' ? value.run?.id ?? null : null;
-      if (runId !== window.runId || value.area_kind !== area) {
-        if (area === 'realm' && instanceKey !== null) {
-          // Snapshots can overtake map events. Retain the last known realm
-          // evidence, excluding unobserved time and fame after departure.
-          reason('Realm departure was first observed in a snapshot; the segment boundary is incomplete.');
-          // Bounds are exclusive, so include the last observed microsecond.
-          leaveRealm((BigInt(observedAt) + 1n).toString());
-        }
-        reset(runId !== null ? 'Current run snapshot has partial timeline coverage.' : 'Visit entry was not observed.', window.streamId, true);
-        window = { ...window, runId };
-      }
-      area = value.area_kind;
-      observedAt = value.at;
-      if (area === 'realm' && entrySequence !== null && sequence >= fameSequence && value.instance?.visit_fame_delta !== undefined) {
-        updateFame(value.instance.visit_fame_delta, sequence);
-        // Anchor later character events to the engine's authoritative per-entry delta.
-        fameEntry = value.character?.fame != null && value.instance.visit_fame_delta !== null
-          ? value.character.fame - value.instance.visit_fame_delta : null;
-      }
-      const scoped = runId !== null || (area === 'realm' && entrySequence !== null && sequence >= entrySequence);
-      // Mid-visit snapshots may establish shared focus without claiming visit membership.
-      invalidateFocus();
-      snapshotFights = !scoped && area === 'realm' ? scopedFights(value) : [];
-      if (scoped) {
-        const activeIds = new Set(value.fights.map(fight => fight.id));
-        for (const [id, row] of fights) {
-          if (row.value.ended === null && row.sequence <= sequence && !activeIds.has(id)) fights.delete(id);
-        }
-        for (const fight of value.fights) {
-          if (accepts(fight, fight.started)) putFight(fight, sequence);
-        }
-        for (const drop of value.drops) {
-          // Realm snapshots can revise a received bag, never seed visit membership.
-          if (accepts(drop, drop.at) && (runId !== null || drops.has(drop.id))) put(drops, drop, sequence);
-        }
-      }
-      if ((value.instance?.events_dropped ?? 0) > 0) reason('Capture omitted instance events.');
-      bound(); emit();
+      // A changed source/session must still retire the old scope before seeding.
+      if (!changed && (sequence < snapshotSequence || (entrySequence !== null && sequence < entrySequence))) return;
+      applySnapshot(value, sequence, changed);
     },
     event(envelope: EventEnvelope) {
       if (disposed) return;
-      if (window.streamId !== envelope.stream_id) {
-        reset('Source changed; visit entry was not observed.', envelope.stream_id);
-        session = null; character = null; verifiedCharacterId = null; snapshotSequence = -1n;
+      if (!observer) {
+        applyEvent(envelope);
+        if (!('capture_state_changed' in envelope.event)) emit();
+        return;
       }
-      const event = envelope.event, sequence = BigInt(envelope.sequence);
-      if ('capture_state_changed' in event) { capture(event.capture_state_changed); return; }
-      if ('session_updated' in event) {
-        if (session !== event.session_updated.id || event.session_updated.ended !== null) {
-          reset('Session changed; visit entry was not observed.'); character = null; verifiedCharacterId = null;
-        }
-        session = event.session_updated.id;
+      const event = envelope.event;
+      const boundary = 'map_entered' in event || 'run_started' in event || 'run_ended' in event
+        || ('run_updated' in event && event.run_updated.ended !== null);
+      const nextCharacter = 'character_updated' in event ? event.character_updated : null;
+      const retires = window.streamId !== envelope.stream_id
+        || ('session_updated' in event && (session !== event.session_updated.id || event.session_updated.ended !== null))
+        || (nextCharacter !== null && ((nextCharacter.identity_verified && verifiedCharacterId !== null && nextCharacter.id !== verifiedCharacterId)
+          || (!establishingIdentity && character?.id !== nextCharacter.id)))
+        || ('capture_state_changed' in event && !['Live', 'Recovering', 'WaitingForGame'].includes(event.capture_state_changed.state));
+      // Internal batching keeps capture/reset publication after ordered event
+      // delivery even when the caller applies a single envelope directly.
+      batching++; quietDepth++;
+      try {
+        if (boundary || retires) checkpoint();
+        applyEvent(envelope);
+        if (!('capture_state_changed' in event)) observer.onEvent(envelope);
+        if (boundary) checkpoint();
+        emit();
+      } finally {
+        quietDepth--; batching--;
+        if (!batching && emissionPending) emit();
       }
-      if ('character_updated' in event) {
-        observeCharacter(event.character_updated, sequence);
-      }
-      if ('map_entered' in event) enterMap(envelope, event.map_entered);
-      if ('run_started' in event && event.run_started.session_id === session) {
-        if ((window.runId !== null && window.runId !== event.run_started.id) || area !== event.run_started.area_kind) {
-          leaveRealm(event.run_started.started);
-          reset('Run changed without an observed map entry.', window.streamId, true);
-        }
-        area = event.run_started.area_kind; window = { ...window, runId: event.run_started.id };
-      }
-      if (!paused) {
-        const fight = 'fight_started' in event ? event.fight_started : 'fight_updated' in event ? event.fight_updated : 'fight_ended' in event ? event.fight_ended : null;
-        const drop = 'bag_dropped' in event ? event.bag_dropped : 'drop_updated' in event ? event.drop_updated : null;
-        if (fight && accepts(fight, fight.started)) {
-          putFight(envelope.fight_chart_omitted && 'fight_updated' in event
-            ? withPreviousChart(fight, envelope.stream_id) : fight, sequence);
-        }
-        if (drop && accepts(drop, drop.at)) put(drops, drop, sequence);
-        if ('instance_event' in event && accepts(event.instance_event, event.instance_event.at)) putEvent(event.instance_event, sequence);
-      }
-      if (BigInt(envelope.at) > BigInt(observedAt)) observedAt = envelope.at;
-      bound(); emit();
     },
     state(value: LiveState) {
       if (disposed || phase === value.phase) return;
-      phase = value.phase;
-      if (value.phase === 'live') return;
-      reset(value.phase === 'resyncing' ? 'Live sequence gap; visit observations are incomplete.' : 'Live source retired; visit entry was not observed.');
-      if (value.phase !== 'resyncing') { session = null; character = null; verifiedCharacterId = null; area = 'unknown'; snapshotSequence = -1n; captureState = null; paused = false; }
-      emit();
+      applyState(value);
     },
     capture,
     select(fightId: string | null) {
       if (disposed) return;
+      if (selected !== fightId || explicitSelection !== (fightId !== null)) metadataRevision++;
       selected = fightId; explicitSelection = fightId !== null; bound(); emit();
     },
-    dispose() {
+    dispose: nonEvent(() => {
       if (disposed) return;
       reset('Live window disposed.'); emit(); disposed = true; character = null; verifiedCharacterId = null; session = null;
-    },
+    }),
   };
 }

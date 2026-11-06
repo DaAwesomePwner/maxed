@@ -37,7 +37,7 @@ it('formats local dates across a month boundary', () => {
 });
 it('marks just the active Loot tab', () => {
   render(LootHeader, { view: 'stats', subline: null });
-  expect(screen.getByRole('link', { name: 'Stats' }).getAttribute('aria-current')).toBe('page');
+  expect(screen.getByRole('link', { name: 'Drop rates' }).getAttribute('aria-current')).toBe('page');
   expect(screen.getByRole('link', { name: 'Feed' }).hasAttribute('aria-current')).toBe(false);
 });
 it('applies presets with the injected clock', async () => {

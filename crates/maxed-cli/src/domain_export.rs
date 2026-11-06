@@ -465,6 +465,7 @@ mod tests {
         let run_id = projection.runs.keys().next().cloned();
         for kind in [
             InstanceEventKind::PlayerDeath {
+                player_id: None,
                 player_name: "SynthAlpha".into(),
                 level: Some(20),
                 killed_by: Some("Synth Enemy".into()),

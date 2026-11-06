@@ -22,11 +22,12 @@ export interface StatsPosition {
   range: StatsRange;
   characterId: string | null;
   mapSort: { key: StatsMapSort; descending: boolean };
+  minMapRuns: number;
   includeEmpty: boolean;
   sessions: { cursor: StatsSessionCursor | null; previous: Array<StatsSessionCursor | null> };
 }
 export const defaultStatsPosition = (): StatsPosition => ({
-  range: 'all', characterId: null, mapSort: { key: 'rate', descending: true }, includeEmpty: false,
+  range: 'all', characterId: null, mapSort: { key: 'rate', descending: true }, minMapRuns: 5, includeEmpty: false,
   sessions: { cursor: null, previous: [] },
 });
 const statsSorts: StatsMapSort[] = ['map', 'visits', 'time', 'fame', 'rate', 'clears', 'deaths'];
@@ -45,6 +46,7 @@ function statsPosition(value: unknown): StatsPosition | null {
     range: value.range as StatsRange,
     characterId: value.characterId as string | null,
     mapSort: { key: sort.key as StatsMapSort, descending: sort.descending },
+    minMapRuns: typeof value.minMapRuns === 'number' && Number.isInteger(value.minMapRuns) && value.minMapRuns >= 1 && value.minMapRuns <= 10000 ? value.minMapRuns : 5,
     includeEmpty: value.includeEmpty,
     sessions: { cursor: copyStatsCursor(pages.cursor as StatsSessionCursor | null),
       previous: (pages.previous as Array<StatsSessionCursor | null>).slice(-100).map(copyStatsCursor) },

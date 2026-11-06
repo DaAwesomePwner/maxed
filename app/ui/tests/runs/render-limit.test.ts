@@ -56,3 +56,34 @@ it('caps the saved run other-targets table and the boss damage table', async () 
   expect(damage.getAllByRole('row')).toHaveLength(1 + RENDER_STEP + 1 + 1);
   expect(main().getByText('99 more players not shown')).toBeTruthy();
 });
+
+it('limits a 64-fight sidebar, pins the current fight, and resets on navigation', async () => {
+  vi.useFakeTimers();
+  const strip = Array.from({ length: 64 }, (_, i) => ({ fight_id: `fight-${i}`, target_type: null,
+    boss_type: null, target_name: `Invented boss ${i}`, started: '0', ended: '1000000',
+    killed: true, player_count: 1, damage: 10, rank: 1, share: 1 }));
+  mountRuns({ hash: '#/runs/run-1/fights/fight-63', queries: {
+    getFight: async id => ready(fight({ id })), getRunFightStrip: async () => ready(strip),
+  } }); await flush();
+  const sidebar = () => within(main().getByRole('region', { name: 'You this run' }));
+  expect(sidebar().getAllByRole('row')).toHaveLength(1 + 8 + 1);
+  expect(sidebar().getByRole('link', { name: 'Invented boss 63' }).getAttribute('aria-current')).toBe('page');
+  await fireEvent.click(sidebar().getByRole('button', { name: 'Show more' })); await flush();
+  expect(sidebar().getAllByRole('row')).toHaveLength(1 + 16 + 1);
+  await fireEvent.click(sidebar().getByRole('link', { name: 'Invented boss 0' })); await flush();
+  expect(sidebar().getAllByRole('row')).toHaveLength(1 + 8);
+  while (sidebar().queryByRole('button', { name: 'Show more' })) {
+    await fireEvent.click(sidebar().getByRole('button', { name: 'Show more' })); await flush();
+  }
+  expect(sidebar().getAllByRole('row')).toHaveLength(65);
+});
+
+it.each(['player_active_window_v1', 'whole_target_v0'] as const)('explains the players table outside its clip region: %s', async basis => {
+  render(FightPlayers, { fight: fight({ dps_basis: basis }) });
+  const label = basis === 'player_active_window_v1' ? 'Active DPS' : 'DPS';
+  expect(screen.getByRole('columnheader', { name: label })).toBeTruthy();
+  const trigger = screen.getByRole('button', { name: label });
+  expect(trigger.closest('.damage-table')).toBeNull();
+  await fireEvent.focusIn(trigger);
+  expect(screen.getByRole('tooltip').textContent).toContain(basis === 'player_active_window_v1' ? 'that player' : 'whole fight');
+});

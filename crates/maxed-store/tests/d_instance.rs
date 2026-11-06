@@ -1,7 +1,7 @@
+use crate::common;
 use maxed_store::*;
 use maxed_types::*;
 use rusqlite::Connection;
-mod common;
 
 fn setup() -> (tempfile::TempDir, std::path::PathBuf, Connection) {
     let dir = tempfile::tempdir().unwrap();
@@ -26,6 +26,7 @@ fn kinds() -> Vec<(InstanceEventKind, TimelineKind)> {
     vec![
         (
             InstanceEventKind::PlayerDeath {
+                player_id: None,
                 player_name: "SynthAlpha".into(),
                 level: Some(1),
                 killed_by: Some("Snomipede".into()),
@@ -149,6 +150,134 @@ fn provisional_flags_survive_store_round_trip() {
             .kill,
         fight.kill
     );
+}
+
+#[test]
+fn historical_names_are_normalized_in_logs_and_run_events_without_rewriting_json() {
+    for (mut kind, _) in kinds() {
+        if let InstanceEventKind::RealmEventKilled { killer, .. } = &mut kind {
+            *killer = Some("SynthAlpha".into());
+        }
+        if let InstanceEventKind::PortalOpened {
+            opener_is_local, ..
+        } = &mut kind
+        {
+            // Historical attribution is deliberately not repaired by display normalization.
+            *opener_is_local = Some(false);
+        }
+        let expected = event(kind);
+        let mut historical = expected.clone();
+        match &mut historical.kind {
+            InstanceEventKind::PlayerDeath { player_name, .. } => player_name.push_str(",fe14"),
+            InstanceEventKind::PlayerLeft { player_name, .. } => {
+                player_name.as_mut().unwrap().push_str(",fe14")
+            }
+            InstanceEventKind::PortalOpened { opener, .. } => {
+                opener.as_mut().unwrap().push_str(",fe14")
+            }
+            InstanceEventKind::RealmEventKilled { killer, .. } => {
+                killer.as_mut().unwrap().push_str(",fe14")
+            }
+        }
+        let (_dir, path, mut db) = setup();
+        apply_batch(
+            &mut db,
+            &[common::envelope(
+                8,
+                EngineEvent::InstanceEvent(historical.clone()),
+            )],
+        )
+        .unwrap();
+        let reader = open_reader(&path).unwrap();
+        let page = reader
+            .list_events(EventFilter {
+                kinds: vec![],
+                query: String::new(),
+                run_id: None,
+                dungeon: None,
+                range: None,
+                opener_local: None,
+                cursor: None,
+                limit: 50,
+            })
+            .unwrap();
+        assert_eq!(page.rows.as_slice(), std::slice::from_ref(&expected));
+        let story = reader.get_run("demo-run").unwrap().unwrap();
+        assert_eq!(
+            story.events.as_deref().unwrap(),
+            std::slice::from_ref(&expected)
+        );
+        let summary = story
+            .timeline
+            .iter()
+            .find(|row| row.related_id.as_deref() == Some(&expected.id))
+            .unwrap();
+        let explanation = match expected.kind {
+            InstanceEventKind::PlayerDeath { .. } => {
+                "SynthAlpha died to Snomipede (level 1) (provisional)"
+            }
+            InstanceEventKind::PlayerLeft { .. } => {
+                "SynthBravo left (cause unconfirmed) (provisional)"
+            }
+            InstanceEventKind::PortalOpened { .. } => {
+                "SynthAlpha opened Synthetic dungeon (provisional)"
+            }
+            InstanceEventKind::RealmEventKilled { .. } => {
+                "Synthetic boss killed by SynthAlpha (provisional)"
+            }
+        };
+        assert_eq!(summary.explanation, explanation);
+        let json: String = db
+            .query_row("SELECT json FROM instance_events", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<InstanceEventView>(&json).unwrap(),
+            historical
+        );
+    }
+}
+
+#[test]
+fn historical_unknown_event_names_stay_unknown() {
+    for kind in [
+        InstanceEventKind::PortalOpened {
+            opener: None,
+            opener_is_local: None,
+            portal_type: None,
+            dungeon: None,
+        },
+        InstanceEventKind::PlayerLeft {
+            object_id: 43,
+            player_name: None,
+            class_id: None,
+        },
+        InstanceEventKind::RealmEventKilled {
+            boss_key: "Synthetic_Boss".into(),
+            object_type: None,
+            killer: None,
+        },
+    ] {
+        let (_dir, path, mut db) = setup();
+        let expected = event(kind);
+        apply_batch(
+            &mut db,
+            &[common::envelope(
+                8,
+                EngineEvent::InstanceEvent(expected.clone()),
+            )],
+        )
+        .unwrap();
+        assert_eq!(
+            open_reader(&path)
+                .unwrap()
+                .get_run("demo-run")
+                .unwrap()
+                .unwrap()
+                .events
+                .unwrap(),
+            [expected]
+        );
+    }
 }
 #[test]
 fn event_upsert_is_idempotent() {

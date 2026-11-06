@@ -1,3 +1,4 @@
+import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ItemTile from '../../src/lib/components/ItemTile.svelte';
@@ -102,6 +103,12 @@ describe('enchant pips on item tiles', () => {
     const { container } = render(HeroCard, { view: railView(snapshot), resolveSpriteUrl: resolve });
     const pips = [...container.querySelectorAll('[data-slot]')].map(slot => slot.querySelector<HTMLElement>('[data-pip]')?.dataset.pip ?? null);
     expect(pips).toEqual(['3', null, '2', '1']);
+    for (const slot of container.querySelectorAll('[data-slot]')) {
+      const index = Number(slot.getAttribute('data-slot'));
+      expect(slot.getAttribute('data-item-hover')).toBe(String(200 + index));
+      expect(slot.hasAttribute('title')).toBe(false);
+      expect(itemHoverParams(slot)).toEqual({ type: 200 + index, enchant: enchant([3, 0, 2, 1][index]), name: railView(snapshot).equipment[index].name ?? undefined });
+    }
   });
   it.each(['contents', 'story'])('marks loot bag items in %s with their enchant count', async (surface) => {
     const drop = retainedBag({ contents: [0, 1, 2, 3, 4].map(n => ({ slot: n, item_type: 600 + n, quantity: 1, enchant: enchant(n), taken_observed_at: null })) });
@@ -111,7 +118,14 @@ describe('enchant pips on item tiles', () => {
     for (const summary of container.querySelectorAll('details > summary')) await fireEvent.click(summary);
     const counts = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>('[data-pip]')].map(pip => pip.dataset.pip).sort();
     expect(counts(container)).toEqual(surface === 'contents' ? ['1', '2', '3', '4'] : ['1', '2', '3']);
-    if (surface === 'story') expect(screen.getByText('+1')).toBeTruthy();
+    if (surface === 'story') {
+      expect(screen.getByText('+1')).toBeTruthy();
+      for (const tile of container.querySelectorAll('.item')) {
+        expect(tile.hasAttribute('title')).toBe(false);
+        expect(tile.hasAttribute('data-item-hover')).toBe(true);
+        expect(itemHoverParams(tile)?.enchant).toEqual(enchant(Number(tile.getAttribute('data-item-hover')) - 600));
+      }
+    }
   });
   it('shows the best bag item pip and its rarity name', () => {
     const drop = retainedBag({ contents: [{ slot: 0, item_type: 444, quantity: 1, enchant: enchant(4), taken_observed_at: null }] });
@@ -146,4 +160,16 @@ it.each([NaN, Infinity, -Infinity, -1, 0, 7, 32.5, 257])('ignores invalid fit %s
   expect(screen.getByRole('img', { name: 'Legacy sword' }).style.width).toBe('16px');
   expect(screen.getByRole('img', { name: 'Legacy sword' }).style.height).toBe('16px');
   expect(screen.getByRole('img', { name: 'Divine, 4 enchants' }).style.width).toBe('8px');
+});
+
+it('keeps empty rail slots free of item hover actions', () => {
+  const snapshot: LiveSnapshot = structuredClone(fixture);
+  snapshot.character!.equipment = [];
+  const { container } = render(HeroCard, { view: railView(snapshot) });
+  expect(container.querySelectorAll('[data-slot]')).toHaveLength(4);
+  for (const slot of container.querySelectorAll('[data-slot]')) {
+    expect(slot.hasAttribute('data-item-hover')).toBe(false);
+    expect(itemHoverParams(slot)).toBeUndefined();
+    expect(slot.getAttribute('title')).toBe(['Weapon', 'Ability', 'Armor', 'Ring'][Number(slot.getAttribute('data-slot'))]);
+  }
 });

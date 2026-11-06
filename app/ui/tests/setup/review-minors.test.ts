@@ -19,13 +19,13 @@ describe('U5 review regressions', () => {
     await user.selectOptions(adapter, '');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Update Channel' }), 'beta');
     await user.click(screen.getByRole('button', { name: 'Apply' }));
-    await screen.findByText('Saved', { selector: 'p[role="status"]' });
+    await screen.findByText('Saved', { selector: '[role="status"]' });
     expect(f.client.setAdapter).toHaveBeenCalledExactlyOnceWith(null);
     expect(f.client.updateSettings).toHaveBeenCalledWith(expect.objectContaining({ adapter_id: null, update_channel: 'beta' }));
     expect(vi.mocked(f.client.setAdapter).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(f.client.updateSettings).mock.invocationCallOrder[0]);
     await user.selectOptions(screen.getByRole('combobox', { name: 'Update Channel' }), 'stable');
     await user.click(screen.getByRole('button', { name: 'Apply' }));
-    await screen.findByText('Saved', { selector: 'p[role="status"]' });
+    await screen.findByText('Saved', { selector: '[role="status"]' });
     expect(f.client.setAdapter).toHaveBeenCalledOnce();
     expect(f.client.updateSettings).toHaveBeenCalledTimes(2);
   });
@@ -70,7 +70,8 @@ describe('U5 review regressions', () => {
     f.client.listAdapters = vi.fn().mockRejectedValue(new Error('unsupported fixture command'));
     if (route === 'setup') render(Setup, { client: f.client, preview: true });
     else render(Settings, { client: f.client, preview: true });
-    await screen.findAllByText('Preview');
+    await screen.findByText('Capture adapters are unavailable in preview.');
+    expect((screen.getByRole('combobox', { name: 'Capture Adapter' }) as HTMLSelectElement).disabled).toBe(true);
     expect(f.client.listAdapters).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Retry Adapters' })).toBeNull();
     expect(document.querySelector('[role="alert"]')?.textContent).toBe('');

@@ -1,7 +1,165 @@
-mod common;
+use crate::common;
 use common::*;
 use maxed_protocol::{defs::*, Packet};
 use maxed_types::*;
+
+fn inferred_source_engine() -> maxed_engine::Engine {
+    let mut catalog = catalog();
+    let mut second_weapon = catalog.items[0].clone();
+    second_weapon.object_type = 202;
+    second_weapon.name = "Synthetic second sword".into();
+    catalog.items.push(second_weapon);
+    let mut projectile_less = catalog.items[1].clone();
+    projectile_less.object_type = 203;
+    projectile_less.name = "Synthetic projectile-less item".into();
+    projectile_less.projectiles.clear();
+    catalog.items.push(projectile_less);
+    maxed_engine::Engine::new(config(), std::sync::Arc::new(catalog)).unwrap()
+}
+
+#[test]
+fn remote_shotless_damage_credits_equipped_weapon() {
+    let mut e = inferred_source_engine();
+    setup(&mut e);
+    apply(
+        &mut e,
+        3000,
+        update(
+            vec![object(
+                3,
+                100,
+                vec![stat(8, 200), string(80, "AAIEewA=,,,")],
+            )],
+            vec![],
+        ),
+    );
+    apply(&mut e, 4000, damage(3, 7, 100));
+    let snapshot = e.snapshot();
+    let player = snapshot.fights[0]
+        .players
+        .iter()
+        .find(|p| p.object_id == 3)
+        .unwrap();
+    assert_eq!(player.sources.len(), 1);
+    let source = &player.sources[0];
+    assert_eq!(source.kind, SourceKind::Weapon);
+    assert_eq!(source.item_type, Some(200));
+    assert!(source.estimated);
+    assert_eq!(source.reasons, vec!["inferred-equipped-weapon"]);
+    assert_eq!(
+        source.enchant,
+        maxed_engine::parse_enchant(Some("AAIEewA="))
+    );
+    assert_eq!(source.damage, 100.);
+}
+
+#[test]
+fn remote_shotless_damage_without_weapon_stays_other() {
+    // Item 201 has projectiles; 203 is the projectile-less catalog item.
+    for stats in [
+        vec![],
+        vec![stat(8, 203)],
+        vec![stat(8, 999)],
+        vec![stat(8, -1)],
+    ] {
+        let mut e = inferred_source_engine();
+        setup(&mut e);
+        apply(&mut e, 3000, update(vec![object(3, 100, stats)], vec![]));
+        apply(&mut e, 4000, damage(3, 7, 100));
+        let snapshot = e.snapshot();
+        let source = &snapshot.fights[0]
+            .players
+            .iter()
+            .find(|p| p.object_id == 3)
+            .unwrap()
+            .sources[0];
+        assert_eq!(source.kind, SourceKind::Other);
+        assert_eq!(source.item_type, None);
+        assert!(!source.estimated);
+        assert!(source.reasons.is_empty());
+    }
+}
+
+#[test]
+fn local_and_summon_sources_are_not_inferred() {
+    let mut e = engine();
+    setup(&mut e);
+    apply(&mut e, 3000, damage(1, 7, 100));
+    let snapshot = e.snapshot();
+    let source = &snapshot.fights[0].players[0].sources[0];
+    assert_eq!(source.kind, SourceKind::Other);
+    assert_eq!(source.item_type, None);
+    assert!(!source.estimated);
+    assert!(source.reasons.is_empty());
+
+    apply(
+        &mut e,
+        4000,
+        update(
+            vec![object(3, 100, vec![stat(8, 200)]), object(4, 301, vec![])],
+            vec![],
+        ),
+    );
+    apply(
+        &mut e,
+        5000,
+        Packet::ServerPlayerShoot(ServerPlayerShoot {
+            bulletId: 1,
+            ownerId: 4,
+            containerType: 301,
+            startingPos: pos(),
+            angle: 0.,
+            damage: 100,
+            summonerId: 3,
+            bulletType: 0,
+            bulletCount: 1,
+            anglesBetweenBullets: 0.,
+        }),
+    );
+    // A different bullet has no known shot, but retains explicit summon ownership.
+    apply(&mut e, 6000, damage(4, 7, 100));
+    let snapshot = e.snapshot();
+    let source = &snapshot.fights[0]
+        .players
+        .iter()
+        .find(|p| p.object_id == 3)
+        .unwrap()
+        .sources[0];
+    assert_eq!(source.kind, SourceKind::Summon);
+    assert_eq!(source.item_type, Some(301));
+    assert!(!source.estimated);
+    assert!(source.reasons.is_empty());
+}
+
+#[test]
+fn weapon_swap_mid_fight_splits_inferred_damage() {
+    let mut e = inferred_source_engine();
+    setup(&mut e);
+    apply(
+        &mut e,
+        3000,
+        update(vec![object(3, 100, vec![stat(8, 200)])], vec![]),
+    );
+    apply(&mut e, 4000, damage(3, 7, 100));
+    apply(&mut e, 5000, tick(vec![status(3, vec![stat(8, 202)])]));
+    apply(&mut e, 6000, damage(3, 8, 50));
+    let snapshot = e.snapshot();
+    let sources = &snapshot.fights[0]
+        .players
+        .iter()
+        .find(|p| p.object_id == 3)
+        .unwrap()
+        .sources;
+    assert_eq!(sources.len(), 2);
+    for (item, damage) in [(200, 100.), (202, 50.)] {
+        let source = sources.iter().find(|s| s.item_type == Some(item)).unwrap();
+        assert_eq!(source.kind, SourceKind::Weapon);
+        assert!(source.estimated);
+        assert_eq!(source.damage, damage);
+        assert_eq!(source.hits, 1);
+        assert_eq!(source.reasons, vec!["inferred-equipped-weapon"]);
+    }
+}
 
 #[test]
 fn explicit_summoner_without_summon_metadata_is_attributed_with_unknown_item() {
@@ -221,4 +379,26 @@ fn swapping_item_without_new_enchant_data_clears_only_that_slot_evidence() {
     let c = e.snapshot().character.unwrap();
     assert_eq!(c.equipment[0].enchant.state, EnchantState::Missing);
     assert_eq!(c.equipment[1].enchant.state, EnchantState::RecordedEmpty);
+}
+
+#[test]
+fn inferred_weapon_labels_do_not_make_run_damage_partial() {
+    let mut e = inferred_source_engine();
+    setup(&mut e);
+    apply(
+        &mut e,
+        3000,
+        update(vec![object(3, 100, vec![stat(8, 200)])], vec![]),
+    );
+    apply(&mut e, 3500, tick(vec![]));
+    apply(&mut e, 4000, damage(3, 7, 100));
+    let snapshot = e.snapshot();
+    assert!(!snapshot.run_totals.as_ref().unwrap().partial);
+    assert!(!maxed_engine::run_totals(&snapshot.fights, None).partial);
+    assert!(snapshot.fights[0].players[0].sources[0].estimated);
+    apply(&mut e, 5000, shoot(1));
+    apply(&mut e, 6000, hit(1));
+    let snapshot = e.snapshot();
+    assert!(snapshot.run_totals.as_ref().unwrap().partial);
+    assert!(maxed_engine::run_totals(&snapshot.fights, None).partial);
 }

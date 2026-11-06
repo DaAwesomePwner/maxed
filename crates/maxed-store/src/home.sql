@@ -1,10 +1,5 @@
 -- One read snapshot. Parameters: kind (0=session, 1=today), session id, lo, hi.
-WITH scope AS (
-    SELECT started AS lo, ended AS hi, id AS session_id
-    FROM play_sessions WHERE ?1=0 AND id=?2
-    UNION ALL
-    SELECT ?3, ?4, NULL WHERE ?1=1
-), scoped_runs AS MATERIALIZED (
+WITH /*home_scope*/, scoped_runs AS MATERIALIZED (
     SELECT r.id,r.started,r.ended,r.outcome,r.dungeon,CASE WHEN json_valid(r.json) THEN json_extract(r.json,'$.issues') ELSE r.json END AS issues,
         CASE WHEN r.outcome='cleared' AND r.completed_at>r.started
             AND CASE WHEN json_valid(r.json) THEN json_extract(r.json,'$.area_kind') END='dungeon'
@@ -32,25 +27,24 @@ WITH scope AS (
       AND r.id IN (SELECT run_id FROM run_evidence WHERE kind IN ('victory','completion_dialogue'))
 ), dungeon_limit AS (SELECT 20 AS n),
 /*dungeon_stats*/
-, scoped_fights AS MATERIALIZED (
-    SELECT f.id,f.started,f.local_dps,json_extract(f.json,'$.issues') AS issues FROM fights f, scope s
-    WHERE (?1=0 AND f.session_id=s.session_id)
-       OR (?1=1 AND f.started>=s.lo AND f.started<s.hi)
-), scoped_drops AS MATERIALIZED (
-    SELECT d.id,d.at,d.bag_rank,json_extract(d.json,'$.issues') AS issues FROM drops d, scope s
-    WHERE (?1=0 AND d.session_id=s.session_id)
-       OR (?1=1 AND d.at>=s.lo AND d.at<s.hi)
-), scoped_deaths AS (
+, scoped_deaths AS (
     SELECT d.* FROM deaths d, scope s
     WHERE (?1=0 AND d.session_id=s.session_id)
        OR (?1=1 AND d.at>=s.lo AND d.at<s.hi)
-), scoped_fame AS MATERIALIZED (
-    SELECT f.at,f.character_id,f.fame,f.stream_id,f.sequence FROM fame_samples f, scope s
-    WHERE (?1=0 AND f.session_id=s.session_id)
-       OR (?1=1 AND f.at>=s.lo AND f.at<s.hi)
+), top_dps_policy AS (
+    -- Require 20 seconds of the local player's own first-to-last hit window.
+    -- Exclude legacy rows without it: the fight window cannot prove local
+    -- activity, so missing evidence must never outrank a qualifying fight.
+    SELECT 20000000 AS min_local_active_micros
 ), top AS (
     SELECT id FROM scoped_fights
     WHERE local_dps IS NOT NULL AND local_dps>=0 AND local_dps<=1.7976931348623157e308
+      AND ended IS NOT NULL AND complete_capture=1 AND json_array_length(issues)=0
+      AND dps_basis='player_active_window_v1'
+      AND (SELECT CASE WHEN json_valid(f.json)
+          THEN json_extract(f.json,'$.local_active_micros') END
+          FROM fights f WHERE f.id=scoped_fights.id)
+          >= (SELECT min_local_active_micros FROM top_dps_policy)
     ORDER BY local_dps DESC, started DESC, id DESC LIMIT 1
 ), best AS (
     SELECT id FROM scoped_drops WHERE bag_rank IS NOT NULL
@@ -71,8 +65,10 @@ WITH scope AS (
         max(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN p.damage END) AS local_damage,
         max(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN json_extract(p.json,'$.share') END) AS supplied_share,
         EXISTS(SELECT 1 FROM fight_players fp, json_each(fp.json,'$.sources') src
-            WHERE fp.fight_id=f.id AND (json_extract(src.value,'$.estimated')=1
-                OR json_array_length(src.value,'$.reasons')>0)) AS estimated
+            WHERE fp.fight_id=f.id AND ((json_extract(src.value,'$.estimated')=1
+                AND json_array_length(src.value,'$.reasons')=0)
+                OR EXISTS(SELECT 1 FROM json_each(src.value,'$.reasons') reason
+                    WHERE reason.value<>'inferred-equipped-weapon'))) AS estimated
     FROM recent_fights f LEFT JOIN fight_players p ON p.fight_id=f.id
     GROUP BY f.id
 ), shares AS (
@@ -114,22 +110,6 @@ WITH scope AS (
         ))
     ) AS json
     FROM recent r LEFT JOIN shares sh ON sh.run_id=r.id
-), latest_fame AS (
-    SELECT character_id, fame, min(at) OVER (PARTITION BY character_id) AS first_at,
-        row_number() OVER (
-        PARTITION BY character_id ORDER BY at DESC,stream_id DESC,sequence DESC
-    ) AS ordinal FROM scoped_fame
-), baselines AS (
-    SELECT l.fame, (
-        SELECT b.fame FROM fame_samples b
-        WHERE b.character_id=l.character_id
-          AND b.at<CASE WHEN ?1=0 THEN l.first_at ELSE (SELECT lo FROM scope) END
-          AND (?1<>0 OR b.session_id IS NOT ?2)
-        ORDER BY b.at DESC,b.stream_id DESC,b.sequence DESC LIMIT 1
-    ) AS baseline FROM latest_fame l WHERE ordinal=1
-), delta AS (
-    SELECT sum(fame-baseline) AS d, count(CASE WHEN baseline IS NULL THEN 1 END) AS missing
-    FROM baselines
 ), fame_count AS MATERIALIZED (
     SELECT count(*) AS n,count(DISTINCT character_id) AS characters FROM scoped_fame
 ), single_character_fame AS (
@@ -198,6 +178,9 @@ WITH scope AS (
         'fame', (SELECT json_group_array(json_object(
             'at',CAST(at AS TEXT),'character_id',character_id,'fame',fame
         )) FROM fame_preview),
+        'fame_characters', (SELECT json_group_array(json_object(
+            'character_id',character_id,'first_fame',baseline,'last_fame',fame,'last_at',CAST(at AS TEXT)
+        )) FROM (SELECT * FROM baselines ORDER BY at,stream_id,sequence)),
         'best_drop', json((SELECT json FROM drops WHERE id=(SELECT id FROM best))),
         'top_fight', json((SELECT json FROM fights WHERE id=(SELECT id FROM top))),
         'recent_runs', (SELECT json_group_array(json(json)) FROM (

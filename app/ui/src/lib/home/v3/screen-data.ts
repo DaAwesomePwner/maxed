@@ -17,6 +17,7 @@ export const bossOnly = (fight: FightView): boolean =>
 export function damageRows(players: Array<PlayerDamage | RunPlayerTotal>, self: PlayerDamage | RunPlayerTotal | null): DamageRow[] {
   return [...players].sort((a, b) => (knownNumber(b.damage) ?? -1) - (knownNumber(a.damage) ?? -1)
     || a.player_id.localeCompare(b.player_id)).map(row => ({
+    player_id: row.player_id, object_id: 'object_id' in row ? row.object_id : null,
     rank: row.rank ?? null, name: row.name ?? null, class_id: row.class_id ?? null,
     is_local: self !== null && row.player_id === self.player_id,
     damage: row.damage, dps: row.dps ?? null, share: row.share ?? null,

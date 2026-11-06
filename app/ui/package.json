@@ -13,7 +13,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "test:ui": "vitest run --config vitest.config.ts --configLoader runner",
     "check:tests": "svelte-check --tsconfig ./tsconfig.test.json --config ./svelte.config.js",
-    "tauri": "cd ../.. && tauri"
+    "tauri": "cd ../src-tauri && tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

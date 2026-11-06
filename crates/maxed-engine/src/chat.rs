@@ -15,10 +15,7 @@ pub struct Classified {
     pub truncated: bool,
 }
 
-/// Removes the `,suffix` the client appends to player names.
-pub fn display_name(raw: &str) -> &str {
-    raw.split(',').next().unwrap_or_default()
-}
+pub use crate::names::display_name;
 
 fn cut(text: &str, limit: usize) -> (String, bool) {
     if text.len() <= limit {

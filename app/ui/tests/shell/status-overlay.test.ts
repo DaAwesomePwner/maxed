@@ -2,6 +2,7 @@ import { cleanup, fireEvent, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { mountV2, homeSnapshot, deferred } from '../home-v2/fixtures';
 import { mountPhase2, flush, follow, primary, ready, runPage, run, advance } from '../phase2/fixtures';
+import { productionFeatures } from '../../src/lib/navigation/routes';
 import { RECOVERY_GRACE_MS } from '../../src/lib/home/mode';
 import type { HistoryReply } from '../../src/lib/bindings/HistoryReply';
 import type { RunPage } from '../../src/lib/bindings/RunPage';
@@ -11,7 +12,7 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 it.each(['nexus', 'dungeon', 'realm'] as const)('shows live resync outside the %s Home panel', async area_kind => {
   const snapshot = homeSnapshot({ area_kind });
-  const page = mountV2(snapshot); await flush();
+  const page = mountV2(snapshot, undefined, { features: productionFeatures }); await flush();
   const idle = page.container.querySelector('.home-idle');
   const children = idle ? [...idle.children] : [];
   const pending = deferred<typeof snapshot>();
@@ -37,7 +38,7 @@ it.each(['nexus', 'dungeon', 'realm'] as const)('shows live resync outside the %
 it('keeps Reconnecting when capture is recovering during a Nexus resync', async () => {
   const base = homeSnapshot({ area_kind: 'nexus' });
   const snapshot = { ...base, capture: { ...base.capture, state: 'Recovering' as const } };
-  const page = mountV2(snapshot); await flush();
+  const page = mountV2(snapshot, undefined, { features: productionFeatures }); await flush();
   expect(screen.getByRole('heading', { name: 'Reconnecting' })).toBeTruthy();
   const pending = deferred<typeof snapshot>();
   page.client.querySnapshot = vi.fn(() => pending.promise);
@@ -51,7 +52,7 @@ it('keeps Reconnecting when capture is recovering during a Nexus resync', async 
 
 it.each(['dungeon', 'realm'] as const)('keeps Reconnecting when a long %s resync falls back to Nexus mode', async area_kind => {
   const snapshot = homeSnapshot({ area_kind });
-  const page = mountV2(snapshot); await flush();
+  const page = mountV2(snapshot, undefined, { features: productionFeatures }); await flush();
   const pending = deferred<typeof snapshot>();
   page.client.querySnapshot = vi.fn(() => pending.promise);
   page.transport.publishEngineEvent({ stream_id: snapshot.stream_id, sequence: String(Number(snapshot.sequence) + 2),

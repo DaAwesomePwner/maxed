@@ -1,3 +1,4 @@
+import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -96,6 +97,10 @@ it('features ST with tier styling, 16px pip, rarity, count and debug-only eviden
   drop.contents[0].enchant = { state: 'recorded', applied: 4, slots: 4, ids: [1, 2, 3, 4] };
   const page = render(BestBagCard, { best: bestDrop([drop], visuals), visuals, resolveSpriteUrl, meta: 'Nexus · 8:14 PM' });
   expect(page.container.querySelector('.best-card')?.getAttribute('data-tier')).toBe('ST');
+  const tile = page.container.querySelector('.item-box')!;
+  expect(tile.getAttribute('data-item-hover')).toBe('444');
+  expect(tile.hasAttribute('title')).toBe(false);
+  expect(itemHoverParams(tile)).toEqual({ type: 444, enchant: drop.contents[0].enchant, name: visuals.objects[0].name, tier: 'ST' });
   expect(screen.getByText('Divine')).toBeTruthy();
   expect(screen.getByText('4 enchants')).toBeTruthy();
   expect(page.container.querySelector<HTMLElement>('[data-pip="4"]')?.style.width).toBe('16px');
@@ -127,6 +132,11 @@ it('fills fixed rows, reserves overflow space, groups hidden bags and disconnect
   const page = render(BagList, { drops, visuals, resolveSpriteUrl, clock: () => '8:14 PM' });
   const sized = (height: number) => resize([{ contentRect: { height } } as ResizeObserverEntry], {} as ResizeObserver);
   sized(114); await tick();
+  const tile = page.container.querySelector('.item')!;
+  expect(tile.getAttribute('data-item-hover')).toBe('444');
+  expect(tile.hasAttribute('title')).toBe(false);
+  expect(itemHoverParams(tile)).toEqual({ type: 444, enchant: drop.contents[0].enchant, name: visuals.objects[0].name, tier: 'ST' });
+
   expect(page.container.querySelectorAll('[data-drop-id]')).toHaveLength(2);
   expect(screen.getByText('+6 more')).toBeTruthy();
   const clippedRows = page.container.querySelector('.bag-rows');

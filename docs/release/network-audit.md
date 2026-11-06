@@ -2,6 +2,15 @@
 
 Maxed's own application code only initiates the manual GitHub update flow. Npcap observes game traffic passively; recording and summaries remain local. The installer can bootstrap WebView2 when missing. The embedded WebView2 runtime also makes independent Microsoft requests, disclosed in [PRIVACY.md](../../PRIVACY.md#outbound-requests). This policy is not a zero-outbound promise.
 
+## RealmEye browser handoff
+
+Party's **Open on RealmEye** action hands a validated player-profile URL to the
+system `explorer.exe`, which opens the user's default browser. This is a
+user-initiated browser handoff: the browser sends the player's name to RealmEye;
+Maxed itself makes no request. It adds no RealmEye allowance for Maxed or WebView2.
+Verify the handoff separately on Windows without retaining names or URL paths in
+audit reports. Synthetic command tests do not establish default-browser behavior.
+
 ## Runtime allowance
 
 Only WebView2 processes may use the following exact hosts; root/unknown process roles do not inherit the allowance.

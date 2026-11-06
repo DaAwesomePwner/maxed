@@ -217,3 +217,314 @@ fn duplicate_errors_identify_only_safe_sections() {
         }
     ));
 }
+
+fn character_catalog(body: &str) -> maxed_types::Catalog {
+    build_catalog(assets(body.as_bytes()), "a".repeat(64)).unwrap()
+}
+
+fn firing(body: &str) -> maxed_types::ItemDef {
+    parse_equipment(format!(r#"<Objects><Object type="1" id="Synthetic"><Class>Equipment</Class>{body}</Object></Objects>"#).as_bytes())
+        .unwrap().remove(0)
+}
+
+#[test]
+fn firing_fixed_ranged_counts_inheritance_and_overrides() {
+    use maxed_types::{CatalogSupport::Supported, WeaponSchedule::Simultaneous};
+    let item = firing(
+        r#"<RateOfFire>0.8</RateOfFire><NumProjectiles>9</NumProjectiles>
+      <Subattack projectileId="0"><NumProjectiles>2</NumProjectiles></Subattack>
+      <Subattack projectileId="3"><RateOfFire>1.25</RateOfFire><NumProjectiles>4</NumProjectiles></Subattack>
+      <Projectile id="0"><Damage>100</Damage><LifetimeMS>12.5</LifetimeMS></Projectile>
+      <Projectile id="3"><MinDamage>20</MinDamage><MaxDamage>30</MaxDamage><ArmorPiercing/></Projectile>"#,
+    );
+    let f = item.weapon_firing.unwrap();
+    assert_eq!(f.support, Supported);
+    assert_eq!(f.groups.len(), 2);
+    assert_eq!(
+        (
+            f.groups[0].projectile_index,
+            f.groups[0].count,
+            f.groups[0].rate_factor
+        ),
+        (0, 2, 0.8)
+    );
+    assert_eq!(
+        (
+            f.groups[1].projectile_index,
+            f.groups[1].count,
+            f.groups[1].rate_factor
+        ),
+        (3, 4, 1.25)
+    );
+    assert!(f.groups.iter().all(|g| g.schedule == Simultaneous));
+    assert!(f.reasons.is_empty());
+    assert_eq!(item.projectiles[0].min_damage, 100);
+    assert_eq!(item.projectiles[0].max_damage, 100);
+    assert_eq!(item.projectiles[0].lifetime_millis, None);
+    assert_eq!(item.projectiles[1].min_damage, 20);
+    assert_eq!(item.projectiles[1].max_damage, 30);
+    assert!(item.projectiles[1].armor_piercing);
+}
+
+#[test]
+fn firing_normal_defaults_do_not_use_scaling_or_list_length() {
+    for (count, expected) in [("", 1), ("<NumProjectiles>3</NumProjectiles>", 3)] {
+        let item = firing(&format!(
+            r#"<RateOfFire>1</RateOfFire>{count}
+          <Activate scalingStat="WIS" statModDamage="2" numShots="7"/>
+          <Projectile id="0"><Damage>9</Damage></Projectile>"#
+        ));
+        // Ability activation is outside the reviewed normal-fire shape, but its shots cannot change count.
+        assert_eq!(item.weapon_firing.unwrap().groups[0].count, expected);
+        assert_eq!(item.scaling.unwrap().shots, 7);
+    }
+    let plain =
+        firing(r#"<RateOfFire>1</RateOfFire><Projectile id="0"><Damage>9</Damage></Projectile>"#);
+    assert_eq!(
+        plain.weapon_firing.unwrap().support,
+        maxed_types::CatalogSupport::Supported
+    );
+    for body in [
+        r#"<Projectile id="0"><Damage>9</Damage></Projectile>"#,
+        r#"<RateOfFire>1</RateOfFire><Projectile><Damage>9</Damage></Projectile>"#,
+        r#"<RateOfFire>1</RateOfFire><Subattack projectileId="0"/><Projectile id="0"><Damage>9</Damage></Projectile>"#,
+        r#"<RateOfFire>1</RateOfFire><Subattack><NumProjectiles>1</NumProjectiles></Subattack><Projectile id="0"><Damage>9</Damage></Projectile>"#,
+    ] {
+        let f = firing(body).weapon_firing.unwrap();
+        assert_eq!(f.support, maxed_types::CatalogSupport::Unsupported);
+        assert!(!f.reasons.is_empty());
+    }
+    assert!(firing("").weapon_firing.is_none());
+}
+
+#[test]
+fn firing_missing_and_skipped_projectiles_keep_only_a_partial_subtotal() {
+    for second in [
+        "",
+        r#"<Projectile id="2"><MinDamage>4</MinDamage></Projectile>"#,
+    ] {
+        let item = firing(&format!(
+            r#"<RateOfFire>1</RateOfFire>
+          <Subattack projectileId="0"><NumProjectiles>1</NumProjectiles></Subattack>
+          <Subattack projectileId="2"><NumProjectiles>1</NumProjectiles></Subattack>
+          <Projectile id="0"><Damage>9</Damage></Projectile>{second}"#
+        ));
+        assert_eq!(item.projectiles.len(), 1);
+        let f = item.weapon_firing.unwrap();
+        assert_eq!(f.support, maxed_types::CatalogSupport::Partial);
+        assert_eq!(f.omitted_projectile_indices, [2]);
+        assert_eq!(f.groups.len(), 1);
+        assert!(!f.reasons.is_empty());
+    }
+    for second in [
+        r#"<Projectile id="2"><Damage>4</Damage></Projectile>"#,
+        r#"<Projectile id="2"><MinDamage>4</MinDamage></Projectile>"#,
+    ] {
+        let f = firing(&format!(r#"<RateOfFire>1</RateOfFire><Projectile id="0"><Damage>9</Damage></Projectile>{second}"#)).weapon_firing.unwrap();
+        assert_eq!(f.support, maxed_types::CatalogSupport::Partial);
+        assert_eq!(f.omitted_projectile_indices, [2]);
+    }
+}
+
+#[test]
+fn firing_duplicate_indices_fail_even_when_one_has_no_damage() {
+    for projectiles in [
+        r#"<Projectile id="0"/><Projectile id="0"><Damage>1</Damage></Projectile>"#,
+        r#"<Projectile id="0"><Damage>1</Damage></Projectile><Projectile id="0"/>"#,
+        r#"<Projectile id="0"/><Projectile id="0"/>"#,
+    ] {
+        let xml = format!(
+            r#"<Objects><Object type="1" id="Synthetic"><Class>Equipment</Class>{projectiles}</Object></Objects>"#
+        );
+        assert!(parse_equipment(xml.as_bytes()).is_err());
+    }
+}
+
+#[test]
+fn firing_unreviewed_schedules_never_become_simultaneous() {
+    for special in [
+        "<Alternating/>",
+        "<Charged/>",
+        "<Burst/>",
+        "<Conditional/>",
+        "<FutureSchedule/>",
+    ] {
+        let f = firing(&format!(r#"<RateOfFire>1</RateOfFire>{special}<Projectile id="0"><Damage>9</Damage></Projectile>"#)).weapon_firing.unwrap();
+        assert_eq!(f.support, maxed_types::CatalogSupport::Unsupported);
+        assert!(f
+            .groups
+            .iter()
+            .all(|g| g.schedule == maxed_types::WeaponSchedule::Unsupported));
+        assert!(!f.reasons.is_empty());
+    }
+    let f = firing(r#"<RateOfFire>1</RateOfFire>
+      <Subattack projectileId="0"><NumProjectiles>1</NumProjectiles></Subattack>
+      <Subattack projectileId="1" condition="PRIVATE"><NumProjectiles>1</NumProjectiles></Subattack>
+      <Projectile id="0"><Damage>1</Damage></Projectile><Projectile id="1"><Damage>2</Damage></Projectile>"#).weapon_firing.unwrap();
+    assert_eq!(f.support, maxed_types::CatalogSupport::Partial);
+    assert_eq!(
+        f.groups[1].schedule,
+        maxed_types::WeaponSchedule::Unsupported
+    );
+    assert!(!format!("{f:?}").contains("PRIVATE"));
+}
+
+#[test]
+fn firing_invalid_rates_counts_and_duplicate_fields_are_unknown() {
+    for rate in ["0", "-1", "NaN", "inf", "invalid"] {
+        let f = firing(&format!(
+            r#"<RateOfFire>{rate}</RateOfFire><Projectile id="0"><Damage>1</Damage></Projectile>"#
+        ))
+        .weapon_firing
+        .unwrap();
+        assert_eq!(f.support, maxed_types::CatalogSupport::Unsupported);
+        assert!(f.groups.is_empty());
+    }
+    for count in ["0", "257", "-1", "1.5", "invalid"] {
+        let f = firing(&format!(r#"<RateOfFire>1</RateOfFire><NumProjectiles>{count}</NumProjectiles><Projectile id="0"><Damage>1</Damage></Projectile>"#)).weapon_firing.unwrap();
+        assert_eq!(f.support, maxed_types::CatalogSupport::Unsupported);
+    }
+    let f = firing(r#"<RateOfFire>1</RateOfFire><RateOfFire>2</RateOfFire><Projectile id="0"><Damage>1</Damage></Projectile>"#).weapon_firing.unwrap();
+    assert_ne!(f.support, maxed_types::CatalogSupport::Supported);
+    let many = format!(
+        r#"<Objects><Object type="1" id="Synthetic"><RateOfFire>1</RateOfFire>{}<Projectile id="0"><Damage>1</Damage></Projectile></Object></Objects>"#,
+        r#"<Subattack projectileId="0"><NumProjectiles>1</NumProjectiles></Subattack>"#.repeat(257)
+    );
+    assert!(parse_equipment(many.as_bytes()).is_err());
+}
+
+fn regen(mutators: &str) -> maxed_types::EnchantRegenDef {
+    character_catalog(&format!(r#"<Enchantments><Enchantment type="1" id="Synthetic"><Mutators>{mutators}</Mutators></Enchantment></Enchantments>"#))
+        .enchants.remove(0).regeneration.unwrap()
+}
+
+#[test]
+fn regen_flat_and_fractional_units_are_per_second_without_percent_conversion() {
+    let r = regen(
+        r#"<ActivateOnEquip stat="HP" amount="2.5">FlatRegen</ActivateOnEquip>
+      <ActivateOnEquip stat="MP" amount="0.02">PercentageRegen</ActivateOnEquip>"#,
+    );
+    assert_eq!(r.support, maxed_types::CatalogSupport::Supported);
+    assert_eq!(r.hp[0].flat_per_sec, Some(2.5));
+    assert_eq!(r.hp[0].fraction_of_max_per_sec, None);
+    assert_eq!(r.mp[0].fraction_of_max_per_sec, Some(0.02));
+    assert_eq!(r.mp[0].flat_per_sec, None);
+    assert_eq!(r.hp[0].source_units, ["units_per_second"]);
+    assert_eq!(r.mp[0].source_units, ["fraction_of_max_per_second"]);
+    assert_eq!(r.source_units.len(), 2);
+    assert!(r.reasons.is_empty());
+}
+
+#[test]
+fn regen_empty_is_supported_but_unknown_or_interval_effects_are_not_zero() {
+    for mutators in [
+        "",
+        "<MultiplyRateOfFire>1.1</MultiplyRateOfFire>",
+        r#"<ActivateOnEquip amount="5">LootBonus</ActivateOnEquip>"#,
+    ] {
+        let r = regen(mutators);
+        assert_eq!(r.support, maxed_types::CatalogSupport::Supported);
+        assert!(r.hp.is_empty() && r.mp.is_empty());
+    }
+    for effect in [
+        r#"<ActivateOnEquip stat="HP" amount="4" interval="2">FlatRegen</ActivateOnEquip>"#,
+        r#"<ActivateOnEquip stat="HP" amount="4" intervalMS="1000">FlatRegen</ActivateOnEquip>"#,
+        r#"<ActivateOnEquip stat="HP" amount="4">FutureRegen</ActivateOnEquip>"#,
+        r#"<ActivateOnEquip stat="HEALTH" amount="4">FlatRegen</ActivateOnEquip>"#,
+        r#"<ActivateOnEquip stat="HP">FlatRegen</ActivateOnEquip>"#,
+        r#"<Conditional><ActivateOnEquip stat="HP" amount="4">FlatRegen</ActivateOnEquip></Conditional>"#,
+    ] {
+        let r = regen(effect);
+        assert_eq!(r.support, maxed_types::CatalogSupport::Unsupported);
+        assert!(r.hp.is_empty() && r.mp.is_empty());
+        assert!(!r.reasons.is_empty());
+        let partial = regen(&format!(
+            r#"{effect}<ActivateOnEquip stat="MP" amount="3">FlatRegen</ActivateOnEquip>"#
+        ));
+        assert_eq!(partial.support, maxed_types::CatalogSupport::Partial);
+        assert_eq!(partial.mp[0].flat_per_sec, Some(3.0));
+    }
+    for amount in ["NaN", "inf", "-1", "bad"] {
+        assert_eq!(
+            regen(&format!(
+                r#"<ActivateOnEquip stat="HP" amount="{amount}">FlatRegen</ActivateOnEquip>"#
+            ))
+            .support,
+            maxed_types::CatalogSupport::Unsupported
+        );
+    }
+}
+
+#[test]
+fn character_catalog_validation_rejects_invalid_metadata_and_preserves_legacy_absence() {
+    let mut c = character_catalog(
+        r#"<root><Object type="1" id="Synthetic"><Class>Equipment</Class>
+      <RateOfFire>1</RateOfFire><Projectile id="0"><Damage>1</Damage></Projectile></Object>
+      <Enchantment type="1" id="Synthetic"><Mutators><ActivateOnEquip stat="HP" amount="2">FlatRegen</ActivateOnEquip></Mutators></Enchantment></root>"#,
+    );
+    let mut json = serde_json::to_value(&c).unwrap();
+    json["items"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("weapon_firing");
+    json["enchants"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("regeneration");
+    let old: maxed_types::Catalog = serde_json::from_value(json).unwrap();
+    assert!(old.items[0].weapon_firing.is_none());
+    assert!(old.enchants[0].regeneration.is_none());
+    validate_catalog(&old).unwrap();
+    for value in [f64::NAN, f64::INFINITY, -1.0, 0.0] {
+        let mut bad = c.clone();
+        bad.items[0].weapon_firing.as_mut().unwrap().groups[0].rate_factor = value;
+        assert!(validate_catalog(&bad).is_err());
+    }
+    for value in [f64::NAN, f64::INFINITY, -1.0] {
+        let mut bad = c.clone();
+        bad.enchants[0].regeneration.as_mut().unwrap().hp[0].flat_per_sec = Some(value);
+        assert!(validate_catalog(&bad).is_err());
+    }
+    for count in [0, 257] {
+        let mut bad = c.clone();
+        bad.items[0].weapon_firing.as_mut().unwrap().groups[0].count = count;
+        assert!(validate_catalog(&bad).is_err());
+    }
+    let mut bad = c.clone();
+    bad.items[0].weapon_firing.as_mut().unwrap().groups[0].projectile_index = 3;
+    assert!(validate_catalog(&bad).is_err());
+    let mut bad = c.clone();
+    bad.items[0]
+        .weapon_firing
+        .as_mut()
+        .unwrap()
+        .omitted_projectile_indices
+        .push(1);
+    assert!(validate_catalog(&bad).is_err());
+    let mut bad = c.clone();
+    bad.items[0].weapon_firing.as_mut().unwrap().groups[0].schedule =
+        maxed_types::WeaponSchedule::Unsupported;
+    assert!(validate_catalog(&bad).is_err());
+    let mut bad = c.clone();
+    bad.enchants[0].regeneration.as_mut().unwrap().hp[0].source_units = vec!["unknown".into()];
+    assert!(validate_catalog(&bad).is_err());
+    c.enchants[0].regeneration.as_mut().unwrap().hp[0].flat_per_sec = None;
+    assert!(validate_catalog(&c).is_err());
+}
+
+#[test]
+fn complete_firing_metadata_cannot_hide_an_unreferenced_projectile_on_reload() {
+    let mut c = character_catalog(
+        r#"<Objects><Object type="1" id="Synthetic">
+      <Class>Equipment</Class><RateOfFire>1</RateOfFire>
+      <Subattack projectileId="0"><NumProjectiles>1</NumProjectiles></Subattack>
+      <Subattack projectileId="1"><NumProjectiles>1</NumProjectiles></Subattack>
+      <Projectile id="0"><Damage>1</Damage></Projectile>
+      <Projectile id="1"><Damage>2</Damage></Projectile></Object></Objects>"#,
+    );
+    let round: maxed_types::Catalog =
+        serde_json::from_slice(&serde_json::to_vec(&c).unwrap()).unwrap();
+    validate_catalog(&round).unwrap();
+    c.items[0].weapon_firing.as_mut().unwrap().groups.pop();
+    assert!(validate_catalog(&c).is_err());
+}

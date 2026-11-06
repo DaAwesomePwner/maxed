@@ -102,7 +102,7 @@ commit. Death records, timeline entries and Home counts are unchanged.
 
 ## Key Popped
 
-Key Popped defaults to Toast and uses its own generated, pinned `key_popped.wav`: two
+Key Popped defaults to Off for new or unset preferences and uses its own generated, pinned `key_popped.wav`: two
 short descending notes at a softer level than Personal Best. The cue is MIT licensed;
 its deterministic derivation and measurements are in the sounds README. The owner approved its audibility and distinction by ear on 2026-10-05. Flawless remains unavailable.
 
@@ -121,8 +121,9 @@ notice cannot create a second occurrence. The log and toast say, for example,
 "Lost Halls key popped"; alert details contain only the dungeon. Ordinary portal
 observations remain in instance history even when no alert is eligible.
 
-Settings remain version 1: `key_popped` defaults to `toast` when absent, and
-`key_pop_dungeons` defaults to null (All dungeons). A list selects canonical
+Settings remain version 1: `key_popped` defaults to `off` when absent, and
+a missing legacy `key_pop_dungeons` remains null (All dungeons), preserving explicit saved delivery choices. New preferences use an empty selection and prompt the user to choose dungeons. Explicitly saved loudness and filters are unchanged. Settings files that predate
+the `key_popped` field and have never been saved since now load key-pop alerts as Off. A list selects canonical
 catalog dungeon names; an empty list selects none. The Alerts picker loads only
 dungeon names through `list_catalog_dungeons`, retains saved selections if assets
 are temporarily unavailable, and persists edits with the existing alert settings

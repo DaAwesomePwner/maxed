@@ -5,7 +5,7 @@
   import EmptyState from '../../../src/lib/components/EmptyState.svelte';
   import { createClient, type Client } from '../../../src/lib/bridge/client';
   import { createFixtureTransport } from '../../../src/lib/bridge/fixture';
-  import { routeHref } from '../../../src/lib/navigation/routes';
+  import { productionFeatures, routeHref } from '../../../src/lib/navigation/routes';
   import type { HistoryAdapter } from '../../../src/lib/navigation/history';
   import type { RunView } from '../../../src/lib/bindings/RunView';
   import fixture from '../../fixtures/t0-live';
@@ -20,7 +20,7 @@
   } = $props();
 </script>
 
-<Shell {client} preview features={{ lootBrowsing: true, logs: true, stats: true }} {historyAdapter} {rowsReady}>
+<Shell {client} preview features={{ lootBrowsing: true, logs: true, stats: true, party: false, character: false, homeRedesign: productionFeatures.homeRedesign }} {historyAdapter} {rowsReady}>
   {#snippet content(navigation, router, context)}
     {@const route = navigation.entry.route}
     {#if route.kind === 'runs'}

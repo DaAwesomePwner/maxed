@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::loot::*;
 use maxed_store::StoreError;
 use maxed_types::*;
@@ -593,6 +593,134 @@ fn runs_since_last_white_counts_runs_started_after_it() {
             .runs_since_last_white,
         None
     );
+}
+
+#[test]
+fn dry_gap_counts_runs_between_white_runs() {
+    let mut t = LootDb::new();
+    // Insert out of order; the dry gaps follow run starts, not insertion order.
+    for i in [4, 2, 0, 3, 1] {
+        let id = format!("r{i}");
+        t.run(
+            &id,
+            "Shatters",
+            i * 100,
+            Some(i * 100 + 90),
+            Some(Outcome::Left),
+        );
+        if i == 0 || i == 3 {
+            t.bag(
+                &format!("w{i}"),
+                Some(&id),
+                i * 100 + 50,
+                Some(255),
+                None,
+                &[],
+            );
+        }
+    }
+    t.run("other", "Nest", 600, Some(690), Some(Outcome::Cleared));
+    t.bag("other-white", Some("other"), 650, Some(255), None, &[]);
+    let s = t.reader().loot_stats(all_time()).unwrap();
+    let d = s.dungeons.iter().find(|d| d.dungeon == "Shatters").unwrap();
+    assert_eq!(d.white_runs, 2);
+    assert_eq!(d.avg_runs_per_white, Some(2.5));
+    assert_eq!(d.longest_dry, Some(2));
+}
+
+#[test]
+fn dry_gap_counts_a_run_with_several_whites_once() {
+    let mut t = LootDb::new();
+    t.run("r1", "Shatters", 100, Some(200), Some(Outcome::Cleared));
+    t.bag("w1", Some("r1"), 150, Some(255), None, &[]);
+    t.bag("w2", Some("r1"), 160, Some(255), None, &[]);
+    let s = t.reader().loot_stats(all_time()).unwrap();
+    let d = &s.dungeons[0];
+    assert_eq!(d.whites, 2);
+    assert_eq!(d.white_runs, 1);
+    assert_eq!(d.avg_runs_per_white, Some(1.0));
+    assert_eq!(d.longest_dry, Some(0));
+}
+
+#[test]
+fn dry_gap_includes_leading_and_current_streaks() {
+    let mut t = LootDb::new();
+    for i in 0..8 {
+        let id = format!("r{i}");
+        t.run(
+            &id,
+            "Shatters",
+            i * 100,
+            Some(i * 100 + 90),
+            Some(Outcome::Left),
+        );
+        if i == 3 {
+            t.bag("w", Some(&id), i * 100 + 50, Some(255), None, &[]);
+        }
+        if i == 3 || i == 7 {
+            let s = t.reader().loot_stats(all_time()).unwrap();
+            let d = &s.dungeons[0];
+            assert_eq!(d.white_runs, 1);
+            assert_eq!(d.avg_runs_per_white, Some((i + 1) as f64));
+            assert_eq!(d.longest_dry, Some(if i == 3 { 3 } else { 4 }));
+        }
+    }
+}
+
+#[test]
+fn dry_gap_none_without_whites() {
+    let mut t = LootDb::new();
+    t.run("r1", "Shatters", 100, Some(200), Some(Outcome::Left));
+    t.bag("purple", Some("r1"), 150, Some(3), None, &[]);
+    t.run("open", "Shatters", 300, None, None);
+    t.bag("open-white", Some("open"), 350, Some(255), None, &[]);
+    t.bag("outside-white", None, 400, Some(255), None, &[]);
+    let s = t.reader().loot_stats(all_time()).unwrap();
+    let d = &s.dungeons[0];
+    assert_eq!(d.white_runs, 0);
+    assert_eq!(d.avg_runs_per_white, None);
+    assert_eq!(d.longest_dry, None);
+}
+
+#[test]
+fn dry_gap_ignores_the_range_filter() {
+    let mut t = LootDb::new();
+    for i in 0..5 {
+        let id = format!("r{i}");
+        t.run(
+            &id,
+            "Shatters",
+            i * 100,
+            Some(i * 100 + 90),
+            Some(Outcome::Left),
+        );
+        if i == 0 || i == 3 {
+            t.bag(
+                &format!("w{i}"),
+                Some(&id),
+                i * 100 + 50,
+                Some(255),
+                None,
+                &[],
+            );
+        }
+    }
+    t.run("open", "Shatters", 500, None, None);
+    t.bag("open-white", Some("open"), 550, Some(255), None, &[]);
+    let s = t
+        .reader()
+        .loot_stats(LootStatsFilter {
+            range: Some(TimeRange {
+                start: Timestamp(400),
+                end: Timestamp(500),
+            }),
+        })
+        .unwrap();
+    let d = &s.dungeons[0];
+    assert_eq!((d.runs_ended, d.whites), (1, 0));
+    assert_eq!(d.white_runs, 2);
+    assert_eq!(d.avg_runs_per_white, Some(2.5));
+    assert_eq!(d.longest_dry, Some(2));
 }
 
 #[test]

@@ -1,3 +1,6 @@
+import type { CharacterCalculation } from '../src/lib/bindings/CharacterCalculation';
+import type { CharacterCalculationRequest } from '../src/lib/bindings/CharacterCalculationRequest';
+import type { CharacterValue } from '../src/lib/bindings/CharacterValue';
 import { expect, test, vi } from 'vitest';
 import fixture from './fixtures/t0-live';
 import type { LiveSnapshot } from '../src/lib/bindings/LiveSnapshot';
@@ -11,20 +14,22 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke, Channel: class { 
 vi.mock('@tauri-apps/api/event', () => ({ listen: mocks.listen }));
 import { nativeTransport } from '../src/lib/bridge/native';
 
-test('native live subscriptions decode byte channels and release native ownership', async () => {
+test.each(['live-snapshot', 'party-changed'] as const)('native %s subscriptions decode byte channels and release native ownership', async event => {
   let channel!: { onmessage(value: ArrayBuffer): void };
   mocks.invoke.mockImplementation(async (command, args) => {
     if (command === 'subscribe_live_payload') { channel = args.channel; return 19; }
   });
   mocks.listen.mockResolvedValueOnce(() => {});
   const receive = vi.fn();
-  const stop = await nativeTransport.listen('live-snapshot', receive);
+  const stop = await nativeTransport.listen(event, receive);
+  const payload = event === 'party-changed' ? { scope_id: null } : fixture;
+  expect(mocks.invoke).toHaveBeenCalledWith('subscribe_live_payload', { event, channel });
   expect(channel).toBeDefined();
-  channel.onmessage(new TextEncoder().encode(JSON.stringify(fixture)).buffer);
-  expect(receive).toHaveBeenCalledExactlyOnceWith(fixture);
+  channel.onmessage(new TextEncoder().encode(JSON.stringify(payload)).buffer);
+  expect(receive).toHaveBeenCalledExactlyOnceWith(payload);
   stop();
   expect(mocks.invoke).toHaveBeenCalledWith('unsubscribe_live_payload', { id: 19 });
-  channel.onmessage(new TextEncoder().encode(JSON.stringify(fixture)).buffer);
+  channel.onmessage(new TextEncoder().encode(JSON.stringify(payload)).buffer);
   expect(receive).toHaveBeenCalledTimes(1);
 });
 
@@ -46,14 +51,14 @@ test('the production App uses the JSON-decoding native transport', async () => {
   } finally { page.unmount(); }
 });
 
-test.each(['live-snapshot', 'engine-event'] as const)('decodes JSON text for %s without changing the logical payload', async event => {
+test.each(['live-snapshot', 'engine-event', 'party-changed'] as const)('decodes JSON text for %s without changing the logical payload', async event => {
   mocks.invoke.mockResolvedValue(21);
   let callback!: (message: { payload: unknown }) => void;
   const release = vi.fn();
   mocks.listen.mockImplementationOnce((_event, receive) => { callback = receive; return Promise.resolve(release); });
   const receive = vi.fn();
   const stop = await nativeTransport.listen(event, receive);
-  const payload = event === 'live-snapshot' ? fixture : {
+  const payload = event === 'live-snapshot' ? fixture : event === 'party-changed' ? { scope_id: 'synth-scope' } : {
     stream_id: fixture.stream_id, sequence: '9007199254740993', at: fixture.at,
     event: { fight_updated: fixture.fights[0] },
   };
@@ -77,4 +82,32 @@ test('a byte-channel event batch remains one callback with its complete range', 
   channel.onmessage(new TextEncoder().encode(JSON.stringify(batch)).buffer);
   expect(receive).toHaveBeenCalledExactlyOnceWith(batch);
   stop();
+});
+
+
+test('forwards the typed Character command and preserves native rejection without subscribing', async () => {
+  const request: CharacterCalculationRequest = {
+    defense: 100, comparison_item_types: [201], expected_revision: {
+      stream_id: 'synthetic-stream', character_id: 'synthetic-character',
+      input_hash: 'input-a', catalog_fingerprint: null,
+    },
+  };
+  const unknown: CharacterValue = { value: null, evidence: 'modeled', completeness: 'unavailable',
+    reasons: ['missing_catalog'], exclusions: [] };
+  const result: CharacterCalculation = { revision: request.expected_revision, observed_at: '100',
+    catalog_fingerprint: null, formula_version: 'synthetic-v1', freshness: 'last_seen', issues: [],
+    applied_defense: 100, weapons: [], regeneration: { applied_wis: null, wis: unknown, effects: [],
+      hp_subtotal: unknown, mp_subtotal: unknown, hp_total: unknown, mp_total: unknown,
+      base_vit: unknown, base_mp: unknown },
+    exalt_damage: { status: 'deferred', value: null, reason: 'deferred' } };
+  mocks.invoke.mockClear(); mocks.listen.mockClear();
+  mocks.invoke.mockResolvedValueOnce(result);
+  await expect(nativeTransport.invoke('get_character_calculation', { request })).resolves.toBe(result);
+  expect(mocks.invoke).toHaveBeenCalledExactlyOnceWith('get_character_calculation', { request });
+  mocks.invoke.mockClear();
+  const failure = new Error('Character catalog unavailable');
+  mocks.invoke.mockRejectedValueOnce(failure);
+  await expect(nativeTransport.invoke('get_character_calculation', { request })).rejects.toBe(failure);
+  expect(mocks.invoke).toHaveBeenCalledExactlyOnceWith('get_character_calculation', { request });
+  expect(mocks.listen).not.toHaveBeenCalled();
 });

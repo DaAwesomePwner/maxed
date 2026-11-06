@@ -1,4 +1,5 @@
 import type { Client } from '../../bridge/client';
+import { createVisibilityPause } from '../../bridge/visibility';
 import type { ScopeLootPage } from '../../bindings/ScopeLootPage';
 import type { HistoryReply } from '../../bindings/HistoryReply';
 import { createHomeHistory, type HomeHistoryInput, type HomeHistoryState } from '../summary';
@@ -13,6 +14,7 @@ export function createNexusHistory(
   receive: (state: NexusHistory) => void,
 ) {
   let input: HomeHistoryInput | null = null, disposed = false, revision = 0;
+  const visibility = createVisibilityPause();
   let identity = '', key = '', page = 1, cursor: string | null = null;
   let requestedPage = 1, requestedCursor: string | null = null;
   let seen: HomeHistoryState['summary'] = null;
@@ -26,8 +28,8 @@ export function createNexusHistory(
   async function readCurrent<T>(request: number, read: () => Promise<HistoryReply<T>>): Promise<HistoryReply<T>> {
     let superseded = 0;
     while (!disposed && request === revision) {
-      const reply = await serial(() => disposed || request !== revision
-        ? Promise.resolve({ status: 'superseded' as const }) : read());
+      const reply = await serial(async () => !await visibility.wait() || disposed || request !== revision
+        ? { status: 'superseded' as const } : read());
       if (reply.status !== 'superseded') return reply;
       // The native scheduler can replace its pending read. Retry unchanged
       // inputs, yielding on repeated replacements rather than spinning.
@@ -87,6 +89,6 @@ export function createNexusHistory(
     retryLoot() { if (loot.retryAvailable) void readLoot(requestedCursor, requestedPage); },
     next() { if (loot.phase === 'ready' && loot.value?.next) void readLoot(loot.value.next, page + 1); },
     first() { if (loot.phase !== 'loading' && page > 1 && cursor !== null) void readLoot(null, 1); },
-    dispose() { disposed = true; revision++; history.dispose(); input = null; },
+    dispose() { disposed = true; visibility.dispose(); revision++; history.dispose(); input = null; },
   };
 }

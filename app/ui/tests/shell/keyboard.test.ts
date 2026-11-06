@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import Shell from '../../src/lib/shell/Shell.svelte';
+import { productionFeatures } from '../../src/lib/navigation/routes';
 import Setup from '../../src/routes/Setup.svelte';
 import Settings from '../../src/routes/Settings.svelte';
 import FixtureApp from './fixtures/FixtureApp.svelte';
@@ -22,7 +23,7 @@ const button = (name: string) => screen.getByRole('button', { name });
 
 describe('document keyboard order', () => {
   it.each([false, true])('traverses the rail without removed breadcrumb controls (loot=%s)', async lootBrowsing => {
-    render(Shell, { client: setupFixture().client, historyAdapter: fakeHistory('#/runs').adapter, features: { lootBrowsing, logs: false, stats: false } });
+    render(Shell, { client: setupFixture().client, historyAdapter: fakeHistory('#/runs').adapter, features: { lootBrowsing, logs: false, stats: false, party: false, character: false, homeRedesign: productionFeatures.homeRedesign } });
     await screen.findByRole('heading', { name: 'Runs', level: 1 });
     const nav = within(screen.getByRole('navigation', { name: 'Navigation' }));
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
@@ -57,40 +58,42 @@ describe('document keyboard order', () => {
     container.append(nativeDetailsStyle);
     await screen.findByRole('combobox', { name: 'Update Channel' });
     const setupLink = screen.getByRole('link', { name: 'Setup' });
-    const retention = screen.getByText('Retention', { selector: 'summary' });
     const delivery = screen.getByText('Delivery', { selector: 'summary' });
     const assets = screen.getByText('Assets Path', { selector: 'summary' });
     const recovery = screen.getByText('Recovery', { selector: 'summary' });
     const chatOrder = [
       ...['All', 'Guild', 'Party', 'Whisper'].map(channel => screen.getByRole('checkbox', { name: `Store ${channel} chat` })),
       screen.getByRole('spinbutton', { name: 'Keep chat for (days)' }),
+      screen.getByRole('checkbox', { name: 'Filter spam ads and repeated public messages' }),
       screen.getByRole('textbox', { name: 'Add keyword' }), button('Add'),
       button('Save chat settings'), button('Clear chat history'),
     ];
     const defaultOrder = [
       setupLink,
       screen.getByRole('combobox', { name: 'Capture Adapter' }), button('Retry Adapters'),
-      screen.getByRole('checkbox', { name: 'Save Recordings' }), retention, ...chatOrder, delivery,
+      button('Refresh storage'), button('Estimate receipt storage'), screen.getByRole('checkbox', { name: 'Save Recordings' }), button('Retry Recording'),
+      ...chatOrder, button('Clear party history'),
       screen.getByRole('checkbox', { name: 'Hardware Acceleration' }), assets,
       screen.getByRole('combobox', { name: 'Update Channel' }),
       button('Check Updates'), button('Retry Updates'),
-      screen.getByRole('switch', { name: 'Demo Mode' }), screen.getByRole('checkbox', { name: /Debug [Mm]ode/ }), button('Apply'),
+      screen.getByRole('switch', { name: 'Demo Mode' }), screen.getByRole('checkbox', { name: /Debug [Mm]ode/ }), delivery, button('Apply'),
       screen.getByRole('link', { name: 'Alert history' }), recovery,
     ];
     await tabOrder(defaultOrder);
     const user = userEvent.setup();
-    for (const summary of [retention, assets, recovery]) {
+    for (const summary of [assets, recovery]) {
       await user.click(summary);
       expect((summary.parentElement as HTMLDetailsElement).open).toBe(true);
     }
     const expandedOrder = [
       setupLink,
       screen.getByRole('combobox', { name: 'Capture Adapter' }), button('Retry Adapters'),
-      screen.getByRole('checkbox', { name: 'Save Recordings' }), retention, button('Retry Recording'), ...chatOrder, delivery,
+      button('Refresh storage'), button('Estimate receipt storage'), screen.getByRole('checkbox', { name: 'Save Recordings' }), button('Retry Recording'),
+      ...chatOrder, button('Clear party history'),
       screen.getByRole('checkbox', { name: 'Hardware Acceleration' }), assets,
       screen.getByRole('textbox', { name: 'Assets Path' }), button('Extract'), button('Retry Detection'),
       screen.getByRole('combobox', { name: 'Update Channel' }), button('Check Updates'), button('Retry Updates'),
-      screen.getByRole('switch', { name: 'Demo Mode' }), screen.getByRole('checkbox', { name: /Debug [Mm]ode/ }), button('Apply'),
+      screen.getByRole('switch', { name: 'Demo Mode' }), screen.getByRole('checkbox', { name: /Debug [Mm]ode/ }), delivery, button('Apply'),
       screen.getByRole('link', { name: 'Alert history' }), recovery,
       button('Retry Settings'), button('Retry Checks'),
     ];

@@ -737,13 +737,22 @@ fn recording_namespace_lease_cross_process() {
     let temp = Temp::new();
     let (_input, owner) = temp.open(100);
     let output = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", "recording_namespace_child_probe", "--nocapture"])
+        .args([
+            "--exact",
+            "owner::recording_namespace_child_probe",
+            "--nocapture",
+        ])
         .env("MAXED_A3_SYNTHETIC_LEASE_CHILD", temp.root())
         .output()
         .unwrap();
     assert!(
         output.status.success(),
         "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("running 1 test"),
+        "child lease probe was not selected: {}",
         String::from_utf8_lossy(&output.stdout)
     );
     owner.finish().unwrap();

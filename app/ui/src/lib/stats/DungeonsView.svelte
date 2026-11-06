@@ -26,7 +26,8 @@
         <ExportButton {client} request={{ kind: { type: 'dungeons' }, filter, include_empty: false }} />
       </header>
       {#if dungeons.rows.length}
-        <table>
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex (keyboard scrolling for wide tables) -->
+        <div class="stats-table-scroll" role="region" aria-label="Scrollable statistics" tabindex="0"><table>
           <thead><tr><th scope="col">Dungeon</th><th scope="col">Entries</th><th scope="col">Time</th><th scope="col">Clears</th>
             <th scope="col">Clear rate</th><th scope="col">Deaths</th><th scope="col">Mean clear</th><th scope="col">Best clear</th>
             <th scope="col">Last played</th></tr></thead>
@@ -35,7 +36,7 @@
               <td>{percentText(row.clears, row.runs)}</td><td>{row.deaths}</td><td>{clearText(row.mean_clear_micros)}</td>
               <td>{clearText(row.best_clear_micros)}</td><td>{dayText(row.last_started)}</td></tr>
           {/each}</tbody>
-        </table>
+        </table></div>
         {#if dungeons.truncated}<p class="note">Showing the 200 most-entered dungeons.</p>{/if}
       {:else}<EmptyState heading="No dungeon runs" description="" />{/if}
     {/if}

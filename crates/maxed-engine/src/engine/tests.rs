@@ -325,6 +325,8 @@ fn catalog() -> Catalog {
         client_fingerprint: "synthetic".into(),
         items: vec![
             ItemDef {
+                weapon_firing: None,
+                potion_stat: None,
                 soulbound: None,
                 stat_bonuses: None,
                 object_type: 200,
@@ -342,6 +344,8 @@ fn catalog() -> Catalog {
                 sprite_key: None,
             },
             ItemDef {
+                weapon_firing: None,
+                potion_stat: None,
                 soulbound: None,
                 stat_bonuses: None,
                 object_type: 201,
@@ -434,6 +438,34 @@ fn config() -> EngineConfig {
 
 fn engine() -> Engine {
     Engine::new(config(), Arc::new(catalog())).unwrap()
+}
+
+#[test]
+fn guild_retention_excludes_enemy_and_unknown_string_stats() {
+    let mut e = engine();
+    apply(&mut e, 0, map("The Void"));
+    let guild = format!("{}é", "x".repeat(63));
+    apply(
+        &mut e,
+        1000,
+        update(
+            vec![
+                object(
+                    3,
+                    100,
+                    vec![string(62, &guild), string(63, "Synthetic rank")],
+                ),
+                object(4, 301, vec![string(62, "Synthetic Guild")]),
+            ],
+            vec![],
+        ),
+    );
+    assert_eq!(
+        e.entities[&3].guild.as_deref(),
+        Some("x".repeat(63).as_str())
+    );
+    assert!(e.entities[&4].guild.is_none());
+    assert!(!e.entities[&3].stats.contains_key(&63));
 }
 
 fn pos() -> WorldPosData {
@@ -1192,6 +1224,8 @@ fn intermittent_live_chart(lengths: &[usize]) -> FightView {
                 until: Timestamp(until),
                 total: rate * seconds as f64,
                 local: Some(rate * seconds as f64 / 2.),
+                others_damage: None,
+                others_presence: None,
             });
             at = until;
         }

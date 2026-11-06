@@ -18,10 +18,10 @@ fn version(db: &Connection) -> i64 {
 }
 
 #[test]
-fn fresh_database_is_version_12_with_chat_search() {
+fn fresh_database_uses_current_schema_with_chat_search() {
     let mut db = Connection::open_in_memory().unwrap();
     maxed_store::migrate(&mut db).unwrap();
-    assert_eq!(version(&db), 12);
+    assert_eq!(version(&db), maxed_store::SCHEMA_VERSION);
     db.execute("INSERT INTO play_sessions VALUES('s',0,0,NULL,'{}')", [])
         .unwrap();
     db.execute(
@@ -56,7 +56,7 @@ fn fresh_database_is_version_12_with_chat_search() {
 }
 
 #[test]
-fn v8_database_upgrades_to_12() {
+fn v8_database_upgrades_to_current_schema() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("v8");
     let mut db = Connection::open(&path).unwrap();
@@ -73,7 +73,7 @@ fn v8_database_upgrades_to_12() {
     }
     db.pragma_update(None, "user_version", 8).unwrap();
     maxed_store::migrate(&mut db).unwrap();
-    assert_eq!(version(&db), 12);
+    assert_eq!(version(&db), maxed_store::SCHEMA_VERSION);
     let indexed: i64 = db
         .query_row(
             "SELECT count(*) FROM sqlite_schema WHERE name='instance_events_kind'",

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 const read = (file: string) => readFileSync(`src/lib/${file}`, 'utf8');
-it('reserves fixed tracks, unwrapped tabular numbers and a 12rem narrow rail', () => {
+it('reserves fixed tracks, readable tabular numbers and a 12rem narrow rail', () => {
   const bar = read('components/VitalBar.svelte');
   const stats = read('shell/StatPanel.svelte');
   const hero = read('shell/HeroCard.svelte');
@@ -10,7 +10,7 @@ it('reserves fixed tracks, unwrapped tabular numbers and a 12rem narrow rail', (
   expect(bar).toContain('font-variant-numeric: tabular-nums');
   expect(bar).toContain('white-space: nowrap');
   expect(stats).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
-  expect(stats).toContain('white-space: nowrap');
+  expect(stats).toContain('overflow-wrap: anywhere');
   expect(stats).toContain('font-variant-numeric: tabular-nums');
   expect(hero).toContain('grid-template-columns: 60px minmax(0, 1fr)');
   expect(shell).toMatch(/@media \(max-width: 900px\).*grid-template-columns: 12rem minmax\(0, 1fr\)/s);
@@ -43,13 +43,15 @@ it('sizes stat values to their grid when a classic scrollbar consumes rail width
   const grid = stats.match(/\.stat-grid\s*\{([^}]+)\}/)![1];
   expect(grid).toContain('container-type: inline-size');
   expect(grid).toContain('container-name: rail-stats');
-  for (const [width, size] of [[196, 13], [184, 12], [172, 11]]) {
+  // The 197px grid at 1100px also needs the first step for long boosted stats.
+  for (const [width, size] of [[212, 13], [184, 12], [172, 11]]) {
     const query = new RegExp(`@container rail-stats \\(max-width: ${width}px\\)\\s*\\{\\s*dd\\s*\\{([^}]+)\\}`);
     expect(stats.match(query)?.[1]).toContain(`font-size: min(var(--rail-stat-size, 14px), ${size}px)`);
   }
   // The narrow rail's readable minimum is 11px; no container step goes below it.
   expect(stats).not.toMatch(/14px\), (?:[1-9]|10)px\)/);
   const value = stats.match(/\n  dd\s*\{([^}]+)\}/)![1];
-  expect(value).toContain('white-space: nowrap');
+  expect(value).toContain('overflow-wrap: anywhere');
+  expect(value).not.toContain('white-space: nowrap');
   expect(value).not.toMatch(/overflow:|text-overflow:|line-clamp:/);
 });

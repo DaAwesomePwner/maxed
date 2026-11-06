@@ -189,16 +189,8 @@ fn mass_close_preserves_full_ordered_storage_before_bounded_presentation_batches
     maxed_store::migrate(&mut oracle).unwrap();
     maxed_store::apply_batch(&mut oracle, &expected).unwrap();
     let actual = rusqlite::Connection::open(&path).unwrap();
-    let receipts = |db: &rusqlite::Connection| {
-        db.prepare("SELECT sequence, digest FROM event_receipts ORDER BY sequence")
-            .unwrap()
-            .query_map([], |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-            })
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap()
-    };
+    let receipts = crate::runtime::receipt_tests::rows;
+    assert_eq!(receipts(&actual).len(), expected.len());
     assert_eq!(receipts(&actual), receipts(&oracle));
     drop(publications);
     adapter.close().unwrap();

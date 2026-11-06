@@ -1,15 +1,18 @@
 <script lang="ts">
+  import { itemHover } from '../components/item-hover';
   import DebugNote from '../debug/DebugNote.svelte';
   import SpriteImage from '../components/SpriteImage.svelte';
   import ItemTile from '../components/ItemTile.svelte';
   import VitalBar from '../components/VitalBar.svelte';
   import StatPanel from './StatPanel.svelte';
+  import { characterMaxed } from './vitals';
   import type { SpriteRef } from '../bindings/SpriteRef';
   import type { RailView } from './rail';
   let { view, sheetUrl = null, resolveSpriteUrl }: {
     view: RailView; sheetUrl?: string | null; resolveSpriteUrl?: (sprite: SpriteRef) => string | null;
   } = $props();
   const known = (n: number | null | undefined): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
+  let maxed = $derived(characterMaxed(view.character));
   let fame = $derived(view.character?.fame);
   let goal = $derived(view.character?.stats.find(s => s.stat_id === 58)?.value);
   let hasGoal = $derived(known(goal) && goal > 0);
@@ -24,7 +27,7 @@
       <div class="identity">
         <h2 class="cname" title={view.name}>{view.name}</h2>
         <p class="cclass" title={view.character ? `${view.className} · Lv ${view.character.level ?? '—'}` : undefined}><span>{view.character ? view.className : '—'}</span> · Lv {#if view.character?.level == null}{@render unavailable()}{:else}{view.character.level}{/if}</p>
-        <p class="maxed">{#if view.character?.maxed == null}{@render unavailable()}{:else}{view.character.maxed}/8{/if} <span>maxed</span></p>
+        <p class="maxed">{#if maxed === null}{@render unavailable()}{:else}{maxed}/8{/if} <span>maxed</span></p>
       </div>
     </div>
     {#if view.character}
@@ -32,9 +35,13 @@
       <ul class="equipment" aria-label="Equipment">
         {#each view.equipment as item (item.slot)}
           {@const name = item.name ?? item.label}
-          <li data-slot={item.slot} data-item-type={item.itemType} title={name}>
-            <ItemTile sprite={item.sprite} {resolveSpriteUrl} fit={32} alt={name} enchant={item.enchant} />
-          </li>
+          {#if item.itemType !== null}
+            <li data-slot={item.slot} data-item-type={item.itemType} use:itemHover={{ type: item.itemType, enchant: item.enchant, name: item.name ?? undefined }}>
+              <ItemTile sprite={item.sprite} {resolveSpriteUrl} fit={32} alt={name} enchant={item.enchant} />
+            </li>
+          {:else}
+            <li data-slot={item.slot} title={name}><ItemTile sprite={item.sprite} {resolveSpriteUrl} fit={32} alt={name} enchant={item.enchant} /></li>
+          {/if}
         {/each}
       </ul>
       <VitalBar kind="fame" label="Fame" text={fameText} fill={fameFill} tone="max" />

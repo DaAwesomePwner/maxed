@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "maxed-store"
 description = "SQLite persistence and history queries for Maxed."
 version.workspace = true
@@ -12,7 +13,7 @@ rust-version.workspace = true
 crossbeam-channel.workspace = true
 maxed-types = { path = "../maxed-types" }
 maxed-engine = { path = "../maxed-engine" }
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+rusqlite = { version = "0.40.2", features = ["bundled", "backup"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -23,3 +24,28 @@ tracing.workspace = true
 maxed-protocol = { path = "../maxed-protocol" }
 rusqlite = { version = "0.40.2", features = ["trace"] }
 tempfile = "3.27.0"
+
+# Merge ordinary integration suites; retain documented or process-isolated targets.
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[[test]]
+name = "chat_performance"
+path = "tests/chat_performance.rs"
+
+[[test]]
+name = "d_perf"
+path = "tests/d_perf.rs"
+
+[[test]]
+name = "loot_performance"
+path = "tests/loot_performance.rs"
+
+[[test]]
+name = "stats_performance"
+path = "tests/stats_performance.rs"
+
+[[test]]
+name = "retention_performance"
+path = "tests/retention_performance.rs"

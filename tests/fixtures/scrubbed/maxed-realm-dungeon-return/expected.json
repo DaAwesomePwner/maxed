@@ -1,0 +1,146 @@
+{
+  "pcap": "realm-visit-dungeon-return.pcap",
+  "pcap_sha256": "a8c6a6e08044f71fc7195c6d39981a25ef0405c2ec1cedd99977476f572f1852",
+  "source_build": "p0@a4f0e08 (capture); scrubbed with p0@4eacecf (#41 opaque-token rule; Oryx keys kept, KILLER redacted)",
+  "catalog_note": "Not included (client-derived). Build one locally with maxed-cli catalog-root, or construct a minimal in-test catalog from the types listed here.",
+  "observed_catalog_sha256": "6ed62efec45097b76e9fb55fea695115af80c54da0823877b524a6d8eff27814",
+  "scrub_report": "verified=true provisional=false; 2 short opaque token interior coincidences admitted (NEWTICK UNIQUE_DATA_STRING: identity x1, player-text x1); public-literal coincidences only in MAPINFO/RECONNECT map names",
+  "export_domain_parity": "422 of 422 rows identical between original and scrubbed (only inputSha256 differs)",
+  "connections": [
+    {
+      "map": "Realm of the Mad God",
+      "mapinfo_us": "1791147526165201",
+      "realm_name": "NexusPortal.Zephyr",
+      "seed": 1486421971,
+      "game_opened_time": 1791146155
+    },
+    {
+      "map": "Ocean Trench",
+      "mapinfo_us": "1791147649344757",
+      "realm_name": "NexusPortal.Zephyr",
+      "seed": 1580120007,
+      "game_opened_time": 1791147646
+    },
+    {
+      "map": "Realm of the Mad God",
+      "mapinfo_us": "1791147656635633",
+      "realm_name": "NexusPortal.Zephyr",
+      "seed": 1486421971,
+      "game_opened_time": 1791146155
+    }
+  ],
+  "same_realm_instance": "Connections 1 and 3 have identical (map, realm_name, seed, game_opened_time). Connection 2 is Ocean Trench (about 7 s).",
+  "bosses": [
+    {
+      "target_id": 218404,
+      "target_type": 34550,
+      "name": "Goblin Patriarch",
+      "last_hp_before_removal": 1,
+      "hp1_samples": 1,
+      "removal_us": "1791147540854362",
+      "oryx": {
+        "key": "stringlist.Goblin_Patriarch.death.N",
+        "t_us": "1791147540854356",
+        "delta_to_removal_us": 6
+      }
+    },
+    {
+      "target_id": 213973,
+      "target_type": 47927,
+      "name": "Cube Deity",
+      "last_hp_before_removal": 428,
+      "hp1_samples": 0,
+      "removal_us": "1791147550315431",
+      "oryx": {
+        "key": "stringlist.Cube_Deity.death.N",
+        "t_us": "1791147550315424",
+        "delta_to_removal_us": 7
+      }
+    },
+    {
+      "target_id": 223419,
+      "target_type": 34605,
+      "name": "Daughter of Limon",
+      "last_hp_before_removal": 1,
+      "hp1_samples": 3,
+      "removal_us": "1791147619068453",
+      "oryx": {
+        "key": "stringlist.Daughter_of_Limon.death.N",
+        "t_us": "1791147619068453",
+        "delta_to_removal_us": 0
+      }
+    },
+    {
+      "target_id": 224956,
+      "target_type": 22023,
+      "name": "Hermit God",
+      "last_hp_before_removal": 0,
+      "hp1_samples": 0,
+      "removal_us": "1791147643075875",
+      "oryx": {
+        "key": "stringlist.Hermit_God.killed.N",
+        "t_us": "1791147642975240",
+        "delta_to_removal_us": 100635
+      }
+    },
+    {
+      "target_id": 226222,
+      "target_type": 34489,
+      "name": "The Plague Doctor",
+      "last_hp_before_removal": 1,
+      "hp1_samples": 3,
+      "removal_us": "1791147693250612",
+      "oryx": {
+        "key": "stringlist.The_Plague_Doctor.death.N",
+        "t_us": "1791147693250611",
+        "delta_to_removal_us": 1
+      }
+    },
+    {
+      "target_id": 222630,
+      "target_type": 22018,
+      "name": "Pentaract Tower",
+      "last_hp_before_removal": 0,
+      "hp1_samples": 0,
+      "removal_us": "1791147575010060"
+    },
+    {
+      "target_id": 222624,
+      "target_type": 22018,
+      "name": "Pentaract Tower",
+      "last_hp_before_removal": 0,
+      "hp1_samples": 0,
+      "removal_us": "1791147579379674"
+    },
+    {
+      "target_id": 222636,
+      "target_type": 22018,
+      "name": "Pentaract Tower",
+      "last_hp_before_removal": 0,
+      "hp1_samples": 0,
+      "removal_us": "1791147586890491"
+    },
+    {
+      "target_id": 222642,
+      "target_type": 22018,
+      "name": "Pentaract Tower",
+      "last_hp_before_removal": 0,
+      "hp1_samples": 0,
+      "removal_us": "1791147584049046"
+    }
+  ],
+  "pentaract_group_death_text_us": [
+    "1791147586890490"
+  ],
+  "dps_short_window_case": {
+    "target": "Pentaract Tower 222624",
+    "fight_window_s": 0.4,
+    "stored_top_dps_before_35": 16782.2,
+    "expected_after_35": "no DPS shown (under 3 s of activity)"
+  },
+  "regression_targets": {
+    "#33": "Goblin Patriarch, Daughter of Limon and The Plague Doctor (HP 1), and Cube Deity (HP 428) are removed within 7 us of their Oryx .death. text, so each is a non-provisional kill. Hermit God's .killed. text comes about 100 ms before its HP 0 removal. Pentaract Towers die at HP 0.",
+    "#34": "After Ocean Trench, connection 3 re-enters the same realm instance. The visit continues: kills, drops and fame from connection 1 remain, and the Ocean Trench time isn't counted.",
+    "#35": "Short Pentaract glimpses have no DPS. The Plague Doctor late-join window is as in maxed-realm-plague-doctor/expected.json."
+  }
+}

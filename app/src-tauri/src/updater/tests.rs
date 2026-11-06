@@ -467,7 +467,9 @@ fn initial_feed_and_artifact_paths_are_exact_before_any_io() {
     run(async {
         let expected = policy::feed(Channel::Stable);
         for bad in [
-            expected.replace("DaAwesomePwner", "other"),
+            expected.replace("daplabs", "other"),
+            expected.replace("daplabs/maxed", "DaAwesomePwner/maxed"),
+            expected.replace("daplabs/maxed", "daplabs/maxed-rotmg"),
             expected.replace("stable", "beta"),
             format!("{expected}?x"),
             expected.replace(".com/", ".com:443/"),
@@ -489,7 +491,7 @@ fn initial_feed_and_artifact_paths_are_exact_before_any_io() {
         }
         let mut json: serde_json::Value =
             serde_json::from_slice(&manifest("1.1.0", TARGET, "sig")).unwrap();
-        for bad in ["https://github.com/other/repo/releases/download/v1.1.0/Maxed_1.1.0_x64-setup.exe", "https://github.com/DaAwesomePwner/maxed/releases/download/update-stable/Maxed_1.1.0_x64-setup.exe", "https://github.com/DaAwesomePwner/maxed-rotmg/releases/download/v1.1.0/Maxed_1.1.0_x64-setup.exe"] {
+        for bad in ["https://github.com/DaAwesomePwner/maxed/releases/download/v1.1.0/Maxed_1.1.0_x64-setup.exe", "https://github.com/other/repo/releases/download/v1.1.0/Maxed_1.1.0_x64-setup.exe", "https://github.com/daplabs/maxed/releases/download/update-stable/Maxed_1.1.0_x64-setup.exe", "https://github.com/daplabs/maxed-rotmg/releases/download/v1.1.0/Maxed_1.1.0_x64-setup.exe"] {
         json["platforms"][TARGET]["url"] = bad.into();
         assert!(matches!(parse_offer(&serde_json::to_vec(&json).unwrap(), &Version::parse("1.0.0").unwrap(), Channel::Stable, 0), Err(Error::Url)));
     }

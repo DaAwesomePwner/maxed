@@ -2,6 +2,7 @@ import { render } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { vi } from 'vitest';
 import Shell from '../../src/lib/shell/Shell.svelte';
+import { productionFeatures } from '../../src/lib/navigation/routes';
 import { createClient, type Client } from '../../src/lib/bridge/client';
 import { createFixtureTransport } from '../../src/lib/bridge/fixture';
 import { fakeHistory } from '../navigation/fake-history';
@@ -26,6 +27,7 @@ export function mountHome(snapshot = homeSnapshot({ area_kind: 'nexus', run: nul
   const query = vi.spyOn(client, 'queryHome');
   const listeners = [vi.spyOn(client, 'onSnapshot'), vi.spyOn(client, 'onCapture'), vi.spyOn(client, 'onEngineEvent')];
   const browser = fakeHistory(hash);
-  const page = render(Shell, { client, historyAdapter: browser.adapter, preview });
+  // Legacy Home suites exercise the explicit v3 rollback path.
+  const page = render(Shell, { client, historyAdapter: browser.adapter, features: { ...productionFeatures, homeRedesign: false }, preview });
   return { ...page, transport, client, query, listeners, browser };
 }

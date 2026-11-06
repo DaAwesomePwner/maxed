@@ -103,20 +103,48 @@ impl Engine {
         owner: i32,
         shot: Option<&Shot>,
         damage: f64,
-        estimated: bool,
+        mut estimated: bool,
     ) -> SourceDamage {
         let resolved = self.resolve_owner(owner);
         let summon = resolved.is_some_and(|id| id != owner);
-        let item = if summon {
+        let mut item = if summon {
             self.entities.get(&owner).and_then(|e| e.object_type)
         } else {
             shot.and_then(|s| s.item)
         };
-        let kind = if summon {
+        let mut kind = if summon {
             SourceKind::Summon
         } else {
             shot.map(|s| s.kind.clone()).unwrap_or(SourceKind::Other)
         };
+        let mut reasons = if estimated {
+            vec!["client-projectile-reconstruction".into()]
+        } else {
+            vec![]
+        };
+        if !summon
+            && shot.is_none()
+            && resolved == Some(owner)
+            && self.local.as_ref().map(|l| l.object) != Some(owner)
+        {
+            let weapon = self
+                .entities
+                .get(&owner)
+                .and_then(|e| e.stat(8))
+                .and_then(|t| u16::try_from(t).ok())
+                .filter(|t| {
+                    self.item_index
+                        .get(t)
+                        .map(|&i| &self.catalog.items[i])
+                        .is_some_and(|item| !item.projectiles.is_empty())
+                });
+            if let Some(weapon) = weapon {
+                item = Some(weapon);
+                kind = SourceKind::Weapon;
+                estimated = true;
+                reasons.push(INFERRED_EQUIPPED_WEAPON.into());
+            }
+        }
         let enchant = resolved
             .and_then(|id| self.entities.get(&id))
             .and_then(|e| {
@@ -136,11 +164,7 @@ impl Engine {
             hits: 1,
             biggest_hit: Some(damage),
             estimated,
-            reasons: if estimated {
-                vec!["client-projectile-reconstruction".into()]
-            } else {
-                vec![]
-            },
+            reasons,
         }
     }
     fn remember(&mut self, owner: i32, bullet: u16, mut shot: Shot, events: &mut Vec<EngineEvent>) {

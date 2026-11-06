@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::stats::*;
 use maxed_types::*;
 
@@ -96,14 +96,14 @@ fn maps_are_grouped_and_ranked_by_fame_per_hour() {
                 Some(1),
                 Some(0)
             ),
-            // The Nexus visit holds the character's first-ever sample: a missing baseline.
+            // The Nexus visit holds the session's first sample: it is the baseline.
             (
                 StatsMapGroup::Hubs,
                 "Hubs",
                 2,
                 12 * MIN,
                 0,
-                true,
+                false,
                 Some(0.0),
                 None,
                 None

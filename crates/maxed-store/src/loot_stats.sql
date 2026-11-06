@@ -1,12 +1,13 @@
 -- Range start and exclusive end in micros; both NULL for all time.
 -- Integer inclusive upper bounds preserve i64::MAX timestamps for all-time reads.
 WITH ended AS MATERIALIZED (
-    SELECT dungeon,count(*) AS n,sum(outcome='cleared') AS clears FROM runs
+    SELECT dungeon,count(*) AS n,sum(outcome='cleared') AS clears FROM runs INDEXED BY runs_loot_stats
     WHERE ended IS NOT NULL AND ended>=coalesce(?1,0) AND ended<=coalesce(?2-1,9223372036854775807)
     GROUP BY dungeon
 ), scoped AS (
     SELECT d.id,d.run_id,d.at,d.bag_rank,d.source_type,r.dungeon
-    FROM drops d INDEXED BY drops_stats LEFT JOIN runs r ON r.id=d.run_id
+    FROM drops d INDEXED BY drops_stats
+        LEFT JOIN runs r INDEXED BY runs_id_dungeon ON r.id=d.run_id
     WHERE d.at>=coalesce(?1,0) AND d.at<=coalesce(?2-1,9223372036854775807)
 ), source_bags AS MATERIALIZED (
     -- Fixed-width nonnegative micros sort chronologically; the suffix breaks ties by id.
@@ -38,7 +39,8 @@ WITH ended AS MATERIALIZED (
     SELECT dungeon,CAST(substr(max(best_key),1,19) AS INTEGER) AS at FROM source_bags
     WHERE ?1 IS NULL AND dungeon IS NOT NULL AND bag_rank=255 GROUP BY dungeon
     UNION ALL
-    SELECT r.dungeon,max(d.at) AS at FROM drops d INDEXED BY drops_stats JOIN runs r ON r.id=d.run_id
+    SELECT r.dungeon,max(d.at) AS at FROM drops d INDEXED BY drops_stats
+        JOIN runs r INDEXED BY runs_id_dungeon ON r.id=d.run_id
     WHERE ?1 IS NOT NULL AND d.bag_rank=255 GROUP BY r.dungeon
 ), streak AS (
     SELECT w.dungeon,count(r.id) AS n FROM last_white w LEFT JOIN runs r
@@ -57,6 +59,8 @@ WITH ended AS MATERIALIZED (
                 FROM dungeon_bags WHERE dungeon=p.dungeon),
             'whites',coalesce((SELECT n FROM dungeon_bags WHERE dungeon=p.dungeon AND bag_rank=255),0),
             'runs_since_last_white',(SELECT n FROM streak WHERE dungeon=p.dungeon),
+            -- Filled by the compact ordered-run read in the same transaction.
+            'white_runs',0,'avg_runs_per_white',NULL,'longest_dry',NULL,
             'best',json((SELECT json_object('drop_id',b.id,'run_id',b.run_id,'bag_rank',b.bag_rank,'bag_type',b.bag_type,'at',CAST(b.at AS TEXT))
                 FROM drops b WHERE b.id=(SELECT substr(best_key,21) FROM source_bags
                     WHERE dungeon=p.dungeon AND bag_rank IS NOT NULL

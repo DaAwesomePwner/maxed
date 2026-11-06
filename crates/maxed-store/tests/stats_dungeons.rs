@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::stats::*;
 use maxed_types::*;
 

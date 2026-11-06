@@ -5,7 +5,8 @@ use crate::{
     StoreError,
 };
 use maxed_types::{FightView, InstanceEventView, RunStory, RunView};
-use rusqlite::{params, Transaction};
+use rusqlite::{params, Params, Transaction};
+use serde::de::DeserializeOwned;
 
 const MAX_STORY_BOSS_FIGHTS: usize = 64;
 const MAX_STORY_BOSS_BYTES: usize = 16 * 1024 * 1024;
@@ -55,9 +56,54 @@ pub(crate) fn load(
     let newer_run_id = neighbor(NEWER)?;
     // Both limit flags are at most five bytes each.
     add_bytes(bytes, 10, MAX_RUN_STORY_BYTES)?;
+    let (events, events_limited) = load_events(
+        tx,
+        EVENTS,
+        params![run.id, MAX_STORY_EVENTS as i64 + 1],
+        bytes,
+    )?;
+    let (boss_fights, boss_fights_limited) = load_bosses(
+        tx,
+        BOSSES,
+        params![run.id, MAX_STORY_BOSS_FIGHTS as i64 + 1],
+        bytes,
+    )?;
+    Ok(RunScreen {
+        boss_fights,
+        boss_fights_limited,
+        events,
+        events_limited,
+        older_run_id,
+        newer_run_id,
+    })
+}
+
+pub(crate) fn load_events(
+    tx: &Transaction<'_>,
+    sql: &str,
+    args: impl Params,
+    bytes: &mut usize,
+) -> Result<(Vec<InstanceEventView>, bool), StoreError> {
+    let (events, limited) = load_details(tx, sql, args, bytes)?;
+    Ok((
+        events
+            .into_iter()
+            .map(crate::instance::normalize_names)
+            .collect(),
+        limited,
+    ))
+}
+
+/// Optional event/drop detail shares the story's 2,000-row and response budget.
+pub(crate) fn load_details<T: DeserializeOwned>(
+    tx: &Transaction<'_>,
+    sql: &str,
+    args: impl Params,
+    bytes: &mut usize,
+) -> Result<(Vec<T>, bool), StoreError> {
     let detail_limit = MAX_RUN_STORY_BYTES - STORY_SERIALIZATION_RESERVE;
-    let mut statement = tx.prepare(EVENTS)?;
-    let mut rows = statement.query(params![run.id, MAX_STORY_EVENTS as i64 + 1])?;
+    let mut statement = tx.prepare(sql)?;
+    let mut rows = statement.query(args)?;
     let mut events = Vec::new();
     let mut events_limited = false;
     while let Some(row) = rows.next()? {
@@ -78,8 +124,19 @@ pub(crate) fn load(
             Err(_) => events_limited = true,
         }
     }
-    let mut statement = tx.prepare(BOSSES)?;
-    let mut rows = statement.query(params![run.id, MAX_STORY_BOSS_FIGHTS as i64 + 1])?;
+    Ok((events, events_limited))
+}
+
+/// Run and interval queries provide ordered length/JSON rows with a 65-row probe.
+pub(crate) fn load_bosses(
+    tx: &Transaction<'_>,
+    sql: &str,
+    args: impl Params,
+    bytes: &mut usize,
+) -> Result<(Vec<FightView>, bool), StoreError> {
+    let detail_limit = MAX_RUN_STORY_BYTES - STORY_SERIALIZATION_RESERVE;
+    let mut statement = tx.prepare(sql)?;
+    let mut rows = statement.query(args)?;
     let mut boss_fights = Vec::new();
     let mut boss_fights_limited = false;
     let mut boss_bytes = 0;
@@ -105,14 +162,7 @@ pub(crate) fn load(
             Err(_) => boss_fights_limited = true,
         }
     }
-    Ok(RunScreen {
-        boss_fights,
-        boss_fights_limited,
-        events,
-        events_limited,
-        older_run_id,
-        newer_run_id,
-    })
+    Ok((boss_fights, boss_fights_limited))
 }
 
 /// Raw row sizes cannot predict all escaping/aggregate expansion. If the final

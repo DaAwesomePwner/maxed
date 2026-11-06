@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::*;
 use maxed_store::*;
 use maxed_types::*;
@@ -146,11 +146,12 @@ fn home_counts_death_after_clear_and_preserves_fame_and_unknown_bag_rank() {
         .unwrap();
     assert_eq!((home.runs, home.clears, home.deaths), (1, 1, 1));
     assert_eq!(
-        home.fame_delta, None,
-        "no pre-session baseline was observed"
+        home.fame_delta,
+        Some(10),
+        "counts from the first in-session sample"
     );
     assert!(home.best_drop.is_none());
-    assert!(!home.top_fight.unwrap().complete_capture);
+    assert!(home.top_fight.is_none());
     assert!(!home.issues.is_empty());
     let home = reader
         .home_summary(HomeScope::Today {
@@ -165,7 +166,7 @@ fn home_counts_death_after_clear_and_preserves_fame_and_unknown_bag_rank() {
 }
 
 #[test]
-fn fame_delta_uses_latest_pre_scope_baseline_for_today_and_session() {
+fn fame_delta_counts_from_first_in_scope_sample_for_today_and_session() {
     for with_baseline in [false, true] {
         let (_dir, path, mut db) = database();
         let mut sequence = 8;
@@ -200,27 +201,24 @@ fn fame_delta_uses_latest_pre_scope_baseline_for_today_and_session() {
         ] {
             let owned_baselines = with_baseline && matches!(scope, HomeScope::Session { .. });
             let home = reader.home_summary(scope.clone()).unwrap();
+            // The delta always equals the chart's last point minus its first.
             assert_eq!(
                 home.fame_delta,
-                if owned_baselines {
-                    None
-                } else {
-                    with_baseline.then_some(60)
-                }
+                Some(home.fame.last().unwrap().fame - home.fame.first().unwrap().fame)
             );
+            assert_eq!(
+                home.fame_delta,
+                Some(if owned_baselines { 260 } else { 10 })
+            );
+            assert_eq!(home.fame_missing_baselines, 0);
             if owned_baselines {
                 assert_eq!(home.fame.first().unwrap().fame, 1000);
                 assert_eq!(home.fame.last().unwrap().fame, 1260);
-                assert_eq!(home.fame_missing_baselines, 1);
-                // A point owned by this session cannot baseline its own chart.
-                // Nor can an external point after its first owned observation.
+                // Fame from a previous session is not credited to this one.
                 db.execute("INSERT INTO fame_samples VALUES('previous',1,'demo-character',50,990,NULL),('previous',2,'demo-character',500000,1100,NULL)",[]).unwrap();
                 let with_external = reader.home_summary(scope).unwrap();
                 assert_eq!(with_external.fame, home.fame);
-                assert_eq!(
-                    with_external.fame_delta,
-                    Some(with_external.fame.last().unwrap().fame - 990)
-                );
+                assert_eq!(with_external.fame_delta, home.fame_delta);
                 assert_eq!(with_external.fame_missing_baselines, 0);
             }
             assert_eq!(
@@ -233,7 +231,7 @@ fn fame_delta_uses_latest_pre_scope_baseline_for_today_and_session() {
 }
 
 #[test]
-fn fame_delta_splits_midnight_within_one_session_and_sums_only_known_characters() {
+fn fame_delta_sums_each_character_from_its_first_in_scope_sample() {
     let (_dir, path, mut db) = database();
     let mut other = demo::demo_snapshot().character.unwrap();
     other.id = "second-character".into();
@@ -283,7 +281,7 @@ fn fame_delta_splits_midnight_within_one_session_and_sums_only_known_characters(
             id: "demo-session".into(),
         })
         .unwrap();
-    assert_eq!(session.fame_delta, None);
+    assert_eq!(session.fame_delta, Some(100)); // (1260-1200) + (90-50) + (999-999).
     db.execute(
         "UPDATE fame_samples SET session_id=NULL WHERE at=500000",
         [],
@@ -294,7 +292,7 @@ fn fame_delta_splits_midnight_within_one_session_and_sums_only_known_characters(
             id: "demo-session".into(),
         })
         .unwrap();
-    assert_eq!(session.fame_delta, Some(100)); // (1260-1200) + (90-50).
+    assert_eq!(session.fame_delta, Some(30)); // (1260-1250) + (90-70).
     let today = reader
         .home_summary(HomeScope::Today {
             range: TimeRange {
@@ -303,7 +301,7 @@ fn fame_delta_splits_midnight_within_one_session_and_sums_only_known_characters(
             },
         })
         .unwrap();
-    assert_eq!(today.fame_delta, Some(30)); // (1260-1250) + (90-70).
+    assert_eq!(today.fame_delta, Some(0)); // Pre-midnight samples are not baselines.
     assert_eq!(today.fame.len(), 3);
     apply_batch(
         &mut db,
@@ -452,7 +450,7 @@ fn closed_session_ending_at_its_start_keeps_explicit_summaries() {
         .unwrap();
     assert_eq!(home.runs, 1);
     assert_eq!(home.recent_runs[0].id, "demo-run");
-    assert_eq!(home.top_fight.unwrap().id, "demo-fight");
+    assert!(home.top_fight.is_none());
     assert_eq!(home.best_drop.unwrap().id, "demo-drop");
     assert_eq!(home.fame.len(), 2);
     assert_eq!(home.deaths, 1);
@@ -722,6 +720,10 @@ fn home_prefers_highest_observed_local_dps_and_ranks_bags_without_inventing_iden
     let (_dir, path, mut db) = database();
     let mut fight = demo::demo_snapshot().fights.remove(0);
     fight.id = "eligible".into();
+    fight.first_hit = Some(fight.started);
+    fight.last_hit = Some(Timestamp(fight.started.0 + 20_000_000));
+    fight.local_active_micros = Some(20_000_000);
+    fight.ended = fight.last_hit;
     fight.complete_capture = true;
     fight.issues.clear();
     fight.players[0].dps = Some(100.0);

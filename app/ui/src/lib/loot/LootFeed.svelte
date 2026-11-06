@@ -238,7 +238,7 @@
             {/if}
           {/if}
         </div>
-        <footer><span>Bags Maxed saw drop. Not pickups.</span><nav aria-label="Loot pages">
+        <footer><span>Bags observed while capturing; pickups are not confirmed.</span><nav aria-label="Loot pages">
           <button class="ctl ghost" type="button" aria-disabled={paging || filter.cursor === null} onclick={first}>Latest</button>
           <button class="ctl sq" type="button" aria-label="Newer bags" aria-disabled={paging || previous.length === 0} onclick={back}>‹</button>
           <button class="ctl sq" type="button" aria-label="Older bags" aria-disabled={paging || !page?.next} onclick={next}>›</button>
@@ -252,10 +252,12 @@
   .feed { overflow-anchor: none; display: grid; gap: 10px; min-width: 0; font-size: 12px; }
   .body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: start; min-width: 0; }
   .body.with-panel { grid-template-columns: minmax(0, 1fr) 300px; }
-  .table-card { display: flex; flex-direction: column; max-height: max(300px, calc(100vh - 295px)); min-width: 0; padding: 10px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
-  .table-scroll { min-height: 0; overflow-y: auto; }
+  .table-card { display: flex; flex-direction: column; min-width: 0; padding: 10px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
+  .table-scroll { min-width: 0; }
   p { margin: 0; color: var(--text-secondary); }
   footer, nav { display: flex; align-items: center; gap: 6px; } footer { flex: none; padding-top: 8px; flex-wrap: wrap; justify-content: space-between; color: var(--text-muted); }
   .error { display: flex; align-items: center; gap: 8px; color: var(--danger); }
   @media (max-width: 1100px) { .body.with-panel { grid-template-columns: minmax(0, 1fr); } .body :global(aside) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .feed :global(.kpi-strip .sub) { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  @media (max-width: 1000px) { .feed :global(.kpi-strip) { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }
 </style>

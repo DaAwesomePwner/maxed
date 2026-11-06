@@ -7,6 +7,8 @@ pub enum StoreError {
     Open,
     #[error("Summary schema validation or migration failed")]
     Migration,
+    #[error("History upgrade required")]
+    HistoryUpgradeRequired,
     #[error("Summary storage was created by a newer version")]
     NewerSchema,
     #[error("Summary storage is busy; pending work is not saved")]
@@ -19,6 +21,12 @@ pub enum StoreError {
     InvalidEvent,
     #[error("Saved history exceeds the supported query size limit")]
     Limit,
+    #[error("Maintenance unit failed; committed progress is retained")]
+    Maintenance,
+    #[error("Maintenance request key already belongs to different inputs")]
+    MaintenanceRequestMismatch,
+    #[error("History backup owner failed; reopen storage before retrying")]
+    BackupPoisoned,
     #[error("Summary event sequence has a gap")]
     SequenceGap,
     #[error("Summary writer is closed")]

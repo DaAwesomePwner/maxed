@@ -306,6 +306,9 @@ function Export-VerifiedBundle([string]$Installer, [string]$TargetDir, [string]$
 if ($MyInvocation.InvocationName -eq '.') { return }
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+# .cargo/config.toml links development builds with rust-lld; releases keep the MSVC linker.
+$savedLinker = $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER
+$env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER = 'link.exe'
 Push-Location -LiteralPath $repoRoot
 try {
     if ($Package) {
@@ -414,4 +417,5 @@ try {
     Write-Output $exe
 } finally {
     Pop-Location
+    $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER = $savedLinker
 }

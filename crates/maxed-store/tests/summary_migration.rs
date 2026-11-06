@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::*;
 use maxed_store::*;
 use maxed_types::*;
@@ -55,7 +55,7 @@ fn legacy(path: &std::path::Path) -> Connection {
 );",
     )
     .unwrap();
-    apply_batch(&mut db, &events).unwrap();
+    apply_legacy_story(&mut db, &events);
     db.execute_batch("DROP TABLE map_visits").unwrap();
     db.execute("UPDATE fights SET boss_type=NULL,json=json_set(json,'$.boss_type',NULL,'$.target_type',2227,'$.target_kind','miniboss')", []).unwrap();
     db.execute("UPDATE fight_summaries SET json=json_remove(json_set(json,'$.boss_type',NULL,'$.target_type',2227),'$.target_kind')", []).unwrap();
@@ -83,7 +83,7 @@ fn v5_miniboss_is_backfilled_once_and_story_stays_summary_only() {
     let before: serde_json::Value = serde_json::from_str(&summary_json(&db)).unwrap();
     assert!(before.get("target_kind").is_none());
     assert!(matches!(open_reader(&path), Err(StoreError::Migration)));
-    upgrade_history(&path).unwrap();
+    crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
     let mut expected = before;
     expected["target_kind"] = serde_json::json!("miniboss");
     assert_eq!(
@@ -93,13 +93,13 @@ fn v5_miniboss_is_backfilled_once_and_story_stays_summary_only() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        12
+        maxed_store::SCHEMA_VERSION
     );
     assert_eq!(
         db.query_row("SELECT count(*) FROM schema_migrations", [], |r| r
             .get::<_, i64>(0))
             .unwrap(),
-        12
+        maxed_store::SCHEMA_VERSION
     );
     assert_eq!(
         db.query_row(
@@ -111,7 +111,7 @@ fn v5_miniboss_is_backfilled_once_and_story_stays_summary_only() {
         format!("{:x}", Sha256::digest(BACKFILL.as_bytes()))
     );
     let saved = summary_json(&db);
-    upgrade_history(&path).unwrap();
+    crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
     assert_eq!(summary_json(&db), saved);
     db.execute_batch(BACKFILL).unwrap();
     assert_eq!(db.changes(), 0);

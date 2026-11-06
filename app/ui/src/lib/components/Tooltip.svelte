@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { scrollBounds } from './placement';
   // `content` replaces `text` when an explanation needs structure, such as a list.
   let { id, text = '', trigger, content }: { id: string; text?: string; trigger: Snippet<[string]>; content?: Snippet } = $props();
   let hovered = $state(false);
@@ -21,14 +22,7 @@
       const height = document.documentElement.clientHeight || window.innerHeight;
       // A scrolling ancestor narrower than the viewport would otherwise gain a horizontal scrollbar,
       // so the tooltip is both capped to and kept inside its width.
-      let start = 0, stop = width;
-      let parent = element.parentElement?.parentElement ?? null;
-      while (parent && parent !== document.body && !['auto', 'scroll'].includes(getComputedStyle(parent).overflowX)) parent = parent.parentElement;
-      if (parent && parent !== document.body && parent.clientWidth > 0) {
-        const edge = parent.getBoundingClientRect().left + parent.clientLeft;
-        start = Math.max(start, edge);
-        stop = Math.min(stop, edge + parent.clientWidth);
-      }
+      const { start, stop } = scrollBounds(element.parentElement?.parentElement ?? null, width);
       element.style.maxWidth = stop < width || start > 0 ? `min(20rem, ${Math.max(0, stop - start - 16)}px)` : '';
       const rect = element.getBoundingClientRect();
       const left = Math.max(start + 8, Math.min(rect.left, stop - rect.width - 8));
@@ -69,5 +63,5 @@
   .tooltip-root { position: relative; display: inline-flex; max-width: 100%; }
   .tooltip-position { position: absolute; z-index: 20; top: 100%; inset-inline-start: 0; padding-top: var(--space-2); width: max-content; max-width: min(20rem, calc(100vw - 1rem)); }
   .tooltip-position[hidden] { display: none; }
-  .tooltip { display: block; padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--elevation-popover); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-normal); overflow-wrap: anywhere; }
+  .tooltip { display: block; padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--elevation-popover); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-normal); overflow-wrap: anywhere; white-space: normal; text-align: start; }
 </style>

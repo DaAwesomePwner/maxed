@@ -376,7 +376,7 @@ if ([IO.File]::ReadAllText("$fixtureRoot/Cargo.lock") -cne [IO.File]::ReadAllTex
 }
 [IO.File]::WriteAllText("$fixtureRoot/notice-checked", 'checked')
 '@ | Set-Content -LiteralPath "$gateRoot/scripts/release/New-ThirdPartyNotices.ps1" -Encoding UTF8
-    function node { $global:LASTEXITCODE = 0 }
+    function node { $global:gateLinker = $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER; $global:LASTEXITCODE = 0 }
     function cargo {
         $global:LASTEXITCODE = 0
         if ($args -contains 'metadata') { return (@{ target_directory = "$gateRoot/target" } | ConvertTo-Json) }
@@ -393,7 +393,13 @@ if ([IO.File]::ReadAllText("$fixtureRoot/Cargo.lock") -cne [IO.File]::ReadAllTex
     }
     [IO.File]::WriteAllText("$gateRoot/Cargo.lock", 'Invented locked dependency A')
     [IO.File]::WriteAllText("$gateRoot/THIRD-PARTY-NOTICES.md", 'Invented locked dependency A')
-    $message = & $runGate
+    $savedLinker = $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER
+    $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER = 'rust-lld.exe'
+    $global:gateLinker = $null
+    try {
+        $message = & $runGate
+        Assert-Check ($global:gateLinker -ceq 'link.exe' -and $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER -ceq 'rust-lld.exe') 'release build links with MSVC and restores the caller linker'
+    } finally { $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER = $savedLinker }
     Assert-Check ((Test-Path -LiteralPath "$gateRoot/notice-checked") -and -not $message.StartsWith('notice_gate_stale:')) 'current notices pass the post-build check'
     [IO.File]::WriteAllText("$gateRoot/THIRD-PARTY-NOTICES.md", 'Mutated notices')
     $message = & $runGate

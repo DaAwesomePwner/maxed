@@ -283,6 +283,68 @@ it('recovery retains only labelled stale observations for 1500ms; stop and dispo
   expect(h.value.drops).toEqual([]);
 });
 
+it('visible recovery within the grace period retains the partial visit through a Live snapshot', async () => {
+  vi.useFakeTimers();
+  const h = harness(true); h.enter();
+  h.send({ bag_dropped: h.drop('before-recovery') });
+  const visitKey = h.value.visitKey;
+  expect(visitKey).not.toBeNull();
+  expect(h.value.partial).toBe(false);
+  h.window.capture({ ...h.snapshot.capture, state: 'Recovering' });
+  await vi.advanceTimersByTimeAsync(1499);
+  h.window.capture({ ...h.snapshot.capture, state: 'Live' });
+  h.publishSnapshot({ capture: { ...h.snapshot.capture, state: 'Live' } });
+  const assertRetained = () => {
+    expect(h.value).toMatchObject({ visitKey, partial: true,
+      reasons: ['Stale observations during capture recovery.'] });
+    expect(h.value.drops.map(row => row.id)).toEqual(['before-recovery']);
+  };
+  assertRetained();
+  await vi.advanceTimersByTimeAsync(1501);
+  assertRetained();
+  h.window.dispose();
+});
+
+it('recovery exceeding the grace period retires the visit before Live and a snapshot', async () => {
+  vi.useFakeTimers();
+  const h = harness(true); h.enter();
+  h.send({ bag_dropped: h.drop('before-expiry') });
+  expect(h.value.visitKey).not.toBeNull();
+  expect(h.value.drops).toHaveLength(1);
+  h.window.capture({ ...h.snapshot.capture, state: 'Recovering' });
+  await vi.advanceTimersByTimeAsync(1501);
+  expect(h.value).toMatchObject({ visitKey: null, drops: [], partial: true,
+    reasons: ['Capture recovery exceeded the observation grace period.'] });
+  h.window.capture({ ...h.snapshot.capture, state: 'Live' });
+  expect(h.value.reasons).toEqual(['Capture recovery exceeded the observation grace period.']);
+  h.publishSnapshot({ capture: { ...h.snapshot.capture, state: 'Live' } });
+  expect(h.value).toMatchObject({ visitKey: null, drops: [], partial: true,
+    reasons: ['Capture resumed; earlier visit observations are incomplete.'] });
+  h.window.dispose();
+});
+
+it.each(['stream', 'session'] as const)('recovery within the grace period still resets on a different %s event', async source => {
+  vi.useFakeTimers();
+  const h = harness(true); h.enter();
+  h.send({ bag_dropped: h.drop('before-source-change') });
+  const visitKey = h.value.visitKey;
+  expect(visitKey).not.toBeNull();
+  h.window.capture({ ...h.snapshot.capture, state: 'Recovering' });
+  await vi.advanceTimersByTimeAsync(1499);
+  h.window.capture({ ...h.snapshot.capture, state: 'Live' });
+  expect(h.value).toMatchObject({ visitKey, partial: true });
+  expect(h.value.drops).toHaveLength(1);
+  if (source === 'stream') {
+    h.window.event({ stream_id: 'synthetic-new-stream', sequence: '1', at: '6000002',
+      event: { bag_dropped: h.drop('different-stream-bag') } });
+  } else {
+    h.send({ session_updated: { ...h.snapshot.session!, id: 'synthetic-new-session' } });
+  }
+  expect(h.value).toMatchObject({ visitKey: null, drops: [], fights: [], events: [], partial: true,
+    reasons: [source === 'stream' ? 'Source changed; visit entry was not observed.' : 'Session changed; visit entry was not observed.'] });
+  h.window.dispose();
+});
+
 it('history_only_queries_nexus', async () => {
   const queryHome = vi.fn(async () => ({ status: 'ready' as const, value: homeSummary() }));
   const controller = createHomeHistory({ queryHome }, vi.fn());

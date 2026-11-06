@@ -1,5 +1,21 @@
-use crate::{identity, parse_enchant, Engine};
+use crate::{identity, parse_enchant, world::Entity, Engine};
 use maxed_types::*;
+
+const STAT_BOOST_PAIRS: [(u8, u8); 8] = [
+    (0, 46),
+    (3, 47),
+    (20, 48),
+    (21, 49),
+    (22, 50),
+    (28, 53),
+    (26, 51),
+    (27, 52),
+];
+
+fn at_cap(class: &ClassDef, stat: &impl Fn(u8) -> Option<i32>, id: u8, boost: u8) -> Option<bool> {
+    let cap = class.stat_caps.iter().find(|v| v.stat_id == id)?.value;
+    Some(i64::from(stat(id)?) - i64::from(stat(boost)?) >= i64::from(cap))
+}
 
 pub const FLAWLESS_UNSUPPORTED: &str =
     "Flawless is unavailable: no approved captured-evidence definition exists.";
@@ -20,7 +36,65 @@ pub fn personal_best_eligible(fight: &FightView, character: &CharacterView) -> b
         })
 }
 
+pub(crate) fn equipment(entity: Option<&Entity>) -> Vec<EquipmentView> {
+    (0..4)
+        .map(|slot| EquipmentView {
+            observed_empty: entity.and_then(|e| e.stat(8 + slot)).and_then(|value| {
+                if value == -1 {
+                    Some(true)
+                } else {
+                    u16::try_from(value).ok().map(|_| false)
+                }
+            }),
+            slot,
+            item_type: entity
+                .and_then(|e| e.stat(8 + slot))
+                .and_then(|i| u16::try_from(i).ok()),
+            enchant: entity
+                .and_then(|e| e.enchants.get(usize::from(slot)))
+                .cloned()
+                .unwrap_or_else(|| parse_enchant(None)),
+        })
+        .collect()
+}
+
 impl Engine {
+    pub(crate) fn maxed(&self, class: Option<u16>, stat: impl Fn(u8) -> Option<i32>) -> Option<u8> {
+        let class = self
+            .catalog
+            .classes
+            .iter()
+            .find(|c| Some(c.object_type) == class)?;
+        // Entity.calculateBaseStats: base = observed value - observed boost.
+        // Missing boosts/caps never imply zero boosts or an 8/8 character.
+        let mut count = 0;
+        for (s, b) in STAT_BOOST_PAIRS {
+            if at_cap(class, &stat, s, b)? {
+                count += 1;
+            }
+        }
+        Some(count)
+    }
+
+    pub(crate) fn maxed_stats(
+        &self,
+        class: Option<u16>,
+        stat: impl Fn(u8) -> Option<i32>,
+    ) -> Vec<u8> {
+        let Some(class) = self
+            .catalog
+            .classes
+            .iter()
+            .find(|c| Some(c.object_type) == class)
+        else {
+            return vec![];
+        };
+        STAT_BOOST_PAIRS
+            .into_iter()
+            .filter_map(|(id, boost)| (at_cap(class, &stat, id, boost) == Some(true)).then_some(id))
+            .collect()
+    }
+
     pub(crate) fn refresh_character(&mut self, events: &mut Vec<EngineEvent>) {
         let Some(local) = self.local.as_ref() else {
             return;
@@ -34,44 +108,16 @@ impl Engine {
         let id = verified
             .clone()
             .unwrap_or_else(|| local.provisional.clone());
-        let equipment = (0..4)
-            .map(|slot| EquipmentView {
-                slot,
-                item_type: entity
-                    .and_then(|e| e.stat(8 + slot))
-                    .and_then(|i| u16::try_from(i).ok()),
-                enchant: entity
-                    .and_then(|e| e.enchants.get(usize::from(slot)))
-                    .cloned()
-                    .unwrap_or_else(|| parse_enchant(None)),
-            })
-            .collect();
+        let equipment = equipment(entity);
         let class_id = entity.and_then(|e| e.object_type);
-        // Entity.calculateBaseStats: base = observed value - observed boost.
-        // Missing boosts/caps never imply zero boosts or an 8/8 character.
-        let maxed = class_id
-            .and_then(|t| self.catalog.classes.iter().find(|c| c.object_type == t))
-            .and_then(|c| {
-                let e = entity?;
-                let pairs = [
-                    (0, 46),
-                    (3, 47),
-                    (20, 48),
-                    (21, 49),
-                    (22, 50),
-                    (28, 53),
-                    (26, 51),
-                    (27, 52),
-                ];
-                let mut count = 0;
-                for (s, b) in pairs {
-                    let cap = c.stat_caps.iter().find(|v| v.stat_id == s)?.value;
-                    if i64::from(e.stat(s)?) - i64::from(e.stat(b)?) >= i64::from(cap) {
-                        count += 1;
-                    }
-                }
-                Some(count)
-            });
+        let stat_panel = entity.map(|e| self.character_panel(e));
+        // Local character and player profile use the shared placement gate.
+        // Remote-player evaluation keeps its existing observation semantics.
+        let maxed = stat_panel.as_ref().and_then(|panel| {
+            panel.lines.iter().try_fold(0u8, |count, line| {
+                line.at_cap.map(|at_cap| count + u8::from(at_cap))
+            })
+        });
         let mut issues = vec![];
         if verified.is_none() {
             issues.push(CoverageIssue::MissingIdentity);
@@ -80,12 +126,13 @@ impl Engine {
             issues.push(CoverageIssue::MissingStats);
         }
         let mut next = CharacterView {
-            stat_panel: entity.map(|e| self.character_panel(e)),
+            calculation_revision: None,
+            stat_panel,
             id: id.clone(),
             // Display only: identity still uses the account-stat HMAC and character number.
             name: entity
                 .and_then(|e| e.name.as_deref())
-                .map(|name| name.split(',').next().unwrap_or_default().to_owned()),
+                .map(|name| crate::names::display_name(name).to_owned()),
             class_id,
             level: entity
                 .and_then(|e| e.stat(7))

@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "maxed-cli"
 description = "Headless replay, scrub, and parity tools for Maxed."
 version.workspace = true
@@ -26,3 +27,28 @@ serde_json.workspace = true
 maxed-store = { path = "../maxed-store" }
 [dependencies.maxed-types]
 path = "../maxed-types"
+
+# Merge ordinary integration suites; retain documented or process-isolated targets.
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[[test]]
+name = "demo"
+path = "tests/demo.rs"
+
+[[test]]
+name = "domain_parity"
+path = "tests/domain_parity.rs"
+
+[[test]]
+name = "parity"
+path = "tests/parity.rs"
+
+[[test]]
+name = "realm_focus"
+path = "tests/realm_focus.rs"
+
+[[test]]
+name = "realm_kill_evidence"
+path = "tests/realm_kill_evidence.rs"

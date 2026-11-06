@@ -1,5 +1,4 @@
-mod common;
-mod d_support;
+use crate::d_support;
 use d_support::*;
 #[test]
 fn series_align_with_buckets_after_compaction() {

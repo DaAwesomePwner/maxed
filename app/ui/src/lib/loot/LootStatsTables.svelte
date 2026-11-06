@@ -13,7 +13,7 @@
     sort: StatsSort; descending: boolean; onSort: (key: StatsSort) => void; portals: Map<string, number>;
   } = $props();
   const columns: Array<{ key: StatsSort; label: string }> = [
-    { key: 'dungeon', label: 'Dungeon' }, { key: 'runs_ended', label: 'Runs' }, { key: 'clears', label: 'Clears' },
+    { key: 'dungeon', label: 'Dungeon' }, { key: 'runs_ended', label: 'Ended runs' }, { key: 'clears', label: 'Clears' },
     { key: 'bags', label: 'Bags' }, { key: 'whites', label: 'Whites' }, { key: 'rate', label: 'White rate' },
     { key: 'runs_since_last_white', label: 'Since last white' }, { key: 'best', label: 'Best bag' },
   ];
@@ -85,26 +85,29 @@
   </aside>
 </div>
 <style>
-  .stats-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 10px; min-width: 0; font-size: 12px; }
+  .stats-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; font-size: 12px; }
   .card { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface-panel); }
-  .dungeon-card { display: flex; flex-direction: column; height: min(740px, calc(100vh - 220px)); min-height: 300px; padding: 10px 6px 6px; box-sizing: border-box; }
+  .dungeon-card { display: flex; flex-direction: column; padding: 10px 6px 6px; box-sizing: border-box; }
   h3 { margin: 0; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
   .dungeon-card > h3 { margin: 0 6px 8px; }
   header { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: var(--text-muted); }
-  aside { display: grid; align-content: start; gap: 10px; min-width: 0; padding: 0; border: 0; background: transparent; }
+  aside { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 10px; min-width: 0; padding: 0; border: 0; background: transparent; }
   .table-scroll { overflow: auto; min-height: 0; flex: 1; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
-  .dungeons { min-width: 770px; }
-  .name-col { width: 23%; } .bags-col { width: 18%; } .dry-col { width: 18%; } .best-col { width: 12%; }
+  .dungeons { min-width: 0; }
+  .dungeons .cell, .dry { flex-wrap: wrap; }
+  .dungeons .ellipsis { white-space: normal; overflow-wrap: anywhere; }
+  .name-col { width: 23%; } .bags-col { width: 12%; } .dry-col { width: 18%; } .best-col { width: 13%; }
   th, td { padding: 3px 4px; height: 30px; box-sizing: border-box; border-bottom: 1px solid var(--border); text-align: right; font-weight: normal; }
-  th:first-child { text-align: left; } thead th { color: var(--text-secondary); font-size: 11px; background: var(--surface-panel); position: sticky; top: 0; z-index: 1; }
+  /* These tables grow with the page; headers deliberately stay in normal flow. */
+  th:first-child { text-align: left; } thead th { color: var(--text-secondary); font-size: 11px; background: var(--surface-panel); }
   thead button.ctl { padding: 0; font-size: 11px; height: auto; min-height: 26px; white-space: normal; text-align: inherit; }
   .cell { display: flex; align-items: center; gap: 6px; min-width: 0; } .ellipsis { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   a { color: inherit; text-decoration: none; } a:hover { color: var(--violet-text); }
   tbody tr[data-row-id] { cursor: pointer; } tbody tr[data-row-id]:hover { background: var(--surface-raised); }
   tbody tr[data-row-id]:focus-within { background: #f2c14e14; box-shadow: inset 2px 0 var(--gold); }
-  .bag-cell { display: flex; align-items: center; justify-content: end; gap: 8px; } .stack { display: inline-flex; width: 96px; flex-shrink: 1; height: 6px; overflow: hidden; border-radius: 2px; background: var(--surface-raised); } .stack i { height: 100%; }
-  .dry { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--text-secondary); } .dry > i { flex: 1; height: 4px; background: var(--surface-raised); } .dry b { display: block; height: 100%; background: var(--text-muted); } .dry.amber { color: var(--estimated); } .dry.amber b { background: var(--estimated); }
+  .bag-cell { display: flex; flex-wrap: wrap; align-items: center; justify-content: end; gap: 8px; } .stack { display: inline-flex; width: 96px; flex-shrink: 1; height: 6px; overflow: hidden; border-radius: 2px; background: var(--surface-raised); } .stack i { height: 100%; }
+  .dry { display: flex; align-items: center; gap: 6px; white-space: normal; overflow-wrap: anywhere; color: var(--text-secondary); } .dry > i { flex: 1; height: 4px; background: var(--surface-raised); } .dry b { display: block; height: 100%; background: var(--text-muted); } .dry.amber { color: var(--estimated); } .dry.amber b { background: var(--estimated); }
   .white { color: var(--text-primary); filter: drop-shadow(0 0 3px #ffffff30); } .muted { color: var(--text-muted); }
   footer { padding: 10px 6px 0; font-size: 11px; color: var(--text-muted); }
   .tiers th { width: 43%; } .tiers td:last-child { width: 40px; } .tiers th, .tiers td { border: 0; }

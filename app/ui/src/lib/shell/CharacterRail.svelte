@@ -22,7 +22,7 @@
   const homeWindow = connection?.homeWindow ?? readable(emptyHomeLiveWindow());
   let focusedView = $derived(railView(view.snapshot, view.visuals, view.stale,
     $homeWindow.focusedFightId ?? null, $homeWindow));
-  let section = $derived(['run', 'fight', 'player'].includes(route.kind) ? 'runs' : route.kind === 'item' ? 'loot' : route.kind);
+  let section = $derived(route.kind.startsWith('party-') ? 'party' : ['run', 'fight', 'player', 'run-player'].includes(route.kind) ? 'runs' : route.kind === 'item' ? 'loot' : route.kind);
 </script>
 
 <aside class="character-rail" aria-label="Character">
@@ -48,6 +48,8 @@
     {#if features.logs}<a href="#/logs" aria-current={section === 'logs' ? 'page' : undefined}>Logs</a>
     {:else}<a href="#/alerts" aria-current={section === 'alerts' ? 'page' : undefined}>Alerts</a>{/if}
     {#if features.stats}<a href="#/stats" aria-current={section === 'stats' ? 'page' : undefined}>Stats</a>{/if}
+    {#if features.character}<a href="#/character" aria-current={section === 'character' ? 'page' : undefined}>Character</a>{/if}
+    {#if features.party}<a href="#/party" aria-current={section === 'party' ? 'page' : undefined}>Party</a>{/if}
   </nav>
   <a class="settings-link" href="#/settings" aria-current={section === 'settings' ? 'page' : undefined}>Settings</a>
 </aside>

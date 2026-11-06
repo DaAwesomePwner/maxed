@@ -43,6 +43,10 @@ pub struct RuntimeOptions {
 }
 
 impl RuntimeOptions {
+    /// App-owned private history images; command clients use manifest IDs only.
+    pub fn backup_directory(&self) -> PathBuf {
+        self.app_data.join("backups").join(self.namespace.label())
+    }
     pub fn live(app_data: PathBuf, resources: Option<PathBuf>) -> Self {
         Self {
             app_data,
@@ -213,6 +217,23 @@ pub fn discover_resources() -> Option<PathBuf> {
 
 impl CaptureRuntime {
     pub fn snapshot(&self) -> maxed_types::LiveSnapshot {
+        // Read on the engine owner, independently of WebView publication cadence.
+        // Never hold a lifecycle/view lock while waiting: Stop must remain able
+        // to join the worker. Disconnection falls back to its final cached view.
+        let requests = self
+            .shared
+            .snapshot_requests
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        if let Some(requests) = requests {
+            let (reply, response) = crossbeam_channel::bounded(1);
+            if requests.send(reply).is_ok() {
+                if let Ok(snapshot) = response.recv() {
+                    return snapshot;
+                }
+            }
+        }
         self.shared
             .views
             .snapshot

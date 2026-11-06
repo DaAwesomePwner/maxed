@@ -1,7 +1,7 @@
-import type { PreviewMode } from './scenario';
+import type { LegacyPreviewMode, PreviewMode } from './scenario';
 
 export const stressCases: ReadonlyArray<{
-  mode: PreviewMode; label: string; query: string; ended: boolean; stress: boolean; participants: number; target: string;
+  mode: LegacyPreviewMode; label: string; query: string; ended: boolean; stress: boolean; participants: number; target: string;
 }> = [
   { mode: 'nexus', label: 'nexus-stress',
     query: '?preview=nexus&variant=stress', ended: false, stress: true, participants: 47, target: 'Lord of the Lost Lands' },
@@ -14,7 +14,7 @@ export const stressCases: ReadonlyArray<{
 ];
 
 // Exact retained copy: Nexus Task 8, Dungeon Task 6, Realm Task 9.
-export const debugText: Record<PreviewMode, readonly string[]> = {
+export const debugText: Record<LegacyPreviewMode, readonly string[]> = {
   nexus: [
     'Session scope ends after 30 minutes without game traffic.',
     'Known baselines',
@@ -28,6 +28,34 @@ export const debugText: Record<PreviewMode, readonly string[]> = {
     'Loot counts are appearances in bags, not stack sizes or items picked up.',
   ],
 };
+
+export const v4Cases: ReadonlyArray<{
+  mode: PreviewMode; label: string; query: string; root: string; target: string;
+  stress: false; rank: number | null; participants: number; partyRecorded: boolean;
+  debugText: readonly string[];
+}> = [
+  { mode: 'home-v4-dungeon', label: 'home-v4-dungeon', query: '?preview=home-v4-dungeon',
+    root: '.dungeon-screen', target: 'Moonlit Warden', stress: false, rank: 2, participants: 9,
+    partyRecorded: true, debugText: debugText.dungeon },
+  { mode: 'home-v4-realm', label: 'home-v4-realm', query: '?preview=home-v4-realm',
+    root: '.realm-screen', target: 'Starfall Guardian', stress: false, rank: 9, participants: 37,
+    partyRecorded: true, debugText: debugText.realm },
+  { mode: 'home-v4-realm', label: 'home-v4-realm-legacy', query: '?preview=home-v4-realm&variant=legacy',
+    root: '.realm-screen', target: 'Willow Behemoth', stress: false, rank: 9, participants: 37,
+    partyRecorded: false, debugText: debugText.realm },
+  { mode: 'home-v4-nexus', label: 'home-v4-nexus', query: '?preview=home-v4-nexus',
+    root: '.nexus-home', target: 'Nexus', stress: false, rank: null, participants: 0,
+    partyRecorded: false, debugText: debugText.nexus },
+  { mode: 'home-v4-recap', label: 'home-v4-recap', query: '?preview=home-v4-recap',
+    root: '.recap-screen', target: 'CLEARED', stress: false, rank: null, participants: 8,
+    partyRecorded: false, debugText: [] },
+  { mode: 'home-v4-recap-died', label: 'home-v4-recap-died', query: '?preview=home-v4-recap-died',
+    root: '.recap-screen .death-banner', target: 'DIED AT', stress: false, rank: null, participants: 8,
+    partyRecorded: false, debugText: [] },
+  { mode: 'home-v4-recap-realm', label: 'home-v4-recap-realm', query: '?preview=home-v4-recap-realm',
+    root: '.visit-recap-screen', target: 'REALM VISIT', stress: false, rank: null, participants: 8,
+    partyRecorded: false, debugText: [] },
+];
 
 export const stressRail = {
   name: 'TestLongHeroXX',

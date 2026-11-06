@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 pub mod alerts;
+pub mod character;
 mod character_stats;
 pub mod chat;
 mod clock;
@@ -10,6 +11,7 @@ mod completion;
 mod enchants;
 mod encoding;
 mod math;
+pub mod names;
 mod reconstruction;
 pub use character_stats::{decode_completion_counts, CompletionCounts, CompletionError};
 pub use clock::{dps, idle_deadline, share};
@@ -24,9 +26,12 @@ mod engine;
 mod fights;
 mod identity;
 mod live;
+pub mod party;
+mod players;
 mod runs;
 mod world;
 pub use live::{compact_live_fight, LIVE_CHART_BUCKETS};
+pub use players::{RosterPresence, PROFILE_LIMIT};
 #[cfg(any(test, feature = "perf-live"))]
 pub mod perf;
 pub use characters::{personal_best_eligible, FLAWLESS_UNSUPPORTED};

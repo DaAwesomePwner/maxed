@@ -5,9 +5,37 @@ import type { RecordingStatus } from '../../src/lib/bindings/RecordingStatus';
 import { setupFixture } from '../setup/fixture';
 import { fakeHistory } from '../navigation/fake-history';
 import { advance, flush } from '../phase2/fixtures';
+import { createRecordingSession } from '../../src/lib/settings/recording';
+import { setNativePresentationVisible } from '../../src/lib/bridge/visibility';
 
 beforeEach(() => vi.useFakeTimers());
-afterEach(() => { cleanup(); vi.clearAllTimers(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); setNativePresentationVisible(true); vi.clearAllTimers(); vi.useRealTimers(); });
+
+it.each(['disabled', 'failed'] as const)('refreshes a skipped capture-state read on restore from %s', async initial => {
+  const f = setupFixture();
+  let status: RecordingStatus = { state: initial, failure: initial === 'failed' ? 'disk' : null,
+    retained_bytes: 0, limit_bytes: 1_000_000_000, dropped_frames: 0 };
+  const query = vi.spyOn(f.client, 'queryRecording').mockImplementation(async () => ({ ...status }));
+  const session = createRecordingSession(f.client);
+  const seen = vi.fn(), unsubscribe = session.subscribe(seen);
+  try {
+    await session.refresh();
+    expect(query).toHaveBeenCalledOnce();
+    setNativePresentationVisible(false);
+    status = { ...status, state: 'armed', failure: null };
+    await session.refresh(); await session.refresh();
+    await advance(60_000);
+    expect(query).toHaveBeenCalledOnce();
+    setNativePresentationVisible(true); await flush();
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(seen).toHaveBeenLastCalledWith(expect.objectContaining({ status: expect.objectContaining({ state: 'armed' }), busy: false }));
+    await advance(1000);
+    expect(query).toHaveBeenCalledTimes(3);
+    setNativePresentationVisible(false); await session.refresh();
+    session.dispose(); setNativePresentationVisible(true); await advance(1000);
+    expect(query).toHaveBeenCalledTimes(3);
+  } finally { unsubscribe(); session.dispose(); }
+});
 
 it('shares one recording poller across Settings navigation and shows failures in the shell', async () => {
   const f = setupFixture(); f.setSettings({ save_recordings: true });

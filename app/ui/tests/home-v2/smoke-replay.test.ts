@@ -22,11 +22,13 @@ it('smoke replay retains the same realm visit and kills while excluding Ocean Tr
   try {
     // Replay the committed pcap on every run; no copied/synthetic event log can
     // hide an engine/projection contract regression. Use the configured build target.
-    await promisify(execFile)('cargo', ['test', '--offline', '-p', 'maxed-cli', '--test', 'smoke_replay',
-      'realm_return_kills_end_at_removal_and_short_tower_has_no_dps', '--', '--exact'], {
+    const { stdout } = await promisify(execFile)('cargo', ['test', '--locked', '--offline', '-p', 'maxed-cli', '--test', 'integration',
+      'smoke_replay::realm_return_kills_end_at_removal_and_short_tower_has_no_dps', '--', '--exact'], {
       cwd: root, timeout: 600_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true,
       env: { ...process.env, CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR ?? resolve(root, 'target'), MAXED_SMOKE_PROJECTION_PATH: output },
     });
+    expect(stdout).toMatch(/^running 1 test\r?$/m);
+    expect(stdout).toContain('test smoke_replay::realm_return_kills_end_at_removal_and_short_tower_has_no_dps ... ok');
     const replay = JSON.parse(readFileSync(output, 'utf8')) as {
       events: EventEnvelope[]; presentation_events: EventEnvelope[];
       snapshot: LiveSnapshot; live_snapshot: LiveSnapshot;

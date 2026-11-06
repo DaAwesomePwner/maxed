@@ -3,6 +3,7 @@
   import { getContext, tick, untrack } from 'svelte';
   import type { Client } from '../bridge/client';
   import type { AppSettings } from '../bindings/AppSettings';
+  import type { DungeonLootStats } from '../bindings/DungeonLootStats';
   import type { ChaseItem } from '../bindings/ChaseItem';
   import type { StoreStatus } from '../bindings/StoreStatus';
   import { emptyListState, normalizeListState, type ListState } from '../navigation/state';
@@ -19,7 +20,7 @@
   import ItemSearch from './ItemSearch.svelte';
   import PinButton from './PinButton.svelte';
   import KpiStrip from '../home/v3/KpiStrip.svelte';
-  import { collectionKpis, chaseOrder, type CollectionSort } from './collection-screen';
+  import { collectionKpis, collectionDungeons, chaseOrder, type CollectionSort } from './collection-screen';
   import '../styles/controls.css';
   const historyCache = getContext<ShellConnection | undefined>(SHELL_CONNECTION)?.historyCache;
   let { client, streamId = null, scopeKey = '', required = null, store = null, savedState = emptyListState(), onStateChange,
@@ -30,6 +31,9 @@
   } = $props();
   const restored = untrack(() => normalizeListState(savedState));
   let dungeon = $state(restored.lootPosition?.collectionDungeon ?? null);
+  let visits = $state.raw<DungeonLootStats[]>([]), visitsReady = $state(false);
+  let visitsHistory = $state.raw<HistoryState>({ phase: 'loading', value: null, message: '', retryAvailable: false });
+  let visitsController = $state.raw<HistoryController>();
   let settings = $state.raw<AppSettings | null>(null);
   let saving = $state(false);
   let sort = $state<CollectionSort>(restored.lootPosition?.collectionSort ?? 'seen');
@@ -48,6 +52,7 @@
   let kpis = $derived(kpiModel.cells);
   let settingsError = $state(''), settingsRevision = $state(0);
   let dungeons = $state<string[]>([]), catalogError = $state(''), catalogReady = $state(false), catalogRevision = $state(0);
+  let choices = $derived(collectionDungeons(dungeons, visits, dungeon));
   let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading collection.', retryAvailable: false });
   let controller = $state.raw<HistoryController>();
   let visuals = $state.raw<HomeVisuals>(emptyHomeVisuals());
@@ -62,7 +67,7 @@
   $effect(() => {
     const position = normalizeListState(savedState).lootPosition;
     untrack(() => {
-      dungeon = position?.collectionDungeon ?? dungeons[0] ?? null;
+      dungeon = position?.collectionDungeon ?? dungeon;
       sort = position?.collectionSort ?? 'seen';
     });
   });
@@ -78,9 +83,30 @@
     return () => instance.dispose();
   });
   $effect(() => {
+    const owner = activeClient;
+    if (!owner) { visitsController = undefined; visitsReady = false; visits = []; return; }
+    const instance = createRunHistory(owner, next => {
+      visitsHistory = next;
+      if (next.phase === 'ready' && next.value?.kind === 'loot-stats') { visits = next.value.stats.dungeons; visitsReady = true; }
+      else if (next.value?.kind !== 'loot-stats') { visits = []; visitsReady = false; }
+    }, { cache: historyCache });
+    visitsController = instance;
+    return () => instance.dispose();
+  });
+  $effect(() => {
+    const instance = visitsController;
+    const input = { query: { kind: 'loot-stats' as const, filter: { range: null } }, scopeKey, streamId, required, store };
+    if (enabled) untrack(() => instance?.update(input));
+  });
+  $effect(() => {
+    if (visitsReady && catalogReady && dungeon === null && choices.visited.length) untrack(() => chooseDungeon(choices.visited[0]));
+  });
+  $effect(() => {
     const instance = controller, chase = settings?.loot.chase;
     const input = { query: { kind: 'collection' as const, request: { dungeon, chase: chase ?? [] } }, scopeKey, streamId, required, store };
-    if (enabled && chase && (catalogReady || catalogError)) untrack(() => instance?.update(input));
+    if (enabled && chase && (catalogReady || catalogError)
+      && (visitsReady || visitsHistory.phase === 'error' || (visitsHistory.phase === 'busy' && visitsHistory.retryAvailable))
+      && !(catalogReady && dungeon === null && choices.visited.length)) untrack(() => instance?.update(input));
   });
   $effect(() => {
     const owner = activeClient; settingsRevision;
@@ -97,7 +123,7 @@
     dungeons = []; catalogError = ''; catalogReady = false;
     if (!owner) return;
     let current = true;
-    void owner.listCatalogDungeons().then(value => { if (current) { dungeons = value; catalogReady = true; if (dungeon === null && value.length) chooseDungeon(value[0]); } }, () => {
+    void owner.listCatalogDungeons().then(value => { if (current) { dungeons = value; catalogReady = true; } }, () => {
       if (current) catalogError = 'Dungeon choices unavailable.';
     });
     return () => { current = false; };
@@ -184,7 +210,9 @@
     <section class="card" aria-label="Dungeon collection">
       {#if catalogError}<div class="error" role="alert">{catalogError}<button class="ctl" onclick={() => catalogRevision++}>Retry dungeon choices</button></div>
       {:else if !catalogReady}<p>Loading dungeon choices…</p>
-      {:else}<CollectionGrid {dungeon} {dungeons} cells={collection?.grid ?? []} {visuals} {portals} {sort} onSort={changeSort} chase={settings?.loot.chase ?? []} ready={readable && settings !== null && collection?.grid_dungeon === dungeon} onChange={chooseDungeon} />{/if}
+      {:else}
+        {#if !visitsReady}<p>{visitsHistory.phase === 'error' || (visitsHistory.phase === 'busy' && visitsHistory.retryAvailable) ? 'Visit history unavailable.' : 'Loading visit history…'}{#if visitsHistory.retryAvailable}<button class="ctl" onclick={() => visitsController?.retry()}>Retry visit history</button>{/if}</p>{/if}
+        <CollectionGrid {dungeon} {dungeons} visited={choices.visited} {visitsReady} cells={collection?.grid ?? []} {visuals} {portals} {sort} onSort={changeSort} chase={settings?.loot.chase ?? []} ready={readable && settings !== null && collection?.grid_dungeon === dungeon} onChange={chooseDungeon} />{/if}
     </section>
   {/if}
   <p class="footer">Observed bag contents, not pickups or possessions.</p>

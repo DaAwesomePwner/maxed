@@ -40,6 +40,40 @@ pub fn validate(settings: &AppSettings) -> Result<(), String> {
     {
         return Err(SETTINGS_ERROR.into());
     }
+    if settings.party.presets.len() > 32 {
+        return Err("At most 32 presets".into());
+    }
+    let mut preset_ids = BTreeSet::new();
+    let mut preset_names = BTreeSet::new();
+    let mut auto_apply_dungeons = BTreeSet::new();
+    for preset in &settings.party.presets {
+        if !(1..=40).contains(&preset.name.chars().count()) {
+            return Err("Preset names must be 1 to 40 characters".into());
+        }
+        if !preset_names.insert(preset.name.to_lowercase()) {
+            return Err("Preset names must be unique".into());
+        }
+        if !preset_ids.insert(preset.id.as_str()) {
+            return Err("Preset ids must be unique".into());
+        }
+        if preset.min_maxed.is_some_and(|value| value > 8) {
+            return Err("Maxed stats must be 0 to 8".into());
+        }
+        let preset_dungeons: BTreeSet<_> = preset.auto_apply.iter().collect();
+        for dungeon in preset_dungeons {
+            if !auto_apply_dungeons.insert(dungeon) {
+                return Err(format!("{dungeon} is set to auto-apply in two presets"));
+            }
+        }
+    }
+    if settings
+        .party
+        .default_preset_id
+        .as_deref()
+        .is_some_and(|id| !preset_ids.contains(id))
+    {
+        return Err("Default preset not found".into());
+    }
     Ok(())
 }
 
@@ -88,6 +122,7 @@ impl SettingsStore {
             next.alerts = current.alerts;
             next.loot = current.loot;
             next.chat = current.chat;
+            next.party = current.party;
             next
         })
     }
@@ -97,6 +132,12 @@ impl SettingsStore {
         }
         self.patch(|mut current| {
             current.chat = chat;
+            current
+        })
+    }
+    pub fn put_party(&self, party: maxed_types::PartySettings) -> Result<(), String> {
+        self.patch(|mut current| {
+            current.party = party;
             current
         })
     }
@@ -194,6 +235,200 @@ fn writer_lease(path: &Path) -> Result<File, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use maxed_types::{PartySettings, RequirementPreset, SlotTiers};
+
+    #[test]
+    fn recap_image_defaults_true_and_round_trips() {
+        let mut json = serde_json::to_value(AppSettings::default()).unwrap();
+        json.as_object_mut().unwrap().remove("recap_image");
+        let defaults: AppSettings = serde_json::from_value(json.clone()).unwrap();
+        assert!(defaults.recap_image.names);
+        assert!(defaults.recap_image.loot);
+        assert!(defaults.recap_image.fights);
+        json["recap_image"] = serde_json::json!({});
+        assert_eq!(
+            serde_json::from_value::<AppSettings>(json.clone()).unwrap(),
+            defaults
+        );
+        let root = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(root.path().into()).unwrap();
+        for names in [false, true] {
+            for loot in [false, true] {
+                for fights in [false, true] {
+                    let settings = AppSettings {
+                        recap_image: maxed_types::RecapImageSettings {
+                            names,
+                            loot,
+                            fights,
+                        },
+                        ..defaults.clone()
+                    };
+                    store.put(&settings).unwrap();
+                    assert_eq!(store.get().unwrap(), settings);
+                }
+            }
+        }
+        json["recap_image"] =
+            serde_json::json!({"names": true, "loot": true, "fights": true, "unknown": true});
+        assert!(serde_json::from_value::<AppSettings>(json.clone()).is_err());
+        json["recap_image"] = serde_json::json!({"names": "true"});
+        assert!(serde_json::from_value::<AppSettings>(json).is_err());
+    }
+
+    fn party_preset(id: &str) -> RequirementPreset {
+        RequirementPreset {
+            id: id.into(),
+            name: format!("Preset {id}"),
+            min_maxed: Some(6),
+            min_tier: SlotTiers {
+                weapon: Some(11),
+                ability: Some(5),
+                armor: Some(12),
+                ring: Some(4),
+            },
+            ut_st_meets: true,
+            auto_apply: vec![format!("Synthetic dungeon {id}")],
+        }
+    }
+
+    #[test]
+    fn party_presets_round_trip() {
+        let mut settings = AppSettings::default();
+        let mut second = party_preset("second");
+        second.min_maxed = Some(8);
+        second.ut_st_meets = false;
+        second.auto_apply.push("Synthetic extra dungeon".into());
+        settings.party = PartySettings {
+            presets: vec![party_preset("first"), second],
+            default_preset_id: Some("second".into()),
+        };
+        let json = serde_json::to_vec(&settings).unwrap();
+        let restored: AppSettings = serde_json::from_slice(&json).unwrap();
+        assert_eq!(restored, settings);
+        assert_eq!(validate(&restored), Ok(()));
+    }
+
+    #[test]
+    fn settings_without_party_load_with_no_presets() {
+        let mut json = serde_json::to_value(AppSettings::default()).unwrap();
+        json.as_object_mut().unwrap().remove("party");
+        let restored: AppSettings = serde_json::from_value(json).unwrap();
+        assert_eq!(restored.party, PartySettings::default());
+        assert_eq!(validate(&restored), Ok(()));
+    }
+
+    #[test]
+    fn settings_with_empty_party_load_with_no_presets() {
+        let mut json = serde_json::to_value(AppSettings::default()).unwrap();
+        json["party"] = serde_json::json!({});
+        let restored: AppSettings = serde_json::from_value(json).unwrap();
+        assert_eq!(restored.party, PartySettings::default());
+        validate(&restored).unwrap();
+    }
+
+    #[test]
+    fn party_preset_count_limit() {
+        let mut settings = AppSettings::default();
+        settings.party.presets = (0..32).map(|id| party_preset(&id.to_string())).collect();
+        assert_eq!(validate(&settings), Ok(()));
+        settings.party.presets.push(party_preset("extra"));
+        assert_eq!(validate(&settings).unwrap_err(), "At most 32 presets");
+    }
+
+    #[test]
+    fn party_preset_name_length_counts_characters_without_trimming() {
+        let mut settings = AppSettings::default();
+        settings.party.presets.push(party_preset("first"));
+        for name in [String::new(), "a".repeat(41), "é".repeat(41)] {
+            settings.party.presets[0].name = name;
+            assert_eq!(
+                validate(&settings).unwrap_err(),
+                "Preset names must be 1 to 40 characters"
+            );
+        }
+        for name in [" ".into(), "a".repeat(40), "é".repeat(40)] {
+            settings.party.presets[0].name = name;
+            assert_eq!(validate(&settings), Ok(()));
+        }
+    }
+
+    #[test]
+    fn party_preset_names_are_unique_ignoring_case() {
+        let mut settings = AppSettings::default();
+        settings.party.presets = vec![party_preset("first"), party_preset("second")];
+        for (first, second) in [("Raid", "Raid"), ("Raid", "rAID"), ("Élite", "élite")] {
+            settings.party.presets[0].name = first.into();
+            settings.party.presets[1].name = second.into();
+            assert_eq!(
+                validate(&settings).unwrap_err(),
+                "Preset names must be unique"
+            );
+        }
+        settings.party.presets[1].name = " Élite".into();
+        assert_eq!(validate(&settings), Ok(()));
+    }
+
+    #[test]
+    fn party_preset_dungeon_cannot_auto_apply_in_two_presets() {
+        let mut settings = AppSettings::default();
+        settings.party.presets = vec![party_preset("first"), party_preset("second")];
+        settings.party.presets[1]
+            .auto_apply
+            .push("Synthetic dungeon first".into());
+        assert_eq!(
+            validate(&settings).unwrap_err(),
+            "Synthetic dungeon first is set to auto-apply in two presets"
+        );
+    }
+
+    #[test]
+    fn party_preset_repeated_dungeon_in_one_preset_is_valid() {
+        let mut settings = AppSettings::default();
+        settings.party.presets.push(party_preset("first"));
+        settings.party.presets[0]
+            .auto_apply
+            .push("Synthetic dungeon first".into());
+        assert_eq!(validate(&settings), Ok(()));
+    }
+
+    #[test]
+    fn party_default_preset_must_exist() {
+        let mut settings = AppSettings::default();
+        settings.party.default_preset_id = Some("missing".into());
+        assert_eq!(validate(&settings).unwrap_err(), "Default preset not found");
+        settings.party.presets.push(party_preset("first"));
+        assert_eq!(validate(&settings).unwrap_err(), "Default preset not found");
+        settings.party.default_preset_id = Some("first".into());
+        assert_eq!(validate(&settings), Ok(()));
+    }
+
+    #[test]
+    fn party_preset_maxed_stats_range() {
+        let mut settings = AppSettings::default();
+        settings.party.presets.push(party_preset("first"));
+        for min_maxed in [Some(9), Some(u8::MAX)] {
+            settings.party.presets[0].min_maxed = min_maxed;
+            assert_eq!(
+                validate(&settings).unwrap_err(),
+                "Maxed stats must be 0 to 8"
+            );
+        }
+        for min_maxed in [None, Some(0), Some(8)] {
+            settings.party.presets[0].min_maxed = min_maxed;
+            assert_eq!(validate(&settings), Ok(()));
+        }
+    }
+
+    #[test]
+    fn party_preset_ids_must_be_unique() {
+        let mut settings = AppSettings::default();
+        settings.party.presets = vec![party_preset("first"), party_preset("second")];
+        settings.party.presets[1].id = "first".into();
+        assert_eq!(
+            validate(&settings).unwrap_err(),
+            "Preset ids must be unique"
+        );
+    }
 
     #[test]
     fn validate_rejects_invalid_chat_settings() {
@@ -226,6 +461,41 @@ mod tests {
                 })
                 .unwrap_err(),
             SETTINGS_INVALID
+        );
+        assert_eq!(fs::read(root.path().join("settings.json")).unwrap(), before);
+    }
+
+    #[test]
+    fn party_updates_preserve_other_settings_and_survive_stale_general_saves() {
+        let root = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(root.path().into()).unwrap();
+        let mut stale = store.get().unwrap();
+        stale.recording_limit_bytes = 4321;
+        store.put(&stale).unwrap();
+        let party = PartySettings {
+            presets: vec![party_preset("first")],
+            default_preset_id: Some("first".into()),
+        };
+        store.put_party(party.clone()).unwrap();
+        assert_eq!(
+            store.get().unwrap(),
+            AppSettings {
+                party: party.clone(),
+                ..stale.clone()
+            }
+        );
+        stale.recording_limit_bytes = 1234;
+        store.put(&stale).unwrap();
+        assert_eq!(store.get().unwrap(), AppSettings { party, ..stale });
+        let before = fs::read(root.path().join("settings.json")).unwrap();
+        assert_eq!(
+            store
+                .put_party(PartySettings {
+                    default_preset_id: Some("missing".into()),
+                    ..Default::default()
+                })
+                .unwrap_err(),
+            "Default preset not found"
         );
         assert_eq!(fs::read(root.path().join("settings.json")).unwrap(), before);
     }

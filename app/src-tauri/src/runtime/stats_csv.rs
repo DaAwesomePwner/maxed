@@ -129,6 +129,10 @@ where
             "Fame",
             "Fame baseline missing",
             "Fame per hour",
+            "Bags",
+            "Notable bags",
+            "Bags per hour",
+            "Notable bags per hour",
             "Runs",
             "Clears",
             "Deaths",
@@ -144,6 +148,10 @@ where
                     int(r.fame),
                     yes(r.missing_baseline),
                     decimal(r.fame_per_hour),
+                    int(r.bags),
+                    int(r.notable_bags),
+                    decimal(r.bags_per_hour),
+                    decimal(r.notable_bags_per_hour),
                     int(r.runs),
                     int(r.clears),
                     int(r.deaths),
@@ -363,23 +371,59 @@ mod tests {
     }
 
     #[test]
-    fn session_rows_mark_the_session_in_progress() {
+    fn session_rows_export_loot_rates_and_mark_the_session_in_progress() {
         let row = StatsSessionRow {
             id: "s1".into(),
             started: Timestamp(0),
             ended: None,
-            duration_micros: 3_600_000_000,
+            duration_micros: 10_800_000_000,
             fame: 120,
             missing_baseline: false,
-            fame_per_hour: Some(120.0),
+            fame_per_hour: Some(40.0),
+            bags: 37,
+            notable_bags: 1,
+            bags_per_hour: Some(37.0 / 3.0),
+            notable_bags_per_hour: Some(1.0 / 3.0),
             runs: 1,
             clears: 1,
             deaths: 0,
         };
-        let csv = text(&sessions(&zone(), &[row]));
-        assert!(csv.ends_with(
-            "\"1969-12-31T19:00:00-05:00\",\"\",\"3600\",\"120\",\"no\",\"120.0\",\"1\",\"1\",\"0\",\"yes\"\r\n"
-        ));
+        let short = StatsSessionRow {
+            id: "short".into(),
+            ended: Some(Timestamp(299_000_000)),
+            duration_micros: 299_000_000,
+            fame_per_hour: None,
+            bags: 1,
+            bags_per_hour: None,
+            notable_bags_per_hour: None,
+            ..row.clone()
+        };
+        let zero = StatsSessionRow {
+            id: "zero".into(),
+            bags: 0,
+            notable_bags: 0,
+            bags_per_hour: Some(0.0),
+            notable_bags_per_hour: Some(0.0),
+            ..row.clone()
+        };
+        let csv = text(&sessions(&zone(), &[row, short, zero]));
+        let lines: Vec<_> = csv.trim_start_matches('\u{feff}').split("\r\n").collect();
+        assert_eq!(
+            lines[0],
+            r#""Started","Ended","Duration (s)","Fame","Fame baseline missing","Fame per hour","Bags","Notable bags","Bags per hour","Notable bags per hour","Runs","Clears","Deaths","In progress""#
+        );
+        assert_eq!(
+            lines[1],
+            r#""1969-12-31T19:00:00-05:00","","10800","120","no","40.0","37","1","12.3","0.3","1","1","0","yes""#
+        );
+        assert_eq!(
+            lines[2],
+            r#""1969-12-31T19:00:00-05:00","1969-12-31T19:04:59-05:00","299","120","no","","1","1","","","1","1","0","no""#
+        );
+        assert_eq!(
+            lines[3],
+            r#""1969-12-31T19:00:00-05:00","","10800","120","no","40.0","0","0","0.0","0.0","1","1","0","yes""#
+        );
     }
 
     #[test]

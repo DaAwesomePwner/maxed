@@ -63,6 +63,7 @@ fn scope_and_large_decimal_timestamps_round_trip() {
     let value = serde_json::to_value(&summary).unwrap();
     for field in [
         "recent_details",
+        "fame_characters",
         "fame_missing_baselines",
         "fame_sampled",
         "unranked_drop_count",

@@ -1,3 +1,4 @@
+import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import Loot from '../../src/routes/Loot.svelte';
@@ -6,6 +7,7 @@ import { SHELL_CONNECTION } from '../../src/lib/shell/context';
 import type { EventEnvelope } from '../../src/lib/bindings/EventEnvelope';
 import type { EngineEvent } from '../../src/lib/bindings/EngineEvent';
 import { createClient } from '../../src/lib/bridge/client';
+import { setNativePresentationVisible } from '../../src/lib/bridge/visibility';
 import { createFixtureTransport, type LootFixtureQueries } from '../../src/lib/bridge/fixture';
 import type { LootDropRow } from '../../src/lib/bindings/LootDropRow';
 import type { DropFilter } from '../../src/lib/bindings/DropFilter';
@@ -69,7 +71,7 @@ function mount(options: { listDrops?: LootFixtureQueries['listDrops']; savedStat
   return { ...view, emitBatch: connection.emitBatch, client, listDrops, searchItems, onStateChange, onRowsReady };
 }
 beforeEach(() => { setDebugMode(false); vi.useFakeTimers(); });
-afterEach(() => { cleanup(); vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); setNativePresentationVisible(true); vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 it('renders the white bag and dungeon, and labels runless bags Outside a run', async () => {
   mount(); await flush();
@@ -358,8 +360,10 @@ it('selects rows by click and keyboard and shows every item in the panel', async
   const panel = within(screen.getByRole('complementary', { name: 'Selected bag' }));
   expect(panel.getAllByRole('link')).toHaveLength(8);
   expect(panel.getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(Array.from({ length: 8 }, (_, i) => `#/loot/item/${100 + i}`));
-  expect(panel.getAllByTitle('Removal observed; who took the item is unknown.')).toHaveLength(8);
-  expect(panel.getAllByTitle('Removal observed; who took the item is unknown.').every(item => item.classList.contains('taken'))).toBe(true);
+  const taken = panel.getAllByRole('listitem').filter(item => itemHoverParams(item)?.note === 'Removal observed');
+  expect(taken).toHaveLength(8);
+  expect(taken.every(item => item.classList.contains('taken'))).toBe(true);
+  expect(taken.every(item => item.hasAttribute('data-item-hover') && !item.hasAttribute('title'))).toBe(true);
   await fireEvent.keyDown(document.querySelector('[data-row-id="drop:unknown"]')!, { key: ' ' }); await flush();
   expect(document.querySelector('[data-row-id="drop:unknown"]')?.getAttribute('aria-current')).toBe('true');
 });
@@ -493,7 +497,7 @@ it('separates the local-day label and keeps the footer outside the table scrolle
   const pager = within(card as HTMLElement).getByRole('navigation', { name: 'Loot pages' });
   expect(pager.closest('footer')?.parentElement).toBe(card);
   expect(table.closest('.table-scroll')?.contains(pager)).toBe(false);
-  expect(within(card as HTMLElement).getByText('Bags Maxed saw drop. Not pickups.')).toBeTruthy();
+  expect(within(card as HTMLElement).getByText('Bags observed while capturing; pickups are not confirmed.')).toBeTruthy();
 });
 
 it('retains summary numbers through one auto-retried Busy followed by ready', async () => {
@@ -509,7 +513,7 @@ it('retains summary numbers through one auto-retried Busy followed by ready', as
   pending.resolve({ status: 'ready', value: { totals: reviewTotals, days: [reviewTotals] } }); await flush();
   expect([...document.querySelectorAll('[data-kpi] .value')].map(value => value.textContent)).toEqual(before);
 });
-it.each(['bag_dropped', 'drop_updated', 'run_ended', 'batched bag_dropped'] as const)('refreshes the selected run through RouteFrame for %s without remounting its card', async kind => {
+it.each(['bag_dropped', 'drop_updated', 'run_ended', 'batched bag_dropped', 'hidden bag_dropped'] as const)('refreshes the selected run through RouteFrame for %s without remounting its card', async kind => {
   const fixture = mount(); fixture.unmount();
   const client = fixture.client, snapshot = homeSnapshot(), streamId = snapshot.stream_id;
   const store = { state: 'ready' as const, queued: 0, durable: '2', stream_id: streamId, message: '' };
@@ -527,9 +531,15 @@ it.each(['bag_dropped', 'drop_updated', 'run_ended', 'batched bag_dropped'] as c
   const batch: EventEnvelope[] = [{ stream_id: streamId, sequence: '2', at: newBag.at, event }];
   if (kind === 'batched bag_dropped') batch.push({ stream_id: streamId, sequence: '3', at: newBag.at,
     event: { bag_dropped: { ...newBag, id: 'unrelated-bag', run_id: 'another-run' } } });
+  if (kind === 'hidden bag_dropped') setNativePresentationVisible(false);
   connection.emitBatch(batch);
   const required = batch.at(-1)!.sequence;
   await page.rerender({ required, store: { ...store, durable: required } });
+  if (kind === 'hidden bag_dropped') {
+    await flush(); await vi.advanceTimersByTimeAsync(60_000); await flush();
+    expect(getRun).toHaveBeenCalledTimes(1);
+    setNativePresentationVisible(true);
+  }
   await flush(); await vi.advanceTimersByTimeAsync(1000); await flush();
   expect(getRun).toHaveBeenCalledTimes(2);
   expect(screen.getByRole('heading', { name: 'Other bags this run' })).toBe(card);

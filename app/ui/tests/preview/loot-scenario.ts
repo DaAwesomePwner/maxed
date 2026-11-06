@@ -98,7 +98,10 @@ export function createLootPreview(variant: 'default' | 'stress'): { client: Clie
     }
     return ready({ dungeons: dungeons.map(dungeon => {
       const bags = matching.filter(row => row.dungeon === dungeon);
+      const whiteRuns = new Set(rows.filter(row => row.dungeon === dungeon && row.drop.bag_rank === 255).map(row => row.drop.run_id)).size;
       return { dungeon, runs_ended: 41, clears: 35, bags: tiers(bags), whites: bags.filter(row => row.drop.bag_rank === 255).length, runs_since_last_white: rows.some(row => row.dungeon === dungeon && row.drop.bag_rank === 255) ? 7 : null,
+        // Synthetic 41-run history: a leading gap, consecutive white runs, then seven dry runs.
+        white_runs: whiteRuns, avg_runs_per_white: whiteRuns ? 41 / whiteRuns : null, longest_dry: whiteRuns ? Math.max(7, 41 - whiteRuns - 7) : null,
         best: bags.length ? (() => {
           const best = [...bags].sort((a, b) => (b.drop.bag_rank ?? -1) - (a.drop.bag_rank ?? -1))[0].drop;
           if (best.bag_rank === null) return null;

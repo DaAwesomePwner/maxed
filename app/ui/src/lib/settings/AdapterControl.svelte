@@ -10,7 +10,7 @@
   {#if value && !adapters?.some((adapter) => adapter.id === value)}<option {value}>Saved Adapter</option>{/if}
   {#each adapters ?? [] as adapter (adapter.id)}<option value={adapter.id}>{adapter.description || 'Unnamed Adapter'}</option>{/each}
 </select>
-{#if preview}<p>Preview</p>{/if}
+{#if preview}<p>Capture adapters are unavailable in preview.</p>{/if}
 {#if !preview && adapters?.length === 0}<p>No Adapters</p><DebugNote text="Auto has not verified capture access." />{/if}
 <style>
   label { display: block; font-weight: var(--weight-semibold); margin-bottom: var(--space-2); }

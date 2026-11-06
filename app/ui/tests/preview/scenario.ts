@@ -3,12 +3,19 @@ import type { ScopeLootPage } from '../../src/lib/bindings/ScopeLootPage';
 import type { EngineEvent } from '../../src/lib/bindings/EngineEvent';
 import type { FightView } from '../../src/lib/bindings/FightView';
 import type { ObjectVisual } from '../../src/lib/bindings/ObjectVisual';
+import type { RunFightSummary } from '../../src/lib/bindings/RunFightSummary';
+import type { RunStory } from '../../src/lib/bindings/RunStory';
+import type { VisitRecap } from '../../src/lib/bindings/VisitRecap';
 import { createClient, type Transport } from '../../src/lib/bridge/client';
 import { createFixtureTransport } from '../../src/lib/bridge/fixture';
 import { homeSnapshot, homeSummary } from '../home/fixtures';
 
-export type PreviewMode = 'dungeon' | 'realm' | 'nexus';
+export type LegacyPreviewMode = 'dungeon' | 'realm' | 'nexus';
+export type PreviewMode = LegacyPreviewMode | 'home-v4-dungeon' | 'home-v4-realm' | 'home-v4-nexus'
+  | 'home-v4-recap' | 'home-v4-recap-died' | 'home-v4-recap-realm';
 export function previewMode(value: string | null): PreviewMode {
+  if (value === 'home-v4-dungeon' || value === 'home-v4-realm' || value === 'home-v4-nexus' || value === 'home-v4-recap') return value;
+  if (value === 'home-v4-recap-died' || value === 'home-v4-recap-realm') return value;
   return value === 'realm' || value === 'nexus' ? value : 'dungeon';
 }
 
@@ -20,11 +27,17 @@ const at = (seconds: number) => String(evening + BigInt(Math.round(seconds * 1_0
 const names = ['TestMage', 'TestKnight', 'TestArcher', 'DemoHero', 'DemoAlly', 'TestPriest', 'TestRogue'];
 
 /** Invented DTOs only; no recording, native bridge, network or persistence. */
-export function createHomePreview(mode: PreviewMode) {
+export function createHomePreview(scene: PreviewMode) {
+  const redesign = scene.startsWith('home-v4-');
+  const recapScene = scene.startsWith('home-v4-recap');
+  const died = scene === 'home-v4-recap-died';
+  const mode: LegacyPreviewMode = scene === 'home-v4-realm' || scene === 'home-v4-recap-realm' ? 'realm' : scene === 'home-v4-nexus' ? 'nexus'
+    : redesign ? 'dungeon' : scene as LegacyPreviewMode;
   const parameters = new URLSearchParams(globalThis.location?.search ?? '');
   const variant = parameters.get('variant');
-  const stressVariant = variant === 'stress';
-  const acceptanceVariant = stressVariant || variant === 'busy';
+  const stressVariant = !redesign && variant === 'stress';
+  const acceptanceVariant = !redesign && (stressVariant || variant === 'busy');
+  const legacyFight = redesign && mode === 'realm' && variant === 'legacy';
   const busy = mode !== 'nexus' && acceptanceVariant;
   const churn = parameters.get('churn') === '1';
 
@@ -63,15 +76,23 @@ export function createHomePreview(mode: PreviewMode) {
       conditions: [],
       lines: [
         { stat_id: 0, current: 1250, total: 1385, base: 1075, cap: 1210,
-          boost: 310, at_cap: false },
+          boost: 310, at_cap: false, exalt: 0,
+          split_evidence: { placement: 'provisional_inside_boost', cap_eligible: true, reasons: [] } },
         { stat_id: 3, current: 52, total: 1105, base: 1105, cap: 1120,
-          boost: 0, at_cap: false },
-        { stat_id: 20, total: 150, base: 45, cap: 70, boost: 105, at_cap: false },
-        { stat_id: 21, total: 125, base: 25, cap: 25, boost: 100, at_cap: true },
-        { stat_id: 22, total: 99, base: 123, cap: 123, boost: -24, at_cap: true },
-        { stat_id: 28, total: 110, base: 75, cap: 75, boost: 35, at_cap: true },
-        { stat_id: 26, total: 140, base: 40, cap: 80, boost: 100, at_cap: false },
-        { stat_id: 27, total: 135, base: 60, cap: 60, boost: 75, at_cap: true },
+          boost: 0, at_cap: false, exalt: 0,
+          split_evidence: { placement: 'provisional_inside_boost', cap_eligible: true, reasons: [] } },
+        { stat_id: 20, total: 150, base: 45, cap: 70, boost: 105, at_cap: false, exalt: 0,
+          split_evidence: { placement: 'provisional_inside_boost', cap_eligible: true, reasons: [] } },
+        { stat_id: 21, total: 125, base: 25, cap: 25, boost: 100, at_cap: true, exalt: 0,
+          split_evidence: { placement: 'provisional_inside_boost', cap_eligible: true, reasons: [] } },
+        { stat_id: 22, total: 99, base: 123, cap: 123, boost: -24, at_cap: true, exalt: 0,
+          split_evidence: { placement: 'provisional_inside_boost', cap_eligible: true, reasons: [] } },
+        { stat_id: 28, total: 110, base: 75, cap: 75, boost: 35, at_cap: true, exalt: 0,
+          split_evidence: { placement: 'provisional_inside_boost', cap_eligible: true, reasons: [] } },
+        { stat_id: 26, total: 140, base: 40, cap: 80, boost: 100, at_cap: false, exalt: 0,
+          split_evidence: { placement: 'provisional_inside_boost', cap_eligible: true, reasons: [] } },
+        { stat_id: 27, total: 135, base: 60, cap: 60, boost: 75, at_cap: true, exalt: 0,
+          split_evidence: { placement: 'provisional_inside_boost', cap_eligible: true, reasons: [] } },
       ],
     };
   }
@@ -91,6 +112,7 @@ export function createHomePreview(mode: PreviewMode) {
   };
 
   function fight(index: number, start: number, end: number | null, realm = false): FightView {
+    if (legacyFight && end === null) end = 1390;
     const finish = end ?? (mode === 'realm' ? (busy ? 4660 : 1400) : 540);
     const players = names.map((name, i) => ({
       ...seedFight.players[0], object_id: i + 1,
@@ -101,10 +123,32 @@ export function createHomePreview(mode: PreviewMode) {
       sources: [{ ...seedFight.players[0].sources[0], damage: (7 - i) * 12_000,
         hits: (7 - i) * 24, biggest_hit: 780 }],
     }));
+    if (redesign) {
+      const count = recapScene ? 8 : realm ? 37 : 9, selfIndex = recapScene ? 1 : realm ? 8 : 1;
+      const seed = players[0];
+      players.splice(0, players.length, ...Array.from({ length: count }, (_, i) => {
+        const damage = (count - i) * 12_000;
+        return { ...seed, object_id: i + 1, player_id: i === selfIndex ? character.id : `synthetic-v4-player-${i}`,
+          name: i === selfIndex ? names[0] : `TestPlayer${String(i + 1).padStart(2, '0')}`,
+          is_local: i === selfIndex, rank: i + 1, damage, dps: damage / (finish - start),
+          share: damage / (count * (count + 1) / 2 * 12_000 + 24_000), deaths: 0,
+          sources: seed.sources.map(source => ({ ...source, damage })) };
+      }));
+    }
     const weights = [1, 2, 3, 2, 4, 5, 3, 4, 2, 2];
     const buckets = weights.map((weight, i) => ({
       from: at(start + (finish - start) * i / 10), until: at(start + (finish - start) * (i + 1) / 10),
       total: 12_000 * weight, local: 3_000 * weight,
+    }));
+    const total = players.reduce((sum, player) => sum + player.damage, 24_000);
+    const local = players.find(player => player.is_local)!;
+    const v4Buckets = buckets.map((bucket, i) => ({ ...bucket, total: total * weights[i] / 28,
+      local: local.damage * weights[i] / 28,
+      // Older saved fights deliberately omit both fields; every live bucket has them.
+      ...(index === 0 || legacyFight ? {} : {
+        others_damage: (total - 24_000 - local.damage) * weights[i] / 28,
+        others_presence: (players.length - 1) * (finish - start) / 10,
+      }),
     }));
     return { ...seedFight, id: `synthetic-fight-${realm ? 'realm-' : ''}${index}`,
       run_id: realm ? null : run.id, target_id: 30 + index, target_type: 300 + index, boss_type: 300 + index,
@@ -113,6 +157,8 @@ export function createHomePreview(mode: PreviewMode) {
       max_hp: end === null ? 500_000 : 336_000, target_hp: end === null ? 164_000 : 0,
       target_kind: realm ? 'event_boss' : 'boss', complete_capture: true, issues: [], buckets,
       kill: end === null ? null : { at: at(end), evidence: 'hp_zero_removed', provisional: false },
+      ...(redesign ? { total_damage: total, unattributed_damage: 24_000, buckets: v4Buckets,
+        local_last_hit: at(finish) } : {}),
       player_series: players.map(player => ({ player_id: player.player_id, object_id: player.object_id,
         is_local: player.is_local, points: weights.map(weight => player.damage * weight / 28) })),
     };
@@ -159,7 +205,7 @@ export function createHomePreview(mode: PreviewMode) {
   if (mode !== 'nexus') drops.forEach((drop, i) => drop.contents.forEach((item, slot) => {
     const count = (i + slot) % 5;
     item.enchant = i === 2 ? { state: 'missing', slots: null, applied: null, ids: [] }
-      : { state: count === 0 ? 'recorded_empty' : 'recorded', slots: count, applied: count, ids: [] };
+      : { state: count === 0 ? 'recorded_empty' : 'recorded', slots: count, applied: count, ids: Array.from({ length: count }, (_, index) => index + 1) };
   }));
   if (mode === 'dungeon' && busy) {
     fights.forEach(row => { row.total_damage = row.players.reduce((sum, player) => sum + player.damage, row.unattributed_damage); });
@@ -199,7 +245,7 @@ export function createHomePreview(mode: PreviewMode) {
       const live = fight(4, busy ? 4218 : 1346, busy ? 4460 : null, true);
       live.target_hp = busy ? 0 : 2880000;
       live.max_hp = 6000000;
-      live.total_damage = busy ? 32400000 : 3120000;
+      if (!redesign) live.total_damage = busy ? 32400000 : 3120000;
       if (busy) {
         const seed = live.players[0];
         live.players = Array.from({ length: 85 }, (_, i) => ({ ...seed, object_id: 100 + i,
@@ -232,6 +278,16 @@ export function createHomePreview(mode: PreviewMode) {
       snapshot.fights = visitFights;
       snapshot.drops = visitLoot;
     } else snapshot.instance = null;
+  }
+  if (redesign && snapshot.instance) {
+    const count = recapScene ? 8 : mode === 'realm' ? 37 : 9;
+    snapshot.instance.population = count; snapshot.instance.population_peak = count;
+    run.party_size = count;
+    if (snapshot.run_totals) {
+      snapshot.run_totals.local = snapshot.run_totals.players.find(player => player.is_local)!;
+      snapshot.run_totals.unattributed_damage = 72_000;
+      snapshot.run_totals.total_damage = snapshot.run_totals.players.reduce((sum, player) => sum + player.damage, 72_000);
+    }
   }
   // Normalize stress only; reviewed busy fixtures keep their existing counts.
   if (stressVariant && mode !== 'nexus') {
@@ -342,6 +398,7 @@ export function createHomePreview(mode: PreviewMode) {
   const summary = homeSummary({
     runs: 4, clears: 4, deaths: 0, fame_delta: 430, fame_missing_baselines: 0, fame_sampled: true,
     fame: [1250, 1320, 1475, 1520, 1680].map((fame, i) => ({ at: at(1 + i * 130), character_id: character.id, fame })),
+    fame_characters: [{ character_id: character.id, first_fame: 1250, last_fame: 1680, last_at: at(521) }],
     best_drop: recentDetails[0].loot[0], top_fight: { ...fight(0, 240, 280), run_id: recentRuns[0].id },
     recent_runs: recentRuns, recent_details: recentDetails, unranked_drop_count: 0,
     dungeon_stats: ['Moonlit Sanctum', 'Crystal Orchard', 'Velvet Citadel'].map((name, i) => ({
@@ -377,7 +434,9 @@ export function createHomePreview(mode: PreviewMode) {
     summary.top_fight!.target_type = 302;
     const target = objects.find(object => object.object_type === 302)!;
     target.name = 'Forgotten King';
-    const names = ['The Shatters', 'Lost Halls', 'The Shatters', 'Sprite World', 'Abyss of Demons', 'Snake Pit'];
+    const names = redesign ? ['Synthetic Moonlit Sanctum', 'Synthetic Crystal Orchard', 'Synthetic Moonlit Sanctum',
+      'Synthetic Petal Grove', 'Synthetic Velvet Citadel', 'Synthetic Willow Den']
+      : ['The Shatters', 'Lost Halls', 'The Shatters', 'Sprite World', 'Abyss of Demons', 'Snake Pit'];
     summary.recent_runs = names.map((dungeon, i) => ({ ...recentRuns[0], id: `nexus-run-${i}`, dungeon,
       started: at(60 + i * 90), ended: at(140 + i * 90), completed_at: i === 2 || i === 3 ? null : at(130 + i * 90),
       outcome: i === 2 ? 'died' : i === 3 ? 'left' : 'cleared', died_at: i === 2 ? at(140 + i * 90) : null,
@@ -398,6 +457,10 @@ export function createHomePreview(mode: PreviewMode) {
     const featured = objects.find(object => object.object_type === summary.best_drop!.contents[0].item_type)!;
     featured.name = stress ? 'A remarkably long name for the featured untiered crown' : 'The Forgotten Crown';
     featured.item_tier = 'UT';
+    if (redesign) {
+      target.name = 'Moonlit Warden'; featured.name = 'Synthetic Moonbeam Crown';
+      summary.dungeon_stats.forEach((row, i) => { row.dungeon = names[i]; });
+    }
   }
   const previewLoot: ScopeLootItem[] = [
     ...[200, 201, 202, 203].map((item_type, i) => ({ item_type, tier: i === 3 ? 'ST' : 'UT', count: 1,
@@ -442,18 +505,105 @@ export function createHomePreview(mode: PreviewMode) {
     }
   }
 
+  // Saved replies use the same invented fights, identities and clock as the live scene.
+  const savedFights = [fight(0, 310, 355), fight(1, 375, 430), fight(2, 455, 549)];
+  const summarize = (row: FightView, ordinal: number): RunFightSummary => {
+    const local = row.players.find(player => player.is_local)!;
+    const others = row.players.filter(player => !player.is_local && player.dps !== null);
+    return { id: row.id, target_kind: row.target_kind, target_type: row.target_type,
+      target_name: objects.find(object => object.object_type === row.target_type)?.name ?? null,
+      boss_type: row.boss_type, ordinal, started: row.started, ended: row.ended,
+      first_hit: row.first_hit, last_hit: row.last_hit, total_damage: row.total_damage,
+      local_damage: local.damage, local_dps: local.dps, local_rank: local.rank,
+      party: { avg_dps: others.reduce((sum, player) => sum + player.dps!, 0) / others.length, players: others.length },
+      player_count: row.players.length, partial: false, estimated: false };
+  };
+  const endedRun = { ...run, ended: at(550), completed_at: died ? null : at(549),
+    died_at: died ? at(550) : null, outcome: died ? 'died' as const : 'cleared' as const,
+    death: died ? { killed_by: 'synthetic-warden', killed_by_type: 302, fame: 1680,
+      hp_trace: [545, 545.25, 545.5, 545.75, 546, 546.25, 548, 548.25, 548.5, 548.75, 549, 549.25]
+        .map((seconds, i) => ({ at: at(seconds), hp: 725 - i * 60, max_hp: 800 })) } : null };
+  const savedDrops = drops.map((drop, i) => ({ ...drop, bag_rank: i === 0 ? 255 : drop.bag_rank }));
+  const story: RunStory = { run: endedRun, character, fights: savedFights.map(summarize),
+    boss_fights: savedFights, boss_fights_limited: false, drops: savedDrops, timeline: [], comparison: null,
+    totals: snapshot.run_totals ? { ...snapshot.run_totals, kills: 3 } : null, events: [], events_limited: false };
+  const realmFights = Array.from({ length: 5 }, (_, i) => fight(i, 400 + i * 170, 460 + i * 170, true));
+  const visit: VisitRecap = { visit_id: 'synthetic-visit', session_id: run.session_id, character_id: character.id,
+    title: 'Synthetic Willow Realm', periods: [{ visit_id: 'synthetic-visit', started: at(300), ended: at(1401) }],
+    fights: realmFights.map(summarize), boss_fights: realmFights, boss_fights_limited: false,
+    announcements: [305, 306].map((object_type, i) => ({ id: `synthetic-announced-${i}`, session_id: run.session_id,
+      run_id: null, at: at(1300 + i * 30), provisional: true,
+      kind: { type: 'realm_event_killed', object_type, boss_key: `Synthetic event ${i + 1}`, killer: 'Synthetic Ally' } })),
+    announcements_limited: false, drops: savedDrops.map(drop => ({ ...drop, run_id: null })), drops_limited: false,
+    fame_delta: 412, best_dps: [], chain: { steps: [
+      { visit_id: 'synthetic-visit', kind: 'realm', name: 'Synthetic Willow Realm', run_id: null,
+        started: at(300), ended: at(1401), local_dps: 1400, party_dps: 1000, bags: 5, whites: 1, item_types: [200] },
+      { visit_id: 'synthetic-castle-visit', kind: 'castle', name: 'Synthetic Castle', run_id: 'synthetic-castle-run',
+        started: at(1401), ended: at(1500), local_dps: 1600, party_dps: 1100, bags: 0, whites: 0, item_types: [] },
+    ] } };
   // The initial query establishes the sequence baseline before any event is sent.
   const baseline = { ...snapshot, at: at(299), fights: [], drops: [], run: null, run_totals: null };
   const fixture = createFixtureTransport(baseline, { client_fingerprint: 'a'.repeat(64), objects }, summary,
-    undefined, undefined, queryLoot,
+    recapScene ? {
+      getRun: async id => ({ status: 'ready', value: id === run.id ? story : null }),
+      listRuns: async () => ({ status: 'ready', value: { rows: [endedRun], next: null } }),
+      getFight: async id => ({ status: 'ready', value: savedFights.find(row => row.id === id) ?? null }),
+      getPlayerBreakdown: async (id, objectId) => ({ status: 'ready',
+        value: savedFights.find(row => row.id === id)?.players.find(player => player.object_id === objectId) ?? null }),
+    } : undefined, undefined, queryLoot,
     async () => ({ status: 'ready', value: (summary.dungeon_stats ?? []).flatMap(row =>
       row.all_time_best_clear_micros == null ? [] : [{ dungeon: row.dungeon, best_clear_micros: row.all_time_best_clear_micros }]) }),
-    { requireHistoryFixtures: true }
+    { requireHistoryFixtures: true, enchants: [
+      { id: 1, name: 'Synthetic Edge I', description: 'Synthetic preview effect: adds imaginary damage to an invented target. This deliberately long description exercises wrapping and placement near window edges, in narrow rails, and over scrolling lists without describing any real game mechanic.' },
+      { id: 2, name: 'Synthetic Guard II', description: 'Synthetic preview effect: grants imaginary protection.' },
+      { id: 3, name: 'Synthetic Spark III', description: 'Synthetic preview effect: creates an invented spark.' },
+      { id: 4, name: 'Synthetic Echo IV', description: 'Synthetic preview effect: repeats an imaginary pulse.' },
+    ] },
+    // The preview's Loot → Stats tab uses this; Home v4 reads homeDungeonStreak below.
+    redesign ? { lootStats: () => ({ dungeons: [{ dungeon: run.dungeon, runs_ended: 46, clears: 40,
+      bags: [], whites: 2, runs_since_last_white: 23, white_runs: 2, avg_runs_per_white: 23,
+      longest_dry: 25, best: null }], sources: [], totals: [], whites: 2 }) } : undefined,
+    undefined,
+    redesign ? {
+      runRecap: request => ({ run_id: request.run_id, clear_number: died ? null : 38, in_a_row: 3,
+        chain: scene === 'home-v4-recap' ? { steps: [
+          { visit_id: 'synthetic-realm-step', kind: 'realm', name: 'Synthetic Willow Realm', run_id: null,
+            started: at(0), ended: at(150), local_dps: 1400, party_dps: 1000, bags: 2, whites: 0, item_types: [] },
+          { visit_id: 'synthetic-castle-step', kind: 'castle', name: 'Synthetic Castle', run_id: 'synthetic-castle-run',
+            started: at(150), ended: run.started, local_dps: 1600, party_dps: 1100, bags: 0, whites: 0, item_types: [] },
+          { visit_id: 'synthetic-run-step', kind: 'sanctuary', name: run.dungeon, run_id: run.id,
+            started: run.started, ended: endedRun.ended, local_dps: 1800, party_dps: 1200,
+            bags: savedDrops.length, whites: 1, item_types: [200, 201, 202, 203] },
+        ] } : null, pb_clear: died ? null : { clear_micros: 249_000_000, previous_best_micros: 260_000_000 },
+        dry_streak_end: { runs: 23, had_previous_white: true },
+        best_dps: [{ fight_id: savedFights[0].id, boss_type: 300,
+          dps: savedFights[0].players.find(player => player.is_local)!.dps!, previous_best_dps: 1500 }], milestones: [] }),
+      visitRecap: request => ({ ...visit, visit_id: request.visit_id,
+        periods: [{ ...visit.periods[0], visit_id: request.visit_id }] }),
+      homeDungeonStreak: request => ({ dungeon: request.dungeon, runs_ended: 46,
+        runs_since_last_white: 23, avg_runs_per_white: 23, last_white_at: at(0) }),
+      homeHud: () => ({ fame_per_hour: 1234, combat: { fights: 5, weighted_dps: 1380,
+        weighted_party_dps: 1000, vs_party: 0.38, avg_rank: 2.6 }, whites: 2,
+        ut_st: [200, 201, 202, 203], ut_st_count: 4,
+        potions: [{ stat: 'life', count: 7 }, { stat: 'mana', count: 5 }, { stat: 'attack', count: 3 },
+          { stat: 'speed', count: 2 }, { stat: 'wisdom', count: 1 }] }),
+      dungeonProfile: request => ({ dungeon: request.dungeon, clears: 10, usual_run_dps: 1000,
+        run_dps_samples: 5, usual_clear_micros: 260_000_000, clear_samples: 5,
+        bosses: [300, 301, 302].map((target_type, i) => ({ target_type, target_name: null, seen_in: 8,
+          median_offset_micros: (50 + i * 70) * 1_000_000, median_kill_micros: 60_000_000,
+          kill_samples: 5, best_dps: 2400 })) }),
+      homeBossBaselines: request => ({ rows: (request.target_types ?? [300, 301, 302, 303, 304]).map(target_type => ({
+        target_type, fights: 5, avg_dps: 1000, best_dps: 2400,
+        kill_samples: 5, median_kill_micros: 60_000_000 })), truncated: false }),
+    } : undefined
   );
   let timer: ReturnType<typeof setTimeout> | undefined;
   let churnTimer: ReturnType<typeof setInterval> | undefined;
+  let recapTimer: ReturnType<typeof setTimeout> | undefined;
 
   let started = false, disposed = false, sequence = 0;
+  // Recap scenes publish one final run-ended or realm-exit event after the live batch.
+  const finalSequence = events.length + 1;
   const transport: Transport = {
     ...fixture,
     async invoke(command, args) {
@@ -462,7 +612,7 @@ export function createHomePreview(mode: PreviewMode) {
       ] };
 
       if (command === 'get_store_status') return {
-        state: 'ready', queued: 0, durable: String(sequence), stream_id: stream,
+        state: 'ready', queued: 0, durable: String(recapScene ? finalSequence : sequence), stream_id: stream,
         message: 'Synthetic in-memory preview history',
       };
       const result = await fixture.invoke(command, args);
@@ -476,6 +626,22 @@ export function createHomePreview(mode: PreviewMode) {
           if (events.length === 0) fixture.publishEngineEvent({ stream_id: stream, sequence: String(++sequence), at: snapshot.at,
             event: { character_updated: character } });
           fixture.publishSnapshot({ ...snapshot, sequence: String(sequence) });
+          if (recapScene) {
+            // Let Shell observe the live run before ending it; no injected recap state.
+            recapTimer = setTimeout(() => {
+              if (disposed) return;
+              if (mode === 'realm') {
+                fixture.publishEngineEvent({ stream_id: stream, sequence: String(++sequence), at: at(1401),
+                  event: { map_entered: { at: at(1401), name: 'Nexus', kind: 'nexus' } } });
+                fixture.publishSnapshot({ ...snapshot, sequence: String(sequence), at: at(1401),
+                  area_kind: 'nexus', map: 'Nexus', run: null, fights: [], drops: [], instance: null });
+              } else {
+                fixture.publishEngineEvent({ stream_id: stream, sequence: String(++sequence), at: endedRun.ended,
+                  event: { run_ended: endedRun } });
+                fixture.publishSnapshot({ ...snapshot, sequence: String(sequence), at: endedRun.ended, run: endedRun });
+              }
+            }, 50);
+          }
           if (churn && mode !== 'nexus') {
             let high = false, seconds = mode === 'realm' ? 10000 : 540;
             churnTimer = setInterval(() => {
@@ -502,6 +668,6 @@ export function createHomePreview(mode: PreviewMode) {
     },
   };
   return { client: createClient(transport), dispose() {
-    disposed = true; clearTimeout(timer); clearInterval(churnTimer);
+    disposed = true; clearTimeout(timer); clearInterval(churnTimer); clearTimeout(recapTimer);
   } };
 }

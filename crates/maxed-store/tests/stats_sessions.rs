@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::stats::*;
 use maxed_types::*;
 
@@ -96,6 +96,7 @@ fn last_visit_includes_sample_at_session_end() {
         vec![
             session("s1", 0, 0, None),
             map("Realm of the Mad God", AreaKind::Realm, MIN),
+            fame(C, 500, 2 * MIN),
             fame(C, 560, 10 * MIN),
             session("s1", 0, 10 * MIN, Some(10 * MIN)),
         ],
@@ -115,20 +116,22 @@ fn fame_before_the_first_visit_is_unrecorded() {
         &mut db,
         vec![
             session("s1", 0, 0, None),
-            fame(C, 550, MIN),
+            fame(C, 520, MIN),
+            fame(C, 550, 3 * MIN / 2),
             map("Realm of the Mad God", AreaKind::Realm, 2 * MIN),
             fame(C, 600, 5 * MIN),
             session("s1", 0, 6 * MIN, Some(6 * MIN)),
         ],
     );
+    // The earlier session's 500 is not a baseline: fame between sessions is not credited.
     let d = detail(&path, "s1", None);
-    assert_eq!(d.session.fame, 100);
+    assert_eq!(d.session.fame, 80);
     assert_eq!(d.maps[0].fame, 50);
-    assert_eq!(d.unrecorded_fame, Some(50));
+    assert_eq!(d.unrecorded_fame, Some(30));
 }
 
 #[test]
-fn missing_baseline_uses_the_first_sample_and_is_flagged() {
+fn session_fame_counts_from_the_first_sample() {
     let (_dir, path, mut db) = database();
     let mut s = Stream::new("live");
     s.apply(
@@ -146,9 +149,12 @@ fn missing_baseline_uses_the_first_sample_and_is_flagged() {
     let home = reader
         .home_summary(HomeScope::Session { id: "s1".into() })
         .unwrap();
-    assert_eq!((home.fame_delta, home.fame_missing_baselines), (None, 1));
+    assert_eq!(
+        (home.fame_delta, home.fame_missing_baselines),
+        (Some(60), 0)
+    );
     let row = &reader.stats_sessions(page(10)).unwrap().rows[0];
-    assert_eq!((row.fame, row.missing_baseline), (60, true));
+    assert_eq!((row.fame, row.missing_baseline), (60, false));
 }
 
 #[test]
@@ -344,4 +350,169 @@ fn sessions_export_stops_at_ten_thousand() {
         .unwrap();
     assert_eq!((rows.len(), truncated), (MAX_STATS_EXPORT_SESSIONS, true));
     assert_eq!(rows[0].id, "s10001");
+}
+
+fn observed_bag(id: &str, session: &str, at: u64, rank: Option<u8>) -> DropView {
+    let mut bag = demo::demo_snapshot().drops.remove(0);
+    bag.id = id.into();
+    bag.session_id = session.into();
+    bag.run_id = None;
+    bag.at = Timestamp(at);
+    bag.bag_rank = rank;
+    bag.bag_type = match rank {
+        Some(255) => 1292,
+        Some(90) => 1708,
+        Some(80) => 1295,
+        Some(70) => 1294,
+        Some(10) => 1709,
+        _ => 65000,
+    };
+    bag.items.clear();
+    bag.contents.clear();
+    bag.contents_known = false;
+    bag
+}
+
+#[test]
+fn session_loot_matches_feed_including_unknown_and_legacy_low_tiers() {
+    let (_dir, path, mut db) = database();
+    let mut s = Stream::new("synthetic-loot");
+    s.apply(&mut db, vec![session("s1", 0, 0, None)]);
+    // Current capture excludes brown bags. If a legacy low-tier observation was retained,
+    // Feed still displays it under Any bag, so Stats must count it too. Unknown contents
+    // and ranks also remain visible; this is not a count of picked-up items.
+    for (index, rank) in [Some(255), Some(90), Some(80), Some(70), Some(10), None]
+        .into_iter()
+        .enumerate()
+    {
+        s.apply(
+            &mut db,
+            vec![EngineEvent::BagDropped(observed_bag(
+                &format!("synth-bag-{index}"),
+                "s1",
+                MIN,
+                rank,
+            ))],
+        );
+    }
+    s.apply(
+        &mut db,
+        vec![
+            EngineEvent::DropUpdated(observed_bag("synth-bag-0", "s1", MIN, Some(255))),
+            session("s1", 0, 30 * MIN, Some(30 * MIN)),
+            session("s2", 31 * MIN, 31 * MIN, None),
+            EngineEvent::BagDropped(observed_bag("other-session", "s2", 32 * MIN, Some(80))),
+            session("s2", 31 * MIN, 60 * MIN, None),
+        ],
+    );
+    let reader = maxed_store::open_reader(&path).unwrap();
+    let filter = DropFilter {
+        min_rank: None,
+        place: None,
+        item_type: None,
+        enchanted_only: false,
+        range: Some(TimeRange {
+            start: Timestamp(0),
+            end: Timestamp(30 * MIN),
+        }),
+        cursor: None,
+        limit: MAX_LOOT_PAGE,
+    };
+    let all = reader.list_drops(filter.clone()).unwrap();
+    let notable = reader
+        .list_drops(DropFilter {
+            min_rank: Some(80),
+            ..filter
+        })
+        .unwrap();
+    let rows = reader
+        .stats_sessions(StatsSessionFilter {
+            include_empty: false,
+            ..page(10)
+        })
+        .unwrap()
+        .rows;
+    assert_eq!(rows.len(), 2, "loot-only sessions are not empty");
+    let first = rows.iter().find(|row| row.id == "s1").unwrap();
+    assert_eq!((first.bags, first.notable_bags), (6, 3));
+    assert_eq!(first.bags as usize, all.rows.len());
+    assert_eq!(first.notable_bags as usize, notable.rows.len());
+    assert_eq!(
+        (first.bags_per_hour, first.notable_bags_per_hour),
+        (Some(12.0), Some(6.0))
+    );
+    assert_eq!(rows[0].bags, 1);
+    assert_eq!(rows[0].notable_bags, 1);
+    assert_eq!(rows[0].bags_per_hour, Some(60.0 / 29.0));
+    assert_eq!(detail(&path, "s1", None).session, *first);
+}
+
+#[test]
+fn session_loot_rates_require_five_minutes_and_preserve_zero() {
+    let (_dir, path, mut db) = database();
+    let mut s = Stream::new("synthetic-short-loot");
+    for (id, duration, rank) in [
+        ("short", 5 * MIN - 1, Some(255)),
+        ("boundary", 5 * MIN, Some(80)),
+        ("empty", 5 * MIN, None),
+    ] {
+        s.apply(&mut db, vec![session(id, 0, 0, None)]);
+        if rank.is_some() {
+            s.apply(
+                &mut db,
+                vec![EngineEvent::BagDropped(observed_bag(id, id, MIN, rank))],
+            );
+        }
+        s.apply(&mut db, vec![session(id, 0, duration, Some(duration))]);
+    }
+    let short = detail(&path, "short", None).session;
+    assert_eq!((short.bags, short.notable_bags), (1, 1));
+    assert_eq!(
+        (short.bags_per_hour, short.notable_bags_per_hour),
+        (None, None)
+    );
+    let boundary = detail(&path, "boundary", None).session;
+    assert_eq!(
+        (boundary.bags_per_hour, boundary.notable_bags_per_hour),
+        (Some(12.0), Some(12.0))
+    );
+    let empty = detail(&path, "empty", None).session;
+    assert_eq!((empty.bags, empty.notable_bags), (0, 0));
+    assert_eq!(
+        (empty.bags_per_hour, empty.notable_bags_per_hour),
+        (Some(0.0), Some(0.0))
+    );
+}
+
+#[test]
+fn session_loot_character_filter_uses_runs_and_containing_visits() {
+    let (_dir, path, mut db) = database();
+    let mut s = Stream::new("synthetic-character-loot");
+    let mut other_run = run("other-run", "s1", "Synthetic Cave", 2 * MIN);
+    other_run.character_id = Some("synth-other".into());
+    let mut run_bag = observed_bag("run-bag", "s1", 3 * MIN, Some(255));
+    run_bag.run_id = Some(other_run.id.clone());
+    s.apply(
+        &mut db,
+        vec![
+            session("s1", 0, 0, None),
+            // No character evidence for this bag; only the all-character total includes it.
+            EngineEvent::BagDropped(observed_bag("unattributed", "s1", 0, Some(255))),
+            map("Realm of the Mad God", AreaKind::Realm, MIN),
+            character(C, "SynthAlpha", MIN),
+            EngineEvent::BagDropped(observed_bag("realm-bag", "s1", 2 * MIN, Some(80))),
+            map("Synthetic Cave", AreaKind::Dungeon, 3 * MIN),
+            character("synth-other", "SynthBravo", 3 * MIN),
+            EngineEvent::RunStarted(other_run),
+            EngineEvent::BagDropped(run_bag),
+            session("s1", 0, 10 * MIN, Some(10 * MIN)),
+        ],
+    );
+    assert_eq!(detail(&path, "s1", None).session.bags, 3);
+    let mine = detail(&path, "s1", Some(C)).session;
+    assert_eq!((mine.bags, mine.notable_bags), (1, 1));
+    let other = detail(&path, "s1", Some("synth-other")).session;
+    assert_eq!((other.bags, other.notable_bags), (1, 1));
+    let absent = detail(&path, "s1", Some("absent")).session;
+    assert_eq!((absent.bags, absent.notable_bags), (0, 0));
 }

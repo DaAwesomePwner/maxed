@@ -1,3 +1,4 @@
+use crate::fixture;
 use maxed_app::assets_bridge::*;
 use maxed_assets::{AssetError, AssetPaths, AssetProgress, CachedCatalog};
 use maxed_types::{AssetCheck, Catalog, SpriteRef};
@@ -5,12 +6,6 @@ use std::{
     fs,
     sync::{atomic::AtomicBool, Arc, Mutex},
 };
-mod fixture {
-    include!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../crates/maxed-assets/tests/common/mod.rs"
-    ));
-}
 
 fn prepared() -> (tempfile::TempDir, AssetPaths, CachedCatalog) {
     let dir = tempfile::tempdir().unwrap();
@@ -411,7 +406,12 @@ fn sprite_protocol_caches_only_valid_fingerprinted_images() {
     );
     let expected = bridge.sprite(&url).unwrap();
     for _ in 0..3 {
-        let response = bridge.sprite_response(true, &tauri::http::Method::GET, &url);
+        let response = bridge.sprite_response(
+            true,
+            &tauri::http::Method::GET,
+            &url,
+            Some("http://tauri.localhost"),
+        );
         assert_eq!(response.status(), 200);
         assert_eq!(response.body(), &expected);
         assert_eq!(
@@ -419,17 +419,18 @@ fn sprite_protocol_caches_only_valid_fingerprinted_images() {
             "public, max-age=31536000, immutable"
         );
         assert_eq!(response.headers()["X-Content-Type-Options"], "nosniff");
-        assert!(response
-            .headers()
-            .get("Access-Control-Allow-Origin")
-            .is_none());
+        assert_eq!(
+            response.headers()["Access-Control-Allow-Origin"],
+            "http://tauri.localhost"
+        );
+        assert_eq!(response.headers()["Vary"], "Origin");
     }
     for (main, method, uri) in [
         (false, tauri::http::Method::GET, url.as_str()),
         (true, tauri::http::Method::POST, url.as_str()),
         (true, tauri::http::Method::GET, "invalid"),
     ] {
-        let response = bridge.sprite_response(main, &method, uri);
+        let response = bridge.sprite_response(main, &method, uri, Some("http://tauri.localhost"));
         assert_eq!(response.status(), 404);
         assert_eq!(response.headers()["Cache-Control"], "no-store");
     }
@@ -452,16 +453,103 @@ fn sprite_protocol_caches_only_valid_fingerprinted_images() {
     bridge.commit(&op, next, || Ok(())).unwrap();
     assert_eq!(
         bridge
-            .sprite_response(true, &tauri::http::Method::GET, &url)
+            .sprite_response(true, &tauri::http::Method::GET, &url, None)
             .status(),
         404
     );
     assert_eq!(
         bridge
-            .sprite_response(true, &tauri::http::Method::GET, &next_url)
+            .sprite_response(true, &tauri::http::Method::GET, &next_url, None)
             .status(),
         200
     );
+}
+
+#[test]
+fn sprite_allows_app_origin() {
+    let (_dir, _paths, cache) = prepared();
+    let bridge = AssetBridge::default();
+    publish(&bridge, &cache);
+    let url = format!(
+        "{SPRITE_ORIGIN}/{}/characters.png/1-0-1-1.png",
+        cache.catalog.client_fingerprint
+    );
+    let origin = "http://tauri.localhost";
+    let response = bridge.sprite_response(true, &tauri::http::Method::GET, &url, Some(origin));
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()["Access-Control-Allow-Origin"], origin);
+    assert_eq!(response.headers()["Vary"], "Origin");
+}
+
+#[test]
+fn sprite_rejects_foreign_or_missing_origin() {
+    let (_dir, _paths, cache) = prepared();
+    let bridge = AssetBridge::default();
+    publish(&bridge, &cache);
+    let url = format!(
+        "{SPRITE_ORIGIN}/{}/characters.png/1-0-1-1.png",
+        cache.catalog.client_fingerprint
+    );
+    for origin in [Some("http://evil.localhost"), None] {
+        let response = bridge.sprite_response(true, &tauri::http::Method::GET, &url, origin);
+        assert_eq!(response.status(), 200);
+        assert!(response
+            .headers()
+            .get("Access-Control-Allow-Origin")
+            .is_none());
+        assert_eq!(response.headers()["Vary"], "Origin");
+    }
+}
+
+#[test]
+fn failed_sprite_has_no_cors() {
+    let (_dir, _paths, cache) = prepared();
+    let bridge = AssetBridge::default();
+    publish(&bridge, &cache);
+    let url = format!(
+        "{SPRITE_ORIGIN}/{}/characters.png/1-0-1-1.png",
+        cache.catalog.client_fingerprint
+    );
+    for (main, method, uri) in [
+        (false, tauri::http::Method::GET, url.as_str()),
+        (true, tauri::http::Method::POST, url.as_str()),
+        (true, tauri::http::Method::GET, "invalid"),
+    ] {
+        let response = bridge.sprite_response(main, &method, uri, Some("http://tauri.localhost"));
+        assert_eq!(response.status(), 404);
+        assert!(response
+            .headers()
+            .get("Access-Control-Allow-Origin")
+            .is_none());
+        assert!(response.headers().get("Vary").is_none());
+    }
+}
+
+#[test]
+fn app_origin_allowlist_is_exact() {
+    assert!(app_origin_allowed("http://tauri.localhost"));
+    assert_eq!(
+        app_origin_allowed("http://127.0.0.1:1420"),
+        cfg!(debug_assertions)
+    );
+    for origin in [
+        "",
+        "null",
+        "*",
+        "http://evil.localhost",
+        "https://tauri.localhost",
+        "http://tauri.localhost/",
+        "http://tauri.localhost:80",
+        "http://tauri.localhost.evil",
+        "http://localhost:1420",
+        "http://127.0.0.1:1421",
+        "http://127.0.0.1:1420/",
+    ] {
+        assert!(
+            !app_origin_allowed(origin),
+            "unexpected allowed origin: {origin}"
+        );
+    }
 }
 
 #[test]
@@ -563,6 +651,8 @@ fn search_items_orders_prefix_first() {
     ]
     .into_iter()
     .map(|(object_type, name)| maxed_types::ItemDef {
+        weapon_firing: None,
+        potion_stat: None,
         object_type,
         name: name.into(),
         tier: Some("UT".into()),
@@ -641,4 +731,103 @@ fn dungeon_picker_options_retain_aliases_and_exclude_non_dungeons() {
         options.iter().map(|d| d.name.clone()).collect::<Vec<_>>(),
         catalog_dungeons(&catalog)
     );
+}
+
+fn detail_catalog() -> Catalog {
+    serde_json::from_slice(include_bytes!(
+        "../../../tests/fixtures/scrubbed/maxed-demo/catalog.json"
+    ))
+    .unwrap()
+}
+
+#[test]
+fn item_details_keep_unknown_rows_and_deduplicate() {
+    let catalog = detail_catalog();
+    let item = catalog.items[0].object_type;
+    let page = item_details(&catalog, &[item, item, 65535], &[1, 1, 999_999]).unwrap();
+    assert_eq!(page.client_fingerprint, catalog.client_fingerprint);
+    assert_eq!(
+        page.items
+            .iter()
+            .map(|row| row.object_type)
+            .collect::<Vec<_>>(),
+        [item, 65535]
+    );
+    assert_eq!(
+        page.enchants.iter().map(|row| row.id).collect::<Vec<_>>(),
+        [1, 999_999]
+    );
+    let unknown = &page.items[1];
+    assert!(
+        unknown.name.is_none()
+            && unknown.tier.is_none()
+            && unknown.slot_type.is_none()
+            && unknown.slot_label.is_none()
+            && unknown.soulbound.is_none()
+    );
+    assert_eq!(page.enchants[0].name.as_deref(), Some("Demo Enchant"));
+    assert!(!page.enchants[0].description.as_ref().unwrap().is_empty());
+    assert!(page.enchants[1].name.is_none() && page.enchants[1].description.is_none());
+}
+
+#[test]
+fn item_details_are_bounded() {
+    let catalog = detail_catalog();
+    assert_eq!(
+        item_details(&catalog, &[0; 129], &[1; 129])
+            .unwrap()
+            .items
+            .len(),
+        1
+    );
+    assert_eq!(
+        item_details(&catalog, &(0..129).collect::<Vec<_>>(), &[]).unwrap_err(),
+        "Request at most 128 unique object types."
+    );
+    assert_eq!(
+        item_details(&catalog, &[], &(0..129).collect::<Vec<_>>()).unwrap_err(),
+        "Request at most 128 unique enchant IDs."
+    );
+    let empty = item_details(&catalog, &[], &[]).unwrap();
+    assert!(empty.items.is_empty() && empty.enchants.is_empty());
+}
+
+#[test]
+fn slot_labels_match_the_client_table() {
+    for (slot, label) in [
+        (1, "Sword"),
+        (6, "Leather Armor"),
+        (25, "Star"),
+        (31, "Sigil"),
+    ] {
+        assert_eq!(slot_label(slot), Some(label));
+    }
+    assert_eq!(slot_label(0), None);
+    assert_eq!(slot_label(32), None);
+    let mut catalog = detail_catalog();
+    let item = catalog.items[0].object_type;
+    for (slot, label) in [(17, Some("Staff")), (40, None)] {
+        catalog.items[0].slot_type = Some(slot);
+        let page = item_details(&catalog, &[item], &[]).unwrap();
+        assert_eq!(page.items[0].slot_type, Some(slot));
+        assert_eq!(page.items[0].slot_label.as_deref(), label);
+    }
+}
+
+#[test]
+fn item_details_carry_name_tier_and_soulbound() {
+    let mut catalog = detail_catalog();
+    catalog.items[0].tier = Some("UT".into());
+    catalog.items[0].soulbound = Some(true);
+    catalog.enchants[0].description.clear();
+    let page = item_details(
+        &catalog,
+        &[catalog.items[0].object_type],
+        &[catalog.enchants[0].id],
+    )
+    .unwrap();
+    assert_eq!(page.items[0].name.as_ref(), Some(&catalog.items[0].name));
+    assert_eq!(page.items[0].tier.as_deref(), Some("UT"));
+    assert_eq!(page.items[0].soulbound, Some(true));
+    assert_eq!(page.enchants[0].description, None);
 }

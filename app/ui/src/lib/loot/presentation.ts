@@ -9,7 +9,11 @@ export function placeLabel(dungeon: string | null): string {
   return dungeon ?? 'Outside a run';
 }
 export function bagLabel(rank: number | null, visual: ObjectVisual | null): string {
-  return visual?.bag?.name ?? visual?.name ?? (rank === 255 ? 'White bag' : rank === null ? 'Unknown tier' : `Rank ${rank}`);
+  const name = visual?.bag?.name ?? visual?.name;
+  return name?.replace(/^B\.\s*(.+)$/i, '$1 bag') ?? (rank === 255 ? 'White bag' : rank === null ? 'Unknown tier' : `Rank ${rank}`);
+}
+export function itemTierLabel(tier: string | null | undefined): string {
+  return tier == null ? '—' : /^\d+$/.test(tier) ? `T${tier}` : tier;
 }
 export function sourceLabel(drop: DropView, name: string | null): { text: string; estimated: boolean; reason: string | null } {
   return { text: drop.source_enemy === null ? 'Unknown source' : name ?? `#${drop.source_enemy}`,

@@ -23,12 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-mod fixture {
-    include!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../crates/maxed-assets/tests/common/mod.rs"
-    ));
-}
+use crate::fixture;
 
 fn history_ready<T: std::fmt::Debug>(reply: Result<HistoryReply<T>, String>) -> T {
     match reply.unwrap() {
@@ -71,6 +66,27 @@ fn history_commands_match_durable_live_story_after_stop() {
             h.runtime.get_player_breakdown(fight.id.clone(), object_id),
         )),
         reader.get_player_breakdown(&fight.id, object_id).unwrap(),
+    );
+    let player_id = fight.players[0].player_id.clone();
+    let run_id = page.rows[0].id.clone();
+    assert!(reader
+        .get_player_context(&run_id, &player_id, None, None)
+        .unwrap()
+        .is_some());
+    assert_eq!(
+        history_ready(tauri::async_runtime::block_on(
+            h.runtime.get_run_player(run_id.clone(), player_id.clone())
+        )),
+        reader.get_run_player(&run_id, &player_id).unwrap()
+    );
+    assert_eq!(
+        history_ready(tauri::async_runtime::block_on(
+            h.runtime
+                .get_player_context(run_id.clone(), player_id.clone(), None, None)
+        )),
+        reader
+            .get_player_context(&run_id, &player_id, None, None)
+            .unwrap()
     );
     let scope = HomeScope::Today {
         range: TimeRange {

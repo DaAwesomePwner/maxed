@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { itemHover } from '../../components/item-hover';
   import { objectVisual } from '../../bridge/visual-index';
   import type { ScopeLootPage } from '../../bindings/ScopeLootPage';
   import type { SpriteRef } from '../../bindings/SpriteRef';
@@ -19,7 +20,7 @@
     <div class="loot-row" class:large={big}>
       {#each items.filter(item => (item.tier === 'UT' || item.tier === 'ST') === big) as item (item.item_type)}
         {@const visual = objectVisual(visuals.objects, item.item_type)}
-        <span class="tile" class:big data-tier={item.tier ?? ''} data-loot-type={item.item_type} title={`${visual?.name ?? `Item ${item.item_type}`} · ${formatStat(item.count)}`}>
+        <span class="tile" class:big data-tier={item.tier ?? ''} data-loot-type={item.item_type} use:itemHover={{ type: item.item_type, enchant: item.best_enchant, name: visual?.name ?? `Item ${item.item_type}`, tier: item.tier, suffix: `×${formatStat(item.count)}`, label: 'Best copy' }}>
           <ItemTile sprite={visual?.sprite ?? null} {resolveSpriteUrl} fit={big ? 40 : 24} alt={visual?.name ?? `Item ${item.item_type}`} enchant={item.best_enchant} />
           {#if item.count > 1}<span class="count">{lootCount(item.count)}</span>{/if}
         </span>
@@ -28,13 +29,13 @@
   {/each}
 {/if}
 {#if page && (page.next || pageNumber > 1)}
-  <nav aria-label="Loot Pages"><button disabled={!enabled || pageNumber === 1} onclick={first}>First Loot</button><span>{pageNumber}</span><button disabled={!enabled || !page.next} onclick={next}>Next Loot</button></nav>
+  <nav aria-label="Loot Pages"><button disabled={!enabled || pageNumber === 1} onclick={first}>First page</button><span>{pageNumber}</span><button disabled={!enabled || !page.next} onclick={next}>Next page</button></nav>
 {/if}
 <DebugNote text="Counts are retained appearances in bags, not stack sizes or pickups. Item tiers and enchant evidence may be unavailable." />
 </div>
 <style>
-  .scope-loot .loot-row { display: flex; flex-wrap: wrap; align-content: start; gap: 6px; padding-top: 5px; max-height: 66px; overflow: auto; padding-right: 5px; }
-  .scope-loot .large { min-height: 48px; max-height: 54px; flex-wrap: nowrap; padding-bottom: 5px; }
+  .scope-loot .loot-row { display: flex; flex-wrap: wrap; align-content: start; gap: 6px; padding-top: 5px; padding-right: 5px; }
+  .scope-loot .large { min-height: 48px; padding-bottom: 5px; }
   .scope-loot .tile { position: relative; flex: none; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); }
   .scope-loot .tile.big { width: 44px; height: 44px; }
   .scope-loot [data-tier="UT"] { border-color: var(--violet-text); box-shadow: 0 0 8px #a77bff44; }

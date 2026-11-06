@@ -22,17 +22,20 @@ function fixture(): Collection {
     { item: { item_type: 103, dungeon: 'Invented Abbey', pinned_at: '1000000' }, seen: 0, last_at: null, dry_runs: 9 },
   ], grid_dungeon: null, grid: [] };
 }
-function mount(options: { value?: Collection; savedState?: ListState; error?: boolean; settingsError?: boolean; catalogError?: boolean; busy?: boolean; container?: HTMLElement } = {}) {
+function mount(options: { value?: Collection; dungeons?: string[]; savedState?: ListState; error?: boolean; settingsError?: boolean; catalogError?: boolean; busy?: boolean; container?: HTMLElement } = {}) {
   const value = options.value ?? fixture();
   const collection = vi.fn((request: CollectionRequest): Collection => ({ ...value, grid_dungeon: request.dungeon,
     chase: value.chase.filter(row => request.chase.some(pin => pin.item_type === row.item.item_type && pin.dungeon === row.item.dungeon)) }));
   const client = createClient(createFixtureTransport(homeSnapshot(), { client_fingerprint: 'a'.repeat(64), objects: [
     { object_type: 101, name: 'Invented sword', sprite: null, bag: null, item_tier: 'UT' },
-  ] }, undefined, undefined, undefined, undefined, undefined, {}, { collection }));
+  ] }, undefined, undefined, undefined, undefined, undefined, {}, { collection, lootStats: () => ({ totals: [], whites: 0, sources: [], dungeons: [
+    { dungeon: 'Invented Abbey', runs_ended: 3, clears: 2, bags: [{ bag_rank: 255, count: 4 }], whites: 4, white_runs: 2, avg_runs_per_white: 1.5, longest_dry: 1, runs_since_last_white: 0, best: null },
+    { dungeon: 'Invented Burrow', runs_ended: 2, clears: 1, bags: [], whites: 0, white_runs: 0, avg_runs_per_white: null, longest_dry: 2, runs_since_last_white: null, best: null },
+  ] }) }));
   const originalSettings = client.querySettings;
   const settings = vi.spyOn(client, 'querySettings').mockImplementation(async () => ({ ...await originalSettings(), loot: { chase: value.chase.map(row => row.item) } }));
   if (options.settingsError) settings.mockRejectedValueOnce(new Error('synthetic settings failure'));
-  const catalog = vi.spyOn(client, 'listCatalogDungeons').mockResolvedValue(['Invented Abbey', 'Invented Burrow']);
+  const catalog = vi.spyOn(client, 'listCatalogDungeons').mockResolvedValue(options.dungeons ?? ['Invented Abbey', 'Invented Burrow']);
   if (options.catalogError) catalog.mockRejectedValueOnce(new Error('synthetic catalog failure'));
   const read = vi.spyOn(client, 'getCollection');
   if (options.error) read.mockRejectedValueOnce(new Error('synthetic read failure'));
@@ -96,7 +99,15 @@ it('pins a search result with its chosen dungeon', async () => {
   await fireEvent.input(input, { target: { value: ' crown ' } });
   await fireEvent.keyDown(input, { key: 'Enter' }); await flush();
   expect(page.search).toHaveBeenCalledExactlyOnceWith('crown', 10);
-  const result = within(screen.getByRole('option', { name: /Invented crown/ }));
+  const option = screen.getByRole('option', { name: /Invented crown/ });
+  const result = within(option);
+  expect(option.hasAttribute('data-item-hover')).toBe(false);
+  expect(option.querySelector('.tile')?.getAttribute('data-item-hover')).toBe('104');
+  expect(result.getByText('Invented crown').getAttribute('data-item-hover')).toBe('104');
+  const dungeon = result.getByRole('combobox', { name: 'Dungeon for Invented crown' });
+  expect(dungeon.closest('[data-item-hover]')).toBeNull();
+  dungeon.focus(); await flush();
+  expect(option.hasAttribute('aria-describedby')).toBe(false);
   await fireEvent.change(result.getByRole('combobox'), { target: { value: 'Invented Abbey' } });
   await fireEvent.click(result.getByRole('button', { name: /^Chase / })); await flush();
   expect(page.setChaseList).toHaveBeenLastCalledWith([...fixture().chase.map(row => row.item),
@@ -117,7 +128,7 @@ it('keeps the observed-only grid note visible with debug disabled', async () => 
   mount(); await flush();
   expect(screen.getByText('Only items Maxed has seen drop').closest('details')).toBeNull();
 });
-it('shows the empty chase and automatically selects the first dungeon', async () => {
+it('shows the empty chase and automatically selects the dungeon with most observed bags', async () => {
   mount({ value: { chase: [], grid_dungeon: null, grid: [] } }); await flush();
   expect(screen.getByText('Chase an item to track it')).toBeTruthy();
   expect(screen.getByText('Search above, pick a dungeon and click the star.')).toBeTruthy();
@@ -455,4 +466,64 @@ it('chases a search result with its chosen dungeon after Enter on the row', asyn
     { item_type: 104, dungeon: 'Invented Burrow', pinned_at: (BigInt(Date.now()) * 1000n).toString() }]);
   expect(screen.getByRole('option', { name: /Invented crown/ })).toBe(result);
   expect(input.value).toBe('crown');
+});
+
+it('defaults to the most observed dungeon and collapses catalog-only choices', async () => {
+  const page = mount({ dungeons: ['Invented Abbey', 'Invented Burrow', 'Invented Courtyard'] });
+  vi.spyOn(page.client, 'getLootStats').mockResolvedValue({ status: 'ready', value: { totals: [], whites: 0, sources: [], dungeons: [
+    { dungeon: 'Invented Abbey', runs_ended: 10, clears: 0, bags: [{ bag_rank: 1, count: 1 }], whites: 0, white_runs: 0, avg_runs_per_white: null, longest_dry: 10, runs_since_last_white: null, best: null },
+    { dungeon: 'Invented Burrow', runs_ended: 2, clears: 0, bags: [{ bag_rank: 1, count: 9 }], whites: 0, white_runs: 0, avg_runs_per_white: null, longest_dry: 2, runs_since_last_white: null, best: null },
+  ] } });
+  await flush();
+  expect(page.read.mock.calls[0][0].dungeon).toBe('Invented Burrow');
+  const nav = screen.getByRole('navigation', { name: 'Collection dungeon' });
+  expect([...nav.querySelectorAll(':scope > button')].map(button => button.getAttribute('title'))).toEqual(['Invented Burrow', 'Invented Abbey']);
+  const group = nav.querySelector('details')!;
+  expect(group.open).toBe(false); expect(group.querySelector('summary')?.textContent).toBe('Not visited (1)');
+  group.open = true;
+  await fireEvent.click(within(nav).getByRole('button', { name: 'Invented Courtyard' })); await flush();
+  expect(page.read.mock.lastCall![0].dungeon).toBe('Invented Courtyard');
+});
+it.each(['scopeKey', 'streamId'] as const)('clears old visit evidence when %s changes and the replacement fails', async identity => {
+  const page = mount({ dungeons: ['Invented Courtyard', 'Invented Burrow', 'Invented Abbey'] });
+  const visits = vi.spyOn(page.client, 'getLootStats');
+  await flush();
+  const nav = screen.getByRole('navigation', { name: 'Collection dungeon' });
+  expect([...nav.querySelectorAll(':scope > button')].map(button => button.getAttribute('title')))
+    .toEqual(['Invented Abbey', 'Invented Burrow']);
+  expect(within(nav).getByText('Not visited (1)')).toBeTruthy();
+
+  const replacement = deferred<Awaited<ReturnType<typeof page.client.getLootStats>>>();
+  visits.mockReturnValueOnce(replacement.promise);
+  await page.rerender({ [identity]: 'synthetic-replacement' }); await flush();
+  expect(visits).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('navigation', { name: 'Collection dungeon' })).toBe(nav);
+  replacement.reject(new Error('synthetic replacement history failure')); await flush();
+  expect.soft(screen.queryByText('Visit history unavailable.')).not.toBeNull();
+  expect.soft(screen.queryByRole('button', { name: 'Retry visit history' })).not.toBeNull();
+  expect.soft(within(nav).queryByText(/^Not visited/)).toBeNull();
+  expect.soft(within(nav).queryByText('All dungeons (3)')).not.toBeNull();
+  expect.soft(nav.querySelectorAll(':scope > button')).toHaveLength(0);
+  expect.soft([...nav.querySelectorAll('button')].map(button => button.getAttribute('title')))
+    .toEqual(['Invented Courtyard', 'Invented Burrow', 'Invented Abbey']);
+
+  visits.mockResolvedValueOnce({ status: 'ready', value: { totals: [], whites: 0, sources: [], dungeons: [
+    { dungeon: 'Invented Courtyard', runs_ended: 1, clears: 0, bags: [], whites: 0, white_runs: 0, avg_runs_per_white: null, longest_dry: 1, runs_since_last_white: null, best: null },
+  ] } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry visit history' })); await flush();
+  expect(visits).toHaveBeenCalledTimes(3);
+  expect(screen.queryByText('Visit history unavailable.')).toBeNull();
+  expect([...nav.querySelectorAll(':scope > button')].map(button => button.getAttribute('title')))
+    .toEqual(['Invented Courtyard']);
+  expect(within(nav).getByText('Not visited (2)')).toBeTruthy();
+});
+it('keeps unavailable visit history distinct from not visited and offers retry', async () => {
+  const page = mount();
+  const visits = vi.spyOn(page.client, 'getLootStats').mockRejectedValueOnce(new Error('synthetic unavailable history'));
+  await flush();
+  expect(screen.getByText('Visit history unavailable.')).toBeTruthy();
+  expect(screen.queryByText(/^Not visited/)).toBeNull();
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry visit history' })); await flush();
+  expect(visits).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('button', { name: 'Invented Abbey' }).getAttribute('aria-pressed')).toBe('true');
 });

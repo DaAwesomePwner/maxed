@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, expect, it, vi } from 'vitest';
 import { setDebugMode } from '../../src/lib/debug/debug';
 import DamageTable from '../../src/lib/home/v3/DamageTable.svelte';
@@ -16,7 +16,7 @@ import { alert } from '../phase2/fixtures';
 afterEach(() => setDebugMode(false));
 
 it.each([1448.7, null])('Home damage table keeps rounded and unavailable DPS (%s)', dps => {
-  const page = render(DamageTable, { rows: [player({ name: 'Player', dps })], total: 1,
+  const page = render(DamageTable, { basis: 'player_active_window_v1', rows: [player({ name: 'Player', dps })], total: 1,
     visuals: emptyHomeVisuals(), resolveSpriteUrl: () => null });
   expect(page.container.querySelector('tbody tr td:nth-child(5)')?.textContent).toBe(dps === null ? '—' : '1,449');
 });
@@ -35,7 +35,7 @@ it('the rail rounds its DPS value', () => {
 });
 it('saved fight players use whole-number DPS', () => {
   render(FightPlayers, { fight: fight({ players: [player({ name: 'Player', dps: 1448.7 })] }) });
-  expect(screen.getByLabelText('DPS').textContent).toBe('1,449');
+  expect(screen.getByLabelText('Active DPS').textContent).toBe('1,449');
 });
 it('run fight rows and details use whole-number DPS', () => {
   const local = player({ dps: 1448.7 });
@@ -49,4 +49,16 @@ it('PB history rounds both current and previous DPS', () => {
   } })] });
   expect(page.container.textContent).toContain('DPS: 1,449');
   expect(page.container.textContent).toContain('Previous DPS: 1,235');
+});
+
+it.each(['player_active_window_v1', 'whole_target_v0', 'whole_run', undefined] as const)('Home table explains the supplied DPS basis outside its scroller: %s', async basis => {
+  const page = render(DamageTable, { basis, scroll: true, rows: [player({ dps: 17 })], total: 1,
+    visuals: emptyHomeVisuals(), resolveSpriteUrl: () => null });
+  const label = basis === 'player_active_window_v1' ? 'Active DPS' : 'DPS';
+  expect(screen.getByRole('columnheader', { name: label })).toBeTruthy();
+  const trigger = screen.getByRole('button', { name: label });
+  expect(trigger.closest('.scroll')).toBeNull();
+  await fireEvent.focusIn(trigger);
+  expect(screen.getByRole('tooltip').textContent).toContain(basis === 'player_active_window_v1' ? 'that player' : basis === 'whole_run' ? 'whole run' : 'whole fight');
+  expect(page.container.querySelector('tbody tr td:nth-child(5)')?.textContent).toBe('17');
 });

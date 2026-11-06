@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::*;
 use maxed_protocol::defs::Packet;
 use maxed_types::*;

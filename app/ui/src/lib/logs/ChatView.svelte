@@ -4,6 +4,7 @@
   import { createLogsList } from './list.svelte';
   import { serializeChatReads } from './chat-reader';
   import ChatStorageOff from './ChatStorageOff.svelte';
+  import { presentChat } from './spam';
   import { hideChatSender } from './chat-settings';
   import { validHiddenTerm } from './validation';
   import { getContext, untrack } from 'svelte';
@@ -68,9 +69,25 @@
   let activeClient = $derived(enabled ? client : undefined);
   let reader = $derived(activeClient ? serializeChatReads(activeClient) : undefined);
   let selectedId = $state(savedChat?.selectedId ?? null);
-  let selected = $derived(page?.rows.find(row => row.message.id === selectedId) ?? page?.rows[0] ?? null);
+  let selected = $state.raw<ChatRow | null>(null);
+  $effect(() => {
+    const row = page?.rows.find(row => row.message.id === selectedId);
+    if (row) selected = row;
+  });
   let selectedSender = $derived(selected?.message.sender ?? null);
   let settings = $state.raw<ChatSettings | null>(null);
+  let spamSaving = $state(false);
+  let shown = $derived(presentChat(page?.rows ?? [], settings?.filter_spam ?? true));
+  async function toggleSpam() {
+    if (!client || !settings || spamSaving) return;
+    spamSaving = true; hideError = '';
+    try {
+      const latest = (await client.querySettings()).chat;
+      const next = { ...latest, filter_spam: !latest.filter_spam };
+      await client.updateChatSettings(next); settings = next;
+    } catch { hideError = 'Could not update spam filter. Retry.'; }
+    finally { spamSaving = false; }
+  }
   let overview = $state.raw<ChatOverview | null>(null);
   let summary = $state.raw<ChatSenderSummary | null>(null);
   let partners = $state.raw<WhisperPartner[]>([]);
@@ -124,7 +141,7 @@
     return () => instance.dispose();
   });
   function only(sender: string) { apply({ ...filter, sender, cursor: null }); }
-  function select(id: string) { selectedId = id; persist(false); }
+  function select(id: string) { selectedId = id; selected = page?.rows.find(row => row.message.id === id) ?? selected; persist(false); }
   async function enableStorage() {
     if (!client || !settings || !storageChannel) return;
     try {
@@ -167,7 +184,7 @@
       validation = 'Sender must be at most 32 UTF-8 bytes with no control characters.'; return;
     }
     validation = '';
-    list.apply(next, $state.snapshot(filter), () => { selectedId = null; filter = next; }, () => controller?.retry());
+    list.apply(next, $state.snapshot(filter), () => { filter = next; }, () => controller?.retry());
   }
 
   async function hideSender(sender: string) {
@@ -190,13 +207,16 @@
   <HistoryStatus {history} />
   <p class="sr-only" role="status" aria-live="polite">{list.missingRow}</p>
   <ChatToolbar {channel} {runId} {filter} rows={knownRows} {partners} hiddenCount={page?.rows.filter(row => row.hidden).length ?? 0} latestAt={page?.rows[0]?.message.at ?? null} onApply={apply} onOpen={() => pickerOpened = true} />
+  <div class="spam-controls"><label><input type="checkbox" checked={settings?.filter_spam ?? true} disabled={!settings || spamSaving} onchange={event => { event.currentTarget.checked = settings?.filter_spam ?? true; void toggleSpam(); }} /> Filter spam</label>
+    {#if shown.hidden}<span role="status" title="Spam ads and repeated public messages hidden on this page. Turn off Filter spam to show them.">{shown.hidden} hidden</span>{/if}
+  </div>
   {#if runId && client && firstReady}<RunScopeChip {runId} client={reader ?? client} removeHref={routeHref({ kind: 'logs', view: 'chat', channel })} links={[{ label: 'Events in this run ›', href: routeHref({ kind: 'logs', view: 'events', channel: 'all', runId }) }, { label: 'Run summary ›', href: routeHref({ kind: 'run', id: runId }) }]} />{/if}
   {#if validation}<p role="alert">{validation}</p>{/if}
   {#if hideError}<p role="alert">{hideError}</p>{/if}
   {#if history.phase === 'error'}<ErrorBar message="Couldn't load chat. Your filters are kept." onRetry={() => controller?.retry()} />{/if}
   <div class="layout">
     <section class="list">
-      {#if list.hasNew}<NewDataPill count={pendingCount} noun="lines" showCount={!filter.sender && !filter.query && settings !== null && !settings.hidden_senders.length && !settings.hidden_keywords.length} onClick={list.showNew} />{/if}
+      {#if list.hasNew}<NewDataPill count={pendingCount} noun="lines" showCount={!filter.sender && !filter.query && settings !== null && !settings.filter_spam && !settings.hidden_senders.length && !settings.hidden_keywords.length} onClick={list.showNew} />{/if}
       {#if !client}<p>Chat unavailable</p>
       {:else if storageOff}<ChatStorageOff {channel} onEnable={enableStorage} />
       {:else}
@@ -207,7 +227,8 @@
           {#if page.rows.length === 0 && history.phase !== 'error' && history.phase !== 'busy'}
             <div class="empty">{#if filter.query || filter.sender}<strong>No {channel === 'all' ? 'chat' : channel} lines match "{filter.query || filter.sender || ''}"</strong><p>{settings ? `Search covers the last ${settings.retention_days} days of ${channel === 'all' ? 'stored' : channel} chat.` : 'Try another search or channel.'}</p><button class="ctl" onclick={() => apply({ ...filter, query: '', sender: null, cursor: null })}>Clear search</button><!-- Search all channels only offers a different scope. -->{#if channel !== 'all'}<a class="ctl" href={routeHref({ kind: 'logs', view: 'chat', channel: 'all', runId: runId ?? undefined })}>Search all channels</a>{/if}
             {:else}<strong>No chat yet</strong><p>Saved lines will appear here when Maxed sees in-game chat.</p>{/if}</div>
-          {:else if page.rows.length}<ChatTable rows={page.rows} selectedId={selected?.message.id ?? null} onSelect={select} onOnly={only} onHide={hideSender} />{/if}
+          {:else if page.rows.length}<ChatTable rows={shown.rows} counts={shown.counts} selectedId={selectedId ? shown.representatives[selectedId] ?? null : null} onSelect={select} onOnly={only} onHide={hideSender} />{/if}
+          {#if page.rows.length && !shown.rows.length}<p>All messages on this page are hidden by the spam filter.</p>{/if}
         {/if}
       {/if}
       <footer><span>In-game chat Maxed saw. Stored only on this PC.</span><Pager atLatest={filter.cursor === null} hasOlder={!!page?.next} loading={list.paging} noun="lines" onLatest={list.first} onNewer={list.back} onOlder={list.next} /></footer>
@@ -216,6 +237,8 @@
   </div>
 </div>
 <style>
+  .spam-controls { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-muted); }
+  .spam-controls label { display: flex; align-items: center; gap: 6px; }
   .feed { --ch-public: #c6bed5; --ch-guild: #75dfa1; --ch-party: #8de4e5; --ch-whisper: #f2a6cf; --ch-npc: #aaa2bc; overflow-anchor: none; overflow-wrap: anywhere; display: grid; gap: 10px; min-width: 0; }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; min-width: 0; }
   .list { position: relative; min-width: 0; padding: 8px 6px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }

@@ -21,7 +21,7 @@ it('formats fame, rates and durations', () => {
   expect(fameText(1840, false)).toBe('1,840');
   expect(fameText(900, true)).toBe('≥ 900');
   expect(rateText(null)).toBe('—');
-  expect(rateText(1162.13)).toBe('1,162.1');
+  expect(rateText(1162.13)).toBe('1,162');
   expect(durationText(95 * 60_000_000)).toBe('1h 35m');
   expect(durationText(3 * 60_000_000)).toBe('3m');
 });

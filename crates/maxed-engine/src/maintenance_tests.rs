@@ -145,8 +145,8 @@ fn grace_period_prunes_only_unreferenced_entities_and_preserves_reentry_generati
     }
     let generation = e.entities[&1].generation;
     e.protect_entity(2); // A fight or bag references this identity.
-    e.remove_entity(1);
-    e.remove_entity(2);
+    e.remove_entity(1, &mut events);
+    e.remove_entity(2, &mut events);
     e.advance_to(Timestamp(29_999_999));
     assert!(e.entities.contains_key(&1));
     e.advance_to(Timestamp(30_000_000));
@@ -168,9 +168,9 @@ fn reverse_summon_index_cleans_only_related_mappings() {
     e.set_summoner(2, 1);
     e.set_summoner(3, 1);
     e.set_summoner(5, 4);
-    e.remove_entity(2);
+    e.remove_entity(2, &mut events);
     assert_eq!(e.summons[&1].len(), 1);
-    e.remove_entity(1);
+    e.remove_entity(1, &mut events);
     assert!(e.entities[&3].summoner.is_none());
     assert!(e.entities[&5].summoner.is_some());
     assert_eq!(e.summons.len(), 1);
@@ -195,7 +195,7 @@ fn type_replacement_and_boundaries_cannot_collide_with_existing_generations() {
     e.merge_entity(status(1), Some(300), &mut events);
     e.ensure_entity(2, &mut events);
     let initial = e.entities[&2].generation;
-    e.remove_entity(2);
+    e.remove_entity(2, &mut events);
     e.merge_entity(status(1), Some(301), &mut events);
     let replacement = e.entities[&1].generation;
     assert_ne!(initial, replacement);
@@ -219,7 +219,7 @@ fn retired_targets_release_capacity_and_keep_bounded_tombstones() {
         assert_eq!(e.fights.len(), 1);
         let key = *e.fights.keys().next().unwrap();
         assert_eq!(key.0, id);
-        e.remove_entity(id);
+        e.remove_entity(id, &mut events);
         assert!(e.entities.len() <= 2);
         assert!(e.retired_entities.len() <= 2);
         assert!(e.retired_targets.len() <= 2);
@@ -248,7 +248,7 @@ fn retired_targets_release_capacity_and_keep_bounded_tombstones() {
     assert_eq!(e.fights.keys().next().unwrap().0, 100);
     let key = *e.fights.keys().next().unwrap();
     e.retire_fight(key, FightEnd::ResourceLimit, &mut events);
-    e.remove_entity(99);
+    e.remove_entity(99, &mut events);
     assert_eq!(e.entities.len(), e.config.max_entities);
     assert!(e
         .entities
@@ -269,7 +269,7 @@ fn all_fight_retirements_release_nonplayer_targets() {
         let mut events = vec![];
         e.report(2, 1, 1, false, Ok(100), &mut events);
         let key = *e.fights.keys().next().unwrap();
-        e.remove_entity(2);
+        e.remove_entity(2, &mut events);
         e.retire_fight(key, reason, &mut events);
         assert!(!e.referenced_entities.contains(&2));
         assert_eq!(e.inactive_entities.len(), 1);
@@ -297,7 +297,7 @@ fn retired_bags_release_capacity_and_flush_releases_protection() {
         e.merge_entity(status(id), Some(1292), &mut events);
         assert!(e.entities.contains_key(&id));
         assert_eq!(e.drops.len(), 1);
-        e.remove_entity(id);
+        e.remove_entity(id, &mut events);
         assert_eq!(e.referenced_entities.len(), 1);
         assert!(e.retired_entities.len() <= 2);
     }
@@ -314,7 +314,7 @@ fn retired_bags_release_capacity_and_flush_releases_protection() {
         .iter()
         .any(|event| matches!(event, EngineEvent::BagDropped(_))));
     // Changed type is still evidence of a new generation, including after prune.
-    e.remove_entity(19);
+    e.remove_entity(19, &mut events);
     e.advance_to(Timestamp(60_000_000));
     e.merge_entity(status(19), Some(1296), &mut events);
     assert!(events
@@ -336,7 +336,7 @@ fn full_tombstone_table_preserves_returning_bag_during_entity_eviction() {
     };
     for id in 1..=4 {
         e.merge_entity(status(id), Some(1292), &mut events);
-        e.remove_entity(id);
+        e.remove_entity(id, &mut events);
     }
     assert_eq!(e.entities.len(), 2);
     assert_eq!(e.retired_entities.len(), 2);

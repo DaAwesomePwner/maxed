@@ -19,7 +19,12 @@ use std::{
 };
 
 const CATALOG_LIMIT: u64 = 32 * 1024 * 1024;
-const CACHE_VERSION: u32 = 11;
+const CACHE_VERSION: u32 = 12;
+// Reviewed retirement layouts: v9 has catalog/atlases without a tile pack;
+// v10 adds the pack, v11 changes localization only, and v12 adds optional catalog
+// metadata. All retain Catalog v1 and the same manifest/hash integrity rules.
+// On the next cache bump, review its layout before extending this explicit range.
+const RETIRABLE_VERSIONS: std::ops::RangeInclusive<u32> = 9..=12;
 static NEXT: AtomicU64 = AtomicU64::new(0);
 type Leases = BTreeMap<PathBuf, Weak<Catalog>>;
 static LEASES: OnceLock<Mutex<Leases>> = OnceLock::new();
@@ -270,8 +275,8 @@ fn validate_generation(
 ) -> Result<Catalog, AssetError> {
     validate_generation_version(path, fingerprint, cancel, false)
 }
-// v9 has the same manifest/catalog/atlas integrity contract but no tile pack.
-// Accept it only for retirement; loading still requires the current version.
+// Older reviewed layouts are accepted only for retirement, never for loading.
+// v9 retains its distinct no-tile-pack integrity rules.
 fn validate_generation_version(
     path: &Path,
     fingerprint: &str,
@@ -284,7 +289,12 @@ fn validate_generation_version(
         }
         let manifest: Manifest = read_json(&path.join("manifest.json"), 65536)?;
         let legacy = retiring && manifest.version == 9;
-        if (!legacy && manifest.version != CACHE_VERSION)
+        let supported_version = if retiring {
+            RETIRABLE_VERSIONS.contains(&manifest.version)
+        } else {
+            manifest.version == CACHE_VERSION
+        };
+        if !supported_version
             || manifest.fingerprint != fingerprint
             || manifest.files.len() > 7
             || manifest.sheets.len() > 5
@@ -935,6 +945,113 @@ fn remove_generation(root: &Path, path: &Path, fingerprint: &str) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn retirement_fixture(version: u32, with_pack: bool) -> (tempfile::TempDir, String) {
+        let dir = tempfile::tempdir().unwrap();
+        let fingerprint = "a".repeat(64);
+        let cancel = AtomicBool::new(false);
+        let catalog = crate::build_catalog(
+            crate::ExtractedAssets {
+                english: Default::default(),
+                texts: vec![],
+                textures: vec![],
+                sprite_mapping: vec![],
+            },
+            fingerprint.clone(),
+        )
+        .unwrap();
+        write_json(&dir.path().join("catalog.json"), &catalog, CATALOG_LIMIT).unwrap();
+        let mut files = BTreeMap::new();
+        files.insert(
+            "catalog.json".into(),
+            hash_file(&dir.path().join("catalog.json"), &cancel).unwrap(),
+        );
+        if with_pack {
+            crate::tiles::write_pack(
+                dir.path(),
+                &fingerprint,
+                &[],
+                &cancel,
+                |_, _, _| unreachable!(),
+            )
+            .unwrap();
+            files.insert(
+                crate::tiles::PACK.into(),
+                hash_file(&dir.path().join(crate::tiles::PACK), &cancel).unwrap(),
+            );
+        }
+        write_json(
+            &dir.path().join("manifest.json"),
+            &Manifest {
+                version,
+                fingerprint: fingerprint.clone(),
+                sheets: vec![],
+                files,
+            },
+            65536,
+        )
+        .unwrap();
+        (dir, fingerprint)
+    }
+
+    #[test]
+    fn v11_generation_is_valid_only_for_retirement() {
+        let (dir, fingerprint) = retirement_fixture(11, true);
+        let cancel = AtomicBool::new(false);
+        assert!(matches!(
+            validate_generation(dir.path(), &fingerprint, &cancel),
+            Err(AssetError::CacheInvalid)
+        ));
+        assert!(validate_generation_version(dir.path(), &fingerprint, &cancel, true).is_ok());
+        // Older layouts still undergo file-integrity validation before deletion.
+        fs::write(
+            dir.path().join(crate::tiles::PACK),
+            b"corrupt synthetic pack",
+        )
+        .unwrap();
+        assert!(matches!(
+            validate_generation_version(dir.path(), &fingerprint, &cancel, true),
+            Err(AssetError::CacheInvalid)
+        ));
+    }
+
+    #[test]
+    fn retirement_versions_cover_current_version_and_reject_unreviewed_layouts() {
+        // A CACHE_VERSION bump must explicitly extend the reviewed retirement set.
+        // Exercise the real validator, including its distinct v9 no-pack layout.
+        for version in 8..=CACHE_VERSION + 1 {
+            let (dir, fingerprint) = retirement_fixture(version, version != 9);
+            let cancel = AtomicBool::new(false);
+            assert_eq!(
+                validate_generation_version(dir.path(), &fingerprint, &cancel, true).is_ok(),
+                (9..=CACHE_VERSION).contains(&version),
+                "retirement version {version} requires a layout review",
+            );
+            assert_eq!(
+                validate_generation(dir.path(), &fingerprint, &cancel).is_ok(),
+                version == CACHE_VERSION
+            );
+        }
+        for (version, with_pack) in [(9, true), (10, false), (11, false), (CACHE_VERSION, false)] {
+            let (dir, fingerprint) = retirement_fixture(version, with_pack);
+            assert!(validate_generation_version(
+                dir.path(),
+                &fingerprint,
+                &AtomicBool::new(false),
+                true
+            )
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn character_metadata_invalidates_version_eleven_fingerprints() {
+        assert_eq!(CACHE_VERSION, 12);
+        assert_ne!(
+            fingerprint_prefix(CACHE_VERSION, include_bytes!("rules.rs")).finalize(),
+            fingerprint_prefix(11, include_bytes!("rules.rs")).finalize()
+        );
+    }
+
     #[test]
     fn removing_a_generation_prunes_only_its_icons() {
         let dir = tempfile::tempdir().unwrap();

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { itemHover } from '../../components/item-hover';
   import { objectVisual } from '../../bridge/visual-index';
   import { onMount } from 'svelte';
   import type { DropView } from '../../bindings/DropView';
@@ -12,14 +13,16 @@
   import { lootItems } from '../v2/loot';
   import { rankedDrops, overflowSummary } from './loot-rank';
   import { formatStat } from '../../styles/format';
-  let { drops, visuals, resolveSpriteUrl, clock, scroll = false, selectedDropId = null }: {
-    scroll?: boolean; selectedDropId?: string | null;
+  let { drops, visuals, resolveSpriteUrl, clock, scroll = false, selectedDropId = null, newestFirst = false }: {
+    scroll?: boolean; selectedDropId?: string | null; newestFirst?: boolean;
     drops: DropView[]; visuals: HomeVisuals; resolveSpriteUrl: (s: SpriteRef) => string | null; clock: (at: string) => string;
   } = $props();
   const id = $props.id();
   let host: HTMLDivElement;
   let height = $state(0);
-  let ranked = $derived(rankedDrops(drops));
+  const at = (drop: DropView) => /^\d+$/.test(drop.at) ? BigInt(drop.at) : -1n;
+  let ranked = $derived(newestFirst ? [...rankedDrops(drops)].sort((a, b) => at(a) < at(b) ? 1 : at(a) > at(b) ? -1 : 0)
+    : rankedDrops(drops));
   let slots = $derived(Math.max(0, Math.floor((height + 3) / 39)));
   let capacity = $derived(scroll ? ranked.length : ranked.length <= slots ? slots : Math.max(0, slots - 1));
   let hidden = $derived(ranked.slice(capacity));
@@ -44,7 +47,7 @@
       <span class="items">
         {#each items.slice(0, 4) as item (`${item.slot}:${item.itemType}`)}
           {@const object = visual(item.itemType)}
-          <span class="item" data-tier={item.tier ?? ''} title={object?.name ?? `Item ${item.itemType}`}><ItemTile sprite={object?.sprite ?? null} {resolveSpriteUrl} fit={24} alt={object?.name ?? `Item ${item.itemType}`} enchant={item.enchant} /></span>
+          <span class="item" data-tier={item.tier ?? ''} use:itemHover={{ type: item.itemType, enchant: item.enchant, name: object?.name ?? `Item ${item.itemType}`, tier: item.tier }}><ItemTile sprite={object?.sprite ?? null} {resolveSpriteUrl} fit={24} alt={object?.name ?? `Item ${item.itemType}`} enchant={item.enchant} /></span>
         {/each}
         {#if items.length > 4}<span class="more">+{formatStat(items.length - 4)}</span>{/if}
         {#if !items.length}<span>—</span>{/if}

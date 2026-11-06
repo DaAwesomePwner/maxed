@@ -6,7 +6,7 @@ import type { PlayerDamage } from '../bindings/PlayerDamage';
 import type { InstanceEventView } from '../bindings/InstanceEventView';
 import type { RunPlayerTotal } from '../bindings/RunPlayerTotal';
 import type { HomeLiveWindow } from './v2/contracts';
-import { coverageLabels, knownNumber } from './evidence';
+import { coverageLabels, damageUncertain, knownNumber } from './evidence';
 import { scopedFights, snapshotFight, verifiedSelf, verifiedRunSelf } from '../shell/rail';
 import { formatClock, formatElapsed } from '../styles/format';
 
@@ -241,7 +241,7 @@ export function dungeonView(snapshot: LiveSnapshot | null, previousId: string | 
   const partial = !snapshot || !run || !run.complete_capture || snapshot.issues.length > 0
     || (snapshot.character?.issues.length ?? 0) > 0
     || run.issues.length > 0 || Boolean(fight && (!fight.complete_capture || fight.issues.length > 0
-      || fight.players.some((player) => player.sources.some((source) => source.estimated))))
+      || fight.players.some((player) => player.sources.some(damageUncertain))))
     || drops.some((drop) => drop.issues.length > 0 || drop.source_estimated);
   // A run death is one local event, even when copied into multiple fight rows.
   const deathObserved = run && (run.died_at !== null || run.outcome === 'died'

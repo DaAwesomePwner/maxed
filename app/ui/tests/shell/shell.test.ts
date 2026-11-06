@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Shell from '../../src/lib/shell/Shell.svelte';
+import { productionFeatures } from '../../src/lib/navigation/routes';
 import FixtureApp from './fixtures/FixtureApp.svelte';
 import { createClient } from '../../src/lib/bridge/client';
 import { createFixtureTransport } from '../../src/lib/bridge/fixture';
@@ -29,7 +30,7 @@ describe('P4 strengthened P3 regressions (NON-RED)', () => {
   it('non_red_dungeon_zero_history_reads_and_one_shell_event_owner', async () => {
     const initial = homeSnapshot();
     const page = mountRuns({ hash: '#/', snapshot: initial }); await flush();
-    expect(within(screen.getByRole('main')).getByRole('heading', { name: 'Fight Damage' })).toBeTruthy();
+    expect(within(screen.getByRole('main')).getByRole('heading', { name: 'Party damage' })).toBeTruthy();
     const focus = within(screen.getByRole('navigation', { name: 'Navigation' })).getByRole('link', { name: 'Home' });
     focus.focus();
     for (let sequence = 13; sequence <= 20; sequence++) {
@@ -43,6 +44,11 @@ describe('P4 strengthened P3 regressions (NON-RED)', () => {
     expect(document.activeElement).toBe(focus);
     const rail = screen.getByRole('complementary', { name: 'Character' });
     page.setStore(saved('21')); page.publish({ ...initial, sequence: '21', area_kind: 'nexus', run: null }); await flush();
+    await fireEvent.click(screen.getByRole('button', { name: 'View recap' })); await flush();
+    expect(within(screen.getByRole('region', { name: 'Recap' })).getByRole('heading', { name: initial.run!.dungeon })).toBeTruthy();
+    expect(document.activeElement).toBe(focus);
+    await fireEvent.click(within(screen.getByRole('region', { name: 'Recap' })).getByRole('button', { name: 'Back' })); await flush();
+    expect(screen.queryByRole('region', { name: 'Recap' })).toBeNull();
     expect(within(screen.getByRole('main')).getByRole('link', { name: /Synthetic Sanctum/ })).toBeTruthy();
     expect(page.client.queryHome).toHaveBeenCalledTimes(1);
     for (const listener of page.listeners) expect(listener).toHaveBeenCalledTimes(1);
@@ -86,7 +92,7 @@ function setup(hash = '#/', lootBrowsing = false) {
   const transport = createFixtureTransport(fixture);
   const client = createClient(transport);
   const browser = fakeHistory(hash);
-  const rendered = render(Shell, { client, historyAdapter: browser.adapter, features: { lootBrowsing, logs: false, stats: false } });
+  const rendered = render(Shell, { client, historyAdapter: browser.adapter, features: { lootBrowsing, logs: false, stats: false, party: false, character: false, homeRedesign: productionFeatures.homeRedesign } });
   return { ...rendered, transport, client, browser };
 }
 describe('persistent shell', () => {
@@ -221,10 +227,16 @@ describe('persistent shell', () => {
     const transport = createFixtureTransport(liveFixture);
     const browser = fakeHistory();
     const { rerender } = render(Shell, { client: createClient(transport), preview: true, historyAdapter: browser.adapter });
-    await within(screen.getByRole('main')).findByRole('heading', { name: 'Fight Damage' });
+    await within(screen.getByRole('main')).findByRole('heading', { name: 'Party damage' });
     const primary = screen.getByRole('navigation', { name: 'Navigation' });
     const home = within(primary).getByRole('link', { name: 'Home' }); home.focus();
     transport.publishSnapshot({ ...liveFixture, sequence: '13', area_kind: 'nexus', map: 'Nexus' });
+    await fireEvent.click(await screen.findByRole('button', { name: 'View recap' }));
+    const recap = await screen.findByRole('region', { name: 'Recap' });
+    expect(within(recap).getByRole('heading', { name: liveFixture.run.dungeon })).toBeTruthy();
+    expect(document.activeElement).toBe(home);
+    await fireEvent.click(within(recap).getByRole('button', { name: 'Back' }));
+    expect(screen.queryByRole('region', { name: 'Recap' })).toBeNull();
     await within(screen.getByRole('main')).findByRole('heading', { name: 'Nexus' });
     expect(document.activeElement).toBe(home);
     expect(browser.adapter.hash).toBe('#/');
@@ -301,5 +313,39 @@ describe('synthetic P4 consumption example', () => {
     await screen.findByRole('heading', { name: 'Runs', level: 1 });
     await user.click(screen.getByRole('button', { name: 'Forward' }));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Settings', level: 1 })));
+  });
+});
+
+describe('Shell-owned Character controls', () => {
+  afterEach(cleanup);
+  it('preserves defense through routes and back/forward with one live subscription; remount resets it', async () => {
+    const client = createClient(createFixtureTransport(homeSnapshot()));
+    const onSnapshot = vi.spyOn(client, 'onSnapshot'), onCapture = vi.spyOn(client, 'onCapture');
+    const browser = fakeHistory('#/character');
+    const props = { client, preview: true, features: { ...productionFeatures, character: true }, historyAdapter: browser.adapter };
+    const page = render(Shell, props);
+    const input = await screen.findByRole('spinbutton', { name: 'Enemy defense' });
+    await fireEvent.input(input, { target: { value: '50' } });
+    await fireEvent.click(screen.getByRole('link', { name: 'Settings' }));
+    await screen.findByRole('heading', { name: 'Settings', level: 1 });
+    browser.adapter.go(-1);
+    expect((await screen.findByRole('spinbutton', { name: 'Enemy defense' }) as HTMLInputElement).value).toBe('50');
+    browser.adapter.go(1);
+    await screen.findByRole('heading', { name: 'Settings', level: 1 });
+    browser.adapter.go(-1);
+    expect((await screen.findByRole('spinbutton', { name: 'Enemy defense' }) as HTMLInputElement).value).toBe('50');
+    expect(onSnapshot).toHaveBeenCalledTimes(1); expect(onCapture).toHaveBeenCalledTimes(1);
+    page.unmount();
+    render(Shell, props);
+    expect((await screen.findByRole('spinbutton', { name: 'Enemy defense' }) as HTMLInputElement).value).toBe('0');
+  });
+  it('shows Character in production but cannot calculate without an input revision', async () => {
+    const client = createClient(createFixtureTransport(homeSnapshot()));
+    const calculate = vi.spyOn(client, 'getCharacterCalculation');
+    render(Shell, { client, preview: true, historyAdapter: fakeHistory('#/character').adapter });
+    await screen.findByRole('heading', { name: 'Character', level: 1 });
+    expect(screen.getByRole('spinbutton', { name: 'Enemy defense' })).toBeTruthy();
+    expect(await screen.findByText('Character calculation unavailable. Reconnect to obtain an input revision.')).toBeTruthy();
+    expect(calculate).not.toHaveBeenCalled();
   });
 });

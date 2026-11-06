@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "maxed-capture"
 description = "Passive packet capture and adapter selection for Maxed."
 version.workspace = true
@@ -16,3 +17,8 @@ libloading.workspace = true
 serde_json.workspace = true
 [dependencies.maxed-types]
 path = "../maxed-types"
+
+# Merge ordinary integration suites; retain documented or process-isolated targets.
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

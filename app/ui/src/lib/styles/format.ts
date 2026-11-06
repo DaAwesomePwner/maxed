@@ -12,9 +12,11 @@ export function formatDps(value: number | null | undefined): string {
 export function titleCase(value: string): string {
   return value.replaceAll('_', ' ').replace(/\b\w/g,letter => letter.toUpperCase());
 }
-export function formatShare(value: number | null): string {
+const fixedPercentFormat = new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 });
+/** Fixed precision keeps percentage columns aligned; compact copy remains the default. */
+export function formatShare(value: number | null, fixedPrecision = false): string {
   return value !== null && Number.isFinite(value) && value >= 0 && value <= 1
-    ? percentFormat.format(value) : '—';
+    ? (fixedPrecision ? fixedPercentFormat : percentFormat).format(value) : '—';
 }
 /** Engine timestamps are decimal microseconds, potentially larger than JS safe integers. */
 export function formatElapsed(start: string, end: string, includeHours = false): string {
@@ -59,4 +61,12 @@ export function formatClockRange(start: string | null | undefined, end: string |
   }
   const text = (values: Intl.DateTimeFormatPart[]) => values.map(part => part.value).join('').trim();
   return `${text(first)} – ${text(last)}`;
+}
+
+/** Decimal storage units, matching the recording quota; unknown remains unavailable. */
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return 'Unavailable';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const unit = bytes === 0 ? 0 : Math.min(units.length - 1, Math.max(0, Math.floor(Math.log(bytes) / Math.log(1000))));
+  return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: unit < 3 ? 0 : 1 }).format(bytes / 1000 ** unit)} ${units[unit]}`;
 }

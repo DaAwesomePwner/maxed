@@ -11,11 +11,22 @@ import { fight } from '../home-v2/fixtures';
 afterEach(() => vi.unstubAllGlobals());
 const visuals = emptyHomeVisuals();
 const resolveSpriteUrl = () => null;
-const rows = Array.from({ length: 85 }, (_, i) => ({ rank: i + 1, name: `FourteenChar${i}`,
+const rows = Array.from({ length: 85 }, (_, i) => ({ player_id: `p${i}`, object_id: i, rank: i + 1, name: `FourteenChar${i}`,
   class_id: 999, is_local: i === 14, damage: (85 - i) * 100, dps: 99, share: 0.01 }));
 
+it('links usable name cells with an affordance and keeps local highlight', () => {
+  const page = render(DamageTable, { basis: 'player_active_window_v1', rows: rows.slice(14, 16), total: 2, visuals, resolveSpriteUrl,
+    rowHref: row => row.is_local ? '#/runs/r/players/p14' : null });
+  const link = screen.getByRole('link', { name: /FourteenChar14/ });
+  expect(link.getAttribute('href')).toBe('#/runs/r/players/p14');
+  expect(link.textContent).toContain('›');
+  expect(link.closest('tr')?.classList.contains('self')).toBe(true);
+  expect(screen.getByRole('rowheader', { name: 'FourteenChar15' }).querySelector('a')).toBeNull();
+  expect(page.container.querySelectorAll('.damage-row a')).toHaveLength(1);
+});
+
 it('renders a ranked window, actual other damage and a real more link', () => {
-  const page = render(DamageTable, { rows: rankWindow(rows), total: 85, otherDamage: 100,
+  const page = render(DamageTable, { basis: 'player_active_window_v1', rows: rankWindow(rows), total: 85, otherDamage: 100,
     visuals, resolveSpriteUrl, moreHref: '#/fights/f' });
   expect(page.container.querySelectorAll('.damage-row')).toHaveLength(6);
   expect(page.container.querySelectorAll('.damage-row.self')).toHaveLength(1);
@@ -26,7 +37,7 @@ it('renders a ranked window, actual other damage and a real more link', () => {
   expect(page.container.querySelector('[data-fallback="true"]')?.getAttribute('aria-label')).toBe('Class');
 });
 it('keeps column definitions and row slots stable through 2 to 4 digit churn', async () => {
-  const page = render(DamageTable, { rows: rows.slice(0, 5), total: 85, visuals, resolveSpriteUrl });
+  const page = render(DamageTable, { basis: 'player_active_window_v1', rows: rows.slice(0, 5), total: 85, visuals, resolveSpriteUrl });
   const columns = [...page.container.querySelectorAll('col')].map(col => col.getAttribute('style'));
   const table = page.container.querySelector('table');
   const slots = [...page.container.querySelectorAll('.damage-row')];
@@ -39,7 +50,7 @@ it('keeps column definitions and row slots stable through 2 to 4 digit churn', a
 });
 it('uses singular gap copy at rank six and plural copy as rank changes', async () => {
   const atRank = (rank: number) => rankWindow(rows.map(row => ({ ...row, is_local: row.rank === rank })));
-  const page = render(DamageTable, { rows: atRank(6), total: 85, visuals, resolveSpriteUrl });
+  const page = render(DamageTable, { basis: 'player_active_window_v1', rows: atRank(6), total: 85, visuals, resolveSpriteUrl });
   expect(page.container.querySelector('.gap')?.textContent).toBe('··· 1 player');
   await page.rerender({ rows: atRank(7) });
   expect(page.container.querySelector('.gap')?.textContent).toBe('··· 2 players');
@@ -94,7 +105,7 @@ it('announces the kill with HP only when the status is inside the meter', async 
   expect(meter.getAttribute('aria-valuetext')).toBe('0 / 336,000 · 0%');
 });
 it.each([NaN, Infinity, -1])('invalid values render dashes (%s)', value => {
-  const page = render(DamageTable, { rows: [{ ...rows[0], rank: value, damage: value, dps: value, share: value }],
+  const page = render(DamageTable, { basis: 'player_active_window_v1', rows: [{ ...rows[0], rank: value, damage: value, dps: value, share: value }],
     total: 1, otherDamage: value, visuals, resolveSpriteUrl });
   expect(page.container.textContent).not.toMatch(/NaN|Infinity|undefined/);
   expect(page.container.querySelector('[data-unattributed]')).toBeNull();

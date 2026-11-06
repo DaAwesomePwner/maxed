@@ -6,7 +6,9 @@ use crate::{
 };
 use maxed_assets::CachedCatalog;
 use maxed_capture::{CaptureConfig, CaptureError, CaptureHandle};
-use maxed_types::{AdapterInfo, AppSettings, CaptureAccess, CaptureState, NpcapCheck, SetupStatus};
+use maxed_types::{
+    AdapterInfo, AppSettings, CaptureAccess, CaptureState, NpcapCheck, PotionStat, SetupStatus,
+};
 use std::{
     fs::File,
     io::Read,
@@ -38,6 +40,12 @@ impl CaptureBackend for NativeCapture {
     }
 }
 pub trait Lifecycle: Send + Sync {
+    fn history_upgrade_status(&self) -> Result<maxed_types::HistoryUpgradeStatus, String> {
+        Err("History upgrade status is unavailable.".into())
+    }
+    fn backup_and_upgrade_history(&self) -> Result<maxed_types::HistoryUpgradeStatus, String> {
+        Err("History upgrade is unavailable.".into())
+    }
     fn configure_recording(&self, enabled: bool, _limit: u32, _live: bool) -> Result<(), String> {
         if enabled {
             Err("Recording is unavailable.".into())
@@ -70,6 +78,12 @@ pub struct NativeLifecycle {
     pub app_data: PathBuf,
 }
 impl Lifecycle for NativeLifecycle {
+    fn history_upgrade_status(&self) -> Result<maxed_types::HistoryUpgradeStatus, String> {
+        self.runtime.history_upgrade_status()
+    }
+    fn backup_and_upgrade_history(&self) -> Result<maxed_types::HistoryUpgradeStatus, String> {
+        self.runtime.backup_and_upgrade_history()
+    }
     fn configure_recording(&self, enabled: bool, limit: u32, live: bool) -> Result<(), String> {
         self.runtime
             .configure_recording(self.app_data.clone(), enabled, limit, live)
@@ -142,6 +156,7 @@ pub struct SetupService {
     discovery_roots: Vec<PathBuf>,
     launcher_root: Option<PathBuf>,
     settings_present_at_start: bool,
+    gui_smoke: bool,
     cancel: AtomicBool,
     closing: AtomicBool,
     demo: AtomicBool,
@@ -177,13 +192,34 @@ impl SetupService {
         }
     }
 
+    pub fn potion_stats(&self) -> Vec<(u16, PotionStat)> {
+        if self.demo.load(Ordering::Acquire) {
+            demo_catalog()
+                .map(|catalog| {
+                    catalog
+                        .items
+                        .into_iter()
+                        .filter_map(|item| item.potion_stat.map(|stat| (item.object_type, stat)))
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            self.assets.potion_stats()
+        }
+    }
+
     pub fn new(
         root: PathBuf,
         backend: Arc<dyn CaptureBackend>,
         lifecycle: Arc<dyn Lifecycle>,
         assets: Arc<AssetBridge>,
     ) -> Result<Self, String> {
-        Self::with_discovery_roots(root, backend, lifecycle, assets, steam_roots())
+        let roots = if crate::gui_smoke::enabled() {
+            Vec::new()
+        } else {
+            steam_roots()
+        };
+        Self::with_discovery_roots(root, backend, lifecycle, assets, roots)
     }
     pub fn with_discovery_roots(
         root: PathBuf,
@@ -195,6 +231,7 @@ impl SetupService {
         Ok(Self {
             updates: Arc::new(crate::updater::service::UpdateService::new()),
             settings_present_at_start: root.join("settings.json").is_file(),
+            gui_smoke: crate::gui_smoke::enabled(),
             settings: Arc::new(SettingsStore::new(root.clone())?),
             root,
             backend,
@@ -215,7 +252,9 @@ impl SetupService {
     }
     /// LocalAppData comes from Tauri's known-folder resolver; tests inject a temp root.
     pub fn with_launcher_root(mut self, root: Option<PathBuf>) -> Self {
-        self.launcher_root = root;
+        if !self.gui_smoke {
+            self.launcher_root = root;
+        }
         self
     }
     pub fn catalog_available(&self) -> bool {
@@ -223,6 +262,9 @@ impl SetupService {
     }
     /// Routing hint only: never probe, discover, hash, extract or join a worker.
     pub fn startup_setup_required(&self) -> bool {
+        if self.gui_smoke {
+            return true;
+        }
         // Explicit synthetic demo startup has its own catalog and never needs
         // a live installation or Npcap. Leaving demo still exposes normal Setup.
         if self.demo.load(Ordering::Acquire) {
@@ -239,6 +281,9 @@ impl SetupService {
             .is_some_and(|path| crate::startup_cache::recorded(&self.root, Path::new(&path)))
     }
     fn begin_transition(&self) -> Result<(), String> {
+        if self.gui_smoke {
+            return Err(CAPTURE_ERROR.into());
+        }
         if self.updates.installing() {
             return Err("Update operation is busy.".into());
         }
@@ -249,6 +294,9 @@ impl SetupService {
         Ok(())
     }
     pub fn adapters(&self) -> Result<Vec<AdapterInfo>, String> {
+        if self.gui_smoke {
+            return Err(CAPTURE_ERROR.into());
+        }
         self.backend
             .adapters()
             .map(|rows| {
@@ -262,6 +310,9 @@ impl SetupService {
             .map_err(|_| CAPTURE_ERROR.into())
     }
     fn opened(&self, id: Option<String>, cancel: &AtomicBool) -> Result<CaptureHandle, String> {
+        if self.gui_smoke {
+            return Err(CAPTURE_ERROR.into());
+        }
         let result = (|| {
             self.backend.probe()?;
             *self.probe.lock().unwrap_or_else(|p| p.into_inner()) =
@@ -338,6 +389,17 @@ impl SetupService {
             self.assets.visuals(object_types)
         }
     }
+    pub fn item_details(
+        &self,
+        object_types: &[u16],
+        enchant_ids: &[i32],
+    ) -> Result<maxed_types::ItemDetailPage, String> {
+        if self.demo.load(Ordering::Acquire) {
+            crate::assets_bridge::item_details(&demo_catalog()?, object_types, enchant_ids)
+        } else {
+            self.assets.item_details(object_types, enchant_ids)
+        }
+    }
     pub fn catalog_dungeons(&self) -> Result<Vec<String>, String> {
         if self.demo.load(Ordering::Acquire) {
             Ok(crate::assets_bridge::catalog_dungeons(&demo_catalog()?))
@@ -384,6 +446,9 @@ impl SetupService {
     }
     /// Explicit Retry checks may retry unchanged failures, including while live.
     pub fn query_with_retry(self: &Arc<Self>, retry: bool) -> SetupStatus {
+        if self.gui_smoke {
+            return self.status();
+        }
         let Ok(_serial) = self.serial.try_lock() else {
             return self.status();
         };
@@ -535,6 +600,9 @@ impl SetupService {
     /// Reserve at IPC receipt, before dispatch to the blocking pool. Worker
     /// scheduling must never invert two successive user selections.
     pub fn reserve_assets(&self) -> Result<Operation, String> {
+        if self.gui_smoke {
+            return Err(crate::assets_bridge::ASSET_ERROR.into());
+        }
         self.discovered.store(true, Ordering::Release);
         *self
             .failed_candidate
@@ -840,6 +908,45 @@ impl SetupService {
             .commit_channel(settings.update_channel, || Ok(()))
     }
 
+    pub fn database_size(&self) -> Result<u64, String> {
+        crate::storage_usage::database_size(&self.root)
+    }
+
+    pub fn history_upgrade_status(&self) -> Result<maxed_types::HistoryUpgradeStatus, String> {
+        self.lifecycle.history_upgrade_status()
+    }
+    pub fn backup_and_upgrade_history(&self) -> Result<maxed_types::HistoryUpgradeStatus, String> {
+        {
+            let _serial = self
+                .serial
+                .lock()
+                .map_err(|_| "History upgrade is unavailable.")?;
+            if self.demo.load(Ordering::Acquire)
+                || self.closing.load(Ordering::Acquire)
+                || self.updates.installing()
+            {
+                return Err("History upgrade is unavailable during playback or shutdown.".into());
+            }
+        }
+        self.lifecycle.backup_and_upgrade_history()
+    }
+    pub fn storage_status(&self) -> Result<maxed_types::StorageStatus, String> {
+        let settings = self.settings.get()?;
+        Ok(crate::storage_usage::status(
+            &self.root,
+            self.lifecycle
+                .recording_status(settings.recording_limit_bytes),
+        ))
+    }
+    /// Local Settings only; never include this location in a notice or log.
+    pub fn storage_backup_location(&self) -> Result<String, String> {
+        self.root
+            .join("backups/live")
+            .into_os_string()
+            .into_string()
+            .map_err(|_| "Backup location is unavailable.".into())
+    }
+
     pub fn recording_status(&self) -> Result<maxed_types::RecordingStatus, String> {
         let settings = self.settings.get()?;
         let mut status = self
@@ -1037,3 +1144,84 @@ pub fn discover_with_launcher(
 #[cfg(test)]
 #[path = "../tests/support/recording_setup.rs"]
 mod recording_tests;
+
+#[cfg(all(test, debug_assertions))]
+mod gui_smoke_tests {
+    use super::*;
+
+    struct NoCapture;
+    impl CaptureBackend for NoCapture {
+        fn probe(&self) -> Result<(), CaptureError> {
+            panic!("smoke touched Npcap")
+        }
+        fn adapters(&self) -> Result<Vec<maxed_capture::AdapterInfo>, CaptureError> {
+            panic!("smoke enumerated adapters")
+        }
+        fn start(&self, _: CaptureConfig) -> Result<CaptureHandle, CaptureError> {
+            panic!("smoke started capture")
+        }
+    }
+    struct NoLifecycle;
+    impl Lifecycle for NoLifecycle {
+        fn running(&self) -> bool {
+            false
+        }
+        fn live(&self) -> bool {
+            false
+        }
+        fn stop(&self) -> Result<(), String> {
+            Ok(())
+        }
+        fn start(&self, _: Option<CachedCatalog>, _: CaptureHandle) -> Result<(), String> {
+            panic!("smoke started the engine")
+        }
+        fn demo(&self, _: bool) -> Result<(), String> {
+            panic!("smoke started demo")
+        }
+    }
+
+    #[test]
+    fn smoke_refuses_setup_work_and_keeps_normal_unavailable_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut service = SetupService::with_discovery_roots(
+            temp.path().to_owned(),
+            Arc::new(NoCapture),
+            Arc::new(NoLifecycle),
+            Arc::new(AssetBridge::default()),
+            Vec::new(),
+        )
+        .unwrap();
+        service.gui_smoke = true;
+        let service = Arc::new(service.with_launcher_root(Some(temp.path().join("launcher"))));
+        assert!(service.launcher_root.is_none());
+        assert!(service.startup_setup_required());
+        for retry in [false, true] {
+            let status = service.query_with_retry(retry);
+            assert_eq!(status.npcap, NpcapCheck::Unchecked);
+            assert_eq!(status.access, CaptureAccess::Unknown);
+            assert_eq!(status.assets, maxed_types::AssetCheck::Missing);
+            assert!(!status.client_found);
+            assert!(!status.demo);
+            assert!(service.refresh_worker.lock().unwrap().is_none());
+        }
+        assert!(service.adapters().is_err());
+        assert!(service.opened(None, &AtomicBool::new(false)).is_err());
+        assert!(service.start().is_err());
+        assert!(service.set_adapter(None).is_err());
+        assert!(service.reserve_assets().is_err());
+        assert!(service
+            .set_assets("unavailable/resources.assets".into())
+            .is_err());
+        let operation = service.assets.begin().unwrap();
+        assert!(service
+            .set_assets_reserved("unavailable/resources.assets".into(), operation)
+            .is_err());
+        let mut settings = service.settings.get().unwrap();
+        settings.assets_path = Some("unavailable/resources.assets".into());
+        assert!(service.update(settings.clone()).is_err());
+        assert!(service.update_reserved(settings, None).is_err());
+        assert!(service.set_demo(true).is_err());
+        assert!(!service.catalog_available());
+        assert!(service.assets.cache().is_none());
+    }
+}

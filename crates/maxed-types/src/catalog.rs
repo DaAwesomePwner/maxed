@@ -38,8 +38,24 @@ pub struct ScalingDef {
     pub shots: u16,
     pub origin_item: Option<u16>,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PotionStat {
+    Life,
+    Mana,
+    Attack,
+    Defense,
+    Speed,
+    Dexterity,
+    Vitality,
+    Wisdom,
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct ItemDef {
+    // Absent in legacy catalogs: firing metadata has not been extracted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub weapon_firing: Option<WeaponFiringDef>,
     pub object_type: u16,
     pub name: String,
     pub tier: Option<String>,
@@ -53,6 +69,9 @@ pub struct ItemDef {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub stat_bonuses: Option<Vec<StatView>>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub potion_stat: Option<PotionStat>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct ObjectDef {
@@ -92,6 +111,10 @@ pub struct EnchantDef {
     #[serde(default, with = "crate::finite::optional_f64")]
     #[ts(as = "Option<f64>")]
     pub stat_damage_multiplier: Option<f64>,
+    // Absent is unknown; supported empty lists establish no regeneration effect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub regeneration: Option<EnchantRegenDef>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct DungeonDef {
@@ -147,4 +170,62 @@ pub struct CrucibleDef {
     #[serde(with = "crate::finite::f64_value")]
     #[ts(as = "f64")]
     pub damage_multiplier: f64,
+}
+
+/// Extraction support is independent of whether any effects were found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum CatalogSupport {
+    Supported,
+    Partial,
+    Unsupported,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum WeaponSchedule {
+    Simultaneous,
+    Unsupported,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct WeaponFiringDef {
+    pub support: CatalogSupport,
+    pub groups: Vec<WeaponAttackGroup>,
+    pub omitted_projectile_indices: Vec<i16>,
+    // Controlled reason codes, never source XML or display descriptions.
+    pub reasons: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct WeaponAttackGroup {
+    pub group_id: String,
+    pub projectile_index: i16,
+    pub count: u16,
+    #[serde(with = "crate::finite::f64_value")]
+    #[ts(as = "f64")]
+    pub rate_factor: f64,
+    pub schedule: WeaponSchedule,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct EnchantRegenDef {
+    pub support: CatalogSupport,
+    pub hp: Vec<RegenEffect>,
+    pub mp: Vec<RegenEffect>,
+    pub reasons: Vec<String>,
+    // Reviewed unit identifiers, not display text or inferred defaults.
+    pub source_units: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct RegenEffect {
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub flat_per_sec: Option<f64>,
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub fraction_of_max_per_sec: Option<f64>,
+    pub source_units: Vec<String>,
 }

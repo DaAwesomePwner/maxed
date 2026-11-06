@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import { setDebugMode } from '../../src/lib/debug/debug';
 import FameSparkline from '../../src/lib/home/FameSparkline.svelte';
 import NexusHome from '../../src/lib/home/NexusHome.svelte';
-import { homeSnapshot, homeSummary } from './fixtures';
+import { characterFame, homeSnapshot, homeSummary } from './fixtures';
 
 beforeEach(() => setDebugMode(false));
 afterEach(() => setDebugMode(false));
@@ -14,18 +14,20 @@ it('keeps chart caveats out of accessible text even in debug mode', async () => 
     points: [{ at: '1000000', character_id: 'a', fame: 42 }],
     period: 'Session', partial: true, sampled: true,
   });
-  const chart = screen.getByRole('img', { name: 'Fame over Time Session Fame' });
+  const chartName = 'Fame over Time Session Fame, 41 to 43. Triangles mark 0 retained recent run starts in this time range.';
+  const chart = screen.getByRole('img', { name: chartName });
   expect(page.container.textContent).not.toMatch(/partial|sampled|baseline/i);
   setDebugMode(true); await tick();
   expect(page.container.querySelector('[data-debug-note]')?.textContent).toMatch(/Partial fame coverage/);
   expect(chart.textContent).not.toMatch(/partial|sampled|baseline/i);
+  expect(screen.getByRole('img', { name: chartName })).toBe(chart);
   expect(chart.querySelectorAll('circle')).toHaveLength(1);
 });
 
 it('keeps session values and short titles while gating history and coverage details', async () => {
   const page = render(NexusHome, {
     snapshot: homeSnapshot(), choice: 'session', retry: () => {},
-    history: { phase: 'error', summary: homeSummary({ fame_delta: 25, fame_missing_baselines: 1, fame_sampled: true }),
+    history: { phase: 'error', summary: homeSummary({ fame_delta: 25, ...characterFame(25), fame_missing_baselines: 1, fame_sampled: true }),
       message: 'History details: partial coverage', retryAvailable: true },
   });
   expect(screen.getByRole('heading', { name: homeSnapshot().map! })).toBeTruthy();

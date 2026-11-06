@@ -100,12 +100,15 @@ it('searches names and aliases, edits chips and visible results, and retains mod
   } }); await flush();
   const mode = main().getByRole('combobox', { name: 'Key Popped dungeons' });
   await fireEvent.change(mode, { target: { value: 'selected' } }); await flush();
-  expect(within(main().getByRole('heading', { name: 'Presentation' }).closest('section')!).getByRole('alert').textContent).toContain('key-pop alerts are silent');
+  const emptySelection = 'Choose dungeons to receive key-pop alerts. None selected means no alerts.';
+  expect(within(main().getByRole('group', { name: 'Chosen dungeons' })).getByText(emptySelection)).toBeTruthy();
+  expect(within(main().getByRole('group', { name: 'Chosen dungeons' })).queryByRole('alert')).toBeNull();
   const search = main().getByRole('searchbox', { name: 'Search dungeons' });
   await fireEvent.input(search, { target: { value: 'lh' } });
   expect(main().queryByRole('checkbox', { name: 'The Void' })).toBeNull();
   await fireEvent.click(main().getByRole('button', { name: 'Select all' }));
   expect(main().getByRole('button', { name: 'Remove Lost Halls' })).toBeTruthy();
+  expect(main().queryByText(emptySelection)).toBeNull();
   await fireEvent.input(search, { target: { value: 'void' } });
   await fireEvent.click(main().getByRole('button', { name: 'Select all' }));
   await fireEvent.click(main().getByRole('button', { name: 'Clear' }));
@@ -117,7 +120,7 @@ it('searches names and aliases, edits chips and visible results, and retains mod
   await fireEvent.click(main().getByRole('button', { name: 'Save' })); await flush();
   expect(page.settings.alerts.key_pop_dungeons).toEqual(['Lost Halls']);
   await fireEvent.click(main().getByRole('button', { name: 'Remove Lost Halls' }));
-  expect(within(main().getByRole('heading', { name: 'Presentation' }).closest('section')!).getByRole('alert').textContent).toContain('key-pop alerts are silent');
+  expect(within(main().getByRole('group', { name: 'Chosen dungeons' })).getByText(emptySelection)).toBeTruthy();
   await fireEvent.change(mode, { target: { value: 'except' } });
   await fireEvent.click(main().getByRole('button', { name: 'Select all' }));
   await fireEvent.click(main().getByRole('button', { name: 'Save' })); await flush();
@@ -229,7 +232,7 @@ it('renders valid legacy selections with duplicate names as one removable chip',
 it.each([false, true])('rebases dirty settings onto a log mute (Only=%s)', async only => {
   const page = mountPhase2({ hash: '#/alerts',
     // Legacy combined Alerts page; unreachable with the production logs flag on.
-    features: { lootBrowsing: true, logs: false, stats: false }, alerts: async () => ready({ rows: [pop()], next: null }),
+    features: { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false }, alerts: async () => ready({ rows: [pop()], next: null }),
     configure: client => { client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void'].map(name => ({ name, aliases: [], kind: 'dungeon' as const, completion_index: null }))); } });
   page.setSettings({ alerts: preferences({ key_pop_dungeons: only ? ['Lost Halls', 'The Void'] : null }) });
   await flush();
@@ -263,7 +266,7 @@ it.each([false, true])('merges dirty picker additions and removals with a log mu
   const names = ['Lost Halls', 'The Void', 'Old choice', 'Added B', 'Added A'];
   const page = mountPhase2({ hash: '#/alerts',
     // Legacy combined Alerts page; unreachable with the production logs flag on.
-    features: { lootBrowsing: true, logs: false, stats: false }, alerts: async () => ready({ rows: [pop()], next: null }),
+    features: { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false }, alerts: async () => ready({ rows: [pop()], next: null }),
     configure: client => { client.listCatalogDungeonOptions = vi.fn(async () => names.map(name => ({ name, aliases: [], kind: 'dungeon' as const, completion_index: null }))); } });
   const initial = ['The Void', 'Old choice', 'The Void'];
   page.setSettings({ alerts: preferences({ key_pop_dungeons: only ? ['Lost Halls', ...initial] : null,

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { itemHover } from '../components/item-hover';
   import { objectVisual } from '../bridge/visual-index';
   import SpriteImage from '../components/SpriteImage.svelte';
   import ItemTile from '../components/ItemTile.svelte';
@@ -14,11 +15,18 @@
   let sheetUrl = $derived(visual?.sprite ? spriteUrl(visuals.client_fingerprint, visual.sprite) : null);
   const resolve = (sprite: SpriteRef) => spriteUrl(visuals.client_fingerprint, sprite);
 </script>
+{#if kind === 'item' && type !== null}
+<span class="object-label" use:itemHover={{ type, enchant, name: visual?.name ?? undefined, tier: visual?.item_tier }}>
+  <ItemTile sprite={visual?.sprite ?? null} resolveSpriteUrl={resolve} scale={2} alt={name} {enchant} />
+  <span>{name}</span>
+</span>
+{:else}
 <span class="object-label" title={type === null ? undefined : `Catalog ID: ${type}`}>
   {#if kind === 'item'}<ItemTile sprite={visual?.sprite ?? null} resolveSpriteUrl={resolve} scale={2} alt={name} {enchant} />
   {:else}<SpriteImage sprite={visual?.sprite ?? null} {sheetUrl} scale={2} alt={name} />{/if}
   <span>{name}</span>
 </span>
+{/if}
 <style>
   .object-label { display: inline-flex; align-items: center; gap: var(--space-2); vertical-align: middle; color: inherit; }
 </style>

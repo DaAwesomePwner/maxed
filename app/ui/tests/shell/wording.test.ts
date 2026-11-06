@@ -27,13 +27,13 @@ it('keeps missing stats and reasons out of production text and accessible names'
   expect(container.querySelector('[data-debug-note], [title]')).toBeNull();
 });
 
-it('retains stat values and fills while showing provisional splits only in debug mode', async () => {
+it('retains old DTO values and fills without trusting their unevidenced cap claims', async () => {
   const { container } = render(StatPanel, { panel: {
     lines: [{ stat_id: 0, current: 50, total: 100, boost: 0 }, { stat_id: 20, total: 75, boost: 10, at_cap: true }],
     conditions: [], breakdown_provisional: true,
   } });
   expect(container.querySelector('[data-stat-id="20"] dd')?.textContent).toBe('75 (+10)');
-  expect(container.querySelector('[data-stat-id="20"]')?.getAttribute('data-tone')).toBe('max');
+  expect(container.querySelector('[data-stat-id="20"]')?.getAttribute('data-tone')).toBe('boosted');
   expect(container.querySelector<HTMLElement>('.fill')?.style.width).toBe('50%');
   expect(container.textContent).not.toMatch(/observed|provisional/i);
   setDebugMode(true); await tick();
@@ -54,4 +54,16 @@ it('keeps identity caveats and capture diagnostics out of the default rail', () 
     busy: false, error: '', onStart: vi.fn(), onStop: vi.fn(), onRetry: vi.fn(),
   });
   expect(live.container.textContent).not.toMatch(/observed|observation|unknown packets|dropped frames/i);
+});
+
+it('shows cap unavailability with debug off and never guesses pots or maxed tone', () => {
+  const { container } = render(StatPanel, { panel: {
+    lines: [{ stat_id: 20, total: 81, base: 75, cap: 75, boost: 6, exalt: 2, at_cap: null,
+      split_evidence: { placement: 'provisional_inside_boost', cap_eligible: false,
+        reasons: ['unverified_placement'] } }],
+    conditions: [], breakdown_provisional: true,
+  } });
+  expect(container.querySelector('[data-stat-id="20"] dd')?.textContent).toBe('81 (+6)');
+  expect(container.querySelector('[data-tone="max"], .at-cap')).toBeNull();
+  expect(screen.getByText(/Cap and pots unavailable: exalt placement unverified/)).toBeTruthy();
 });

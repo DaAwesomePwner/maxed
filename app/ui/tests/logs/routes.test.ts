@@ -7,7 +7,7 @@ import { createRouter } from '../../src/lib/navigation/history';
 import { defaultLogsPosition } from '../../src/lib/navigation/state';
 import { fakeHistory } from '../navigation/fake-history';
 
-const on = { lootBrowsing: true, logs: true, stats: false }, off = { lootBrowsing: true, logs: false, stats: false };
+const on = { lootBrowsing: true, logs: true, stats: false, party: false, character: false, homeRedesign: false }, off = { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false };
 const routes: Array<[string, Route]> = [
   ['#/logs/chat/guild/run/r1', { kind: 'logs', view: 'chat', channel: 'guild', runId: 'r1' }],
   ['#/logs/chat/party/run/r1', { kind: 'logs', view: 'chat', channel: 'party', runId: 'r1' }],

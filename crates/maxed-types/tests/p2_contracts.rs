@@ -82,9 +82,12 @@ fn settings_defaults_round_trip_without_persisted_demo() {
             "update_channel": "stable", "hardware_acceleration": false,
             "alerts": AlertPreferences::default(),
             "loot": { "chase": [] },
+            "party": { "presets": [], "default_preset_id": null },
+            "recap_image": { "fights": true, "loot": true, "names": true },
             "chat": {
                 "store": { "public": true, "guild": true, "party": true, "whisper": true },
-                "retention_days": 90, "hidden_senders": [], "hidden_keywords": []
+                "retention_days": 90, "hidden_senders": [], "hidden_keywords": [],
+                "filter_spam": true
             }
         })
     );

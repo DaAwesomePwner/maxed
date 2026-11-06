@@ -3,8 +3,8 @@
   import type { StatsMapSort } from '../navigation/state';
   import { sortMaps } from './filters';
   import { NO_VALUE, durationText, fameText, rateText } from './presentation';
-  let { rows, sort = null, onSort, unrecorded = null }: {
-    rows: StatsMapRow[]; sort?: { key: StatsMapSort; descending: boolean } | null;
+  let { rows, sort = null, onSort, unrecorded = null, label = 'Map statistics' }: {
+    rows: StatsMapRow[]; label?: string; sort?: { key: StatsMapSort; descending: boolean } | null;
     onSort?: (key: StatsMapSort) => void; unrecorded?: number | null;
   } = $props();
   const columns: Array<[StatsMapSort, string]> = [['map', 'Map'], ['visits', 'Visits'], ['time', 'Time'], ['fame', 'Fame'],
@@ -13,7 +13,8 @@
   const ariaSort = (key: StatsMapSort) => sort?.key !== key ? undefined : sort.descending ? 'descending' : 'ascending';
 </script>
 
-<table>
+<!-- svelte-ignore a11y_no_noninteractive_tabindex (keyboard scrolling for wide tables) -->
+<div class="stats-table-scroll" role="region" aria-label={`${label} scroll area`} tabindex="0"><table aria-label={label}>
   <thead><tr>{#each columns as [key, label]}
     <th scope="col" aria-sort={ariaSort(key)}>{#if onSort}<button type="button" onclick={() => onSort(key)}>{label}</button>{:else}{label}{/if}</th>
   {/each}</tr></thead>
@@ -31,7 +32,7 @@
         <td>{fameText(unrecorded, false)}</td><td>{NO_VALUE}</td><td>{NO_VALUE}</td><td>{NO_VALUE}</td></tr>
     {/if}
   </tbody>
-</table>
+</table></div>
 
 <style>
   table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }

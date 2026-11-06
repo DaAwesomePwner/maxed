@@ -13,7 +13,7 @@ pub const MAX_STATS_EXPORT_SESSIONS: usize = 10_000;
 pub const MAX_STATS_SESSION_RUNS: usize = 500;
 /// Characters offered by the filter.
 pub const MAX_STATS_CHARACTERS: usize = 200;
-/// Below five minutes in total, fame per hour is not shown.
+/// Below five minutes in total, per-hour rates are not shown.
 pub const MIN_STATS_RATE_MICROS: u64 = 300_000_000;
 
 /// Fame per hour, or `None` when the row has under five minutes in total.
@@ -50,6 +50,136 @@ pub struct StatsFilter {
     /// Visits, sessions and runs whose start is within `[start, end)`; `None` is all time.
     pub range: Option<TimeRange>,
     pub character_id: Option<String>,
+}
+
+/// `range` is half-open over `fights.started`; `None` is all time.
+/// `character_id` restricts local performance only; kills cover all characters.
+/// `target_types` contains at most 64 types from fight JSON (`$.target_type`);
+/// `None` includes all targets and an empty list includes none.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct BossHistoryRequest {
+    pub range: Option<TimeRange>,
+    pub character_id: Option<String>,
+    pub target_types: Option<Vec<u16>>,
+}
+
+/// Boss rows sorted by fights descending, then target type. Read 201 rows and keep 200.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct BossHistory {
+    pub rows: Vec<BossHistoryRow>,
+    pub truncated: bool,
+}
+
+/// Home's scalar boss baselines, using `BossHistoryRequest` and the same row order and limit.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct HomeBossBaselines {
+    pub rows: Vec<HomeBossBaseline>,
+    pub truncated: bool,
+}
+
+/// Same definitions as the matching `BossHistoryRow` fields; `kill_samples` is `kills`.
+/// Performance is character-specific; confirmed kill durations cover all characters.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct HomeBossBaseline {
+    pub target_type: u16,
+    pub fights: u32,
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub avg_dps: Option<f64>,
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub best_dps: Option<f64>,
+    pub kill_samples: u32,
+    #[ts(as = "Option<f64>")]
+    pub median_kill_micros: Option<u64>,
+}
+
+/// `target_type` comes from fight JSON (`$.target_type`).
+/// `fights` counts ended fights in range with non-null `fights.local_dps`,
+/// restricted to the requested character resolved through the run or containing map visit.
+/// `avg_dps`, `best_dps`, `best_fight_id` and the mean of non-null local ranks
+/// (`avg_rank`) cover those eligible fights. `avg_party_dps` is the mean of the
+/// shared `party_avg` CTE's per-fight averages over those fights; each party
+/// average excludes the local player and unknown DPS.
+///
+/// `kills` and `median_kill_micros` cover confirmed kills in range across all
+/// characters: `CAST(json_extract(f.json,'$.kill.at') AS INTEGER)` is non-null
+/// and `json_extract(f.json,'$.kill.provisional')=0`.
+/// The median uses `kill.at - started`; for an even count, floor the mean of
+/// the two middle values. Unknown metrics, including a median with no kills, are `None`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct BossHistoryRow {
+    pub target_type: u16,
+    pub target_name: Option<String>,
+    pub fights: u32,
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub avg_dps: Option<f64>,
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub best_dps: Option<f64>,
+    pub best_fight_id: Option<String>,
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub avg_rank: Option<f64>,
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub avg_party_dps: Option<f64>,
+    pub kills: u32,
+    #[ts(as = "Option<f64>")]
+    pub median_kill_micros: Option<u64>,
+}
+
+/// Runs are scoped by dungeon and half-open start range. The character filter
+/// applies to performance and clear-time baselines, not the learned boss order.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DungeonProfileRequest {
+    pub dungeon: String,
+    pub character_id: Option<String>,
+    pub range: TimeRange,
+}
+
+/// `clears` counts cleared runs across all characters. Bosses killed in at least
+/// half those runs are ordered by median kill offset, then target type.
+/// `usual_run_dps` is the mean established whole-run local DPS from ended runs
+/// for the character, using run-story totals; at least three eligible runs are needed.
+/// `usual_clear_micros` is the median `completed_at - started` for the character's
+/// cleared runs. At least three non-negative durations are needed; even medians round down.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct DungeonProfile {
+    pub dungeon: String,
+    pub clears: u32,
+    pub bosses: Vec<ProfileBoss>,
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub usual_run_dps: Option<f64>,
+    pub run_dps_samples: u32,
+    #[ts(as = "Option<f64>")]
+    pub usual_clear_micros: Option<u64>,
+    pub clear_samples: u32,
+}
+
+/// Confirmed, non-provisional kills of `boss` or `event_boss` targets inside
+/// cleared runs, across all characters. Inconsistent negative offsets/durations
+/// are excluded. `seen_in` counts distinct runs, not repeated kills.
+/// `median_kill_micros` is the median `kill.at - fight.started`, with at least three kills.
+/// `best_dps` is the maximum established local DPS on this boss in ended fights
+/// starting in range for the character, resolved through the run or containing map visit.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct ProfileBoss {
+    pub target_type: u16,
+    pub target_name: Option<String>,
+    pub seen_in: u32,
+    #[ts(as = "f64")]
+    pub median_offset_micros: u64,
+    #[ts(as = "Option<f64>")]
+    pub median_kill_micros: Option<u64>,
+    pub kill_samples: u32,
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub best_dps: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -111,7 +241,7 @@ pub struct StatsSessionCursor {
 pub struct StatsSessionFilter {
     pub range: Option<TimeRange>,
     pub character_id: Option<String>,
-    /// Include sessions with no fame change, no runs and no deaths.
+    /// Include sessions with no fame change, no runs, no deaths and no observed bags.
     pub include_empty: bool,
     pub cursor: Option<StatsSessionCursor>,
     pub limit: u16,
@@ -131,6 +261,17 @@ pub struct StatsSessionRow {
     #[serde(with = "crate::finite::optional_f64")]
     #[ts(as = "Option<f64>")]
     pub fame_per_hour: Option<f64>,
+    // Observed bags, as in Loot Feed with "Any bag"; pickup and ownership are unknown.
+    pub bags: u32,
+    // Orange/ST and higher bag ranks (80+): orange, red and white, including boosted bags.
+    pub notable_bags: u32,
+    // Uses the same five-minute minimum as fame per hour.
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub bags_per_hour: Option<f64>,
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub notable_bags_per_hour: Option<f64>,
     pub runs: u32,
     pub clears: u32,
     pub deaths: u32,

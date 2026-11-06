@@ -17,13 +17,12 @@
 </script>
 
 <span class="export">
-  <button type="button" aria-disabled={!client || busy} onclick={save}>{busy ? 'Exporting…' : label}</button>
+  <button class="ctl" type="button" aria-disabled={!client || busy} onclick={save}>{busy ? 'Exporting…' : label}</button>
   {#if failed}<span role="alert">{message}</span>{:else}<span role="status">{message}</span>{/if}
 </span>
 
 <style>
   .export { display: inline-flex; align-items: center; gap: var(--space-2); }
-  button { font: inherit; color: var(--text-primary); min-height: var(--target-min); border-radius: var(--radius-control); background: var(--surface-panel); border: 1px solid var(--border-strong); padding: var(--space-2) var(--space-3); }
   button:not([aria-disabled="true"]) { cursor: pointer; } button[aria-disabled="true"] { color: var(--text-muted); }
   [role="alert"] { color: var(--danger-text, var(--text-primary)); }
 </style>

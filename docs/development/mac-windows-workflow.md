@@ -44,7 +44,7 @@ The first cargo-xwin run downloads the MSVC CRT and Windows SDK into `~/Library/
 |---|---|---|
 | `cargo fmt --check` | yes | |
 | `cargo clippy -D warnings` | yes, Windows target via cargo-xwin | Native clippy fails because `cfg(windows)` code goes unused or missing |
-| Perf feature check/clippy (`perf-live`) | yes, Windows target via cargo-xwin | clippy covers `cargo check` |
+| Perf feature clippy (`perf-live`) | yes, Windows target via cargo-xwin | |
 | `cargo test` library crates | yes, native | Skips two maxed-assets lease tests that need Windows share-mode locking |
 | `cargo test -p maxed-app` | compile and link only | Native build fails: `maxed_recording` owner types are `cfg(windows)`, and Tauri wants `icons/icon.png` |
 | UI check / check:tests / test / test:ui / build | yes | `test:ui` smoke-replay spawns `cargo`, so Rust must be on PATH |

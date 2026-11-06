@@ -55,20 +55,27 @@ pub(crate) fn parse(text: &str) -> Option<Notice> {
     if text.len() > 16_384 {
         return None;
     }
-    if let Some(notice) = maxed_protocol::notices::parse_oryx_announcement(text) {
-        return Some(Notice::RealmEventKilled {
+    let mut notice = if let Some(notice) = maxed_protocol::notices::parse_oryx_announcement(text) {
+        Notice::RealmEventKilled {
             boss_key: notice.boss_key,
             killer: notice.killer.unwrap_or_default(),
-        });
-    }
-    if let Some(notice) = maxed_protocol::notices::parse_portal_announcement(text) {
-        return Some(Notice::PortalOpened {
+        }
+    } else if let Some(notice) = maxed_protocol::notices::parse_portal_announcement(text) {
+        Notice::PortalOpened {
             player: notice.player,
-        });
-    }
-    let mut p = Parser(text);
-    let notice = parse_one(&mut p)?;
-    p.0.trim().is_empty().then_some(notice)
+        }
+    } else {
+        let mut p = Parser(text);
+        let notice = parse_one(&mut p)?;
+        p.0.trim().is_empty().then_some(notice)?
+    };
+    // Validate the full raw fields before normalizing names for display and matching.
+    let name = match &mut notice {
+        Notice::PlayerDeath { player, .. } | Notice::PortalOpened { player } => player,
+        Notice::RealmEventKilled { killer, .. } => killer,
+    };
+    name.truncate(crate::names::display_name(name).len());
+    Some(notice)
 }
 
 fn parse_one(p: &mut Parser<'_>) -> Option<Notice> {
@@ -210,6 +217,29 @@ impl Parser<'_> {
 mod tests {
     use super::*;
     #[test]
+    fn notice_names_are_stripped_after_raw_length_validation() {
+        for length in [256, 257] {
+            let name = format!("SynthAlpha,{}", "x".repeat(length - "SynthAlpha,".len()));
+            for message in [
+                serde_json::json!({"k":"s.death","t":{"player":name,"level":"20","enemy":"Synthetic Boss"}}),
+                serde_json::json!({"k":"s.dungeon_opened_by","t":{"player":name}}),
+                serde_json::json!({"k":"stringlist.Synthetic_Boss.killed.0","t":{"KILLER":name}}),
+            ] {
+                let notice = parse(&message.to_string());
+                if length == 257 {
+                    assert_eq!(notice, None);
+                    continue;
+                }
+                let name = match notice.unwrap() {
+                    Notice::PlayerDeath { player, .. } | Notice::PortalOpened { player } => player,
+                    Notice::RealmEventKilled { killer, .. } => killer,
+                };
+                assert_eq!(name, "SynthAlpha");
+            }
+        }
+    }
+
+    #[test]
     fn death_template_with_trailing_comma_parses() {
         assert_eq!(
             parse(
@@ -252,11 +282,11 @@ mod tests {
     #[test]
     fn escaped_strings_truncation_and_wrong_shapes_are_safe() {
         let valid =
-            r#"{"k":"s.dungeon_opened_by","t":{"player":"Synth\u0041lpha\" ,}\uD83D\uDE00",}}"#;
+            r#"{"k":"s.dungeon_opened_by","t":{"player":"Synth\u0041lpha\uD83D\uDE00\" ,}",}}"#;
         assert_eq!(
             parse(valid),
             Some(Notice::PortalOpened {
-                player: "SynthAlpha\" ,}😀".into()
+                player: "SynthAlpha😀\" ".into()
             })
         );
         for i in 0..valid.len() {

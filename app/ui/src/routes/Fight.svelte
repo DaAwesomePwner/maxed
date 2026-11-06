@@ -19,14 +19,16 @@
   import SpriteImage from '../lib/components/SpriteImage.svelte';
   import { parseObjectId } from '../lib/navigation/routes';
   import { bossOutcome } from '../lib/home/dungeon';
-  import { formatClock, formatClockRange, formatStat } from '../lib/styles/format';
-  import { defaultFightPlotted, fightKpis, fightNeighbors } from '../lib/runs/fight-screen';
+  import { formatClock, formatClockRange, formatShare, formatStat } from '../lib/styles/format';
+  import { defaultFightPlotted, fightKpis, fightNeighbors, fightSourceRows } from '../lib/runs/fight-screen';
   import FightSeriesChart from '../lib/runs/FightSeriesChart.svelte';
   import KpiStrip from '../lib/home/v3/KpiStrip.svelte';
   import Breadcrumbs from '../lib/runs/Breadcrumbs.svelte';
   import '../lib/home/v3/area-home.css';
   import KillEvidence from '../lib/runs/KillEvidence.svelte';
   import FightPlayers from '../lib/runs/FightPlayers.svelte';
+  import ShowMore from '../lib/runs/ShowMore.svelte';
+  import { limitRows, type RenderLimit } from '../lib/runs/render-limit';
   import EmptyState from '../lib/components/EmptyState.svelte';
   import ObjectLabel from '../lib/home/ObjectLabel.svelte';
   import { createHomeVisuals, emptyHomeVisuals } from '../lib/home/visuals';
@@ -48,6 +50,10 @@
   let position = $state<FightPosition>({ playerWindow: 0, selectedPlayerId: null, sourceWindow: 0 });
   const strips = new WeakMap<FightView, RunFightStripRow[] | null>();
   let strip = $derived(fight ? strips.get(fight) ?? null : null);
+  const STRIP_STEP = 8;
+  let stripLimit = $state<RenderLimit>({ key: '', count: STRIP_STEP });
+  let stripCount = $derived(stripLimit.key === fightId ? stripLimit.count : STRIP_STEP);
+  let shownStrip = $derived(limitRows(strip ?? [], stripCount, row => row.fight_id === fightId));
   let neighbors = $derived(fightNeighbors(strip ?? [], fightId));
   let self = $derived(fight?.players.filter(row => row.is_local).length === 1 ? fight.players.find(row => row.is_local)! : null);
   let plotted = $derived(position.plotted ?? (fight ? defaultFightPlotted(fight) : []));
@@ -55,7 +61,7 @@
   let bossName = $derived(boss?.name ?? 'Unknown target');
   let selfHref = $derived(fight && self && fight.players.filter(row => row.object_id === self.object_id).length === 1 && parseObjectId(String(self.object_id)) !== null
     ? routeHref({ kind: 'player', fightId: fight.id, runId: fight.run_id ?? undefined, objectId: self.object_id }) : null);
-  let sources = $derived([...(self?.sources ?? [])].sort((a, b) => b.damage - a.damage).slice(0, 3));
+  let sources = $derived(fightSourceRows(self?.sources ?? []).slice(0, 3));
   const stripName = (row: RunFightStripRow) => row.target_name ?? objectVisual(visuals.objects, row.target_type ?? row.boss_type)?.name ?? 'Unknown boss';
   const fightHref = (id: string) => routeHref({ kind: 'fight', id, runId: fight?.run_id ?? undefined });
   $effect(() => {
@@ -165,15 +171,16 @@
           <div class="card-heading"><h3>Your damage sources</h3>{#if selfHref}<a class="all" href={selfHref}>All ›</a>{/if}</div>
           {#each sources as source}
             <div class="source"><div class="source-label"><ObjectLabel type={source.item_type} kind="item" {visuals} enchant={source.enchant} /><span>{formatStat(source.damage)}</span></div>
-              {#if source.estimated}<span class="tag">estimated</span>{/if}
+              {#if source.estimatedDamage > 0}<span class="tag" title="Estimated share of this item's damage">~{formatShare(source.estimatedDamage / source.damage)} est.</span>{/if}
               <div class="source-bar"><i style:width={`${self && self.damage > 0 ? Math.max(0, Math.min(100, source.damage / self.damage * 100)) : 0}%`}></i></div>
             </div>
           {:else}<p class="muted">—</p>{/each}
         </section>
         <section class="area-card" aria-label="You this run"><h3>You this run</h3>
           {#if strip?.length}<div class="strip-scroll"><table><thead><tr><th>Boss</th><th>Damage</th><th>Rank</th></tr></thead><tbody>
-            {#each strip as row (row.fight_id)}<tr class:current={row.fight_id === fight.id}><th scope="row"><a href={fightHref(row.fight_id)} aria-current={row.fight_id === fight.id ? 'page' : undefined} title={stripName(row)}>{stripName(row)}</a></th><td>{formatStat(row.damage)}</td><td>{damageRank(row.rank)}</td></tr>{/each}
-          </tbody></table></div>{:else}<p class="muted">—</p>{/if}
+            {#each shownStrip as row (row.fight_id)}<tr class:current={row.fight_id === fight.id}><th scope="row"><a href={fightHref(row.fight_id)} aria-current={row.fight_id === fight.id ? 'page' : undefined} title={stripName(row)}>{stripName(row)}</a></th><td>{formatStat(row.damage)}</td><td>{damageRank(row.rank)}</td></tr>{/each}
+          </tbody></table></div>
+            <ShowMore shown={shownStrip.length} total={strip.length} noun="fights" onmore={() => { stripLimit = { key: fightId, count: stripCount + STRIP_STEP }; }} />{:else}<p class="muted">—</p>{/if}
         </section>
         <section class="area-card" aria-label="Fight facts"><h3>Fight facts</h3><dl class="facts">
           <dt>Ended</dt><dd class:good={fight.end_reason === 'killed'}>{fight.end_reason === null ? '—' : fightEndLabels[fight.end_reason].toLowerCase().replace(/^./, letter => letter.toUpperCase())}</dd>
@@ -219,7 +226,7 @@
   .source-label :global(.object-label > span:last-child) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .source-bar { height: 6px; background: #00000040; border-radius: 2px; }
   .source-bar i { display: block; height: 100%; background: var(--gold); border-radius: inherit; }
-  .strip-scroll { max-height: 260px; overflow: auto; }
+  .strip-scroll { min-width: 0; }
   table { width: 100%; table-layout: fixed; border-collapse: collapse; font-variant-numeric: tabular-nums; }
   th, td { text-align: right; height: 30px; padding: 0 4px; font-weight: 400; }
   th:first-child { width: 52%; text-align: left; }
@@ -233,5 +240,5 @@
   .good { color: var(--success); }
   .facts dt, .muted { color: var(--text-muted); } .facts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
   .area-debug { grid-column: 1 / -1; } summary { min-height: 26px; cursor: pointer; }
-  @media (max-width: 950px) { .fight-screen { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: 'crumbs' 'head' 'kpis' 'chart' 'table' 'side'; } }
+  @media (max-width: 1200px) { .fight-screen { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: 'crumbs' 'head' 'kpis' 'chart' 'table' 'side'; } }
 </style>

@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::chat::*;
 use maxed_store::ChatMaintenance;
 use maxed_types::*;

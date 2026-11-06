@@ -30,14 +30,14 @@ it('groups local days and leaves unobserved fame unknown', () => {
   ]);
 });
 it('formats PB improvements and slower clears without fabricating unknowns', () => {
-  expect(vsBest(detail())).toEqual({ text: '−0:28', tone: 'good' });
-  expect(vsBest(detail({ clear_micros: 620_000_000, best_clear_micros: 580_000_000, is_personal_best: false }))).toEqual({ text: '+0:40', tone: 'plain' });
+  expect(vsBest(detail())).toEqual({ text: '−0:28', title: '−0:28', tone: 'good' });
+  expect(vsBest(detail({ clear_micros: 620_000_000, best_clear_micros: 580_000_000, is_personal_best: false }))).toEqual({ text: '+0:40', title: '+0:40', tone: 'plain' });
   expect(vsBest(undefined)).toBeNull();
   expect(vsBest(detail({ clear_micros: null }))).toBeNull();
   expect(vsBest(detail({ previous_best_clear_micros: null }))).toBeNull();
   expect(vsBest(detail({ previous_best_clear_micros: undefined }))).toBeNull();
   expect(vsBest(detail({ is_personal_best: false, best_clear_micros: null }))).toBeNull();
-  expect(vsBest(detail({ is_personal_best: false, previous_best_clear_micros: null }))).toEqual({ text: '0:00', tone: 'plain' });
+  expect(vsBest(detail({ is_personal_best: false, previous_best_clear_micros: null }))).toEqual({ text: '0:00', title: '0:00', tone: 'plain' });
 });
 it('keeps missing summary KPIs unknown', () => {
   expect(listKpis(null).map(cell => [cell.key, cell.value])).toEqual(['runs', 'deaths', 'time', 'pbs', 'fame'].map(key => [key, '—']));
@@ -51,3 +51,10 @@ it.each(['duration_ascending', 'duration_descending'] as const)('keeps %s rows i
   expect(groups.flatMap(group => group.rows)).toEqual(rows);
   expect(groups.every(group => group.label === null)).toBe(true);
 });
+
+it.each([[1, '+<1s', 'under 1 s slower'], [-1, '−<1s', 'under 1 s faster'],
+  [999_999, '+<1s', 'under 1 s slower'], [-999_999, '−<1s', 'under 1 s faster']])(
+  'fits a %s microsecond delta and retains its explanation', (delta, text, title) => {
+    expect(vsBest(detail({ clear_micros: 1_000_000 + Number(delta), best_clear_micros: 1_000_000, is_personal_best: false })))
+      .toMatchObject({ text, title });
+  });

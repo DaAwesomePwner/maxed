@@ -14,33 +14,45 @@ use std::{
 
 #[derive(Clone)]
 pub(super) struct Bridge {
+    pub visibility: Arc<crate::bridge::PresentationVisibility>,
+    // Full canonical envelopes, also used by replay consumers as store inputs.
     pub event: Arc<dyn Fn(EventEnvelope) + Send + Sync>,
+    // Native presentation delivery; copies may carry presentation-only metadata.
     pub batch: Option<Arc<dyn Fn(Vec<EventEnvelope>) + Send + Sync>>,
     pub snapshot: Arc<dyn Fn(LiveSnapshot) + Send + Sync>,
+    pub party_changed: Arc<dyn Fn(crate::bridge::PartyChanged) + Send + Sync>,
 }
 impl Default for Bridge {
     fn default() -> Self {
         Self {
+            visibility: Arc::default(),
             event: Arc::new(|_| {}),
             batch: None,
             snapshot: Arc::new(|_| {}),
+            party_changed: Arc::new(|_| {}),
         }
     }
 }
 
 pub(super) struct Views {
+    pub maintenance: Arc<super::maintenance::StorageService>,
     pub delivery: Mutex<super::alerts::delivery::Delivery>,
     pub alert_wake: Arc<super::alerts::delivery::DeliveryWake>,
     pub alert_policy: Arc<Mutex<AlertPreferences>>,
     pub chat_policy: Arc<Mutex<ChatSettings>>,
     pub chat_clear: Mutex<Option<crossbeam_channel::Sender<Result<(), String>>>>,
     pub snapshot: Mutex<LiveSnapshot>,
+    pub character: Mutex<super::character::CharacterViewState>,
+    pub party: Mutex<super::party::PartyRoster>,
+    pub party_write: Mutex<Option<super::party::PartyWriteRequest>>,
+    pub party_catalog: Mutex<Option<Arc<super::party::PartyCatalog>>>,
     pub store: Mutex<StoreStatus>,
 }
 impl Default for Views {
     fn default() -> Self {
         let alert_wake = Arc::new(super::alerts::delivery::DeliveryWake::default());
         Self {
+            maintenance: Arc::new(super::maintenance::StorageService::default()),
             delivery: Mutex::new(super::alerts::delivery::Delivery::with_wake(
                 alert_wake.clone(),
             )),
@@ -48,6 +60,10 @@ impl Default for Views {
             alert_policy: Arc::new(Mutex::new(AlertPreferences::default())),
             chat_policy: Arc::new(Mutex::new(ChatSettings::default())),
             chat_clear: Mutex::new(None),
+            character: Mutex::new(super::character::CharacterViewState::default()),
+            party: Mutex::new(super::party::PartyRoster::default()),
+            party_write: Mutex::new(None),
+            party_catalog: Mutex::new(None),
             snapshot: Mutex::new(LiveSnapshot {
                 instance: None,
                 run_totals: None,
@@ -76,6 +92,7 @@ impl Default for Views {
 }
 
 pub(super) struct Adapter {
+    maintenance_work: super::maintenance::OwnerWork,
     pub engine: Engine,
     writer: Option<StoreWriter>,
     path: PathBuf,
@@ -84,8 +101,11 @@ pub(super) struct Adapter {
     bridge: Bridge,
     views: Arc<Views>,
     missing_catalog: bool,
+    character_catalog: Option<Arc<Catalog>>,
+    character_generation: Arc<()>,
     finalized: bool,
     gate: crate::bridge::SnapshotGate,
+    snapshot_dirty: bool,
     rejected: bool,
     at: Timestamp,
     sequence: Sequence,
@@ -120,6 +140,10 @@ impl Adapter {
         self.writer.as_ref().unwrap().flush().unwrap();
     }
     #[cfg(test)]
+    pub(super) fn maintenance_writer_for_test(&self) -> &StoreWriter {
+        self.writer.as_ref().unwrap()
+    }
+    #[cfg(test)]
     pub(super) fn submit_pending_for_test(&mut self) {
         self.submit_pending().unwrap();
     }
@@ -133,8 +157,8 @@ impl Adapter {
         bridge: Bridge,
     ) -> Result<Self, String> {
         let stream_id = config.stream_id.clone();
-        let engine =
-            Engine::new(config, catalog).map_err(|_| "Catalog could not initialize the engine")?;
+        let engine = Engine::new(config, catalog.clone())
+            .map_err(|_| "Catalog could not initialize the engine")?;
         let writer =
             start_writer(path.clone(), writer_config.clone()).map_err(|e| e.to_string())?;
         // A new allocator must have a new stream ID; resuming an old engine is unsupported.
@@ -142,7 +166,9 @@ impl Adapter {
             let _ = writer.shutdown();
             return Err("A new capture requires a new stream namespace".into());
         }
+        *views.party.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
         let mut adapter = Self {
+            maintenance_work: super::maintenance::OwnerWork::default(),
             engine,
             writer: Some(writer),
             path,
@@ -153,11 +179,14 @@ impl Adapter {
             chat_policy: views.chat_policy.clone(),
             views,
             missing_catalog,
+            character_catalog: (!missing_catalog).then(|| catalog.clone()),
+            character_generation: Arc::new(()),
             finalized: false,
             gate: crate::bridge::SnapshotGate {
                 dirty: true,
                 ..Default::default()
             },
+            snapshot_dirty: true,
             rejected: false,
             at: Timestamp(0),
             sequence: Sequence(Timestamp(0)),
@@ -175,6 +204,7 @@ impl Adapter {
             lease: None,
             catalog_lease: None,
         };
+        adapter.share_party_catalog(catalog);
         adapter.publish_snapshot();
         adapter.refresh_store();
         Ok(adapter)
@@ -232,6 +262,31 @@ impl Adapter {
     }
 
     fn events_at(&mut self, events: Vec<EngineEvent>, at: Option<Timestamp>) {
+        // Engine metadata (e.g. last traffic) can change without a domain event.
+        self.snapshot_dirty = true;
+        // Feed both paths under one lock, before publishing the complete batch.
+        // Presence and roster profiles never enter the durable writer queue.
+        let presence = self.engine.take_roster_presence();
+        let profiles = self.engine.take_roster_profiles();
+        if !events.is_empty() || !profiles.is_empty() || !presence.is_empty() {
+            let mut party = self.views.party.lock().unwrap_or_else(|p| p.into_inner());
+            let mut presence = presence.into_iter().peekable();
+            for (index, event) in events.iter().enumerate() {
+                while presence
+                    .peek()
+                    .is_some_and(|update| update.event_index == index)
+                {
+                    party.observe_presence(&presence.next().unwrap().presence);
+                }
+                party.apply(event);
+            }
+            for update in presence {
+                party.observe_presence(&update.presence);
+            }
+            for profile in profiles {
+                party.observe_profile(profile);
+            }
+        }
         if at.is_none() && self.stream_id.starts_with("live-") {
             self.views
                 .delivery
@@ -242,7 +297,7 @@ impl Adapter {
         if events.is_empty() {
             return;
         }
-        let mut presentation = Vec::with_capacity(events.len());
+        let mut envelopes = Vec::with_capacity(events.len());
         for mut event in events {
             self.partial(&mut event);
             if let EngineEvent::CaptureStateChanged(status) = &event {
@@ -285,19 +340,53 @@ impl Adapter {
                     _ => None,
                 },
             };
+            if let Some(writer) = &self.writer {
+                writer.set_maintenance_blocked(true);
+            }
             self.pending.push_back(maxed_store::ContextualEvent {
                 event: envelope.clone(),
                 context,
             });
-            // The publisher compacts the presentation copy before enqueueing.
-            presentation.push(envelope);
+            // Update the calculator's separate view without changing full events.
+            match &envelope.event {
+                EngineEvent::CharacterUpdated(character) => {
+                    self.observe_character(Some(character.clone()));
+                }
+                EngineEvent::CaptureStateChanged(_) => {
+                    let input = self
+                        .views
+                        .character
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .input
+                        .as_ref()
+                        .filter(|input| Arc::ptr_eq(&input.generation, &self.character_generation))
+                        .cloned();
+                    if let Some(input) = input {
+                        self.observe_character(input.character.clone());
+                    }
+                }
+                _ => {}
+            }
+            envelopes.push(envelope);
         }
         // The original full events and alert contexts are retained first. Only
         // presentation delivery changes; writer ordering/backpressure is intact.
         if let Some(batch) = &self.bridge.batch {
-            batch(presentation);
+            // Annotate only native presentation copies, after forming the writer's
+            // envelopes. Each event uses its own observation and this stream's catalog.
+            for envelope in &mut envelopes {
+                if let EngineEvent::CharacterUpdated(character) = &mut envelope.event {
+                    character.calculation_revision = Some(maxed_engine::character::input_revision(
+                        &envelope.stream_id,
+                        character,
+                        self.character_catalog.as_deref(),
+                    ));
+                }
+            }
+            batch(envelopes);
         } else {
-            for envelope in presentation {
+            for envelope in envelopes {
                 (self.bridge.event)(envelope);
             }
         }
@@ -310,8 +399,77 @@ impl Adapter {
         // One coalesced commit wake must service every page already made durable.
         while self.drain_alert_claims()? == 32 {}
         self.submit_pending()?;
-        self.service_chat_maintenance();
+        self.service_maintenance();
         Ok(())
+    }
+
+    pub fn service_maintenance(&mut self) {
+        self.service_chat_maintenance();
+        self.service_party_write();
+        if self.live {
+            if let Some(writer) = &self.writer {
+                writer.set_maintenance_blocked(
+                    !self.pending.is_empty() || self.maintenance_work.closed(),
+                );
+                self.maintenance_work
+                    .service_live(writer, &self.views.maintenance);
+            }
+        }
+    }
+
+    fn service_party_write(&mut self) {
+        if !self.live {
+            return;
+        }
+        let Some(writer) = &self.writer else { return };
+        let request = self
+            .views
+            .party_write
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take();
+        if let Some(request) = request {
+            let result = request
+                .operation
+                .apply(writer)
+                .map_err(|_| super::party::WRITE_FAILED.into());
+            if result.is_ok() {
+                self.views
+                    .party
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .mark_dirty();
+            }
+            let _ = request.reply.send(result);
+        }
+    }
+
+    fn share_party_catalog(&self, catalog: Arc<Catalog>) {
+        let mut shared = self
+            .views
+            .party_catalog
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        if self.missing_catalog {
+            *shared = None;
+        } else if shared
+            .as_ref()
+            .is_none_or(|previous| !Arc::ptr_eq(&previous.catalog, &catalog))
+        {
+            *shared = Some(Arc::new(super::party::PartyCatalog::new(catalog)));
+        }
+    }
+
+    fn publish_party_changed(&self) {
+        let notice = self
+            .views
+            .party
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take_changed();
+        if let Some(notice) = notice {
+            (self.bridge.party_changed)(notice);
+        }
     }
 
     pub fn service_chat_maintenance(&mut self) {
@@ -372,6 +530,7 @@ impl Adapter {
 
     fn submit_pending(&mut self) -> Result<(), String> {
         let writer = self.writer.as_ref().ok_or("Summary writer is closed")?;
+        writer.set_maintenance_blocked(!self.pending.is_empty() || self.maintenance_work.closed());
         while let Some(pending) = self.pending.pop_front() {
             let context = pending.context;
             match writer.try_submit_with_alert_context(pending.event, context.clone()) {
@@ -399,6 +558,7 @@ impl Adapter {
             }
         }
         self.rejected = false;
+        writer.set_maintenance_blocked(self.maintenance_work.closed());
         self.refresh_store();
         Ok(())
     }
@@ -557,14 +717,98 @@ impl Adapter {
     }
 
     pub fn publish_due(&mut self, now: std::time::Duration) {
-        if self.gate.take_due(now) {
+        self.publish_due_at(now, self.at);
+    }
+
+    /// `activity_at` is capture time; `now` is monotonic presentation elapsed time.
+    pub fn publish_due_at(&mut self, now: std::time::Duration, activity_at: Timestamp) {
+        // Live restore/read requests materialize on demand. Keep both dirty
+        // flags and the gate deadline intact until the window becomes visible.
+        // Demo/replay still need paced cache refreshes for their direct reads.
+        if self.live
+            && !self
+                .bridge
+                .visibility
+                .accepts(self.bridge.visibility.epoch())
+        {
+            self.publish_party_changed();
+            return;
+        }
+        let last_hit_age = self
+            .engine
+            .latest_open_fight_hit()
+            .map(|at| std::time::Duration::from_micros(activity_at.0.saturating_sub(at.0)));
+        if self.gate.take_due_with_hit_age(now, last_hit_age) {
             self.gate.dirty = true;
             self.publish_snapshot();
         }
+        self.publish_party_changed();
     }
 
     pub fn publish_snapshot(&mut self) {
         if !self.gate.dirty {
+            self.publish_party_changed();
+            return;
+        }
+        let snapshot = self.read_snapshot();
+        (self.bridge.snapshot)(snapshot);
+        self.gate.dirty = false;
+        self.publish_party_changed();
+    }
+
+    pub(super) fn read_snapshot(&mut self) -> LiveSnapshot {
+        self.materialize_snapshot();
+        self.views
+            .snapshot
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+    }
+
+    fn observe_character(&self, character: Option<CharacterView>) -> Option<CharacterView> {
+        // Engine finalization clears world state. Keep the last presentation
+        // observation only in that retiring generation, with its immutable catalog.
+        // A newly opened adapter must still publish an empty initial observation.
+        let character = character.or_else(|| {
+            if !self.finalized {
+                return None;
+            }
+            self.views
+                .character
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .input
+                .as_ref()
+                .filter(|input| {
+                    Arc::ptr_eq(&input.generation, &self.character_generation)
+                        && input.stream_id == self.stream_id
+                })
+                .and_then(|input| input.character.clone())
+        });
+        let mut capture = self.capture_status.clone();
+        if self.finalized {
+            // Finalization precedes native Stopped delivery. Calculations must
+            // already be LastSeen (or Died), even if the last capture state is Live.
+            capture.state = CaptureState::Stopped;
+        }
+        let input = super::character::CharacterInputs::new(
+            self.character_generation.clone(),
+            self.stream_id.clone(),
+            character,
+            self.character_catalog.clone(),
+            capture,
+        );
+        let character = input.character.clone();
+        self.views
+            .character
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .observe(input);
+        character
+    }
+
+    fn materialize_snapshot(&mut self) {
+        if !self.snapshot_dirty {
             return;
         }
         #[cfg(test)]
@@ -599,19 +843,21 @@ impl Adapter {
                 add_missing(&mut drop.issues);
             }
         }
+        snapshot.character = self.observe_character(snapshot.character.take());
         *self
             .views
             .snapshot
             .lock()
-            .unwrap_or_else(|p| p.into_inner()) = snapshot.clone();
-        (self.bridge.snapshot)(snapshot);
-        self.gate.dirty = false;
+            .unwrap_or_else(|p| p.into_inner()) = snapshot;
+        self.snapshot_dirty = false;
     }
 
     pub fn finish(&mut self, at: Timestamp, reason: FightEnd) -> Result<(), String> {
         if !self.finalized {
             self.at = self.at.max(at);
             self.finalized = true;
+            self.snapshot_dirty = true;
+            self.gate.dirty = true;
             let events = self.engine.finish(at, reason);
             self.events(events);
         }
@@ -666,6 +912,13 @@ impl Adapter {
     }
 
     pub fn close(&mut self) -> Result<(), String> {
+        self.maintenance_work.stop();
+        if let Some(writer) = &self.writer {
+            writer.set_maintenance_blocked(true);
+        }
+        if self.live {
+            self.views.maintenance.attach(false);
+        }
         self.flush_alerts()?;
         self.publish_snapshot();
         let writer = self.writer.as_ref().ok_or("Summary writer is closed")?;
@@ -712,6 +965,10 @@ impl Adapter {
     }
 
     pub fn discard(&mut self) {
+        self.maintenance_work.stop();
+        if self.live {
+            self.views.maintenance.attach(false);
+        }
         self.reclaim_failed_writer();
         self.pending.clear();
         let _ = self.cleanup_playback();
@@ -764,6 +1021,80 @@ mod session_coverage_tests {
     use super::*;
 
     #[test]
+    fn direct_reads_refresh_silent_metadata_without_consuming_the_publication_gate() {
+        let dir = tempfile::tempdir().unwrap();
+        let (sent, snapshots) = crossbeam_channel::unbounded();
+        let mut adapter = Adapter::open(
+            dir.path().join("direct-reads"),
+            unavailable_catalog(),
+            EngineConfig::default(),
+            WriterConfig {
+                stream_id: "engine".into(),
+                ..Default::default()
+            },
+            true,
+            Arc::new(Views::default()),
+            Bridge {
+                snapshot: Arc::new(move |snapshot| sent.send(snapshot).unwrap()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        snapshots.try_recv().unwrap(); // Initial baseline.
+        adapter.live_traffic(Timestamp(1)).unwrap();
+        let first = adapter.read_snapshot();
+        assert_eq!(first.session.as_ref().unwrap().last_traffic, Timestamp(1));
+        assert!(first.issues.contains(&CoverageIssue::MissingCatalog));
+        assert_eq!(adapter.snapshot_builds, 2);
+
+        // SessionUpdated is throttled to 30 seconds; this changes no watermark.
+        adapter.live_traffic(Timestamp(2)).unwrap();
+        let latest = adapter.read_snapshot();
+        assert_eq!(latest.sequence, first.sequence);
+        assert_eq!(latest.session.as_ref().unwrap().last_traffic, Timestamp(2));
+        assert_eq!(adapter.snapshot_builds, 3);
+        for _ in 0..10 {
+            assert_eq!(adapter.read_snapshot(), latest);
+        }
+        assert_eq!(
+            adapter.snapshot_builds, 3,
+            "clean reads reuse the projection"
+        );
+        for millis in [250, 500, 750, 999] {
+            adapter.publish_due(std::time::Duration::from_millis(millis));
+        }
+        assert!(
+            snapshots.try_recv().is_err(),
+            "reads must never push a snapshot"
+        );
+        adapter.publish_due(std::time::Duration::from_secs(1));
+        assert_eq!(snapshots.try_recv().unwrap(), latest);
+        assert_eq!(
+            adapter.snapshot_builds, 3,
+            "publication reuses the fresh cache"
+        );
+
+        adapter
+            .capture(CaptureStatus {
+                state: CaptureState::Live,
+                ..Default::default()
+            })
+            .unwrap();
+        let latest = adapter.read_snapshot();
+        adapter.publish_due(std::time::Duration::from_millis(1250));
+        assert!(
+            snapshots.try_recv().is_err(),
+            "idle publication stays at 1 Hz"
+        );
+        adapter.publish_due(std::time::Duration::from_secs(2));
+        assert_eq!(snapshots.try_recv().unwrap(), latest);
+        adapter
+            .finish(Timestamp(2), FightEnd::CaptureStopped)
+            .unwrap();
+        adapter.close().unwrap();
+    }
+
+    #[test]
     fn missing_catalog_session_only_capture_persists_coverage_after_repair() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("session-only");
@@ -802,3 +1133,11 @@ mod session_coverage_tests {
 #[cfg(test)]
 #[path = "departure_tests.rs"]
 mod departure_tests;
+
+#[cfg(test)]
+#[path = "snapshot_tests.rs"]
+mod snapshot_tests;
+
+#[cfg(test)]
+#[path = "hidden_snapshot_tests.rs"]
+mod hidden_snapshot_tests;

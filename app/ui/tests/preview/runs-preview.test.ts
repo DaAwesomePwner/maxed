@@ -244,7 +244,7 @@ it.each(['default', 'stress'] as const)('varies local days and gameplay metrics 
       else expect(vsBest(detail)).toEqual(expect.objectContaining({ tone: 'good' }));
     }
     if (variant === 'default') {
-      expect(vsBest(details!.find(detail => detail.run_id === 'preview-run-0'))).toEqual({ text: '−0:28', tone: 'good' });
+      expect(vsBest(details!.find(detail => detail.run_id === 'preview-run-0'))).toEqual({ text: '−0:28', title: '−0:28', tone: 'good' });
       expect(vsBest(details!.find(detail => detail.run_id === 'preview-run-1'))).toBeNull();
     }
     expect(new Set(details!.map(detail => detail.observed_drop_count))).toEqual(new Set([0, 1, 2, 3, 4, 5]));

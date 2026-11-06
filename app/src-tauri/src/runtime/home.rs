@@ -1,6 +1,7 @@
 //! Home readers own no capture locks and never cross a thread boundary.
 use super::history::{read_error, ReaderMessage, Scheduler};
 use super::{join::Bridge, Adapter, CaptureRuntime, Namespace, RuntimeOptions, Shared};
+use maxed_store::SCHEMA_VERSION;
 use maxed_types::{Catalog, HomeScope, HomeSummary};
 use std::{
     cell::{Cell, RefCell},
@@ -17,6 +18,7 @@ pub(super) const CHANGED: &str = "Home history changed; retry for the current so
 pub(super) const READ_FAILED: &str =
     "Home history could not be read; retry or repair local storage";
 pub(super) const SCHEMA_FAILED: &str = "History schema upgrade failed; close other Maxed instances or resolve local storage access, then Retry.";
+pub(super) const HISTORY_UPGRADE_REQUIRED: &str = "History upgrade required";
 pub(super) const SCHEMA_NEWER: &str =
     "History schema is newer than this Maxed build; update Maxed, then Retry.";
 const INVALID_SCOPE: &str = "Home history scope is invalid; select a session or day again";
@@ -51,6 +53,8 @@ pub(super) struct HomeReads {
     pub(super) on_reader: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     #[cfg(test)]
     pub(super) on_open: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    #[cfg(test)]
+    pub(super) on_storage_admission: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 const READER_IDLE: Duration = Duration::from_secs(60);
@@ -99,6 +103,8 @@ impl Default for HomeReads {
             on_reader: Default::default(),
             #[cfg(test)]
             on_open: Default::default(),
+            #[cfg(test)]
+            on_storage_admission: Default::default(),
         }
     }
 }
@@ -424,10 +430,22 @@ impl HomeReads {
 }
 
 fn schema_error(error: maxed_store::StoreError) -> &'static str {
-    if matches!(error, maxed_store::StoreError::NewerSchema) {
-        SCHEMA_NEWER
-    } else {
-        SCHEMA_FAILED
+    match error {
+        maxed_store::StoreError::NewerSchema => SCHEMA_NEWER,
+        maxed_store::StoreError::HistoryUpgradeRequired => HISTORY_UPGRADE_REQUIRED,
+        _ => SCHEMA_FAILED,
+    }
+}
+
+impl HomeReads {
+    pub(super) fn upgraded(&self) -> Result<(), String> {
+        let mut state = self.preparation.lock().map_err(|_| UNAVAILABLE)?;
+        state.ready = true;
+        state.absent = false;
+        state.error = None;
+        state.last_attempt = None;
+        drop(state);
+        self.restore_live()
     }
 }
 
@@ -439,6 +457,16 @@ impl Shared {
         bridge: Bridge,
         catalog: Option<Arc<Catalog>>,
     ) -> Result<Adapter, String> {
+        if self.upgrade.running() {
+            return Err("History upgrade is running; wait for it to finish.".into());
+        }
+        // Playback suspends live maintenance, but cannot revoke a request
+        // already answered Queued. attach(false) keeps the FIFO dormant until
+        // live ownership returns.
+        self.views.maintenance.handoff_background();
+        if options.namespace != Namespace::Live {
+            self.views.maintenance.defer_requests();
+        }
         // Resolve policy before retiring history or creating a writer. This
         // dedicated lock also serializes read/publication with preference edits;
         // none of the history admission locks are held during settings I/O.
@@ -532,11 +560,18 @@ impl Shared {
         }
         alerts.namespace = options.namespace;
         adapter.home = Some(self.home.clone());
+        self.views
+            .maintenance
+            .attach(options.namespace == Namespace::Live);
         Ok(adapter)
     }
 }
 
 impl CaptureRuntime {
+    #[cfg(test)]
+    pub(super) fn register_storage_path_for_test(&self, path: &std::path::Path) {
+        *self.shared.home.live_database.lock().unwrap() = Some(path.to_owned());
+    }
     /// Register and schedule immediately, without filesystem/SQLite work or a
     /// blocking wait on the caller (the app setup/UI thread).
     pub fn initialize_home(self: &Arc<Self>, app_data: PathBuf) -> Result<(), String> {
@@ -555,6 +590,27 @@ impl CaptureRuntime {
             state.allow_recovery = true;
         }
         home.dispatch_preparation(generation, app_data);
+        let runtime = Arc::downgrade(self);
+        tauri::async_runtime::spawn(async move {
+            let Some(runtime) = runtime.upgrade() else {
+                return;
+            };
+            runtime.wait_history_preparation().await;
+            let manifest = runtime
+                .shared
+                .home
+                .live_database()
+                .and_then(|p| p.parent().map(|p| p.join("backups/live/manifest.sqlite3")));
+            if !manifest.is_some_and(|p| p.is_file()) {
+                return;
+            }
+            if let Ok(jobs) = runtime.read_storage_jobs().await {
+                let _ = tauri::async_runtime::spawn_blocking(move || {
+                    runtime.resume_requested_storage(jobs)
+                })
+                .await;
+            }
+        });
         Ok(())
     }
 
@@ -600,6 +656,46 @@ impl CaptureRuntime {
         result
     }
 
+    pub(super) fn read_existing_storage(
+        &self,
+        job: HomeJob,
+        estimate: bool,
+    ) -> Result<Option<super::maintenance::StorageObservation>, String> {
+        let context = job.owner.reader_context(&job.context)?;
+        if context.namespace != Namespace::Live {
+            return Ok(None);
+        }
+        let service = &self.shared.views.maintenance;
+        let gate = estimate
+            .then(|| service.estimate_gate.try_lock().ok())
+            .flatten();
+        let result = KEPT_READER.with(|kept| {
+            let kept = kept.borrow();
+            let Some(kept) = kept
+                .as_ref()
+                .filter(|k| k.generation == context.generation && k.database == context.database)
+            else {
+                return Ok(None);
+            };
+            if kept.reader.user_version().map_err(read_error)? != SCHEMA_VERSION {
+                return Ok(None);
+            }
+            let jobs = kept.reader.maintenance_statuses().map_err(read_error)?;
+            let measured =
+                (gate.is_some() && !jobs.iter().any(super::maintenance::runnable)).then(|| {
+                    kept.reader
+                        .estimate_legacy_receipt_bytes(super::chat::wall_now())
+                });
+            Ok(Some((
+                kept.reader.logical_storage().map_err(read_error)?,
+                jobs,
+                measured,
+            )))
+        });
+        job.owner.check(&job.context)?;
+        result
+    }
+
     fn read_history_context<T>(
         &self,
         context: &HomeReadContext,
@@ -628,8 +724,8 @@ impl CaptureRuntime {
                 });
                 let reader = match kept {
                     Some(kept) => match kept.reader.user_version().map_err(read_error)? {
-                        12 => Some(kept.reader),
-                        version if version > 12 => return Err(SCHEMA_NEWER.into()),
+                        SCHEMA_VERSION => Some(kept.reader),
+                        version if version > SCHEMA_VERSION => return Err(SCHEMA_NEWER.into()),
                         _ => None,
                     },
                     None => None,
@@ -727,6 +823,7 @@ pub(super) fn empty_history() -> HomeSummary {
         deaths: 0,
         fame_delta: None,
         fame: vec![],
+        fame_characters: vec![],
         best_drop: None,
         top_fight: None,
         recent_runs: vec![],
@@ -735,5 +832,58 @@ pub(super) fn empty_history() -> HomeSummary {
         fame_missing_baselines: 0,
         fame_sampled: false,
         unranked_drop_count: 0,
+    }
+}
+
+#[cfg(test)]
+mod maintenance_tests {
+    use super::super::{
+        history::{HistoryCaller, HistoryKey},
+        maintenance_tests::{current_fixture, initialized},
+    };
+    use super::*;
+    use maxed_types::HistoryReply;
+    use std::future::Future;
+
+    #[test]
+    fn history_storage_admission_racing_preparation_keeps_context() {
+        let root = current_fixture();
+        let runtime = initialized(root.path());
+        let home = &runtime.shared.home;
+        let (entered, waiting) = crossbeam_channel::bounded(1);
+        let (release, held) = crossbeam_channel::bounded(1);
+        *home.on_prepare.lock().unwrap() = Some(Arc::new(move || {
+            entered.send(()).unwrap();
+            held.recv_timeout(Duration::from_secs(10)).unwrap();
+        }));
+        *home.on_storage_admission.lock().unwrap() = Some({
+            let home = Arc::downgrade(home);
+            let root = root.path().to_path_buf();
+            Arc::new(move || {
+                let home = home.upgrade().unwrap();
+                {
+                    let mut state = home.preparation.lock().unwrap();
+                    state.running = true;
+                    state.ready = false;
+                }
+                home.dispatch_preparation(home.generation.load(Ordering::Acquire), root.clone());
+                waiting.recv_timeout(Duration::from_secs(5)).unwrap();
+            })
+        });
+        let reader = runtime.clone();
+        let mut read = Box::pin(runtime.submit_history(
+            HistoryCaller::Storage,
+            HistoryKey::MaintenanceJobs,
+            move |job| reader.read_history(job, Vec::new, |r| r.maintenance_statuses()),
+        ));
+        let result = read
+            .as_mut()
+            .poll(&mut std::task::Context::from_waker(std::task::Waker::noop()));
+        release.send(()).unwrap();
+        assert!(result.is_pending());
+        assert!(matches!(
+            tauri::async_runtime::block_on(read).unwrap(),
+            HistoryReply::Ready { .. }
+        ));
     }
 }

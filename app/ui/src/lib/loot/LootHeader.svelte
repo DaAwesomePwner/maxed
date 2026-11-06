@@ -6,7 +6,7 @@
 <header>
   <div><h2>Loot</h2>{#if subline !== null}<p>{subline}</p>{/if}</div>
   <nav aria-label="Loot views">
-    {#each [['feed', 'Feed'], ['stats', 'Stats'], ['collection', 'Collection']] as [key, label]}
+    {#each [['feed', 'Feed'], ['stats', 'Drop rates'], ['collection', 'Collection']] as [key, label]}
       <a href={key === 'feed' ? '#/loot' : `#/loot/${key}`} aria-current={view === key ? 'page' : undefined}>{label}</a>
     {/each}
   </nav>

@@ -40,7 +40,8 @@ it('rail_boost_null_cap_and_unconfirmed_conditions', async () => {
   snapshot.character!.stat_panel = { breakdown_provisional: true, lines: [
     { stat_id: 0, current: 0, total: 800, boost: null, at_cap: null },
     { stat_id: 3, current: null, total: 300, boost: null, at_cap: false },
-    { stat_id: 20, total: 75, boost: 12, gear: 4, exalt: null, other: 8, at_cap: true },
+    { stat_id: 20, total: 75, base: 63, cap: 63, boost: 12, gear: 4, exalt: 0, other: 8, at_cap: true,
+      split_evidence: { placement: 'provisional_inside_boost', cap_eligible: true, reasons: [] } },
     { stat_id: 21, total: 25, boost: -3, at_cap: false },
     { stat_id: 22, total: 50, boost: 0, at_cap: null },
     { stat_id: 26, total: 60, boost: null, at_cap: null },
@@ -144,7 +145,7 @@ it('rail_identity_equipment_and_capture_controls', async () => {
 });
 
 it.each(['#/', '#/runs', '#/alerts', '#/settings'])('rail_present_on_all_routes (%s)', async hash => {
-  const page = mountV2(homeSnapshot(), undefined, { hash, features: { lootBrowsing: false, logs: false, stats: false } });
+  const page = mountV2(homeSnapshot(), undefined, { hash, features: { lootBrowsing: false, logs: false, stats: false, party: false, character: false, homeRedesign: false } });
   await flushHomeRender();
   expect(screen.getByRole('complementary', { name: 'Character' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Stop Capture' })).toBeTruthy();

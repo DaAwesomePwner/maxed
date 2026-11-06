@@ -46,6 +46,8 @@ fn replay_home_fixture(name: &str) -> (Vec<LiveSnapshot>, HomeSummary) {
             options,
             Cursor::new(std::fs::read(fixture(name)).expect("reviewed synthetic pcap")),
             Bridge {
+                visibility: Arc::default(),
+                party_changed: Arc::new(|_| {}),
                 batch: None,
                 snapshot: Arc::new(move |value| received.lock().unwrap().push(value)),
                 event: Arc::new(move |value| recorded.lock().unwrap().push(value)),

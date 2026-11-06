@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 pub mod chat;
+pub mod installed_schema;
 pub mod loot;
+mod receipt_support;
+pub use receipt_support::{downgrade, receipts};
 pub mod stats;
 use maxed_types::*;
 
@@ -38,6 +41,37 @@ pub fn story_events() -> Vec<EventEnvelope> {
     .enumerate()
     .map(|(i, e)| envelope(i as u64 + 1, e))
     .collect()
+}
+
+/// Seed a pre-Party schema without asking the current projector to rebuild
+/// ended-run members. Restore the legacy run's exact end time before migrating.
+pub fn apply_legacy_story(db: &mut rusqlite::Connection, events: &[EventEnvelope]) {
+    let mut events = events.to_vec();
+    let mut endings = vec![];
+    for envelope in &mut events {
+        if let EngineEvent::RunStarted(run) = &mut envelope.event {
+            if let Some(ended) = run.ended.take() {
+                endings.push((run.id.clone(), ended));
+            }
+        }
+    }
+    apply_legacy_batch(db, &events);
+    for (id, ended) in endings {
+        db.execute(
+            "UPDATE runs SET ended=?2,json=json_set(json,'$.ended',?3) WHERE id=?1",
+            rusqlite::params![id, i64::try_from(ended.0).unwrap(), ended.0.to_string()],
+        )
+        .unwrap();
+    }
+}
+
+pub fn apply_legacy_batch(db: &mut rusqlite::Connection, events: &[EventEnvelope]) {
+    db.execute_batch(include_str!(
+        "../../migrations/016_maintenance_receipts.sql"
+    ))
+    .unwrap();
+    maxed_store::apply_batch(db, events).unwrap();
+    downgrade::remove_maintenance_schema(db);
 }
 
 pub fn filter(sort: RunSort, limit: u16) -> RunFilter {

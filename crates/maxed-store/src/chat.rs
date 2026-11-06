@@ -498,12 +498,8 @@ impl StoreReader {
                 more = true;
                 break;
             }
-            rows.push(row_json::<InstanceEventView>(
-                row,
-                0,
-                &mut bytes,
-                MAX_LOGS_BYTES,
-            )?);
+            let event = row_json(row, 0, &mut bytes, MAX_LOGS_BYTES)?;
+            rows.push(crate::instance::normalize_names(event));
         }
         let next = more
             .then(|| rows.last())

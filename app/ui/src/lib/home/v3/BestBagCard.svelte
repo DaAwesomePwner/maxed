@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { itemHover } from '../../components/item-hover';
   import { objectVisual } from '../../bridge/visual-index';
   import type { DropView } from '../../bindings/DropView';
   import type { SpriteRef } from '../../bindings/SpriteRef';
@@ -47,7 +48,7 @@
   <div class="best-card" class:selected {...(selected ? { tabindex: -1, 'data-row-id': `drop:${featured.id}` } : {})} data-tier={best?.item?.tier ?? ''} data-drop-id={featured.id} bind:this={node}>
     <div class="pictures">
       <span class="bag-glow"><SpriteImage sprite={bagVisual?.sprite ?? null} sheetUrl={bagVisual?.sprite ? resolveSpriteUrl(bagVisual.sprite) : null} fit={40} alt={bagVisual?.name ?? `Bag ${featured.bag_type}`} /></span>
-      {#if best?.item}<span class="item-box"><ItemTile sprite={itemVisual?.sprite ?? null} {resolveSpriteUrl} fit={44} alt={itemVisual?.name ?? `Item ${best.item.itemType}`} enchant={best.item.enchant} /></span>{/if}
+      {#if best?.item}<span class="item-box" use:itemHover={{ type: best.item.itemType, enchant: best.item.enchant, name: itemVisual?.name ?? `Item ${best.item.itemType}`, tier: best.item.tier }}><ItemTile sprite={itemVisual?.sprite ?? null} {resolveSpriteUrl} fit={44} alt={itemVisual?.name ?? `Item ${best.item.itemType}`} enchant={best.item.enchant} /></span>{/if}
     </div>
     <div class="copy">
       {#if best?.item}<div class="name clamp">{itemVisual?.name ?? `Item ${best.item.itemType}`}</div>

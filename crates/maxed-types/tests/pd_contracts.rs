@@ -6,7 +6,13 @@ const FIELDS: &[(&str, &[&str])] = &[
     ("RunView", &["context"]),
     (
         "FightView",
-        &["kill", "target_hp", "target_kind", "player_series"],
+        &[
+            "kill",
+            "target_hp",
+            "target_kind",
+            "player_series",
+            "scope_id",
+        ],
     ),
     ("DropView", &["capture_scope"]),
     ("CharacterView", &["stat_panel"]),
@@ -128,7 +134,7 @@ fn fight_end_killed_and_timeline_kinds_are_snake_case() {
 #[test]
 fn instance_event_kind_is_internally_tagged() {
     for value in [
-        json!({"type":"player_death", "player_name":"SynthAlpha", "level":null,
+        json!({"type":"player_death", "player_id":null, "player_name":"SynthAlpha", "level":null,
             "killed_by":null, "grave_type":null, "object_id":null, "class_id":null, "is_local":false}),
         json!({"type":"player_left", "object_id":123, "player_name":"SynthBravo", "class_id":null}),
         json!({"type":"portal_opened", "opener":null, "portal_type":null, "dungeon":null, "opener_is_local":null}),

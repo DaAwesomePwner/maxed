@@ -26,12 +26,20 @@
   {#snippet children(history)}
     {@const maps = history.value?.kind === 'stats-maps' ? history.value.maps : null}
     {#if maps}
+      {@const dungeons = maps.rows.filter(row => row.group === 'dungeon' && row.visits >= position.minMapRuns)}
+      {@const otherMaps = maps.rows.filter(row => row.group !== 'dungeon')}
       <header class="bar">
         <StatsFilterBar {client} range={position.range} characterId={position.characterId} characters={maps.characters} {onChange} />
+        <label class="min-runs">Minimum runs <input class="ctl" type="number" min="1" max="10000" step="1" value={position.minMapRuns}
+          onchange={event => { const count = event.currentTarget.valueAsNumber; if (Number.isInteger(count) && count >= 1 && count <= 10000) onChange({ minMapRuns: count }); }} /></label>
         <ExportButton {client} request={{ kind: { type: 'maps' }, filter, include_empty: false }} />
       </header>
       {#if maps.rows.length}
-        <MapsTable rows={maps.rows} sort={position.mapSort} onSort={sortBy} />
+        <h3>Dungeons</h3>
+        {#if dungeons.length}<MapsTable rows={dungeons} label="Dungeon rankings" sort={position.mapSort} onSort={sortBy} />
+        {:else}<p class="note">No dungeons have at least {position.minMapRuns} recorded runs. Lower Minimum runs to see more.</p>{/if}
+        {#if otherMaps.length}<section aria-label="Other maps"><h3>Realm, hubs and other maps</h3><MapsTable rows={otherMaps} label="Other map statistics" /></section>{/if}
+        <p class="note">Dungeon rankings require at least {position.minMapRuns} recorded runs. Fame/hour also requires five minutes of observed time. CSV exports include all maps.</p>
         {#if maps.truncated}<p class="note">Showing the first 200 maps.</p>{/if}
       {:else}<EmptyState heading="No recorded maps" description="" />{/if}
       <p class="note">{maps.tracking_since
@@ -42,6 +50,9 @@
 </StatsQuery>
 
 <style>
+  .min-runs { display: grid; gap: var(--space-1); }
+  .min-runs input { width: 70px; }
+  h3 { margin: var(--space-3) 0 var(--space-2); }
   .bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: var(--space-3); margin-bottom: var(--space-3); }
   .note { margin: var(--space-2) 0 0; color: var(--text-secondary); }
 </style>

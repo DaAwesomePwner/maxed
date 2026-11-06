@@ -1,0 +1,76 @@
+{
+  "pcap": "realm-plague-doctor.pcap",
+  "pcap_sha256": "fe85078c202073a991f73292348d0dbac5c6e6d33de622d3b19e798d70defca9",
+  "source_build": "p0@a4f0e08 (capture); scrubbed with p0@dd6cead (Oryx announcement keys kept, KILLER redacted)",
+  "catalog_note": "Not included (client-derived). Build one locally with maxed-cli catalog-root, or construct a minimal in-test catalog from the types listed here.",
+  "observed_catalog_sha256": "6ed62efec45097b76e9fb55fea695115af80c54da0823877b524a6d8eff27814",
+  "scrub_report": "verified=true provisional=false",
+  "export_domain_parity": "200 of 200 rows identical between original and scrubbed (only inputSha256 differs)",
+  "visit": {
+    "map": "Realm of the Mad God",
+    "realm_name": "NexusPortal.Zephyr",
+    "seed": 1486421971,
+    "game_opened_time": 1791146155,
+    "note": "Second visit to this realm instance. It was entered directly from Ocean Trench (the first visit and the dungeon are not in this file; see README). The identity matches the first visit exactly (#34)."
+  },
+  "plague_doctor": {
+    "target_id": 226222,
+    "target_type": 34489,
+    "name": "The Plague Doctor",
+    "catalog_flags": {
+      "event_boss": true
+    },
+    "max_hp": 236600,
+    "fight_first_hit_us": "1791147665395000",
+    "fight_last_hit_us": "1791147692035000",
+    "hp1_samples": [
+      {
+        "decode_i": 6033,
+        "t_us": "1791147692240761"
+      },
+      {
+        "decode_i": 6061,
+        "t_us": "1791147692442046"
+      },
+      {
+        "decode_i": 6086,
+        "t_us": "1791147692645230"
+      }
+    ],
+    "oryx_death_text": {
+      "decode_i": 6152,
+      "t_us": "1791147693250611",
+      "key": "stringlist.The_Plague_Doctor.death.0"
+    },
+    "removal_update_drop": {
+      "decode_i": 6166,
+      "t_us": "1791147693250612"
+    },
+    "expected_after_33": "non-provisional kill (death announcement and removal) at the removal; fight ends there",
+    "observed_live_before_33": "no kill; target_hp 1; fight ended at the map change (map_changed)"
+  },
+  "dps_window_case_for_35": {
+    "total_damage": 187565,
+    "players": 12,
+    "local": {
+      "object_id": 226477,
+      "damage": 29250,
+      "hits": 48,
+      "dps_stored_whole_fight_window": 1097.97,
+      "first_local_enemyhit_us": "1791147670928448",
+      "last_local_enemyhit_us": "1791147692181561",
+      "local_active_window_s": 21.25,
+      "dps_over_local_window_approx": 1376
+    },
+    "fight_window_s": 26.64,
+    "top_player": {
+      "damage": 65809,
+      "dps_stored": 2470.31
+    }
+  },
+  "regression_targets": {
+    "#33": "Plague Doctor holds at HP 1, then is removed in the same tick as the Oryx .death. text; this must be a non-provisional kill.",
+    "#35": "The local player starts 5.5 s after the fight's first hit. Per-player DPS must use the player's own window, not the 26.6 s fight window.",
+    "#34": "This file has only the return visit. The full realm, dungeon and realm sequence is blocked by a scrubber false positive on the first visit (see README)."
+  }
+}

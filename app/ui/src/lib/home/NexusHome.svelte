@@ -11,8 +11,10 @@
   import type { LootHistoryState } from './v3/nexus-history';
   import { emptyHomeVisuals, type HomeVisuals } from './visuals';
   import { spriteUrl } from '../bridge/visuals';
+  import { dpsMetric } from '../runs/dps-metric';
   import { formatDps, formatStat } from '../styles/format';
   import { statText } from './evidence';
+  import { plural } from '../loot/presentation';
   import { dayCaption, clockTime } from './nexus';
   import { routeHref } from '../navigation/routes';
   import { debugMode } from '../debug/debug';
@@ -39,13 +41,17 @@
   let local = $derived(locals.length === 1 ? locals[0] : null);
   let boss = $derived(objectVisual(visuals.objects, (top?.target_type ?? top?.boss_type)));
   let bossName = $derived(boss?.name ?? (top ? `Enemy ${top.target_type ?? top.boss_type ?? '—'}` : '—'));
-  let points = $derived(summary?.fame.filter(point => /^\d+$/.test(point.at) && Number.isFinite(point.fame) && point.fame >= 0) ?? []);
+  let fameCharacters = $derived(summary?.fame_characters ?? []);
+  // The tile follows the current character, or the latest observed one outside the game.
+  let fameCharacter = $derived(snapshot?.character?.id ?? fameCharacters.at(-1)?.character_id ?? null);
+  let characterFame = $derived(fameCharacters.find(row => row.character_id === fameCharacter) ?? null);
+  let fameDelta = $derived(characterFame ? characterFame.last_fame - characterFame.first_fame : null);
   let cells = $derived<KpiCell[]>([
     { key: 'runs', label: 'Runs', value: statText(summary?.runs) ?? '—', sub: `${statText(summary?.clears) ?? '—'} cleared` },
-    { key: 'deaths', label: 'Deaths', value: statText(summary?.deaths) ?? '—', sub: `in ${statText(summary?.runs) ?? '—'} runs` },
-    { key: 'fame', label: 'Fame', value: summary?.fame_delta != null && Number.isFinite(summary.fame_delta) ? `${summary.fame_delta > 0 ? '+' : ''}${formatStat(summary.fame_delta)}` : '—', tone: 'fame',
-      sub: points.length ? `${formatStat(points[0].fame)} → ${formatStat(points[points.length - 1].fame)}` : '—' },
-    { key: 'dps', label: 'Top DPS', value: formatDps(local?.dps), sub: bossName },
+    { key: 'deaths', label: 'Deaths', value: statText(summary?.deaths) ?? '—', sub: `in ${statText(summary?.runs) ?? '—'} ${plural(summary?.runs ?? 0, 'run')}` },
+    { key: 'fame', label: 'Fame', value: fameDelta !== null ? `${fameDelta > 0 ? '+' : ''}${formatStat(fameDelta)}` : '—', tone: 'fame',
+      sub: characterFame ? `${formatStat(characterFame.first_fame)} → ${formatStat(characterFame.last_fame)}` : '—' },
+    { key: 'dps', label: 'Top Active DPS', tooltip: `${dpsMetric('player_active_window_v1').tooltip} Best among complete, issue-free ended fights with at least 20 seconds from first to last hit.`, value: formatDps(local?.dps), sub: bossName },
   ]);
   let best = $derived.by(() => {
     const drop = summary?.best_drop;
@@ -84,7 +90,7 @@
       <span class="boss-sprite"><SpriteImage sprite={boss?.sprite ?? null} sheetUrl={boss?.sprite ? resolve(boss.sprite) : null} fit={32} alt={bossName} /></span>
     </a>{/if}
   </div>
-  <section class="panel fame"><h3>Observed character fame</h3><FameSparkline points={summary?.fame ?? []} {period} partial={(summary?.fame_missing_baselines ?? 0) > 0} sampled={summary?.fame_sampled ?? false} gaps={summary?.issues.includes('stream_gap') ?? false} /></section>
+  <section class="panel fame"><h3>Observed character fame</h3><FameSparkline points={summary?.fame ?? []} runs={summary?.recent_runs ?? []} {period} partial={(summary?.fame_missing_baselines ?? 0) > 0} sampled={summary?.fame_sampled ?? false} gaps={summary?.issues.includes('stream_gap') ?? false} /></section>
   <section class="panel loot"><h3>Best bag</h3>
     <BestBagCard {best} {visuals} resolveSpriteUrl={resolve} {meta} scope={summary ? scopeKey : null} />
     <h3 class="loot-title">Loot this {choice === 'session' ? 'session' : 'day'}</h3>
@@ -114,6 +120,7 @@
   .nexus-home .fight-link:hover { background: #ffffff05; }
   .nexus-home .fight-link:focus-visible { outline: 2px solid var(--violet-text); outline-offset: -2px; }
   .nexus-home .boss-sprite { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+  .nexus-home .kpis :global([data-kpi="dps"] dt) { position: relative; z-index: 1; width: fit-content; }
   .nexus-home .kpis :global([data-kpi="dps"]) { padding-right: 46px; }
   .nexus-home .kpis :global([data-kpi="dps"] .value) { font-size: 22px; }
   .nexus-home .panel { min-width: 0; min-height: 262px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
@@ -121,6 +128,8 @@
   .nexus-home .fame { display: flex; flex-direction: column; }
   .nexus-home .loot { display: flex; flex-direction: column; gap: 4px; }
   .nexus-home .loot-title { margin: 4px 0 0; }
+  .nexus-home :global(.history-link) { margin-left: auto; font-size: 12px; color: var(--violet-text); text-decoration: none; white-space: nowrap; }
+  .nexus-home :global(.history-link:hover) { text-decoration: underline; }
   .nexus-home .tables { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 10px; min-width: 0; }
   .nexus-home.debug .panel { height: auto; }
   .nexus-home > :global([data-debug-note]) { grid-column: 1 / -1; }

@@ -1,5 +1,7 @@
 //! #45: real capture -> stream -> decoder -> engine -> presentation/alert consumers.
 //! Catalogs here are synthetic subsets; no client assets or capture rewrites.
+use crate::combat_fixture;
+use crate::support;
 use maxed_cli::Pipeline;
 use maxed_engine::{Engine, EngineConfig};
 use maxed_protocol::{DecodeEvent, Diagnostic};
@@ -8,9 +10,6 @@ use maxed_store::{open_reader, start_writer, AlertContext, WriterConfig};
 use maxed_types::*;
 use serde_json::{json, Value};
 use std::{fs, path::PathBuf, sync::Arc};
-#[path = "common/combat_fixture.rs"]
-mod combat_fixture;
-mod support;
 // Compile the actual native presentation boundary without introducing a CLI ->
 // desktop dependency. The encoder in this shared source is unused by replay.
 #[allow(dead_code)]

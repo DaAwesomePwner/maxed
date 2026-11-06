@@ -161,7 +161,7 @@
     <input class="ctl" aria-label="Find a player or boss" placeholder="Find a player or boss" bind:value={search.query} />
   </div>
   {#if runId && activeClient}<RunScopeChip {runId} client={activeClient} suppliedRun={story?.run.id === runId ? story.run : null} removeHref="#/logs/events" links={[{ label: 'Chat in this run ›', href: routeHref({ kind: 'logs', view: 'chat', channel: 'all', runId }) }, { label: 'Run summary ›', href: routeHref({ kind: 'run', id: runId }) }]} />{/if}
-  <p class="legend"><span class="unconf">unconfirmed</span> Seen without a confirming observation.</p>
+  <p class="legend">Events are unconfirmed unless marked confirmed. Select a row for observation details.</p>
   {#if validation}<p role="alert">{validation}</p>{/if}
   {#if history.phase === 'error'}<ErrorBar message="Couldn't load events. Your filters are kept." onRetry={() => controller?.retry()} />{/if}
   <div class="layout"><section class="list">

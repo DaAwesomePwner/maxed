@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 use maxed_cli::decode;
 use maxed_recording::PcapWriter;
 use maxed_types::{RawFrame, Timestamp};

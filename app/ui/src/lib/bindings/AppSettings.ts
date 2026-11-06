@@ -2,6 +2,8 @@
 import type { AlertPreferences } from "./AlertPreferences";
 import type { ChatSettings } from "./ChatSettings";
 import type { LootSettings } from "./LootSettings";
+import type { PartySettings } from "./PartySettings";
+import type { RecapImageSettings } from "./RecapImageSettings";
 import type { UpdateChannel } from "./UpdateChannel";
 
-export type AppSettings = { alerts: AlertPreferences, loot: LootSettings, chat: ChatSettings, version: number, adapter_id: string | null, assets_path: string | null, save_recordings: boolean, hardware_acceleration: boolean, recording_limit_bytes: number, update_channel: UpdateChannel, };
+export type AppSettings = { alerts: AlertPreferences, loot: LootSettings, chat: ChatSettings, party: PartySettings, recap_image: RecapImageSettings, version: number, adapter_id: string | null, assets_path: string | null, save_recordings: boolean, hardware_acceleration: boolean, recording_limit_bytes: number, update_channel: UpdateChannel, };

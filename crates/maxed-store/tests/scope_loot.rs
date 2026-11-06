@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::*;
 use maxed_store::*;
 use maxed_types::*;
@@ -49,13 +49,7 @@ fn put(db: &mut Connection, id: &str, at: u64, items: &[(u16, u8)]) {
             },
         })
         .collect();
-    let head: i64 = db
-        .query_row(
-            "SELECT sequence FROM stream_heads WHERE stream_id='test-stream'",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap();
+    let head: i64 = common::receipts::head(db, "test-stream").unwrap();
     apply_batch(
         db,
         &[envelope(

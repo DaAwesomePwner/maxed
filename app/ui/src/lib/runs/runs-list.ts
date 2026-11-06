@@ -6,6 +6,8 @@ import type { RunListSummary } from '../bindings/RunListSummary';
 import type { KpiCell } from '../home/v3/types';
 import { localDayRange } from '../home/scope';
 import { formatElapsed, formatStat, formatTimeDelta } from '../styles/format';
+import { plural } from '../loot/presentation';
+import { coverageExplanation } from './damage';
 
 export type RangePreset = 'all' | '30d' | '7d' | 'today';
 export function presetRange(preset: RangePreset, now: Date): TimeRange | null {
@@ -57,14 +59,27 @@ export function listKpis(summary: RunListSummary | null): KpiCell[] {
       ? `last: ${summary.last_death.dungeon}, ${shortDate(summary.last_death.at)}` : 'last: —' },
     { key: 'time', label: 'Time in dungeons', value: minutes === null ? '—' : `${Math.floor(minutes / 60)}h ${minutes % 60}m`,
       sub: `avg ${summary?.runs ? clearTime(summary.time_in_runs_micros / summary.runs) : '—'} per run` },
-    { key: 'pbs', label: 'Personal bests', value: formatStat(summary?.personal_bests ?? null) },
+    { key: 'pbs', label: 'Dungeon records', tooltip: 'Fastest clear per dungeon', value: formatStat(summary?.personal_bests ?? null) },
     { key: 'fame', label: 'Run fame', value: signedFame(summary?.fame_delta ?? null), tone: 'fame',
-      sub: summary ? `observed in ${formatStat(summary.fame_observed_runs)} runs` : '—' },
+      sub: summary ? `observed in ${formatStat(summary.fame_observed_runs)} ${plural(summary.fame_observed_runs, 'run')}` : '—' },
   ];
 }
-export function vsBest(detail: RunRowDetail | undefined): { text: string; tone: 'good' | 'plain' } | null {
+export function vsBest(detail: RunRowDetail | undefined): { text: string; title: string; tone: 'good' | 'plain' } | null {
   if (detail?.clear_micros == null) return null;
   const best = detail.is_personal_best ? detail.previous_best_clear_micros : detail.best_clear_micros;
   if (best == null) return null;
-  return { text: formatTimeDelta(BigInt(Math.round(detail.clear_micros - best))), tone: detail.is_personal_best ? 'good' : 'plain' };
+  const delta = BigInt(Math.round(detail.clear_micros - best));
+  const title = formatTimeDelta(delta);
+  const text = delta !== 0n && delta > -1_000_000n && delta < 1_000_000n ? `${delta < 0n ? '−' : '+'}<1s` : title;
+  return { text, title, tone: detail.is_personal_best ? 'good' : 'plain' };
+}
+
+export function partialReasons(run: RunView, detail: RunRowDetail | undefined): string | null {
+  const reasons = new Set<string>();
+  if (!run.complete_capture) reasons.add('Run capture is incomplete.');
+  for (const issue of run.issues) reasons.add(coverageExplanation[issue]);
+  // Child uncertainty is aggregated into a boolean; individual reasons are not
+  // available in the list reply.
+  if (detail?.share_partial) reasons.add('Damage share is based on partial observations or estimated damage.');
+  return reasons.size ? [...reasons].join(' ') : null;
 }

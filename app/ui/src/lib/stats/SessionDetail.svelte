@@ -3,6 +3,7 @@
   import type { StoreStatus } from '../bindings/StoreStatus';
   import type { StatsPosition } from '../navigation/state';
   import { routeHref } from '../navigation/routes';
+  import KpiStrip from '../home/v3/KpiStrip.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import StatsQuery from './StatsQuery.svelte';
   import StatsFilterBar from './StatsFilterBar.svelte';
@@ -30,12 +31,14 @@
         <ExportButton {client} label="Export runs with party"
           request={{ kind: { type: 'session_runs', id }, filter: { range: null, character_id: position.characterId }, include_empty: false }} />
       </header>
-      <dl class="totals">
-        <div><dt>Length</dt><dd>{durationText(s.duration_micros)}</dd></div>
-        <div><dt>Fame</dt><dd>{fameText(s.fame, s.missing_baseline)}</dd></div>
-        <div><dt>Fame/hour</dt><dd>{rateText(s.fame_per_hour)}</dd></div>
-        <div><dt>Runs</dt><dd>{s.runs}</dd></div><div><dt>Clears</dt><dd>{s.clears}</dd></div><div><dt>Deaths</dt><dd>{s.deaths}</dd></div>
-      </dl>
+      <div class="session-kpis"><KpiStrip cells={[
+        { key: 'length', label: 'Length', value: durationText(s.duration_micros) },
+        { key: 'fame', label: 'Fame', value: fameText(s.fame, s.missing_baseline), tone: 'fame' },
+        { key: 'rate', label: 'Fame/hour', value: rateText(s.fame_per_hour) },
+        { key: 'runs', label: 'Runs', value: String(s.runs) },
+        { key: 'clears', label: 'Clears', value: String(s.clears) },
+        { key: 'deaths', label: 'Deaths', value: String(s.deaths) },
+      ]} /></div>
       {#if s.ended === null}<p><a href="#/">Open in Home</a> for this session's fame chart.</p>{/if}
       <h3>Maps</h3>
       {#if detail.maps.length || detail.unrecorded_fame}<MapsTable rows={detail.maps} unrecorded={detail.unrecorded_fame} />
@@ -54,7 +57,5 @@
 <style>
   .bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: var(--space-3); margin-bottom: var(--space-3); }
   h2 { margin: 0; font-size: var(--text-title); }
-  .totals { display: flex; flex-wrap: wrap; gap: var(--space-4, 24px); margin: 0 0 var(--space-3); }
-  .totals div { display: grid; } dt { color: var(--text-secondary); } dd { margin: 0; font-variant-numeric: tabular-nums; }
   .runs { padding-left: var(--space-3); }
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import { closeItemHover, itemHover, openItemHover } from '../components/item-hover';
+  import { onDestroy, type Snippet } from 'svelte';
   import type { Client } from '../bridge/client';
   import type { ItemMatch } from '../bindings/ItemMatch';
   import ItemTile from '../components/ItemTile.svelte';
@@ -14,6 +15,9 @@
   let results = $state<ItemMatch[]>([]), active = $state(-1), searching = $state(false);
   let searchRevision = 0;
   let searchInput: HTMLInputElement;
+  let listbox = $state<HTMLUListElement>();
+  function closeHover() { if (listbox) closeItemHover(listbox); }
+  onDestroy(closeHover);
   let visuals = $state.raw(emptyHomeVisuals());
   let visualController = $state.raw<ReturnType<typeof createHomeVisuals>>();
   $effect(() => {
@@ -27,7 +31,7 @@
     client; enabled;
     return () => { searchRevision++; };
   });
-  function clearResults() { clearTimeout(timer); searchRevision++; results = []; active = -1; searching = false; searchMessage = ''; }
+  function clearResults() { closeHover(); clearTimeout(timer); searchRevision++; results = []; active = -1; searching = false; searchMessage = ''; }
   let timer: ReturnType<typeof setTimeout> | undefined;
   function input() { clearTimeout(timer); clearResults(); timer = setTimeout(() => void search(), 250); }
   $effect(() => () => clearTimeout(timer));
@@ -57,6 +61,8 @@
     if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && results.length) {
       event.preventDefault();
       active = event.key === 'ArrowDown' ? (active + 1) % results.length : (active < 0 ? results.length - 1 : (active + results.length - 1) % results.length);
+      const anchor = listbox?.children[active], item = results[active];
+      if (anchor instanceof HTMLElement) openItemHover(anchor, { type: item.object_type, name: item.name, tier: item.tier });
     } else if (event.key === 'Enter') {
       event.preventDefault();
       if (active >= 0 && results[active]) choose(results[active]); else void search();
@@ -64,16 +70,16 @@
   }
 </script>
 <div class="search">
-  <input id={`${id}-search`} bind:this={searchInput} bind:value={query} oninput={input} onkeydown={keydown}
+  <input id={`${id}-search`} bind:this={searchInput} bind:value={query} oninput={input} onkeydown={keydown} onblur={closeHover}
     role="combobox" aria-autocomplete="list" aria-expanded={results.length > 0} aria-controls={results.length ? `${id}-results` : undefined}
     aria-activedescendant={active >= 0 ? `${id}-option-${active}` : undefined} {placeholder} aria-label={placeholder} class="ctl" autocomplete="off" />
   {#if results.length}
-    <ul id={`${id}-results`} role="listbox" aria-label="Item results">
+    <ul id={`${id}-results`} role="listbox" aria-label="Item results" bind:this={listbox}>
       {#each results as item, index (item.object_type)}
         <li id={`${id}-option-${index}`} role="option" aria-selected={active === index} tabindex="-1"
           onclick={event => { if (!(event.target instanceof Element && event.target.closest('button, select, input, a'))) choose(item); }} onkeydown={event => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(item); } }}>
-          <span class="tile {tierClass(item.tier)}"><ItemTile sprite={visuals.objects.find(v => v.object_type === item.object_type)?.sprite ?? null} resolveSpriteUrl={sprite => spriteUrl(visuals.client_fingerprint, sprite)} fit={24} alt="" /></span>
-          <span class={tierClass(item.tier)} title={item.name}>{item.name}</span>{#if item.tier}<small class={tierClass(item.tier)}>{item.tier}</small>{/if}
+          <span class="tile {tierClass(item.tier)}" use:itemHover={{ type: item.object_type, name: item.name, tier: item.tier }}><ItemTile sprite={visuals.objects.find(v => v.object_type === item.object_type)?.sprite ?? null} resolveSpriteUrl={sprite => spriteUrl(visuals.client_fingerprint, sprite)} fit={24} alt="" /></span>
+          <span class={tierClass(item.tier)} use:itemHover={{ type: item.object_type, name: item.name, tier: item.tier }}>{item.name}</span>{#if item.tier}<small class={tierClass(item.tier)}>{item.tier}</small>{/if}
           {#if resultExtra}{@render resultExtra(item)}{/if}
         </li>
       {/each}

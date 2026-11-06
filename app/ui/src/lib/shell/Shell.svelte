@@ -4,9 +4,10 @@
 </script>
 
 <script lang="ts">
-  import { onMount, setContext, tick, untrack, type Snippet } from 'svelte';
+  import { onDestroy, onMount, setContext, tick, untrack, type Snippet } from 'svelte';
   import { readonly, writable } from 'svelte/store';
   import type { Client } from '../bridge/client';
+  import ItemHoverCard from '../components/ItemHoverCard.svelte';
   import type { CaptureStatus } from '../bindings/CaptureStatus';
   import type { LiveSnapshot } from '../bindings/LiveSnapshot';
   import type { ObjectVisual } from '../bindings/ObjectVisual';
@@ -17,6 +18,7 @@
   import type { Timestamp } from '../bindings/Timestamp';
   import type { LiveState } from '../bridge/live';
   import { invalidatesHomeHistory } from '../bridge/live';
+  import { observePresentationVisibility } from '../bridge/visibility';
   import { createHistoryCache, type HistoryCache } from '../runs/history-cache';
   import { invalidatesSavedHistory } from './history-invalidation';
   import { notifyEventObserver } from './event-observers';
@@ -40,6 +42,8 @@
   import { railView } from './rail';
   import { createHomeObservation } from '../home/mode';
   import { emptyHomeLiveWindow } from '../home/v2/live';
+  import { createRecapTracker } from '../home/v4/recap';
+  import { createCharacterController } from '../character/controller';
   import { connectShell } from './connection';
   import { SHELL_CONNECTION, type ShellConnection } from './context';
   let { client, preview = false, features = productionFeatures, historyAdapter, historyCache, content, rowsReady = () => Promise.resolve(), resolveSpriteUrl, initialSetupRequired = false }: {
@@ -67,10 +71,25 @@
     : null);
   const statusRegistry = createStatusRegistry();
   setContext(STATUS_REGISTRY, statusRegistry);
+  const characterController = createCharacterController({
+    getCharacterCalculation: request => client.getCharacterCalculation(request),
+  });
+  onDestroy(() => characterController.dispose());
+  let characterSnapshot: LiveSnapshot | null = null;
+  function updateCharacter() {
+    if (features.character) characterController.update(characterSnapshot, capture, liveState);
+  }
   const sharedCapture = writable<CaptureStatus | null>(null);
   const sharedSnapshot = writable<LiveSnapshot | null>(null);
   const eventObservers = new Set<(event: EventEnvelope) => void>();
-  const sharedHomeWindow = writable(emptyHomeLiveWindow());
+  let currentHomeWindow = emptyHomeLiveWindow();
+  const sharedHomeWindow = writable(currentHomeWindow);
+  const homeRecap = createRecapTracker();
+  onDestroy(() => homeRecap.presentation.dispose());
+  $effect(() => {
+    if (!features.homeRedesign) return;
+    return observePresentationVisibility(homeRecap.setVisible);
+  });
   const sharedAlertPreferences = writable<AlertPreferences | null>(null);
   const sharedAlertStatus = writable<AlertSessionStatus>('retired');
   let releaseAlertStatus = () => {};
@@ -96,8 +115,9 @@
   const dungeonMute = createDungeonMute(alerts, () => mounted && !preview && nativeDemo === false);
   setContext(DUNGEON_MUTE, dungeonMute);
   const cache = untrack(() => historyCache) ?? createHistoryCache({ invalidates: invalidatesSavedHistory, route: () => router?.route });
-  setContext<ShellConnection>(SHELL_CONNECTION, { capture: sharedCapture, snapshot: sharedSnapshot, historyCache: cache,
+  setContext<ShellConnection>(SHELL_CONNECTION, { character: characterController, capture: sharedCapture, snapshot: sharedSnapshot, historyCache: cache,
     onEvent: receive => { eventObservers.add(receive); return () => { eventObservers.delete(receive); }; },
+    homeRecap, recapPresentation: homeRecap.presentation, dismissHomeRecap: homeRecap.dismiss,
     homeWindow: sharedHomeWindow, selectHomeFight: id => releaseConnection.selectFight(id), reconnect: () => connect(), alerts, get recording() { return recordingSession; } });
   let visuals = $state.raw<ObjectVisual[]>([]);
   let fingerprint = $state('');
@@ -128,7 +148,7 @@
   }
   $effect(() => { if (initialSetupRequired && !preview) router?.replaceInitial({ kind: 'setup' }); });
   let homeRoute = $derived(navigation?.entry.route.kind === 'home');
-  let historyRoute = $derived(['runs', 'run', 'fight', 'player', 'loot', 'item'].includes(navigation?.entry.route.kind ?? ''));
+  let historyRoute = $derived(['runs', 'run', 'fight', 'player', 'run-player', 'loot', 'item'].includes(navigation?.entry.route.kind ?? ''));
   let pane: HTMLElement;
   let missingRow = $state(false);
   let observedStream: string | null = null;
@@ -147,7 +167,8 @@
     update();
     return () => clearTimeout(timer);
   });
-  let releaseConnection: ReturnType<typeof connectShell> = Object.assign(() => {}, { selectFight: (_id: string | null) => {} });
+  let releaseConnection: ReturnType<typeof connectShell> = Object.assign(() => {}, { selectFight: (_id: string | null) => {}, setHomeActive: (_active: boolean) => {} });
+  $effect(() => { releaseConnection.setHomeActive(homeRoute); });
   let mounted = false;
   let interactiveReady = $derived(snapshot !== null && capture !== null && liveState.phase === 'live'
     && router !== undefined && navigation !== undefined && !busy && !captureError && !errors.snapshot
@@ -237,6 +258,7 @@
     untrack(() => {
       if (!mounted || (nextClient === connectedClient && nextPreview === connectedPreview)) return;
       cache.clear();
+      characterSnapshot = null; characterController.update(null, null, liveState);
       snapshot = null; capture = null; visuals = []; store = null;
       logsPending.reset(); pendingRevision++;
       acceptedEvent = null; historyReady = null; historyRequired = null; historyInitial = false; routeRequired = null;
@@ -314,8 +336,18 @@
 
     capture = null; sharedCapture.set(null);
     connectedClient = client; connectedPreview = preview;
+    // Features are startup/preview configuration, not runtime settings. Like the
+    // router, observation chooses its feature set when the connection is made.
+    const homeRedesign = features.homeRedesign;
     releaseConnection = connectShell(client, {
-      homeWindow: (next) => sharedHomeWindow.set(next),
+      homeWindow: (next) => { currentHomeWindow = next; sharedHomeWindow.set(next); },
+      homeWindowObserved: homeRedesign ? {
+        onEvent: event => homeRecap.onEvent(event),
+        onWindow: (next, observedSnapshot) => {
+          currentHomeWindow = next;
+          homeRecap.observe(observedSnapshot, currentHomeWindow);
+        },
+      } : undefined,
       historyInvalidates,
       historyBaseline: (next) => {
         if (next.stream_id !== '' && (historyRequired === null || BigInt(next.sequence) > BigInt(historyRequired))) {
@@ -340,12 +372,13 @@
         }
         observedStream = next.stream_id;
         snapshot = next;
+        characterSnapshot = next; updateCharacter();
         sharedSnapshot.set(next);
       },
       capture: (next) => {
         const changed = capture?.state !== next.state;
         if (changed) readCatalog();
-        capture = next; sharedCapture.set(next);
+        capture = next; sharedCapture.set(next); updateCharacter();
         if (changed) configureAlerts();
       },
       visuals: (next) => {
@@ -381,6 +414,7 @@
         const changingEpoch = next.phase === 'connecting' && liveState.phase !== 'connecting';
         if (next.phase === 'resyncing' && liveState.phase !== 'resyncing') cache.invalidateAll();
         liveState = next;
+        updateCharacter();
         if (changingEpoch) {
           cache.clear();
           retireAlerts();
@@ -396,8 +430,9 @@
         if (source === 'captureSubscription') { capture = null; alertController.configure(null, alertStream); }
         if (source === 'snapshot') { snapshot = null; sharedSnapshot.set(null); visuals = []; alertController.configure(null, alertStream); }
         if (source === 'store') store = null;
+        updateCharacter();
       },
-    });
+    }, { homeActive: router?.route.kind === 'home' });
   }
   async function action(start: boolean) {
     if (busy || preview) return;
@@ -509,7 +544,7 @@
         <DebugNote text={`Latest durable sequence: ${store.durable ?? "unavailable"}`} />
       {:else if liveState.historyFailed || errors.store || !store}<p class="storage-note">Storage Error</p>
       {/if}
-      <h1 class:sr-only={homeRoute || ['runs', 'run', 'fight', 'player', 'loot', 'item', 'logs', 'alerts'].includes(navigation.entry.route.kind)} tabindex="-1">{routeTitle(navigation.entry.route)}</h1>
+      <h1 class:sr-only={homeRoute || ['runs', 'run', 'fight', 'player', 'run-player', 'loot', 'item', 'logs', 'alerts'].includes(navigation.entry.route.kind)} tabindex="-1">{routeTitle(navigation.entry.route)}</h1>
       <div class:home-content={homeRoute} class:route-content={!homeRoute}>
       {#key navigation.entry.key}
         {#if content}{@render content(navigation, router, { store, onRowsReady: rowsRendered })}
@@ -526,6 +561,7 @@
     <p class="restoration-status" role="status" aria-live="polite" aria-atomic="true">{missingRow ? 'Page Heading' : ''}</p>
   </main>
   </div>
+  <ItemHoverCard {client} />
 </div>
 
 <BusyStatus message={liveState.phase === 'resyncing' ? 'Refreshing' : null} />

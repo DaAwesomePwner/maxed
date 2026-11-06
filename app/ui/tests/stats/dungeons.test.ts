@@ -23,5 +23,7 @@ it('shows lifetime dungeon records', async () => {
 });
 it.each([[null, false], ['#/stats/dungeons', true]])('Home links to all-time records only with Stats on', (allTimeHref, shown) => {
   render(DungeonBreakdown, { rows: [], allTimeHref });
-  expect(screen.queryByRole('link', { name: 'See all time' }) !== null).toBe(shown);
+  const link = screen.queryByRole('link', { name: 'All time ›' });
+  expect(link !== null).toBe(shown);
+  if (shown) expect(link?.getAttribute('href')).toBe(allTimeHref);
 });

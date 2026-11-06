@@ -2,6 +2,7 @@
 //! Archive fights are compact valid DTOs, not a full replay throughput fixture.
 #![allow(dead_code)]
 use super::{apply_batch, migrate, open_reader, StoreReader};
+use crate::common::receipts;
 use maxed_types::*;
 use rusqlite::{params, Connection};
 use std::{
@@ -215,7 +216,7 @@ impl Fixture {
                 f.boss_type.is_some()
             );
         }
-        assert_eq!(count(&self.db, "SELECT count(*) FROM event_receipts"), 1);
+        assert_eq!(receipts::count(&self.db), 1);
         eprintln!("validated: runs=10000 fights=4000000 eligible=200000 players=200000 drops=40000 whites=8000 deaths=20000 baselines=10000 alerts={}",self.alerts);
     }
     pub fn validate_pages(&self) -> StoreReader {
@@ -469,6 +470,8 @@ pub fn burst_fight(i: usize, stress: bool) -> FightView {
             until: Timestamp(BASE + (b + 1) as u64 * 1000),
             total: f.total_damage / buckets as f64,
             local: Some(300. / buckets as f64),
+            others_damage: None,
+            others_presence: None,
         })
         .collect();
     f
@@ -715,10 +718,7 @@ pub fn benchmark_burst() {
             ),
             0
         );
-        assert_eq!(
-            count(&db, "SELECT count(*) FROM event_receipts"),
-            seq as i64
-        );
+        assert_eq!(receipts::count(&db), seq as i64);
         assert_eq!(writer.status().queued, 0);
         eprintln!("burst stress={stress}: fights={fights} eligible=20 revisions=20 preexisting_unclassified_bags=20 deaths=1 max_event_bytes={max_event} streamed_event_bytes={total_bytes} queue_peak_rows={max_queued} sampled_queue_bytes={peak_queue_bytes} production_queue_limit={} full_retries={full} submission_and_concurrent_commit={submitted:?} final_flush={flush:?} claim_times={claim_times:?}",32*1024*1024);
         if stress {
@@ -734,8 +734,13 @@ pub fn benchmark_burst() {
     }
 }
 
+pub(super) use crate::common::downgrade;
+
 fn legacy_v1(f: &Fixture) {
+    downgrade::remove_maintenance_schema(&f.db);
+    downgrade::remove_loot_stats_indexes(&f.db);
     f.db.execute_batch("DROP TRIGGER pd_player_insert; DROP TRIGGER pd_player_delete; DROP TRIGGER pd_player_update; DROP TRIGGER pd_fight_association; DROP TABLE pd_player_contributions; DROP TABLE pd_run_players; DROP INDEX pd_home_session_runs; DROP INDEX pd_home_today_runs; DROP INDEX pd_run_evidence_kind; DROP INDEX pd_fight_players_totals; DROP INDEX pd_runs_comparison; DROP TABLE event_fts; DROP TABLE instance_events; DROP TABLE alert_occurrences; DROP TABLE personal_bests;
+        DROP TABLE party_run_members; DROP TABLE party_players; DROP TABLE player_profiles; DROP TABLE player_gear_log; DROP TABLE scope_timelines; DROP TABLE player_timelines;
         DROP TABLE map_visits; DROP INDEX play_sessions_started; DROP TABLE chat_fts; DROP TABLE chat_messages; DROP INDEX drops_source; DROP INDEX runs_dungeon_ended; DROP INDEX drops_id_at; DROP INDEX drops_stats; ALTER TABLE drops DROP COLUMN source_type;
         DROP INDEX alerts_kind_at; DROP INDEX fights_final_boss; DROP INDEX fights_final_boss_key; DROP INDEX fight_players_identity; DROP INDEX character_aliases_verified;
         DROP TABLE stream_sessions; DROP INDEX fame_session; DROP INDEX deaths_session;
@@ -837,7 +842,7 @@ pub fn benchmark_cold_upgrade() {
                 assert_eq!(count(&db, "SELECT count(*) FROM personal_bests"), 0);
                 assert_eq!(count(&db,"SELECT count(*) FROM alert_occurrences WHERE state!='suppressed' OR alert_id IS NOT NULL OR source_stream_id IS NOT NULL"),0);
                 assert_eq!(count(&db, "SELECT count(*) FROM alerts"), n as i64);
-                assert_eq!(count(&db, "SELECT count(*) FROM event_receipts"), 1);
+                assert_eq!(receipts::count(&db), 1);
                 assert_eq!(
                     count(&db, "SELECT count(*) FROM fight_summaries"),
                     4_000_000

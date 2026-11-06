@@ -6,9 +6,9 @@ import type { RunView } from '../bindings/RunView';
 import { formatElapsed } from '../styles/format';
 import { fameSegments } from './summary';
 
-export const DUNGEON_PAGE_SIZE = 6;
+export const DUNGEON_PAGE_SIZE = 12;
 export const DUNGEON_SERVER_LIMIT = 20;
-export const RECENT_PAGE_SIZE = 6;
+export const RECENT_PAGE_SIZE = 10;
 export const RECENT_SERVER_LIMIT = 10;
 
 export function lootCount(count: number): string {

@@ -6,6 +6,18 @@ import type { SetupStatus } from '../../src/lib/bindings/SetupStatus';
 import { setupFixture, deferred } from './fixture';
 
 describe('three-step setup', () => {
+  it('keeps capture and access blocked until the independent upgrade status is known', async () => {
+    const f = setupFixture(), status = await f.client.queryHistoryUpgradeStatus();
+    const pending = deferred<typeof status>(); f.client.queryHistoryUpgradeStatus = () => pending.promise;
+    render(Setup, { client: f.client }); await screen.findByText('Assets Ready');
+    for (const name of ['Start Capture', 'Check Access']) {
+      const button = screen.getByRole('button', { name });
+      expect(button.getAttribute('aria-disabled')).toBe('true'); await fireEvent.click(button);
+    }
+    expect(f.client.startCapture).not.toHaveBeenCalled();
+    pending.resolve(status);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('false'));
+  });
   it.each([
     [{ npcap: 'missing' }, 'Install Npcap'],
     [{ npcap: 'incompatible' }, 'Repair Npcap'],

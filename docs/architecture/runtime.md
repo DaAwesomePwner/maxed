@@ -6,7 +6,7 @@ The native application joins capture, decoding, interpretation, storage and pres
 
 The capture worker owns TCP reassembly and directional decode, then passes owned packets and diagnostics to one engine. Parsed game TCP payload counts as traffic; UI timers and unrelated frames do not. Unverified cipher alignment cannot establish game facts. A 250 ms tick handles idle expiry and dirty presentation even before the first game frame. Queued frames take priority. Quiet periods longer than five seconds advance a conservative wall-clock estimate with a five-second buffer for delayed capture batches.
 
-A stream owns an immutable validated catalog and the installation's random 32-byte identity key. Account strings are immediately HMAC-SHA256 hashed with domain separation; only opaque character IDs leave the engine. Remote identity is bound to observed object generations, not player-name joins. `observe_live_traffic` and `apply_observed` separate traffic timing from decoded packets; offline adapters use replay timestamps. Thirty minutes without game traffic ends a session.
+A stream owns an immutable validated catalog and the installation's random 32-byte identity key. Account strings are immediately HMAC-SHA256 hashed with domain separation; only opaque character IDs leave the engine. Remote damage attribution is bound to observed object generations. Party separately merges roster rows and links history by the normalized display-name key. `observe_live_traffic` and `apply_observed` separate traffic timing from decoded packets; offline adapters use replay timestamps. Thirty minutes without game traffic ends a session.
 
 Asset extraction runs off the UI thread. The retained catalog lease protects its cache generation. Unavailable or rejected assets produce explicit partial capture with `MissingCatalog`; a stale cache never silently substitutes for the selected client.
 
@@ -14,7 +14,40 @@ Asset extraction runs off the UI thread. The retained catalog lease protects its
 
 The adapter numbers every engine envelope and submits the original batch to storage before bridge delivery. A snapshot's stream/sequence watermark and the ordered event cursor have different roles. Subscribe before querying `get_live_snapshot`; use `get_store_status().durable` before reading history at that watermark. Queue acceptance is not a disk acknowledgment.
 
-`SnapshotGate` publishes dirty snapshots at most once per 250 ms, with explicit opening/finalization flushes. Domain events bypass that gate. A bounded eight-transaction FIFO backpressures bridge producers instead of dropping envelopes; event transactions split at 1,024 envelopes before enqueueing. Storage and alert contexts retain the full originals first; `publish` compacts each presentation copy exactly once before queueing, and later delivery stages retain that compact payload. Thus the FIFO holds at most 8 * 1,024 = 8,192 compact event envelopes (plus one dequeued batch and the producer's pending transaction outside the queue), rather than 32,768 full envelopes. This is an event-count bound, not a universal byte bound: event shapes vary. The perf-only `before` mode intentionally retains full envelopes. Native lifecycle locks do not emit to the WebView. Storage receives full domain events before any presentation compaction.
+`SnapshotGate` publishes dirty snapshots at most once per 250 ms while an open fight has accepted damage within the preceding five seconds and once per second otherwise, with explicit opening/finalization flushes. Domain events bypass that gate. A bounded eight-transaction FIFO backpressures bridge producers instead of dropping envelopes; event transactions split at 1,024 envelopes before enqueueing. Storage and alert contexts retain the full originals first; `publish` compacts each presentation copy exactly once before queueing, and later delivery stages retain that compact payload. Thus the FIFO holds at most 8 * 1,024 = 8,192 compact event envelopes (plus one dequeued batch and the producer's pending transaction outside the queue), rather than 32,768 full envelopes. This is an event-count bound, not a universal byte bound: event shapes vary. The perf-only `before` mode intentionally retains full envelopes. Native lifecycle locks do not emit to the WebView. Storage receives full domain events before any presentation compaction.
+
+Main-window resize/focus events reconcile native visibility and minimization;
+`set_document_visible` adds the document visibility signal. Hidden snapshots and
+Party notices are discarded before queueing, and visibility epochs reject these
+already queued publications from before a hide/restore boundary. Ordered domain
+events, capture status, storage, capture clocks and native alert delivery continue.
+During live capture, restore requests a fresh full snapshot from the capture worker
+before queueing it. Restore resets delta encoding and invalidates Party in every
+mode. The UI queries a numeric baseline without retiring its event-sourced Home window or advancing the
+ordered event cursor past deliveries still in flight. Hidden events have already
+updated the model and history checkpoints; restore does not replay them.
+An IPC send or snapshot build already in progress at hide time may finish. Hidden
+live capture skips scheduled snapshot builds and leaves the publication gate dirty;
+showing the window permits the next due publication. Explicit lifecycle snapshots
+and direct reads still materialize while hidden.
+During live capture, direct native reads (`runtime.snapshot()` and `get_live_snapshot`)
+materialize on demand after the worker's current transaction, including metadata
+changes that do not emit a domain event. These reads neither publish a snapshot
+nor consume/reset the publication gate. Clean reads reuse the cached projection.
+The Tauri query waits off the UI thread; storage/bridge backpressure can delay a
+read. Stopped or failed workers leave their last finalized cached view available.
+
+Demo and replay do not service fresh-snapshot requests. Their direct reads and
+restore baselines use the last cached projection, which can lag by the publication
+interval (up to about one second while idle) and omit metadata-only changes until
+the next snapshot-producing update or finalization. They retain scheduled cache
+builds while hidden; their snapshot publications are still suppressed.
+
+The summary writer retains the validated canonical digest beside each immutable
+queued envelope and reuses it at commit/retry. Direct batch projection still
+validates its inputs. Digest semantics, duplicate checks and projections are unchanged;
+the 32-byte binary digest counts toward the existing writer byte budget. Presentation
+JSON remains separate because compacted events differ from stored envelopes.
 
 The high-frequency logical topics `engine-event` and `live-snapshot` use fetch-backed Tauri byte channels. `subscribe_live_payload(event, channel)` returns an ownership ID; `unsubscribe_live_payload(id)` releases it. UTF-8 JSON bodies are padded with whitespace to at least 1,024 bytes to avoid the small-body inline-JavaScript path. The shared UI transport decodes them once. `capture-status` remains a typed event; queries return typed objects. Channel ownership is scoped to a WebView label, purged on page load/destruction, and bounded to 16 subscriptions; failed subscribers are removed independently.
 
@@ -34,6 +67,13 @@ per-envelope cursor, generation, side-effect and projection rules. Received even
 covered by a recovery snapshot still drive side effects exactly once; covered
 projections and initial-baseline history remain silent. Recovery replay is also a
 presentation transaction. Home publishes one immutable visit window per batch.
+As of 2026-10-13, Home reuses the complete window identity when its row,
+fight-sequence and metadata revisions are unchanged; drops use the same cached
+array projection as the other row collections. With Home v4 enabled, recap
+observation occurs at the boundaries described in [UI](ui.md) and at batch end,
+without requiring a new window object for an unchanged checkpoint. Ordered
+event callbacks remain independent of projection reuse. See the
+[synthetic timing evidence](../performance/2026-10-13-home-slim-reads.md).
 Focus and bounded-history eviction decisions stay ordered, since deferring those
 decisions could resurrect previously evicted rows or change sticky focus. Eviction
 uses cached timestamps and a bounded minimum scan instead of repeated per-event
@@ -58,6 +98,47 @@ measurements are in the [fixes report](../performance/2026-10-06-live-realm-fixe
 
 `Engine::live_snapshot` filters presentation to relevant boss/quest and recent local-hit fights. `Engine::snapshot` and storage retain the full domain view. Charts compact contiguous observations without bridging gaps; the live payload bound is `max(120, contiguous-run count)`, up to 1,800 engine buckets, while UI display is bounded separately. Per-player DPS uses accepted first-to-last hit time. Per-player DPS is unavailable (null) when that player's active window is shorter than three seconds. Rankings and shares remain damage-based. [Parity exports](../parity/README.md) use a separate reference-compatible rate.
 
+## Party roster
+
+The native `PartyRoster` keeps the current observation scope outside `LiveSnapshot`.
+It combines `PlayerPresence`, profiles, instance events, run totals and boss fights,
+using the engine's public `PROFILE_LIMIT` cap of 512 player instances per scope.
+A scope change replaces the roster and clears the manual preset pick.
+Same-name instances merge for display using
+`name_key`: text before the first comma, ASCII-lowercased. The latest profile wins;
+the row is present if any matching instance is present.
+
+`Engine::take_roster_profiles` and `Engine::take_roster_presence` supply
+non-persisted roster profiles and presence to the adapter, including bystanders
+in Nexus and the realm. Neither path enters the writer, creates event receipts,
+or sends engine events to the UI. Presence retains its position within the
+accompanying engine batch so scope-end absences precede the new scope and identity
+merges stay ordered. The adapter drains presence after each engine update;
+undrained presence is discarded at the next update. Outside dungeon runs, only
+players who fought become eligible for persisted `PlayerObserved` profiles.
+Deliberate marks and notes can
+still create a Party history entry.
+
+Dirty roster changes produce a presentation-only `party-changed` notice containing
+`{ scope_id }`. A change from the last delivered `scope_id` delivers immediately,
+supersedes any pending notice and resets the throttle window. Within the same
+scope, the bridge delivers at most once per second with a leading delivery and
+the latest trailing notice, including when traffic goes quiet. Explicit flush
+and disconnection deliver a pending notice immediately. This notice never enters
+storage. Live re-reads on these notices; saved views use durable engine-event
+invalidation.
+
+`get_party_live` queries annotations for at most 512 keys through the shared
+history reader on each read; it keeps no annotation cache. Both live and saved-run
+queries resolve presets and evaluate requirements against the local catalog.
+The `PartyView.live` flag comes from active live capture; demo, replay and stopped
+capture do not get a Live label merely because a scope remains available.
+
+Presets save through `update_party_settings`, which patches only Party settings.
+General settings saves preserve the stored Party section. The validated RealmEye
+action launches the system `explorer.exe` with the profile URL for the default
+browser; the application does not fetch it.
+
 ## Storage pressure and shutdown
 
 When the writer rejects an envelope because its queue is full, capture consumption pauses with the rejected envelope and remaining batch retained. Npcap's bounded input queue may then drop frames; frame-index gaps enter normal recovery diagnostics. Storage failure stops capture and retains accepted and unaccepted summaries. `retry_store` retries the original ordered queue; a terminated writer transfers pending ownership to its replacement.
@@ -68,7 +149,64 @@ Live uses `live.sqlite3` and a fresh stream per capture. Exclusive Windows names
 
 History reads run on one lazily started `history-reader` thread, which keeps a query-only SQLite connection between successful reads of the same database and generation. Every reuse checks the schema version; errors, panics, namespace retirement, shutdown and 60 seconds of idle time close the connection. Idle connections hold no transaction, so writer checkpoints remain unaffected. Lifecycle waits track both active work and idle kept connections: after `invalidate_and_wait` or `shutdown_reads` returns, no reader remains open, including before Windows playback file cleanup and update installation. Application shutdown closes the idle reader before the writer.
 
+Receipt maintenance uses the same storage owner as capture. Accepted events,
+retry, flush, shutdown and retained unsaved work take priority. Default units admit
+at most 1,000 receipts and 1 MiB serialized input with a cooperative 10 ms target;
+batch sizing uses executor work, excluding fixed setup, status and commit costs.
+`reserve` still bounds record admission using elapsed time from before BEGIN.
+Batch-proportional commit work (WAL page writes) is bounded only by those ceilings;
+its real-disk cost remains unmeasured. These are cooperative budgets, not hard
+statement or transaction latency guarantees. Busy readers and
+the 32 MiB maintenance WAL budget cause checkpoint attempts or deferral. Progress
+notices are throttled to at most once per second; terminal rejection of queued
+requests publishes immediately so it does not depend on another owner turn.
+
+The native owner starts receipt backup/conversion only after the Settings request,
+or resumes a persisted unpaused request. Backup steps run outside the capture owner;
+failed or pending backup does not prevent v12/v14/v15 capture. Stopped maintenance uses
+an exclusive owner and yields it when capture starts. Owner transitions retain the
+process-local request FIFO, including Compact/Resume already answered Queued and
+subsequent Cancel commands. Stop restarts pending work even without a runnable
+persisted job. Demo/Replay suspend the FIFO until a live owner returns; neither
+playback nor its retained Home context admits live maintenance. `reset_preview`
+returns to stopped-Live and resumes the FIFO after releasing its session and alert
+locks. Playback handoff answers pending control callers Queued while retaining
+their order, and rejects synchronous deletions for retry. A reply waiter's loss
+of an owner never drains unrelated requests. Shutdown joins the
+live owner before rejecting outstanding requests, and rejection during shutdown,
+explicit history upgrade or storage failure publishes Unavailable to the UI.
+Rejecting only internal, reply-less Restore entries leaves the failure state
+unchanged; their persisted jobs remain restorable.
+Persisted unpaused jobs still restore after restart; the FIFO itself is not
+crash-durable. Storage reads retain namespace
+and generation context. Legacy v1–v10 preparation instead stops before opening
+history and exposes the explicit backup/upgrade prompt, including space and retry
+feedback; cancellation keeps capture blocked. The
+[Phase 1 synthetic evidence](../development/storage-maintenance.md) does not establish
+live Npcap, game-client, WebView2, installer or real-history timing acceptance.
+
 ## Engine bounds and uncertainty
+
+Player profiles are capped at 512 per observation scope. A dungeon scope uses
+the run id; other maps use a map id. The scope lasts until map closure even if
+the run ends earlier. Dungeon scopes publish every observed player; outside runs,
+profiles stay pending in memory until the player deals attributed damage in that
+scope. Eligibility survives timeline overflow. Dirty profiles publish on the
+250 ms engine flush;
+`last_seen` changes alone publish with the next content change or at scope end.
+Exceeding the profile cap marks `ResourceLimit` and stops admitting new profiles.
+The stored gear log is capped at 64 rows per player: the first 63 changes and the
+most recent gear are retained. Starting gear uses the profile's `first_seen`;
+later swaps use the publishing profile's `last_seen`.
+
+Scope damage timelines accumulate accepted attributed contributions across all
+fights in the map. Dirty timelines publish every five seconds and flush at scope
+closure, with per-bucket party damage and counts of players with positive damage.
+Updates carry only changed player rows unless mid-array insertion, compaction or
+identity merging requires every row. The sparse timeline compacts adjacent
+buckets above 1,800 buckets, coarsening its resolution. Its 200,000-cell limit
+also bounds the dense player-by-bucket projection; overflow disables the timeline
+for that scope and publishes `disabled: true` once, without changing fight totals.
 
 Default ceilings are 100,000 entities, 50,000 shots/reconciliation groups, 2,048 fights and 1,024 bags. Shot evidence expires after five seconds. Unreferenced entities leave memory 30 seconds after leaving view; bounded tombstones prevent reopening recently retired targets. Fight charts compact above 1,800 buckets. Each fight has at most 256 source summaries per player and 4,096 represented players; overflow retains explicit resource-limit evidence and unattributed totals. Series are capped at 200,000 cells; exceeding the bound disables the series rather than changing damage totals. Instance events are capped at 4,096 per map.
 

@@ -7,20 +7,37 @@
 #![forbid(unsafe_code)]
 
 mod alerts;
+pub mod backup;
+mod boss_history;
 mod chat;
+mod dungeon_profile;
 mod error;
 mod home;
+mod home_hud;
+mod home_streak;
 mod instance;
+mod journey;
 mod loot;
+pub mod maintenance;
 mod migrate;
+pub mod party;
+mod party_average;
+mod players;
 mod project;
 mod queries;
+mod recap;
+mod receipts;
+mod records;
 mod run_rows;
 mod run_screen;
 mod run_strip;
 mod stats;
+pub mod storage_usage;
 mod visits;
 mod writer;
+
+#[cfg(test)]
+mod home_read_plans;
 
 #[cfg(test)]
 #[path = "../tests/common/runs_workload.rs"]
@@ -30,6 +47,13 @@ mod runs_workload;
 #[path = "../tests/common/alerts_workload.rs"]
 mod alerts_workload;
 
+#[cfg(test)]
+#[path = "../tests/common/receipt_support.rs"]
+mod common;
+
+#[cfg(test)]
+use common::receipts as receipt_tests;
+
 pub use alerts::{
     AlertContext, ChatContext, CommittedAlert, ContextualEvent, ContextualShutdownError,
 };
@@ -38,10 +62,14 @@ pub use chat::{
     HiddenLists, CHAT_CLEAR_BATCH, CHAT_PRUNE_BATCH,
 };
 pub use error::StoreError;
-pub use migrate::{migrate, open_reader, upgrade_history, StoreReader};
+pub use migrate::{
+    history_preflight, migrate, open_reader, upgrade_history, StoreReader, SCHEMA_VERSION,
+};
+pub use party::{party_write_file, PartyWrite};
 pub use project::{apply_batch, apply_contexts_for_tests};
-pub use queries::{clear_comparison, validate_scope_loot};
+pub use queries::{clear_comparison, validate_loot_catalog, validate_scope_loot};
 pub use stats::SessionRunParty;
 pub use writer::{
-    start_writer, take_abandoned_events, FlushReceipt, StoreWriter, SubmitError, WriterConfig,
+    start_writer, start_writer_with_maintenance, take_abandoned_events, FlushReceipt, StoreWriter,
+    SubmitError, WriterConfig,
 };

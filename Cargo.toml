@@ -5,8 +5,8 @@ members = ["crates/maxed-types", "crates/maxed-engine", "crates/maxed-store", "c
 version = "0.1.1"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/DaAwesomePwner/maxed"
-homepage = "https://github.com/DaAwesomePwner/maxed"
+repository = "https://github.com/daplabs/maxed"
+homepage = "https://github.com/daplabs/maxed"
 rust-version = "1.99.0"
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -19,3 +19,11 @@ crossbeam-channel = "0.5"
 ctrlc = "3"
 libloading = "0.8"
 ts-rs = { version = "11", features = ["serde-compat"] }
+
+# Line tables keep file:line backtraces in workspace code. Full debug info,
+# especially for dependencies, mostly slows linking and multiplies target/ size.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

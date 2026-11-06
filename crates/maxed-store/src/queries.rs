@@ -3,7 +3,7 @@ use crate::{
     StoreError, StoreReader,
 };
 use maxed_types::*;
-use rusqlite::{params, params_from_iter, types::Value, Connection, Params};
+use rusqlite::{params, params_from_iter, types::Value, Connection, Params, Transaction};
 use serde::{de::DeserializeOwned, Serialize};
 
 const MAX_RUN_ID_BYTES: usize = 256;
@@ -15,6 +15,27 @@ const MAX_STORY_FIGHTS: usize = 12_000;
 const MAX_STORY_TIMELINE: usize = 20_000;
 const MAX_STORY_DROPS: usize = 2_000;
 const DURATION: &str = "CASE WHEN ended>=started THEN ended-started END";
+
+/// The same summary cap, ordinal ordering and party rule for run and visit scopes.
+pub(crate) fn fight_summaries(
+    tx: &Transaction<'_>,
+    sql: &str,
+    args: impl Params,
+    bytes: &mut usize,
+) -> Result<Vec<RunFightSummary>, StoreError> {
+    let mut fights: Vec<RunFightSummary> =
+        rows(tx, sql, args, MAX_STORY_FIGHTS, bytes, MAX_RUN_STORY_BYTES)?;
+    let fight_ids = fights
+        .iter()
+        .map(|fight| fight.id.as_str())
+        .collect::<Vec<_>>();
+    let mut parties = crate::party_average::party_averages(tx, &fight_ids)?;
+    for (index, fight) in fights.iter_mut().enumerate() {
+        fight.ordinal = index as u32 + 1;
+        fight.party = parties.remove(&fight.id);
+    }
+    Ok(fights)
+}
 
 pub fn clear_comparison(current_micros: f64, previous_micros: &[f64]) -> Option<ClearComparison> {
     if !current_micros.is_finite()
@@ -116,7 +137,7 @@ fn one<T: DeserializeOwned + Serialize>(
     }
 }
 
-fn rows<T: DeserializeOwned>(
+pub(crate) fn rows<T: DeserializeOwned>(
     conn: &Connection,
     sql: &str,
     args: impl Params,
@@ -239,7 +260,7 @@ impl StoreReader {
         identifier(id)?;
         let tx = self.conn.unchecked_transaction()?;
         let mut bytes = 0;
-        let (run, character): (RunView, Option<CharacterView>) = {
+        let (run, mut character): (RunView, Option<CharacterView>) = {
             let mut stmt = tx.prepare("SELECT length(CAST(json AS BLOB)),json,length(CAST(entry_character_json AS BLOB)),entry_character_json FROM runs WHERE id=?1")?;
             let mut query = stmt.query([id])?;
             let Some(row) = query.next()? else {
@@ -253,12 +274,24 @@ impl StoreReader {
             };
             (run, character)
         };
-        let mut fights: Vec<RunFightSummary> = rows(&tx,
-            "SELECT length(CAST(json AS BLOB)),json FROM fight_summaries WHERE run_id=?1 ORDER BY started,fight_id LIMIT 12001",
-            [id], MAX_STORY_FIGHTS, &mut bytes, MAX_RUN_STORY_BYTES)?;
-        for (index, fight) in fights.iter_mut().enumerate() {
-            fight.ordinal = index as u32 + 1;
+        if let Some(entry) = character
+            .as_mut()
+            .filter(|c| c.name.is_none() || c.class_id.is_none())
+        {
+            let mut stmt = tx.prepare("SELECT length(CAST(identity AS BLOB)),identity FROM
+                (SELECT json_array(json_extract(json,'$.name'),json_extract(json,'$.class_id')) AS identity
+                 FROM characters WHERE id=?1)")?;
+            let mut query = stmt.query([&entry.id])?;
+            if let Some(row) = query.next()? {
+                let (name, class_id): (Option<String>, Option<u16>) =
+                    row_json(row, 0, &mut bytes, MAX_RUN_STORY_BYTES)?;
+                entry.name = entry.name.take().or(name);
+                entry.class_id = entry.class_id.or(class_id);
+            }
         }
+        let fights = fight_summaries(&tx,
+            "SELECT length(CAST(json AS BLOB)),json FROM fight_summaries WHERE run_id=?1 ORDER BY started,fight_id LIMIT 12001",
+            [id], &mut bytes)?;
         let drops = rows(&tx,
             "SELECT length(CAST(json AS BLOB)),json FROM drops WHERE run_id=?1 ORDER BY at,id LIMIT 2001",
             [id], MAX_STORY_DROPS, &mut bytes, MAX_RUN_STORY_BYTES)?;
@@ -433,6 +466,22 @@ fn loot_cursor(
         })
         .transpose()
 }
+/// Bound catalog metadata before allocating query JSON or scheduling a read.
+pub fn validate_loot_catalog(
+    tiers: &[(u16, Option<String>)],
+    potions: &[(u16, PotionStat)],
+) -> Result<(), StoreError> {
+    if tiers.len() > 65_536
+        || potions.len() > 65_536
+        || tiers
+            .iter()
+            .any(|(_, tier)| tier.as_ref().is_some_and(|s| s.len() > 16))
+    {
+        return Err(StoreError::Limit);
+    }
+    Ok(())
+}
+
 pub fn validate_scope_loot(
     scope: &HomeScope,
     cursor: Option<&str>,
@@ -468,13 +517,7 @@ impl StoreReader {
             }
         };
         // One tier per u16 type; reject pathological metadata before allocating SQL JSON.
-        if tiers.len() > 65_536
-            || tiers
-                .iter()
-                .any(|(_, tier)| tier.as_ref().is_some_and(|s| s.len() > 16))
-        {
-            return Err(StoreError::Limit);
-        }
+        validate_loot_catalog(tiers, &[])?;
         let unique: std::collections::BTreeMap<_, _> = tiers.iter().cloned().collect();
         let tiers = serde_json::to_string(&unique.into_iter().collect::<Vec<_>>())?;
         let json: Option<String> = self.conn.query_row(
@@ -601,7 +644,9 @@ mod tests {
             reader.list_runs(filter).unwrap();
             assert_eq!(count().len(), 3);
             let expected = reader.get_run("demo-run").unwrap().unwrap();
-            let sql = count();
+            let mut sql = count();
+            assert_eq!(sql.len(), 14, "{sql:?}");
+            assert!(sql.remove(2).contains("FROM party_avg"));
             assert_eq!(sql.len(), 13, "{sql:?}");
             assert!(sql[..5].iter().all(|q| !q.contains("FROM fights")
                 && !q.contains("fight_players")
@@ -657,8 +702,22 @@ mod tests {
                 Some(capture),
             );
             let check = |label: &str| {
-                let statements = SQL.with(|s| std::mem::take(&mut *s.borrow_mut()));
+                let mut statements = SQL.with(|s| std::mem::take(&mut *s.borrow_mut()));
                 if label == "story" {
+                    assert_eq!(statements.len(), 14);
+                    let party_sql = statements.remove(2);
+                    assert!(party_sql.contains("FROM party_avg"));
+                    let plan = fixture
+                        .db
+                        .prepare(&format!("EXPLAIN QUERY PLAN {party_sql}"))
+                        .unwrap()
+                        .query_map([], |row| row.get::<_, String>(3))
+                        .unwrap()
+                        .collect::<Result<Vec<_>, _>>()
+                        .unwrap()
+                        .join("\n");
+                    assert!(plan.contains("SEARCH fight_players"), "{plan}");
+                    assert!(!plan.contains("SCAN fight_players"), "{plan}");
                     assert_eq!(statements.len(), 13);
                     crate::run_screen::tests::assert_plans(&fixture.db, &statements[5..9]);
                     crate::instance::tests::assert_aggregate_plans(&fixture.db, &statements[9..]);

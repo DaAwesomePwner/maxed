@@ -1,8 +1,11 @@
-mod common;
+use crate::common;
 use common::*;
 use maxed_store::*;
 use maxed_types::*;
 use rusqlite::{params, Connection};
+
+#[path = "home/active_window.rs"]
+mod active_window;
 
 fn database() -> (tempfile::TempDir, std::path::PathBuf, Connection) {
     let dir = tempfile::tempdir().unwrap();
@@ -29,13 +32,7 @@ fn today(start: u64, end: u64) -> HomeScope {
 }
 
 fn add(db: &mut Connection, events: Vec<EngineEvent>) {
-    let head: i64 = db
-        .query_row(
-            "SELECT sequence FROM stream_heads WHERE stream_id='test-stream'",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap();
+    let head: i64 = common::receipts::head(db, "test-stream").unwrap();
     let events: Vec<_> = events
         .into_iter()
         .enumerate()
@@ -44,37 +41,123 @@ fn add(db: &mut Connection, events: Vec<EngineEvent>) {
     apply_batch(db, &events).unwrap();
 }
 
+// Synthetic completed encounter eligible for Home's 20-second combat window.
+fn eligible_fight(id: &str, started: u64) -> FightView {
+    let mut fight = demo::demo_snapshot().fights.remove(0);
+    fight.id = id.into();
+    fight.started = Timestamp(started);
+    fight.first_hit = Some(Timestamp(started));
+    fight.last_hit = Some(Timestamp(started + 20_000_000));
+    fight.local_active_micros = Some(20_000_000);
+    fight.ended = fight.last_hit;
+    fight.complete_capture = true;
+    fight.issues.clear();
+    fight.players[0].dps = Some(100.0);
+    fight
+}
+
 #[test]
-fn partial_highest_dps_wins_with_its_evidence() {
+fn home_top_dps_requires_complete_ended_twenty_second_combat() {
     let (_dir, path, mut db) = database();
-    let mut complete = demo::demo_snapshot().fights.remove(0);
-    complete.id = "complete".into();
-    complete.complete_capture = true;
-    complete.issues.clear();
-    let mut partial = complete.clone();
-    partial.id = "partial-a".into();
-    partial.ended = None;
-    partial.complete_capture = false;
-    partial.issues = vec![CoverageIssue::StreamGap];
-    partial.players[0].dps = Some(200.0);
-    partial.players[0].sources[0].estimated = true;
-    let mut tied = partial.clone();
-    tied.id = "partial-z".into();
-    let mut older = tied.clone();
-    older.id = "partial-zz-older".into();
-    older.started = Timestamp(older.started.0 - 1);
-    let mut unknown = complete.clone();
-    unknown.id = "unknown".into();
-    unknown.players[0].dps = None;
+    let complete = eligible_fight("complete", 2_000_000);
+    let mut candidates = vec![complete.clone()];
+    for id in [
+        "short-spike",
+        "just-short",
+        "open",
+        "partial",
+        "issues",
+        "unknown-window",
+        "unknown-dps",
+    ] {
+        let mut fight = complete.clone();
+        fight.id = id.into();
+        fight.players[0].dps = Some(9999.0);
+        match id {
+            // A long idle tail must not turn a ten-second burst into a best.
+            "short-spike" => fight.local_active_micros = Some(10_000_000),
+            "just-short" => fight.local_active_micros = Some(19_999_999),
+            "open" => fight.ended = None,
+            "partial" => fight.complete_capture = false,
+            "issues" => fight.issues = vec![CoverageIssue::StreamGap],
+            "unknown-window" => fight.local_active_micros = None,
+            "unknown-dps" => fight.players[0].dps = None,
+            _ => unreachable!(),
+        }
+        candidates.push(fight);
+    }
     add(
         &mut db,
-        vec![complete, partial, tied.clone(), older, unknown]
+        candidates
             .into_iter()
             .map(EngineEvent::FightUpdated)
             .collect(),
     );
-    let home = open_reader(&path).unwrap().home_summary(session()).unwrap();
-    assert_eq!(home.top_fight.unwrap(), tied);
+    let reader = open_reader(&path).unwrap();
+    for scope in [session(), today(0, 30_000_000)] {
+        assert_eq!(
+            reader.home_summary(scope).unwrap().top_fight,
+            Some(complete.clone())
+        );
+    }
+    let mut no_longer_eligible = complete;
+    no_longer_eligible.complete_capture = false;
+    add(&mut db, vec![EngineEvent::FightUpdated(no_longer_eligible)]);
+    assert!(reader.home_summary(session()).unwrap().top_fight.is_none());
+}
+
+#[test]
+fn home_top_dps_excludes_legacy_basis_and_missing_basis_json() {
+    for explicit in [false, true] {
+        let (_dir, path, mut db) = database();
+        let current = eligible_fight("current", 2_000_000);
+        let mut legacy = eligible_fight("legacy", 2_000_000);
+        legacy.dps_basis = DpsBasis::WholeTargetV0;
+        legacy.players[0].dps = Some(9999.0);
+        add(&mut db, vec![EngineEvent::FightUpdated(legacy)]);
+        if !explicit {
+            db.execute(
+                "UPDATE fights SET json=json_remove(json,'$.dps_basis') WHERE id='legacy'",
+                [],
+            )
+            .unwrap();
+        }
+        let reader = open_reader(&path).unwrap();
+        for scope in [session(), today(0, 30_000_000)] {
+            assert!(reader.home_summary(scope).unwrap().top_fight.is_none());
+        }
+        add(&mut db, vec![EngineEvent::FightUpdated(current.clone())]);
+        for scope in [session(), today(0, 30_000_000)] {
+            assert_eq!(
+                reader.home_summary(scope).unwrap().top_fight,
+                Some(current.clone())
+            );
+        }
+    }
+}
+
+#[test]
+fn home_top_dps_ties_use_latest_start_then_id() {
+    let (_dir, path, mut db) = database();
+    let fights = vec![
+        eligible_fight("older-z", 1_000_000),
+        eligible_fight("latest-a", 2_000_000),
+        eligible_fight("latest-z", 2_000_000),
+    ];
+    add(
+        &mut db,
+        fights.into_iter().map(EngineEvent::FightUpdated).collect(),
+    );
+    assert_eq!(
+        open_reader(&path)
+            .unwrap()
+            .home_summary(session())
+            .unwrap()
+            .top_fight
+            .unwrap()
+            .id,
+        "latest-z"
+    );
 }
 
 #[test]
@@ -101,21 +184,23 @@ fn home_json_decodes_fame_timestamps_and_overflowing_delta() {
         )
         .unwrap();
         let home = reader
-            .home_summary(today(at as u64, at as u64 + 1))
+            .home_summary(today(at as u64 - 1, at as u64 + 1))
             .unwrap();
         assert_eq!(home.fame_delta, expected);
-        assert_eq!(home.fame[0].at, Timestamp(at as u64));
-        assert_eq!(home.fame[0].fame, latest);
+        assert_eq!(home.fame[0].at, Timestamp(at as u64 - 1));
+        assert_eq!(home.fame[1].at, Timestamp(at as u64));
+        assert_eq!(home.fame[1].fame, latest);
         assert_eq!(home.fame_missing_baselines, 0);
         assert!(!home.fame_sampled);
     }
+    // A lone sample is its own baseline.
     db.execute("DELETE FROM fame_samples WHERE sequence=1", [])
         .unwrap();
     let home = reader
-        .home_summary(today(at as u64, at as u64 + 1))
+        .home_summary(today(at as u64 - 1, at as u64 + 1))
         .unwrap();
-    assert_eq!(home.fame_delta, None);
-    assert_eq!(home.fame_missing_baselines, 1);
+    assert_eq!(home.fame_delta, Some(0));
+    assert_eq!(home.fame_missing_baselines, 0);
 }
 
 #[test]
@@ -316,8 +401,7 @@ fn session_ids_exclude_other_sessions_at_the_same_time() {
     let mut story = demo::demo_run_story();
     story.run.id = "other-run".into();
     story.run.session_id = session_view.id.clone();
-    let mut fight = demo::demo_snapshot().fights.remove(0);
-    fight.id = "other-fight".into();
+    let mut fight = eligible_fight("other-fight", 2_000_000);
     fight.run_id = Some(story.run.id.clone());
     fight.session_id = session_view.id.clone();
     fight.players[0].dps = Some(9999.0);
@@ -342,7 +426,7 @@ fn session_ids_exclude_other_sessions_at_the_same_time() {
     let reader = open_reader(&path).unwrap();
     let home = reader.home_summary(session()).unwrap();
     assert_eq!((home.runs, home.deaths), (1, 0));
-    assert_eq!(home.top_fight.unwrap().id, "demo-fight");
+    assert!(home.top_fight.is_none());
     assert!(home.best_drop.is_none());
     let day = reader.home_summary(today(0, 6_000_000)).unwrap();
     assert_eq!((day.runs, day.deaths), (2, 1));
@@ -351,7 +435,7 @@ fn session_ids_exclude_other_sessions_at_the_same_time() {
 }
 
 #[test]
-fn fame_ties_use_stream_then_sequence_for_chart_and_latest_baseline() {
+fn fame_ties_use_stream_then_sequence_for_chart_and_baseline() {
     let (_dir, path, db) = database();
     db.execute("DELETE FROM fame_samples", []).unwrap();
     for (stream, sequence, at, fame) in [
@@ -373,7 +457,8 @@ fn fame_ties_use_stream_then_sequence_for_chart_and_latest_baseline() {
         .unwrap()
         .home_summary(today(1, 2))
         .unwrap();
-    assert_eq!(home.fame_delta, Some(4));
+    // The baseline is the first point in the chart's tie order, 91, not a pre-scope sample.
+    assert_eq!(home.fame_delta, Some(24 - 91));
     assert_eq!(
         home.fame.iter().map(|p| p.fame).collect::<Vec<_>>(),
         [91, 13, 24]
@@ -438,8 +523,9 @@ fn fame_sampling_keeps_endpoints_exact_delta_and_character_identity() {
     let home = reader.home_summary(today(1, 302)).unwrap();
     assert_eq!(home.fame.len(), 301);
     assert!(!home.fame_sampled);
-    assert_eq!(home.fame_delta, Some(301));
-    assert_eq!(home.fame_missing_baselines, 1);
+    // Each character counts from its first in-scope sample: (301-1) + (300-2).
+    assert_eq!(home.fame_delta, Some(598));
+    assert_eq!(home.fame_missing_baselines, 0);
     assert_eq!(home.fame.first().unwrap().at, Timestamp(1));
     assert_eq!(home.fame.last().unwrap().at, Timestamp(301));
     assert!(home.fame.windows(2).all(|p| p[0].at.0 < p[1].at.0));
@@ -470,9 +556,9 @@ fn fame_sampling_keeps_endpoints_exact_delta_and_character_identity() {
         )
         .unwrap();
     }
-    let overflow = reader.home_summary(today(1, 2)).unwrap();
+    let overflow = reader.home_summary(today(0, 2)).unwrap();
     assert_eq!(overflow.fame_delta, None);
-    assert_eq!(overflow.fame.len(), 2);
+    assert_eq!(overflow.fame.len(), 4);
 }
 
 #[test]
@@ -520,8 +606,7 @@ fn local_day_bounds_and_session_membership_remain_independent() {
             let mut run = story.run.clone();
             run.id = id.into();
             run.started = Timestamp(at);
-            let mut fight = demo::demo_snapshot().fights.remove(0);
-            fight.id = id.into();
+            let mut fight = eligible_fight(id, at);
             fight.run_id = Some(id.into());
             fight.started = Timestamp(at);
             fight.players[0].dps = Some(at as f64);
@@ -715,6 +800,11 @@ fn benchmark_home(shape: &str, scoped_runs: i64, scoped_fame: i64, release_limit
             .prepare(&format!(
                 "EXPLAIN QUERY PLAN {}",
                 include_str!("../src/home.sql")
+                    .replace("/*home_scope*/", include_str!("../src/home_scope.sql"))
+                    .replace(
+                        "/*dungeon_stats*/",
+                        include_str!("../src/dungeon_stats.sql")
+                    )
             ))
             .unwrap();
         let plan: Vec<String> = explain
@@ -840,7 +930,8 @@ fn future_dated_observations_from_old_stream_do_not_leak_into_new_session() {
     assert_eq!(home.deaths, 0);
     assert_eq!(home.fame.len(), 1);
     assert_eq!(home.fame[0].fame, 1300);
-    assert_eq!(home.fame_delta, Some(40));
+    // Neither the old session's 1260 nor its future-dated 9999 is a baseline.
+    assert_eq!(home.fame_delta, Some(0));
     assert_eq!(reader.home_summary(session()).unwrap().deaths, 1);
     assert_eq!(
         reader
@@ -910,6 +1001,17 @@ fn fame_endpoint_overflow_drops_oldest_whole_segments() {
     assert_eq!(home.fame.first().unwrap().at, Timestamp(132));
     assert_eq!(home.fame.last().unwrap().at, Timestamp(899));
     assert!(home.fame_sampled);
+    // Per-character totals ignore chart sampling: both start at their first scoped sample.
+    let totals = |id: &str, first_fame, last_fame| CharacterFame {
+        character_id: id.into(),
+        first_fame,
+        last_fame,
+        last_at: Timestamp(last_fame as u64),
+    };
+    assert_eq!(
+        home.fame_characters,
+        vec![totals("B", 0, 896), totals("demo-character", 3, 899)]
+    );
     for pair in home.fame.as_chunks::<2>().0 {
         assert_eq!(pair[0].character_id, pair[1].character_id);
         assert_eq!(pair[1].at.0 - pair[0].at.0, 2);

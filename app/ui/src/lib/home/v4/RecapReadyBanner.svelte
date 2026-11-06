@@ -1,0 +1,70 @@
+<script lang="ts">
+  import { onDestroy } from 'svelte';
+  import type { SpriteRef } from '../../bindings/SpriteRef';
+  import { objectVisual } from '../../bridge/visual-index';
+  import SpriteImage from '../../components/SpriteImage.svelte';
+  import { formatElapsed } from '../../styles/format';
+  import { bestItem } from '../v3/loot-rank';
+  import type { HomeVisuals } from '../visuals';
+  import type { RecapState } from './recap';
+  import type { createRecapPresentation } from './recap-presentation';
+  import type { RunRecapView, VisitRecapView } from './recap-view';
+
+  let { recap, view, visuals, portalType, resolveSpriteUrl, presentation }: {
+    recap: RecapState; view: RunRecapView | VisitRecapView | null; visuals: HomeVisuals;
+    portalType: number | null; resolveSpriteUrl: (sprite: SpriteRef) => string;
+    presentation: ReturnType<typeof createRecapPresentation>;
+  } = $props();
+  let region: HTMLElement;
+  const labels = { cleared: 'CLEARED', died: 'DIED', left: 'LEFT EARLY', unknown: 'OUTCOME UNKNOWN' };
+  const title = $derived(view?.title ?? recap.summary.title);
+  const outcome = $derived(recap.summary.kind === 'visit' ? 'REALM VISIT' : labels[recap.summary.outcome ?? 'unknown']);
+  const clearTime = $derived(view?.kind === 'run' ? view.clearTime
+    : recap.summary.outcome === 'cleared' && recap.summary.completedAt
+      ? formatElapsed(recap.summary.startedAt, recap.summary.completedAt, true) : null);
+  const portal = $derived(objectVisual(visuals.objects, recap.summary.kind === 'visit' ? 1796 : portalType));
+  const drop = $derived(view?.best?.drop ?? recap.summary.best?.drop);
+  const item = $derived(drop ? bestItem(drop, visuals) : null);
+  const loot = $derived(objectVisual(visuals.objects, item?.itemType ?? drop?.bag_type));
+  function blur(event: FocusEvent) {
+    if (!(event.relatedTarget instanceof Node) || !region.contains(event.relatedTarget)) presentation.setFocused(false);
+  }
+  onDestroy(() => {
+    presentation.setHovered(false); presentation.setFocused(false);
+  });
+</script>
+
+<section class="v4-card recap-ready" aria-label="Recap ready" bind:this={region}
+  onmouseenter={() => presentation.setHovered(true)} onmouseleave={() => presentation.setHovered(false)}
+  onfocusin={() => presentation.setFocused(true)} onfocusout={blur}>
+  <SpriteImage sprite={portal?.sprite ?? null} sheetUrl={portal?.sprite ? resolveSpriteUrl(portal.sprite) : null} fit={32} alt="" />
+  <div class="recap-ready-copy">
+    <p class="v4-meta">Recap ready</p>
+    <h2>{title} <span class="recap-outcome">· {outcome}</span></h2>
+    {#if clearTime !== null}
+      <p>{clearTime}{#if view?.kind === 'run' && view.pb}<span class="recap-tag">PB</span>{/if}</p>
+    {:else if view?.kind === 'visit'}<p>{view.timeHere}</p>{/if}
+  </div>
+  {#if drop}<div class="recap-ready-loot">
+    <SpriteImage sprite={loot?.sprite ?? null} sheetUrl={loot?.sprite ? resolveSpriteUrl(loot.sprite) : null} fit={28} alt="" />
+    <span>{loot?.name ?? 'Best drop observed'}</span>
+  </div>{/if}
+  <div class="recap-ready-actions">
+    <button type="button" onclick={presentation.open}>View recap</button>
+    <button type="button" aria-label="Dismiss recap banner" onclick={presentation.hide}>×</button>
+  </div>
+</section>
+
+<style>
+  .recap-ready { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; }
+  .recap-ready-copy { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+  h2 { margin: 2px 0; font: 600 15px/1.4 var(--font-home-display); }
+  p { margin: 0; font-variant-numeric: tabular-nums; }
+  .recap-outcome { font-size: 11px; color: var(--text-secondary); }
+  .recap-ready-loot { display: flex; align-items: center; gap: 6px; max-width: 100%; font-size: 12px; }
+  .recap-ready-loot span { min-width: 0; overflow-wrap: anywhere; }
+  .recap-ready-actions { display: flex; gap: 8px; }
+  button { min-height: var(--target-min); padding: 6px 12px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary); font: inherit; }
+  button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+</style>

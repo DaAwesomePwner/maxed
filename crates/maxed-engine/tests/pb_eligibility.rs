@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::*;
 use maxed_engine::alerts::personal_best_candidate;
 use maxed_protocol::{defs::QuestObjId, Packet};

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { itemHover } from '../components/item-hover';
   import { debugMode } from '../debug/debug';
   import { reasonLabel } from '../home/evidence';
   import type { LootDropRow } from '../bindings/LootDropRow';
@@ -52,14 +53,14 @@
           <td><div class="cell contents">
             {#each others.slice(0, 6) as item (`${item.slot}:${item.item_type}`)}
               {@const object = visual(item.item_type)}
-              <a class="tile {tierClass(object?.item_tier)}" class:taken={item.taken_observed_at !== null} title={item.taken_observed_at !== null ? 'Removal observed; who took the item is unknown.' : object?.name ?? `#${item.item_type}`} aria-label={object?.name ?? `#${item.item_type}`} href={routeHref({ kind: 'item', type: item.item_type })}><ItemTile sprite={object?.sprite ?? null} {resolveSpriteUrl} fit={24} alt="" enchant={item.enchant} /></a>
+              <a class="tile {tierClass(object?.item_tier)}" class:taken={item.taken_observed_at !== null} use:itemHover={{ type: item.item_type, enchant: item.enchant, name: object?.name ?? `#${item.item_type}`, tier: object?.item_tier, note: item.taken_observed_at !== null ? 'Removal observed' : undefined }} aria-label={object?.name ?? `#${item.item_type}`} href={routeHref({ kind: 'item', type: item.item_type })}><ItemTile sprite={object?.sprite ?? null} {resolveSpriteUrl} fit={24} alt="" enchant={item.enchant} /></a>
             {/each}
             {#if others.length > 6}<small>+{others.length - 6}</small>{/if}
-            {#if columns === 'feed' && best}<span class={tierClass(visual(best.item_type)?.item_tier)} title={visual(best.item_type)?.name ?? `#${best.item_type}`}>{visual(best.item_type)?.name ?? `#${best.item_type}`}</span>{/if}
+            {#if columns === 'feed' && best}<span class={tierClass(visual(best.item_type)?.item_tier)} use:itemHover={{ type: best.item_type, enchant: best.enchant, name: visual(best.item_type)?.name ?? `#${best.item_type}`, tier: visual(best.item_type)?.item_tier }}>{visual(best.item_type)?.name ?? `#${best.item_type}`}</span>{/if}
             {#if !drop.contents_known}<small>{items.length ? 'partial' : 'contents not seen'}</small>{:else if !others.length}<small>{columns === 'item' ? '—' : 'Empty bag'}</small>{/if}
           </div></td>
           {#if columns === 'item'}<td>{#each copies as copy}<div title={copy.taken_observed_at !== null ? 'Removal observed; who took the item is unknown.' : undefined}>{copy.taken_observed_at !== null ? 'Taken' : '—'}</div>{:else}—{/each}</td>{/if}
-          <td><div class="cell">{#if columns === 'item'}<SpriteImage sprite={sourceVisual?.sprite ?? null} sheetUrl={sourceVisual?.sprite ? resolveSpriteUrl(sourceVisual.sprite) : null} fit={20} alt="" />{/if}<span title={source.text}>{source.text}</span>{#if source.estimated}<small class="tag" title={$debugMode ? reasonLabel(source.reason) : undefined}>est.</small>{/if}</div></td>
+          <td class="source-cell"><div class="cell">{#if columns === 'item'}<SpriteImage sprite={sourceVisual?.sprite ?? null} sheetUrl={sourceVisual?.sprite ? resolveSpriteUrl(sourceVisual.sprite) : null} fit={20} alt="" />{/if}<span title={source.text}>{source.text}</span>{#if source.estimated}<small class="tag" title={$debugMode ? reasonLabel(source.reason) : undefined}>est.</small>{/if}</div></td>
           <td title={placeLabel(row.dungeon)}>{placeLabel(row.dungeon)}</td>
           <td>{#if rowHref?.(row) || drop.run_id}<a class="run-link" aria-label="Open run" href={rowHref?.(row) ?? routeHref({ kind: 'run', id: drop.run_id! })}>›</a>{/if}</td>
         </tr>
@@ -71,7 +72,7 @@
   table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
   table[data-columns="item"] { min-width: 760px; }
   [data-columns="item"] th { white-space: nowrap; }
-  .time { width: 75px; } .bag { width: 115px; } .source { width: 16%; } .place { width: 17%; } .arrow { width: 24px; }
+  .time { width: 75px; } .bag { width: 115px; } .source { width: 23%; } .place { width: 17%; } .arrow { width: 24px; }
   [data-columns="item"] .time { width: 110px; }
   .enchants { width: 118px; } .taken-col { width: 52px; }
   th { text-align: left; font-weight: 500; font-size: 11px; color: var(--text-muted); padding: 0 6px 6px; }
@@ -83,10 +84,12 @@
   .group b { color: var(--text-secondary); }
   .cell { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
   .cell > span { overflow: hidden; text-overflow: ellipsis; }
+  .source-cell .cell { flex-wrap: wrap; gap: 2px 6px; padding-block: 4px; }
+  .source-cell .cell > span { white-space: normal; overflow-wrap: anywhere; }
   .contents { gap: 3px; } .tile { display: inline-flex; flex: none; border: 1px solid transparent; border-radius: 4px; }
   .ut { color: var(--violet-text); } .st { color: var(--bag-orange); } .tile.ut, .tile.st { border-color: currentColor; }
   .taken { opacity: .45; } .white { color: var(--bag-white); filter: drop-shadow(0 0 3px #ffffff30); }
   small { color: var(--text-muted); } .tag { border: 1px solid var(--border); border-radius: 4px; padding: 0 3px; }
   a { color: var(--text-secondary); text-decoration: none; }
-  @media (max-width: 1100px) { .bag { width: 95px; } .source { width: 14%; } }
+  @media (max-width: 1100px) { .bag { width: 95px; } .source { width: 24%; } }
 </style>

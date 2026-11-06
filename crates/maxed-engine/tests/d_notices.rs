@@ -1,7 +1,150 @@
-mod common;
-mod d_support;
+use crate::d_support;
 use d_support::*;
 use maxed_types::*;
+
+#[test]
+fn suffixed_death_matches_present_or_departed_player_once() {
+    for departed in [false, true] {
+        let mut e = remote();
+        let player_id = e.snapshot().fights[0]
+            .players
+            .iter()
+            .find(|p| p.object_id == 3)
+            .unwrap()
+            .player_id
+            .clone();
+        if departed {
+            apply(&mut e, 4500, update(vec![], vec![3]));
+        }
+        for at in [5000, 6000] {
+            let row = instances(apply(
+                &mut e,
+                at,
+                player_death("SynthBravo,fe14", 20, "Synthetic Boss", 9),
+            ))
+            .remove(0);
+            let InstanceEventKind::PlayerDeath {
+                player_id: matched_player_id,
+                player_name,
+                object_id,
+                class_id,
+                is_local,
+                ..
+            } = row.kind
+            else {
+                panic!("death")
+            };
+            assert_eq!(player_name, "SynthBravo");
+            // A matched departure is consumed by the first notice.
+            if !departed || at == 5000 {
+                assert_eq!(object_id, Some(3));
+                assert_eq!(class_id, Some(100));
+                assert_eq!(matched_player_id.as_deref(), Some(player_id.as_str()));
+            } else {
+                assert_eq!(matched_player_id, None);
+            }
+            assert!(!is_local);
+            let snapshot = e.snapshot();
+            let player = snapshot.fights[0]
+                .players
+                .iter()
+                .find(|p| p.object_id == 3)
+                .unwrap();
+            assert_eq!(player.name.as_deref(), Some("SynthBravo"));
+            assert_eq!(player.player_id, player_id);
+            assert_eq!(player.deaths, 1);
+        }
+        assert!(instances(apply(&mut e, 7000, map("Nexus"))).is_empty());
+    }
+}
+
+#[test]
+fn suffixed_realm_killer_and_departure_names_are_stripped() {
+    let mut e = remote();
+    let row = instances(apply(
+        &mut e,
+        4500,
+        oryx_killed("Synthetic_Boss", "SynthAlpha,fe14"),
+    ))
+    .remove(0);
+    assert!(
+        matches!(row.kind, InstanceEventKind::RealmEventKilled { killer: Some(ref name), .. } if name == "SynthAlpha")
+    );
+    apply(&mut e, 5000, update(vec![], vec![3]));
+    let row = instances(apply(&mut e, 6000, map("Nexus"))).remove(0);
+    assert!(
+        matches!(row.kind, InstanceEventKind::PlayerLeft { player_name: Some(ref name), .. } if name == "SynthBravo")
+    );
+}
+
+#[test]
+fn own_suffixed_portal_notices_and_historical_events_never_alert() {
+    for local in ["SynthAlpha", "SynthAlpha,fe14"] {
+        let mut c = catalog();
+        c.objects[2].dungeon_name = Some("The Void".into());
+        let mut e = maxed_engine::Engine::new(
+            maxed_engine::EngineConfig {
+                stream_id: "live-suffix".into(),
+                ..config()
+            },
+            std::sync::Arc::new(c),
+        )
+        .unwrap();
+        setup(&mut e);
+        apply(&mut e, 2500, tick(vec![status(1, vec![string(31, local)])]));
+        for opener in ["synthalpha", "synthalpha,fe14"] {
+            let row = instances(apply(&mut e, 3000, portal_opened(opener, 301))).remove(0);
+            assert!(matches!(&row.kind, InstanceEventKind::PortalOpened {
+                opener: Some(name), opener_is_local: Some(true), ..
+            } if name == "synthalpha"));
+            assert_eq!(
+                e.key_pop_dungeon(&EngineEvent::InstanceEvent(row.clone())),
+                None
+            );
+            let mut historical = row;
+            if let InstanceEventKind::PortalOpened {
+                opener,
+                opener_is_local,
+                ..
+            } = &mut historical.kind
+            {
+                *opener = Some("SYNTHALPHA,old".into());
+                *opener_is_local = Some(false);
+            }
+            assert_eq!(
+                e.key_pop_dungeon(&EngineEvent::InstanceEvent(historical)),
+                None
+            );
+        }
+        let other = instances(apply(&mut e, 4000, portal_opened("SynthBravo,fe14", 301))).remove(0);
+        assert!(
+            matches!(&other.kind, InstanceEventKind::PortalOpened { opener: Some(name), opener_is_local: Some(false), .. } if name == "SynthBravo")
+        );
+        assert_eq!(
+            e.key_pop_dungeon(&EngineEvent::InstanceEvent(other))
+                .as_deref(),
+            Some("The Void")
+        );
+        apply(
+            &mut e,
+            5000,
+            tick(vec![status(1, vec![string(31, ",fe14")])]),
+        );
+        let unknown = instances(apply(&mut e, 6000, portal_opened("SynthBravo", 301))).remove(0);
+        assert!(matches!(
+            &unknown.kind,
+            InstanceEventKind::PortalOpened {
+                opener_is_local: None,
+                ..
+            }
+        ));
+        assert_eq!(
+            e.key_pop_dungeon(&EngineEvent::InstanceEvent(unknown)),
+            None
+        );
+    }
+}
+
 #[test]
 fn party_death_links_player_by_name_and_increments_row_deaths() {
     let mut e = remote();
@@ -41,7 +184,7 @@ fn local_name_death_notice_sets_is_local_and_does_not_double_count() {
     let v = instances(apply(
         &mut e,
         5000,
-        player_death("SynthAlpha", 20, "Synthetic Boss", 9),
+        player_death("SynthAlpha,fe14", 20, "Synthetic Boss", 9),
     ))
     .remove(0);
     assert!(matches!(
@@ -197,12 +340,12 @@ fn duplicate_name_does_not_guess_identity_or_cancel_departures() {
     apply(
         &mut e,
         4500,
-        update(vec![player_obj(4, 100, "SynthBravo")], vec![]),
+        update(vec![player_obj(4, 100, "SynthBravo,other")], vec![]),
     );
     let v = instances(apply(
         &mut e,
         5000,
-        player_death("SynthBravo", 20, "Synthetic Boss", 9),
+        player_death("SynthBravo,fe14", 20, "Synthetic Boss", 9),
     ))
     .remove(0);
     assert!(matches!(
@@ -328,10 +471,13 @@ fn key_pop_candidate_uses_local_identity_and_catalog_dungeon_only() {
 #[test]
 fn portal_opener_flag_tracks_known_local_identity() {
     for (local, opener, expected) in [
-        (Some("Vexlin"), "vExLiN", Some(true)),
-        (Some("Vexlin"), "Quenby", Some(false)),
-        (None, "Quenby", None),
-        (Some(""), "Quenby", None),
+        (Some("SynthAlpha"), "synthalpha", Some(true)),
+        (Some("SynthAlpha"), "SynthBravo", Some(false)),
+        (None, "SynthBravo", None),
+        (Some(""), "SynthBravo", None),
+        (Some(",fe14"), "SynthBravo", None),
+        (Some("SynthAlpha,fe14"), ",fe14", None),
+        (Some(",fe14"), ",fe14", None),
     ] {
         let mut e = engine();
         apply(&mut e, 0, map("The Void"));

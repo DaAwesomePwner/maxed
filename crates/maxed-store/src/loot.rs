@@ -8,6 +8,13 @@ use rusqlite::{params, params_from_iter, types::Value};
 
 const MAX_LOOT_BYTES: usize = 1024 * 1024;
 
+#[derive(Default)]
+struct DryGap {
+    runs: u32,
+    current: u32,
+    longest: u32,
+}
+
 fn validate_page(limit: u16, cursor: Option<&DropCursor>) -> Result<(), StoreError> {
     if !(1..=MAX_LOOT_PAGE).contains(&limit) {
         return Err(StoreError::InvalidEvent);
@@ -157,6 +164,7 @@ impl StoreReader {
         )
     }
 
+    /// Bag/run totals follow the range; dungeon white-run counts and dry gaps are all-time.
     pub fn loot_stats(&self, filter: LootStatsFilter) -> Result<LootStats, StoreError> {
         let (start, end) = match filter.range {
             Some(time) => {
@@ -165,15 +173,50 @@ impl StoreReader {
             }
             None => (None, None),
         };
+        let tx = self.conn.unchecked_transaction()?;
         let json: Option<String> =
             self.conn
                 .query_row(include_str!("loot_stats.sql"), params![start, end], |row| {
                     row.get(0)
                 })?;
-        bounded(
-            serde_json::from_str(&json.ok_or(StoreError::Limit)?)?,
-            MAX_LOOT_BYTES,
-        )
+        let mut stats: LootStats = serde_json::from_str(&json.ok_or(StoreError::Limit)?)?;
+        self.loot_dry_gaps(&mut stats.dungeons)?;
+        let stats = bounded(stats, MAX_LOOT_BYTES)?;
+        tx.commit()?;
+        Ok(stats)
+    }
+
+    fn loot_dry_gaps(&self, dungeons: &mut [DungeonLootStats]) -> Result<(), StoreError> {
+        if dungeons.is_empty() {
+            return Ok(());
+        }
+        // Stream only reported dungeons in start order from the covering run index.
+        // The partial white index answers membership without loading drop JSON.
+        let mut statement = self.conn.prepare(
+            "SELECT EXISTS(SELECT 1 FROM drops WHERE run_id=r.id AND bag_rank=255)
+            FROM runs r INDEXED BY runs_loot_stats
+            WHERE r.dungeon=?1 AND r.ended IS NOT NULL ORDER BY r.started,r.id",
+        )?;
+        for dungeon in dungeons {
+            let mut rows = statement.query([&dungeon.dungeon])?;
+            let mut gap = DryGap::default();
+            while let Some(row) = rows.next()? {
+                gap.runs = gap.runs.checked_add(1).ok_or(StoreError::Limit)?;
+                if row.get::<_, bool>(0)? {
+                    dungeon.white_runs += 1;
+                    gap.current = 0;
+                } else {
+                    gap.current += 1;
+                    gap.longest = gap.longest.max(gap.current);
+                }
+            }
+            if dungeon.white_runs > 0 {
+                dungeon.avg_runs_per_white =
+                    Some(f64::from(gap.runs) / f64::from(dungeon.white_runs));
+                dungeon.longest_dry = Some(gap.longest);
+            }
+        }
+        Ok(())
     }
 
     /// `tiers` contains catalog (object_type, tier) pairs, as in `scope_loot`.

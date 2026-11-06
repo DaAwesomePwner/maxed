@@ -1,7 +1,10 @@
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
+import { itemHoverParams } from '../../src/lib/components/item-hover';
+import ScopeLoot from '../../src/lib/home/v3/ScopeLoot.svelte';
+import { emptyHomeVisuals } from '../../src/lib/home/visuals';
+import { render, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
-import { deferred, homeSnapshot, homeSummary, saved } from './fixtures';
+import { characterFame, deferred, homeSnapshot, homeSummary, saved } from './fixtures';
 import { flushHomeRender, mountHome } from './shell-fixture';
 import { localDayRange } from '../../src/lib/home/scope';
 import type { HomeSummary } from '../../src/lib/bindings/HomeSummary';
@@ -160,7 +163,7 @@ describe('durable Nexus story in the real Shell', () => {
 
   it('loads once, labels the default session scope and does not read on 250 ms updates', async () => {
     const snapshot = homeSnapshot({ area_kind: 'nexus', run: null });
-    const page = mountHome(snapshot, homeSummary({ fame_delta: 25, fame_missing_baselines: 1 }));
+    const page = mountHome(snapshot, homeSummary({ fame_delta: 25, ...characterFame(25), fame_missing_baselines: 1 }));
     await waitFor(() => expect(page.query).toHaveBeenCalledOnce());
     expect(page.query).toHaveBeenCalledWith({ session: { id: snapshot.session!.id } });
     const main = within(screen.getByRole('main'));
@@ -185,15 +188,15 @@ describe('durable Nexus story in the real Shell', () => {
     const first = await screen.findByRole('link', { name: /Synthetic Sanctum/i });
     const row = first.closest('[data-row-id]')!;
     expect(row.textContent).toMatch(/unavailable|—/i);
-    expect(row.textContent).not.toMatch(/25%|0%/);
+    expect(row.textContent).not.toMatch(/25\.0%|0\.0%/);
     const second = (await screen.findByRole('link', { name: /Other synthetic dungeon/i })).closest('[data-row-id]')!;
-    expect(second.textContent).toMatch(/25%/);
+    expect(second.textContent).toMatch(/25\.0%/);
   });
 
   it('null top fight and best bag are unavailable, not zero DPS or no loot ever', async () => {
     mountHome(undefined, homeSummary({ top_fight: null, best_drop: null, fame_delta: null }));
     const main = within(screen.getByRole('main'));
-    await main.findByText(/Top DPS/i);
+    await main.findByText(/Top Active DPS/i);
     expect(screen.getByRole('main').textContent).not.toMatch(/0 DPS|no loot ever|personal best/i);
     expect(main.getAllByText(/\u2014/).length).toBeGreaterThan(0);
   });
@@ -216,7 +219,7 @@ describe('durable Nexus story in the real Shell', () => {
     }
   });
 
-  it('pages ten stable recent rows six at a time and keeps at most 120 fame points', async () => {
+  it('shows all ten stable recent rows and keeps at most 120 fame points', async () => {
     const summary = homeSummary();
     summary.recent_runs = Array.from({ length: 10 }, (_, index) => ({ ...summary.recent_runs[0], id: `run-${index}`, dungeon: `Synthetic dungeon ${index}` }));
     summary.recent_details = summary.recent_runs.map(run => ({ ...summary.recent_details[0], run_id: run.id }));
@@ -225,21 +228,9 @@ describe('durable Nexus story in the real Shell', () => {
     await screen.findByRole('link', { name: /Synthetic dungeon 0/i });
     const main = screen.getByRole('main');
     const ids = () => [...main.querySelectorAll('[data-row-id]')].map(row => row.getAttribute('data-row-id'));
-    expect(ids()).toEqual(['run-0', 'run-1', 'run-2', 'run-3', 'run-4', 'run-5']);
-    expect(screen.queryByRole('link', { name: /Synthetic dungeon 9/i })).toBeNull();
-    const seen = [...ids()];
-    for (const expected of [['run-6', 'run-7', 'run-8', 'run-9']]) {
-      await fireEvent.click(screen.getByRole('button', { name: 'Next Runs' }));
-      await flushHomeRender();
-      expect(ids()).toEqual(expected);
-      seen.push(...ids());
-    }
-    expect(seen).toEqual(summary.recent_runs.map(run => run.id));
+    expect(ids()).toEqual(summary.recent_runs.map(run => run.id));
     expect(screen.getByRole('link', { name: /Synthetic dungeon 9/i }).getAttribute('href')).toBe('#/runs/run-9');
-    expect(screen.getByRole('button', { name: 'Next Runs' }).getAttribute('aria-disabled')).toBe('true');
-    await fireEvent.click(screen.getByRole('button', { name: 'Previous Runs' }));
-    await flushHomeRender();
-    expect(ids()).toEqual(['run-0', 'run-1', 'run-2', 'run-3', 'run-4', 'run-5']);
+    expect(screen.queryByRole('button', { name: 'Next Runs' })).toBeNull();
     expect(page.query).toHaveBeenCalledOnce();
     const chart = within(main).getByRole('img', { name: /Fame over Time/ });
     expect(chart.querySelectorAll('circle').length).toBeLessThanOrEqual(120);
@@ -268,4 +259,15 @@ describe('durable Nexus story in the real Shell', () => {
     page.unmount(); await vi.advanceTimersByTimeAsync(2 * 86400000);
     expect(page.query).toHaveBeenCalledTimes(count);
   });
+});
+
+it('passes the best copy and formatted count to the scope loot hover', () => {
+  const enchant = { state: 'recorded' as const, slots: 2, applied: 2, ids: [7, 8] };
+  const page = render(ScopeLoot, { page: { items: [{ item_type: 101, tier: 'UT', count: 3, last_at: '2000000', best_enchant: enchant }], next: null, total_bags: 3 },
+    pageNumber: 1, visuals: emptyHomeVisuals(), resolveSpriteUrl: () => null, enabled: true, next: () => {}, first: () => {} });
+  const tile = page.container.querySelector('.tile')!;
+  expect(tile.getAttribute('data-item-hover')).toBe('101');
+  expect(tile.hasAttribute('title')).toBe(false);
+  expect(tile.hasAttribute('tabindex')).toBe(false);
+  expect(itemHoverParams(tile)).toEqual({ type: 101, enchant, name: 'Item 101', tier: 'UT', suffix: '×3', label: 'Best copy' });
 });

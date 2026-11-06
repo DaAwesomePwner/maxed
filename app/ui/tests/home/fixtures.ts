@@ -21,12 +21,21 @@ export function homeSummary(overrides: Partial<HomeSummary> = {}): HomeSummary {
   const snapshot = homeSnapshot();
   const run = { ...snapshot.run!, ended: '5000000', completed_at: '4000000', outcome: 'cleared' as const };
   return {
-    runs: 1, clears: 1, deaths: 0, fame_delta: null, fame: [],
+    runs: 1, clears: 1, deaths: 0, fame_delta: null, fame: [], fame_characters: [],
     best_drop: snapshot.drops[0], top_fight: snapshot.fights[0], recent_runs: [run], issues: [],
     recent_details: [{ run_id: run.id, local_share: 1, share_partial: false,
       observed_drop_count: 1, loot: snapshot.drops, loot_preview_limited: false, issues: [] }],
     fame_missing_baselines: 1, fame_sampled: false, unranked_drop_count: 1,
     ...overrides,
+  };
+}
+
+/** Chart points and totals for the fixture's live character, `delta` apart. */
+export function characterFame(delta: number, start = 1000): Pick<HomeSummary, 'fame' | 'fame_characters'> {
+  const id = homeSnapshot().character!.id;
+  return {
+    fame: [{ at: '1000000', character_id: id, fame: start }, { at: '2000000', character_id: id, fame: start + delta }],
+    fame_characters: [{ character_id: id, first_fame: start, last_fame: start + delta, last_at: '2000000' }],
   };
 }
 

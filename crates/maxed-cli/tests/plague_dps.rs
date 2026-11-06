@@ -1,9 +1,8 @@
+use crate::combat_fixture;
 use maxed_cli::demo::replay_engine;
 use maxed_engine::EngineConfig;
 use maxed_types::EngineEvent;
 use serde_json::Value;
-#[path = "common/combat_fixture.rs"]
-mod combat_fixture;
 use std::{path::PathBuf, sync::Arc};
 
 #[test]

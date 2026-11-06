@@ -75,6 +75,12 @@ pub fn presentation_event(mut event: maxed_types::EventEnvelope) -> maxed_types:
         }
         maxed_engine::compact_live_fight(fight);
     }
+    if let EngineEvent::ScopeTimelineUpdated(timeline) = &mut event.event {
+        timeline.buckets = Vec::new();
+        for player in &mut timeline.players {
+            player.points = Vec::new();
+        }
+    }
     event
 }
 
@@ -109,6 +115,77 @@ pub fn event_batches(events: Vec<maxed_types::EventEnvelope>) -> Vec<maxed_types
 mod tests {
     use super::*;
     use maxed_types::{EngineEvent, EventEnvelope, PlayerSeries, Sequence, TargetKind, Timestamp};
+
+    #[test]
+    fn history_timeline_presentation_keeps_refresh_identity_and_flags() {
+        let update = maxed_types::ScopeTimelineUpdate {
+            scope_id: "synthetic-scope".into(),
+            run_id: Some("synthetic-run".into()),
+            buckets: vec![maxed_types::ScopeBucket {
+                from: Timestamp(1),
+                until: Timestamp(2),
+                party_total: 10.,
+                party_active: 1,
+            }],
+            players: vec![PlayerSeries {
+                player_id: "synthetic-player".into(),
+                object_id: 101,
+                is_local: true,
+                points: vec![10.],
+            }],
+            full: true,
+            compacted: true,
+            disabled: false,
+        };
+        let original = EventEnvelope {
+            stream_id: "synthetic-stream".into(),
+            sequence: Sequence(Timestamp(1)),
+            at: Timestamp(2),
+            fight_chart_omitted: false,
+            event: EngineEvent::ScopeTimelineUpdated(update.clone()),
+        };
+        let mut expected = original.clone();
+        if let EngineEvent::ScopeTimelineUpdated(timeline) = &mut expected.event {
+            timeline.buckets.clear();
+            for player in &mut timeline.players {
+                player.points.clear();
+            }
+        }
+        assert_eq!(presentation_event(original.clone()), expected);
+        assert_eq!(original.event, EngineEvent::ScopeTimelineUpdated(update));
+    }
+
+    #[test]
+    fn player_observation_presentation_is_unchanged() {
+        let profile = maxed_types::PlayerProfileView {
+            scope_id: "synthetic-scope".into(),
+            run_id: Some("synthetic-run".into()),
+            player_id: "synthetic-player".into(),
+            object_id: 101,
+            is_local: false,
+            name: Some("Synthetic Player".into()),
+            class_id: None,
+            level: None,
+            stars: None,
+            fame: None,
+            skin_id: None,
+            guild: None,
+            stats: vec![],
+            maxed: None,
+            maxed_stats: vec![],
+            equipment: vec![],
+            first_seen: Timestamp(1),
+            last_seen: Timestamp(2),
+        };
+        let original = EventEnvelope {
+            stream_id: "synthetic-stream".into(),
+            sequence: Sequence(Timestamp(1)),
+            at: Timestamp(2),
+            fight_chart_omitted: false,
+            event: EngineEvent::PlayerObserved(profile),
+        };
+        assert_eq!(presentation_event(original.clone()), original);
+    }
 
     #[test]
     fn chart_omission_covers_priority_transitions_and_preserves_terminal_events() {

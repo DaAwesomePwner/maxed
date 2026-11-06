@@ -3,6 +3,18 @@ use rusqlite::{Connection, OpenFlags};
 use sha2::{Digest, Sha256};
 use std::{marker::PhantomData, path::Path, rc::Rc, time::Duration};
 
+/// Latest schema supported by this build, matching SQLite's `user_version`.
+pub const SCHEMA_VERSION: i64 = 16;
+pub(crate) const BUSY_TIMEOUT: Duration = Duration::from_millis(250);
+
+const MAINTENANCE_RECEIPTS: &str = include_str!("../migrations/016_maintenance_receipts.sql");
+
+const LOOT_STATS_INDEXES: &str = include_str!("../migrations/015_loot_stats_indexes.sql");
+
+const PARTY: &str = include_str!("../migrations/014_party.sql");
+
+const PLAYER_PROFILES: &str = include_str!("../migrations/013_player_profiles.sql");
+
 const EVENT_FTS: &str = include_str!("../migrations/012_event_fts.sql");
 
 const EXCLUDE_JUNK_BAGS: &str = include_str!("../migrations/011_exclude_junk_bags.sql");
@@ -32,7 +44,7 @@ pub(crate) fn digest(bytes: &[u8]) -> String {
 }
 
 fn configure(conn: &Connection) -> Result<(), StoreError> {
-    conn.busy_timeout(Duration::from_millis(250))?;
+    conn.busy_timeout(BUSY_TIMEOUT)?;
     conn.pragma_update(None, "foreign_keys", true)?;
     if conn.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, i64>(0))? != 1 {
         return Err(StoreError::Migration);
@@ -42,18 +54,30 @@ fn configure(conn: &Connection) -> Result<(), StoreError> {
 
 pub(crate) fn check_schema(conn: &Connection) -> Result<i64, StoreError> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-    if version > 12 {
+    if version > SCHEMA_VERSION {
         return Err(StoreError::NewerSchema);
     }
-    if !(0..=12).contains(&version) {
+    if !(0..=SCHEMA_VERSION).contains(&version) {
         return Err(StoreError::Migration);
+    }
+    if version == 0 {
+        let objects: i64 = conn.query_row(
+            "SELECT count(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'",
+            [],
+            |r| r.get(0),
+        )?;
+        if objects != 0 {
+            return Err(StoreError::Migration);
+        }
     }
     if version > 0 {
         let mut statement = conn
-            .prepare("SELECT version,checksum FROM schema_migrations ORDER BY version LIMIT 13")
+            .prepare("SELECT version,checksum FROM schema_migrations ORDER BY version LIMIT ?1")
             .map_err(|_| StoreError::Migration)?;
         let rows = statement
-            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?
+            .query_map([SCHEMA_VERSION + 1], |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+            })?
             .collect::<Result<Vec<_>, _>>()?;
         let expected: Vec<_> = [
             INITIAL,
@@ -68,6 +92,10 @@ pub(crate) fn check_schema(conn: &Connection) -> Result<i64, StoreError> {
             MAP_VISITS,
             EXCLUDE_JUNK_BAGS,
             EVENT_FTS,
+            PLAYER_PROFILES,
+            PARTY,
+            LOOT_STATS_INDEXES,
+            MAINTENANCE_RECEIPTS,
         ]
         .iter()
         .take(version as usize)
@@ -83,6 +111,8 @@ pub(crate) fn check_schema(conn: &Connection) -> Result<i64, StoreError> {
 
 /// Create the latest schema in an empty database or atomically upgrade an exact
 /// known prior schema. Installed migration checksums are never rewritten.
+/// File entry points must refuse v1–v10; only the confirmed HistoryUpgrade
+/// owner may call this low-level primitive on installed legacy history.
 pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
     configure(conn)?;
     migrate_script(conn, INITIAL)
@@ -91,7 +121,7 @@ pub fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
 fn migrate_script(conn: &mut Connection, script: &str) -> Result<(), StoreError> {
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let version = check_schema(&tx)?;
-    if version == 12 {
+    if version == SCHEMA_VERSION {
         return Ok(());
     }
     if version == 0 {
@@ -203,13 +233,46 @@ fn migrate_script(conn: &mut Connection, script: &str) -> Result<(), StoreError>
             [digest(EXCLUDE_JUNK_BAGS.as_bytes())],
         )?;
     }
-    tx.execute_batch(EVENT_FTS)
-        .map_err(|_| StoreError::Migration)?;
-    tx.execute(
-        "INSERT INTO schema_migrations VALUES(12,?1)",
-        [digest(EVENT_FTS.as_bytes())],
-    )?;
-    tx.pragma_update(None, "user_version", 12)?;
+    if version < 12 {
+        tx.execute_batch(EVENT_FTS)
+            .map_err(|_| StoreError::Migration)?;
+        tx.execute(
+            "INSERT INTO schema_migrations VALUES(12,?1)",
+            [digest(EVENT_FTS.as_bytes())],
+        )?;
+    }
+    if version < 13 {
+        tx.execute_batch(PLAYER_PROFILES)
+            .map_err(|_| StoreError::Migration)?;
+        tx.execute(
+            "INSERT INTO schema_migrations VALUES(13,?1)",
+            [digest(PLAYER_PROFILES.as_bytes())],
+        )?;
+    }
+    if version < 14 {
+        tx.execute_batch(PARTY).map_err(|_| StoreError::Migration)?;
+        tx.execute(
+            "INSERT INTO schema_migrations VALUES(14,?1)",
+            [digest(PARTY.as_bytes())],
+        )?;
+    }
+    if version < 15 {
+        tx.execute_batch(LOOT_STATS_INDEXES)
+            .map_err(|_| StoreError::Migration)?;
+        tx.execute(
+            "INSERT INTO schema_migrations VALUES(15,?1)",
+            [digest(LOOT_STATS_INDEXES.as_bytes())],
+        )?;
+    }
+    if version < 16 {
+        tx.execute_batch(MAINTENANCE_RECEIPTS)
+            .map_err(|_| StoreError::Migration)?;
+        tx.execute(
+            "INSERT INTO schema_migrations VALUES(16,?1)",
+            [digest(MAINTENANCE_RECEIPTS.as_bytes())],
+        )?;
+    }
+    tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;
     Ok(())
 }
@@ -222,11 +285,35 @@ pub fn upgrade_history(path: &Path) -> Result<(), StoreError> {
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(|_| StoreError::Open)?;
-    // Existing version zero is not an installed history database.
-    if check_schema(&conn)? == 0 {
-        return Err(StoreError::Migration);
-    }
+    require_compatible_history(&conn)?;
     migrate(&mut conn)
+}
+
+fn require_compatible_history(conn: &Connection) -> Result<(), StoreError> {
+    if (1..11).contains(&check_schema(conn)?) {
+        return Err(StoreError::HistoryUpgradeRequired);
+    }
+    Ok(())
+}
+
+/// Read-only native preflight. Missing/empty databases need no history backup;
+/// only the explicit stopped upgrade owner may cross destructive legacy scripts.
+pub fn history_preflight(path: &Path) -> Result<(), StoreError> {
+    match std::fs::symlink_metadata(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err(StoreError::Open),
+        Ok(metadata) if !metadata.is_file() || metadata.file_type().is_symlink() => {
+            return Err(StoreError::Open)
+        }
+        _ => (),
+    }
+    let conn = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|_| StoreError::Open)?;
+    configure(&conn)?;
+    require_compatible_history(&conn)
 }
 
 pub(crate) fn open_writer(path: &Path) -> Result<Connection, StoreError> {
@@ -236,6 +323,7 @@ pub(crate) fn open_writer(path: &Path) -> Result<Connection, StoreError> {
     let mut conn = Connection::open(path).map_err(|_| StoreError::Open)?;
     configure(&conn)?;
     // Validate before changing the journal of an unrecognized database.
+    require_compatible_history(&conn)?;
     migrate(&mut conn)?;
     let mode: String = conn.query_row("PRAGMA journal_mode=WAL", [], |r| r.get(0))?;
     if !mode.eq_ignore_ascii_case("wal") {
@@ -269,7 +357,7 @@ pub fn open_reader(path: &Path) -> Result<StoreReader, StoreError> {
     )
     .map_err(|_| StoreError::Open)?;
     configure(&conn)?;
-    if check_schema(&conn)? != 12 {
+    if check_schema(&conn)? != SCHEMA_VERSION {
         return Err(StoreError::Migration);
     }
     conn.pragma_update(None, "query_only", true)?;
@@ -288,7 +376,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("history.sqlite3");
         drop(open_writer(&path).unwrap());
-        assert_eq!(open_reader(&path).unwrap().user_version().unwrap(), 12);
+        assert_eq!(
+            open_reader(&path).unwrap().user_version().unwrap(),
+            SCHEMA_VERSION
+        );
     }
 
     #[test]

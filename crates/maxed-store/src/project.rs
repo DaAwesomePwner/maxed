@@ -1,8 +1,8 @@
-use crate::{migrate::digest, StoreError};
+use crate::{migrate::digest, receipts, receipts::ReceiptDigest, StoreError};
 use maxed_types::*;
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::Serialize;
-use std::io::Write;
+use std::{collections::BTreeSet, io::Write};
 
 pub(crate) const MAX_EVENT_BYTES: usize = 8 * 1024 * 1024;
 
@@ -43,7 +43,7 @@ impl Write for Limited {
 }
 
 /// Canonical sorted-key JSON, matching the CLI's SHA-256 value hashing.
-pub(crate) fn validate_event(event: &EventEnvelope) -> Result<(usize, String), StoreError> {
+pub(crate) fn validate_event(event: &EventEnvelope) -> Result<(usize, ReceiptDigest), StoreError> {
     if event.stream_id.is_empty() || event.sequence.0 .0 == 0 {
         return Err(StoreError::InvalidEvent);
     }
@@ -91,7 +91,7 @@ pub(crate) fn validate_event(event: &EventEnvelope) -> Result<(usize, String), S
     }
     visit(&value)?;
     value.sort_all_objects();
-    Ok((size, digest(&serde_json::to_vec(&value)?)))
+    Ok((size, receipts::digest(&serde_json::to_vec(&value)?)))
 }
 
 pub fn apply_batch(conn: &mut Connection, events: &[EventEnvelope]) -> Result<(), StoreError> {
@@ -119,6 +119,21 @@ pub(crate) fn apply_contexts<'a>(
     conn: &mut Connection,
     events: impl IntoIterator<Item = (&'a EventEnvelope, &'a crate::AlertContext)>,
 ) -> Result<(), StoreError> {
+    apply_prepared_contexts(conn, events.into_iter().map(|(e, c)| (e, c, None)))
+}
+
+/// The writer supplies a digest only for an immutable envelope already validated
+/// at submission. Direct batch callers still validate inside the transaction.
+pub(crate) fn apply_prepared_contexts<'a>(
+    conn: &mut Connection,
+    events: impl IntoIterator<
+        Item = (
+            &'a EventEnvelope,
+            &'a crate::AlertContext,
+            Option<&'a ReceiptDigest>,
+        ),
+    >,
+) -> Result<(), StoreError> {
     #[cfg(test)]
     fault::check(fault::Point::Begin)?;
     conn.pragma_update(None, "foreign_keys", true)?;
@@ -126,31 +141,23 @@ pub(crate) fn apply_contexts<'a>(
         return Err(StoreError::Io);
     }
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-    for (event, context) in events {
+    let tables = receipts::Tables::read(&tx)?;
+    let mut party_runs = BTreeSet::new();
+    for (event, context, prepared_hash) in events {
         context.validate()?;
-        let (_, hash) = validate_event(event)?;
+        let hash = match prepared_hash {
+            Some(hash) => *hash,
+            None => validate_event(event)?.1,
+        };
         let sequence = micros(event.sequence.0)?;
-        let old: Option<String> = tx
-            .query_row(
-                "SELECT digest FROM event_receipts WHERE stream_id=?1 AND sequence=?2",
-                params![event.stream_id, sequence],
-                |r| r.get(0),
-            )
-            .optional()?;
-        if let Some(old) = old {
+        if let Some(old) = tables.lookup(&tx, &event.stream_id, sequence)? {
             if old != hash {
                 return Err(StoreError::InvalidEvent);
             }
             continue;
         }
-        let head: i64 = tx
-            .query_row(
-                "SELECT sequence FROM stream_heads WHERE stream_id=?1",
-                [&event.stream_id],
-                |r| r.get(0),
-            )
-            .optional()?
-            .unwrap_or(0);
+        let (stream_key, head) = tables.intern_stream(&tx, &event.stream_id)?;
+        let head = head.unwrap_or(0);
         if head.checked_add(1) != Some(sequence) {
             return Err(StoreError::SequenceGap);
         }
@@ -165,13 +172,25 @@ pub(crate) fn apply_contexts<'a>(
         let finalized = crate::alerts::was_finalized(&tx, &event.event)?;
         #[cfg(test)]
         fault::check(fault::Point::BeforeProjection)?;
-        project(&tx, event, context)?;
+        project(&tx, event, context, &mut party_runs)?;
         crate::alerts::project(&tx, event, context, finalized)?;
-        tx.execute(
-            "INSERT INTO event_receipts VALUES(?1,?2,?3)",
-            params![event.stream_id, sequence, hash],
+        tx.prepare_cached(
+            "INSERT INTO event_receipts_v2(stream_key,sequence,digest) VALUES(?1,?2,?3)",
+        )?
+        .execute(params![stream_key, sequence, hash.as_slice()])?;
+        receipts::advance_head(&tx, stream_key, sequence)?;
+    }
+    // Map close can publish RunEnded before final fights and profiles. Project
+    // all of them before rebuilding each affected ended run once.
+    for run_id in party_runs {
+        let ended: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM runs WHERE id=?1 AND ended IS NOT NULL)",
+            [&run_id],
+            |r| r.get(0),
         )?;
-        tx.execute("INSERT INTO stream_heads VALUES(?1,?2) ON CONFLICT(stream_id) DO UPDATE SET sequence=excluded.sequence", params![event.stream_id,sequence])?;
+        if ended {
+            crate::party::rebuild_run_members(&tx, &run_id)?;
+        }
     }
     #[cfg(test)]
     fault::check(fault::Point::Commit)?;
@@ -205,6 +224,7 @@ fn project(
     tx: &Transaction<'_>,
     envelope: &EventEnvelope,
     context: &crate::AlertContext,
+    party_runs: &mut BTreeSet<String>,
 ) -> Result<(), StoreError> {
     match &envelope.event {
         EngineEvent::InstanceEvent(event) => crate::instance::project(tx, event)?,
@@ -234,7 +254,17 @@ fn project(
         EngineEvent::CharacterUpdated(character) => {
             let mut character = character.clone();
             character.id = resolve(tx, &character.id)?;
+            let learned_identity: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM characters WHERE id=?1 AND
+                    ((json_extract(json,'$.name') IS NULL AND ?2 IS NOT NULL)
+                    OR (json_extract(json,'$.class_id') IS NULL AND ?3 IS NOT NULL)))",
+                params![character.id, character.name, character.class_id],
+                |row| row.get(0),
+            )?;
             tx.execute("INSERT INTO characters VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET observed_at=excluded.observed_at,json=excluded.json WHERE excluded.observed_at>=characters.observed_at", params![character.id,micros(character.observed_at)?,json(&character)?])?;
+            if learned_identity {
+                backfill_run_identity(tx, &character.id)?;
+            }
             crate::visits::set_character(tx, &envelope.stream_id, &character.id)?;
         }
         EngineEvent::RunStarted(run) => {
@@ -244,11 +274,28 @@ fn project(
         }
         EngineEvent::RunUpdated(run) | EngineEvent::RunEnded(run) => {
             write_run(tx, run)?;
+            if matches!(envelope.event, EngineEvent::RunEnded(_)) {
+                party_runs.insert(run.id.clone());
+            }
             run_character(tx, &envelope.stream_id, run)?;
         }
         EngineEvent::FightStarted(fight)
         | EngineEvent::FightUpdated(fight)
-        | EngineEvent::FightEnded(fight) => write_fight(tx, fight)?,
+        | EngineEvent::FightEnded(fight) => {
+            let previous_run: Option<String> = tx
+                .query_row("SELECT run_id FROM fights WHERE id=?1", [&fight.id], |r| {
+                    r.get(0)
+                })
+                .optional()?
+                .flatten();
+            write_fight(tx, fight)?;
+            if let Some(run_id) = previous_run {
+                party_runs.insert(run_id);
+            }
+            if let Some(run_id) = &fight.run_id {
+                party_runs.insert(run_id.clone());
+            }
+        }
         EngineEvent::BagDropped(drop) | EngineEvent::DropUpdated(drop) => write_drop(tx, drop)?,
         EngineEvent::CharacterMerged {
             provisional_id,
@@ -337,8 +384,62 @@ fn project(
             name,
             kind,
         )?,
+        EngineEvent::PlayerObserved(profile) => {
+            crate::players::write_profile(tx, profile)?;
+            let map: Option<String> = if let Some(run_id) = &profile.run_id {
+                tx.query_row("SELECT dungeon FROM runs WHERE id=?1", [run_id], |r| {
+                    r.get(0)
+                })
+                .optional()?
+            } else {
+                // Scopes have no visit foreign key. Use the indexed session and
+                // observation interval: buffered players can precede MapEntered,
+                // and a final profile can arrive after its map has closed.
+                // started<=last_seen includes buffered players seen at visit start.
+                // For old-map profiles this is safe only because the engine's
+                // close_map calls end_scope before MapEntered: the final
+                // PlayerObserved is projected before the next visit exists.
+                tx.query_row(
+                    "SELECT v.map FROM map_visits v JOIN stream_sessions s ON s.session_id=v.session_id
+                     WHERE s.stream_id=?1 AND v.stream_id=?1 AND v.started<=?2
+                         AND (v.ended IS NULL OR v.ended>?3)
+                     ORDER BY v.started DESC,v.id DESC LIMIT 1",
+                    params![
+                        envelope.stream_id,
+                        micros(profile.last_seen)?,
+                        micros(profile.first_seen)?
+                    ],
+                    |r| r.get(0),
+                )
+                .optional()?
+            };
+            crate::party::write_party_player(tx, profile, map.as_deref())?;
+            if let Some(run_id) = &profile.run_id {
+                party_runs.insert(run_id.clone());
+            }
+        }
+        EngineEvent::ScopeTimelineUpdated(update) => crate::players::write_timeline(tx, update)?,
         EngineEvent::CaptureStateChanged(_) => {}
     }
+    Ok(())
+}
+
+// Entry gear/stats and already-known identity remain historical. Late identity
+// observations only fill holes, using the accepted (possibly newer) character row.
+fn backfill_run_identity(tx: &Transaction<'_>, id: &str) -> Result<(), StoreError> {
+    tx.execute(
+        "UPDATE runs SET entry_character_json=json_set(entry_character_json,
+            '$.name',coalesce(json_extract(entry_character_json,'$.name'),
+                (SELECT json_extract(json,'$.name') FROM characters WHERE id=?1)),
+            '$.class_id',coalesce(json_extract(entry_character_json,'$.class_id'),
+                (SELECT json_extract(json,'$.class_id') FROM characters WHERE id=?1)))
+        WHERE character_id=?1 AND entry_character_json IS NOT NULL
+            AND ((json_extract(entry_character_json,'$.name') IS NULL
+                AND (SELECT json_extract(json,'$.name') FROM characters WHERE id=?1) IS NOT NULL)
+            OR (json_extract(entry_character_json,'$.class_id') IS NULL
+                AND (SELECT json_extract(json,'$.class_id') FROM characters WHERE id=?1) IS NOT NULL))",
+        [id],
+    )?;
     Ok(())
 }
 
@@ -512,12 +613,13 @@ pub(crate) fn fight_summary(fight: &FightView) -> Result<RunFightSummary, StoreE
         local_damage: local.map(|p| p.damage),
         local_dps: local.and_then(|p| p.dps),
         local_rank: local.and_then(|p| p.rank),
+        party: None,
         player_count: u32::try_from(fight.players.len()).map_err(|_| StoreError::InvalidEvent)?,
         partial: !fight.complete_capture || !fight.issues.is_empty(),
         estimated: fight
             .players
             .iter()
-            .any(|p| p.sources.iter().any(|s| s.estimated)),
+            .any(|p| p.sources.iter().any(|s| s.damage_uncertain())),
     })
 }
 
@@ -718,8 +820,9 @@ fn merge(tx: &Transaction<'_>, provisional: &str, verified: &str) -> Result<(), 
     if present != 2 {
         return Err(StoreError::InvalidEvent);
     }
-    // JSON changes only identity fields, never historical names, gear, or stats.
+    // Preserve known historical names, gear, and stats; fill only missing identity.
     tx.execute("UPDATE runs SET character_id=?2,json=json_set(json,'$.character_id',?2),entry_character_json=CASE WHEN entry_character_json IS NULL THEN NULL ELSE json_set(entry_character_json,'$.id',?2) END WHERE character_id=?1", params![from,to])?;
+    backfill_run_identity(tx, &to)?;
     tx.execute(
         "UPDATE fame_samples SET character_id=?2 WHERE character_id=?1",
         params![from, to],
@@ -729,6 +832,16 @@ fn merge(tx: &Transaction<'_>, provisional: &str, verified: &str) -> Result<(), 
         params![from, to],
     )?;
     crate::visits::merge(tx, &from, &to)?;
+    tx.execute(
+        "UPDATE OR REPLACE player_profiles SET player_id=?2,json=json_set(json,'$.player_id',?2) WHERE player_id=?1",
+        params![from, to],
+    )?;
+    for table in ["player_gear_log", "player_timelines"] {
+        tx.execute(
+            &format!("UPDATE OR REPLACE {table} SET player_id=?2 WHERE player_id=?1"),
+            params![from, to],
+        )?;
+    }
     tx.execute(
         "UPDATE character_aliases SET verified_id=?2 WHERE verified_id=?1",
         params![from, to],

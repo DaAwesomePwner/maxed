@@ -11,6 +11,73 @@ fn round_trip<T: Serialize + DeserializeOwned + PartialEq + Debug>(value: &T) ->
 }
 
 #[test]
+fn name_key_strips_suffix_and_lowercases() {
+    for (name, expected) in [
+        ("SynthAlpha,fe14", "synthalpha"),
+        ("SYNTHalpha", "synthalpha"),
+        ("SynthBravo,fe14,extra", "synthbravo"),
+        (",fe14", ""),
+        ("", ""),
+    ] {
+        assert_eq!(party::name_key(name), expected);
+    }
+}
+
+#[test]
+fn party_players_cursor_round_trips_exact_sort_bits() {
+    for value in [1.0_f64 / 3.0, 2.0 / 3.0, 0.0, -1.0, f64::MAX] {
+        let cursor = PartyPlayersCursor {
+            sort_value: value.to_bits().to_string(),
+            key: "synthalpha".into(),
+        };
+        assert_eq!(
+            round_trip(&cursor)["sort_value"],
+            value.to_bits().to_string()
+        );
+        let encoded = serde_json::to_string(&cursor).unwrap();
+        let decoded: PartyPlayersCursor = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded.sort_value.parse::<u64>().unwrap(), value.to_bits());
+    }
+    assert!(PartyPlayersCursor::decl().contains("sort_value: string"));
+}
+
+#[test]
+fn settings_without_party_load_with_defaults() {
+    let settings: AppSettings = serde_json::from_value(json!({
+        "version": 1,
+        "adapter_id": null,
+        "assets_path": null,
+        "save_recordings": false,
+        "recording_limit_bytes": 1_000_000_000,
+        "update_channel": "stable"
+    }))
+    .unwrap();
+    assert_eq!(settings.party, PartySettings::default());
+    assert!(settings.party.presets.is_empty());
+    assert_eq!(settings.party.default_preset_id, None);
+    assert_eq!(round_trip(&settings)["version"], 1);
+}
+
+#[test]
+fn player_presence_is_not_an_engine_event() {
+    for (run_id, present) in [(None, false), (Some("synthetic-run".into()), true)] {
+        let presence = PlayerPresence {
+            scope_id: "synthetic-scope".into(),
+            run_id,
+            player_id: "synthetic-player".into(),
+            object_id: 1,
+            present,
+            at: Timestamp(u64::MAX),
+        };
+        assert_eq!(round_trip(&presence), json!(presence));
+        assert!(
+            serde_json::from_value::<EngineEvent>(json!({"player_presence": presence})).is_err()
+        );
+    }
+    assert!(!EngineEvent::decl().contains("player_presence"));
+}
+
+#[test]
 fn fight_chart_marker_defaults_off_and_preserves_legacy_envelope_bytes() {
     let legacy =
         r#"{"stream_id":"synthetic","sequence":"1","at":"2","event":{"fight_updated":null}}"#;
@@ -347,6 +414,7 @@ fn catalog_round_trip_includes_every_definition_and_unknown_asset_fields() {
         origin_item: None,
     });
     catalog.enchants.push(EnchantDef {
+        regeneration: None,
         id: 987654,
         name: "Synthetic enchant".into(),
         description: "Contract fixture".into(),
@@ -581,4 +649,183 @@ fn fight_dps_basis_is_explicit_and_legacy_json_stays_legacy() {
     value.as_object_mut().unwrap().remove("dps_basis");
     let legacy: FightView = serde_json::from_value(value).unwrap();
     assert_eq!(round_trip(&legacy)["dps_basis"], "whole_target_v0");
+}
+
+#[test]
+fn player_drilldown_contracts_round_trip_populated_values() {
+    let snapshot = demo_snapshot();
+    let character = snapshot.character.unwrap();
+    let fight = &snapshot.fights[0];
+    let profile = PlayerProfileView {
+        scope_id: "synthetic-scope".into(),
+        run_id: Some("demo-run".into()),
+        player_id: "synthetic-player".into(),
+        object_id: 1,
+        is_local: true,
+        name: Some("Synthetic Knight".into()),
+        class_id: Some(100),
+        level: Some(20),
+        stars: Some(5),
+        fame: Some(1250),
+        skin_id: Some(101),
+        guild: Some("Synthetic Guild".into()),
+        stats: character.stats,
+        maxed: Some(8),
+        maxed_stats: vec![0, 3, 20, 21, 22, 28, 26, 27],
+        equipment: character.equipment,
+        first_seen: Timestamp(9_007_199_254_740_993),
+        last_seen: Timestamp(u64::MAX),
+    };
+    assert_eq!(round_trip(&profile)["first_seen"], "9007199254740993");
+    assert_eq!(
+        round_trip(&profile)["maxed_stats"],
+        json!([0, 3, 20, 21, 22, 28, 26, 27])
+    );
+    assert!(PlayerProfileView::decl().contains("maxed_stats: Array<number>"));
+    let mut legacy = serde_json::to_value(&profile).unwrap();
+    legacy.as_object_mut().unwrap().remove("maxed_stats");
+    assert!(serde_json::from_value::<PlayerProfileView>(legacy)
+        .unwrap()
+        .maxed_stats
+        .is_empty());
+    let bucket = ScopeBucket {
+        from: Timestamp(1),
+        until: Timestamp(2),
+        party_total: 300.5,
+        party_active: 2,
+    };
+    round_trip(&bucket);
+    let update = ScopeTimelineUpdate {
+        scope_id: profile.scope_id.clone(),
+        run_id: profile.run_id.clone(),
+        buckets: vec![bucket.clone()],
+        players: vec![PlayerSeries {
+            player_id: profile.player_id.clone(),
+            object_id: 1,
+            is_local: true,
+            points: vec![300.5],
+        }],
+        full: true,
+        compacted: true,
+        disabled: false,
+    };
+    round_trip(&update);
+    assert_eq!(
+        round_trip(&EngineEvent::PlayerObserved(profile.clone())),
+        json!({"player_observed": profile})
+    );
+    assert_eq!(
+        round_trip(&EngineEvent::ScopeTimelineUpdated(update.clone())),
+        json!({"scope_timeline_updated": update})
+    );
+    let gear = GearChange {
+        at: Timestamp(2),
+        equipment: profile.equipment.clone(),
+    };
+    round_trip(&gear);
+    let timeline = PlayerTimeline {
+        buckets: vec![bucket],
+        points: vec![300.5],
+        compacted: true,
+        disabled: false,
+    };
+    round_trip(&timeline);
+    let death = PlayerDeathAt {
+        at: Timestamp(3),
+        fight_id: Some(fight.id.clone()),
+    };
+    round_trip(&death);
+    let roster = RosterEntry {
+        player_id: profile.player_id.clone(),
+        name: profile.name.clone(),
+        class_id: profile.class_id,
+        is_local: true,
+        damage: Some(300.5),
+    };
+    round_trip(&roster);
+    let party = PartySummary {
+        total_damage: 300.5,
+        average_dps: Some(150.25),
+        top_player_id: Some(profile.player_id.clone()),
+        top_name: profile.name.clone(),
+        top_dps: Some(150.25),
+        players_with_damage: 1,
+    };
+    round_trip(&party);
+    let player_fight = RunPlayerFight {
+        fight_id: fight.id.clone(),
+        dps_basis: fight.dps_basis,
+        object_id: Some(2),
+        target_type: Some(300),
+        target_name: Some("Synthetic Boss".into()),
+        boss_type: Some(300),
+        started: Timestamp(1),
+        ended: Some(Timestamp(3)),
+        killed: true,
+        player_count: 1,
+        damage: Some(300.5),
+        dps: Some(150.25),
+        rank: Some(1),
+        share: Some(1.0),
+        deaths: Some(1),
+    };
+    round_trip(&player_fight);
+    let view = RunPlayerView {
+        run: snapshot.run.unwrap(),
+        scope_id: profile.scope_id.clone(),
+        player_id: profile.player_id.clone(),
+        player: Some(RunPlayerTotal {
+            player_id: profile.player_id.clone(),
+            name: profile.name.clone(),
+            class_id: profile.class_id,
+            is_local: true,
+            damage: 300.5,
+            hits: 2,
+            deaths: 1,
+            share: Some(1.0),
+            rank: Some(1),
+            dps: Some(150.25),
+        }),
+        party,
+        sources: fight.players[0].sources.clone(),
+        fights: vec![player_fight],
+        profile: Some(profile.clone()),
+        gear_log: vec![gear.clone()],
+        timeline: Some(timeline.clone()),
+        deaths: vec![death.clone()],
+        departed_at: Some(Timestamp(4)),
+        roster: vec![roster],
+        partial: true,
+    };
+    round_trip(&view);
+    round_trip(&PlayerContextView {
+        profile: Some(profile),
+        gear_log: vec![gear],
+        timeline: Some(timeline),
+        deaths: vec![death],
+    });
+}
+
+#[test]
+fn player_drilldown_legacy_fields_default_to_unknown() {
+    let mut value = serde_json::to_value(demo_snapshot().fights.remove(0)).unwrap();
+    value.as_object_mut().unwrap().remove("scope_id");
+    assert_eq!(
+        serde_json::from_value::<FightView>(value).unwrap().scope_id,
+        None
+    );
+    let death: InstanceEventKind = serde_json::from_value(
+        json!({"type": "player_death", "player_name": "Synthetic Knight", "is_local": false}),
+    )
+    .unwrap();
+    let InstanceEventKind::PlayerDeath { player_id, .. } = death else {
+        panic!("expected death")
+    };
+    assert_eq!(player_id, None);
+}
+
+#[test]
+fn item_detail_page_decl() {
+    assert!(ItemDetail::decl().contains("slot_label: string | null"));
+    assert!(EnchantInfo::decl().contains("description: string | null"));
 }

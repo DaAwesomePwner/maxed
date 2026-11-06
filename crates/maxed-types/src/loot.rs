@@ -133,6 +133,13 @@ pub struct DungeonLootStats {
     pub whites: u32,
     /// All-time: ended runs of this dungeon that started after the latest white. None = no white ever.
     pub runs_since_last_white: Option<u32>,
+    // All-time ended runs with at least one observed white bag.
+    pub white_runs: u32,
+    // All-time ended runs divided by white runs. None = no ended white run.
+    pub avg_runs_per_white: Option<f64>,
+    // Longest all-time sequence of ended runs without a white, ordered by run start.
+    // Includes leading and current streaks. None = no ended white run.
+    pub longest_dry: Option<u32>,
     pub best: Option<BestBagRef>,
 }
 

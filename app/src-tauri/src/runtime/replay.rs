@@ -231,6 +231,18 @@ impl CaptureRuntime {
         self.shared.home.restore_live()?;
         alerts.namespace = Namespace::Live;
         let defaults = Views::default();
+        *self
+            .shared
+            .views
+            .party
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = defaults.party.into_inner().unwrap();
+        *self
+            .shared
+            .views
+            .party_catalog
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = None;
         defaults.snapshot.lock().unwrap().stream_id = format!("stopped-{}", storage::random_id()?);
         *self
             .shared
@@ -244,6 +256,12 @@ impl CaptureRuntime {
             .store
             .lock()
             .unwrap_or_else(|p| p.into_inner()) = defaults.store.into_inner().unwrap();
+        drop(alerts);
+        drop(session);
+        // The live Home context is restored without opening a capture writer.
+        // Resume pending maintenance only after releasing its admission locks.
+        self.resume_cached_storage();
+        self.publish_party_changed()?;
         Ok(self.snapshot())
     }
 }

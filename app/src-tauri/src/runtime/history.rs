@@ -16,6 +16,7 @@ pub(super) const WORKER: &str = "History worker failed; retry";
 #[derive(Clone, Copy)]
 pub(super) enum HistoryCaller {
     MainWindow,
+    Storage,
     #[cfg(test)]
     NativeTest,
 }
@@ -23,6 +24,7 @@ impl HistoryCaller {
     fn index(self) -> usize {
         match self {
             Self::MainWindow => 0,
+            Self::Storage => 2,
             #[cfg(test)]
             Self::NativeTest => 1,
         }
@@ -31,12 +33,25 @@ impl HistoryCaller {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum HistoryKey {
+    StorageStatus(bool),
+    MaintenanceJobs,
     StatsMaps(StatsFilter),
     StatsSessions(StatsSessionFilter),
     StatsSession(StatsSessionRequest),
     StatsDungeons(StatsFilter),
+    BossHistory(BossHistoryRequest),
+    HomeBossBaselines(BossHistoryRequest),
+    DungeonProfile(DungeonProfileRequest),
     StatsExport(StatsExportRequest),
     Home(HomeScope),
+    HomeDungeonStreak(HomeDungeonStreakRequest),
+    RunRecap(RunRecapRequest),
+    VisitRecap(VisitRecapRequest),
+    HomeHud(
+        HomeScope,
+        Vec<(u16, Option<String>)>,
+        Vec<(u16, PotionStat)>,
+    ),
     ScopeLoot(HomeScope, Option<String>, u16, Vec<(u16, Option<String>)>),
     DungeonBests,
     Runs(RunFilter),
@@ -57,8 +72,22 @@ pub(super) enum HistoryKey {
     RunFightStrip(String, Option<String>),
     Fight(String),
     Player(String, i32),
+    RunPlayer(String, String),
+    PartyAnnotations(Vec<String>),
+    PartyRun(String),
+    PartyPlayers(
+        String,
+        PartyPlayerFilter,
+        PartyPlayerSort,
+        Option<PartyPlayersCursor>,
+    ),
+    PartyPlayer(String, Option<PartyRunsCursor>),
+    PlayerContext(String, String, Option<Timestamp>, Option<Timestamp>),
 }
 impl HistoryKey {
+    fn storage(&self) -> bool {
+        matches!(self, Self::StorageStatus(_) | Self::MaintenanceJobs)
+    }
     #[cfg(test)]
     pub(super) fn validate_for_tests(&self) -> Result<(), String> {
         self.validate()
@@ -67,6 +96,27 @@ impl HistoryKey {
     pub(super) fn validate(&self) -> Result<(), String> {
         match self {
             Self::StatsMaps(filter) | Self::StatsDungeons(filter) => validate_stats(filter),
+            Self::DungeonProfile(request) => {
+                identifier(&request.dungeon)?;
+                validate_stats(&StatsFilter {
+                    range: Some(request.range.clone()),
+                    character_id: request.character_id.clone(),
+                })
+            }
+            Self::BossHistory(request) | Self::HomeBossBaselines(request) => {
+                validate_stats(&StatsFilter {
+                    range: request.range.clone(),
+                    character_id: request.character_id.clone(),
+                })?;
+                if request
+                    .target_types
+                    .as_ref()
+                    .is_some_and(|types| types.len() > 64)
+                {
+                    return Err(INVALID.into());
+                }
+                Ok(())
+            }
             Self::StatsSessions(filter) => {
                 if !(1..=MAX_STATS_SESSION_PAGE).contains(&filter.limit) {
                     return Err(INVALID.into());
@@ -169,18 +219,19 @@ impl HistoryKey {
                 Ok(())
             }
             Self::Home(scope) => validate_scope(scope),
+            Self::HomeDungeonStreak(request) => identifier(&request.dungeon),
+            Self::RunRecap(request) => identifier(&request.run_id),
+            Self::VisitRecap(request) => identifier(&request.visit_id),
+            Self::HomeHud(scope, tiers, potions) => {
+                validate_scope(scope)?;
+                maxed_store::validate_loot_catalog(tiers, potions).map_err(|_| INVALID.into())
+            }
             Self::ScopeLoot(scope, cursor, limit, tiers) => {
-                if tiers.len() > 65_536
-                    || tiers
-                        .iter()
-                        .any(|(_, tier)| tier.as_ref().is_some_and(|s| s.len() > 16))
-                {
-                    return Err(INVALID.into());
-                }
+                maxed_store::validate_loot_catalog(tiers, &[]).map_err(|_| INVALID.to_owned())?;
                 maxed_store::validate_scope_loot(scope, cursor.as_deref(), *limit)
                     .map_err(|_| INVALID.into())
             }
-            Self::DungeonBests => Ok(()),
+            Self::DungeonBests | Self::StorageStatus(_) | Self::MaintenanceJobs => Ok(()),
             Self::Drops(filter) => {
                 validate_loot_page(filter.limit, filter.cursor.as_ref())?;
                 validate_loot_range(filter.range.as_ref())?;
@@ -237,6 +288,52 @@ impl HistoryKey {
                 identifier(run_id)?;
                 if let Some(id) = player_id {
                     identifier(id)?;
+                }
+                Ok(())
+            }
+            Self::RunPlayer(run_id, player_id) => {
+                identifier(run_id)?;
+                identifier(player_id)
+            }
+            Self::PartyAnnotations(keys) => {
+                if keys.len() > 512 {
+                    return Err(INVALID.into());
+                }
+                keys.iter().try_for_each(|key| identifier(key))
+            }
+            Self::PartyRun(id) => identifier(id),
+            Self::PartyPlayer(key, cursor) => {
+                identifier(key)?;
+                if let Some(cursor) = cursor {
+                    identifier(&cursor.run_id)?;
+                    if cursor.started.0 > i64::MAX as u64 {
+                        return Err(INVALID.into());
+                    }
+                }
+                Ok(())
+            }
+            Self::PartyPlayers(query, _, _, cursor) => {
+                if query.chars().count() > 64 || query.contains('\0') {
+                    return Err(INVALID.into());
+                }
+                if let Some(cursor) = cursor {
+                    identifier(&cursor.key)?;
+                    if cursor.sort_value.len() > 20 {
+                        return Err(INVALID.into());
+                    }
+                }
+                Ok(())
+            }
+            Self::PlayerContext(scope_id, player_id, from, until) => {
+                identifier(scope_id)?;
+                identifier(player_id)?;
+                if from.zip(*until).is_some_and(|(from, until)| from > until)
+                    || [from, until]
+                        .into_iter()
+                        .flatten()
+                        .any(|at| at.0 > i64::MAX as u64)
+                {
+                    return Err(INVALID.into());
                 }
                 Ok(())
             }
@@ -365,6 +462,7 @@ type Notice = Box<dyn FnOnce(bool) + Send>;
 trait Operation: Send {
     fn closed(&self) -> bool;
     fn reject(self: Box<Self>, error: Option<String>);
+    fn busy(self: Box<Self>);
     fn run(self: Box<Self>, job: HomeJob) -> Completion;
 }
 struct Read<T, F> {
@@ -382,6 +480,9 @@ impl<T: Send + 'static, F: FnOnce(HomeJob) -> Result<T, String> + Send + 'static
             Some(error) => Err(error),
             None => Ok(HistoryReply::Superseded),
         });
+    }
+    fn busy(self: Box<Self>) {
+        let _ = self.send.send(Ok(HistoryReply::Busy));
     }
     fn run(self: Box<Self>, job: HomeJob) -> Completion {
         let Read { send, read } = *self;
@@ -423,10 +524,11 @@ struct Active {
 pub(super) struct Scheduler {
     active: Option<Active>,
     pending: Option<Pending>,
+    storage: VecDeque<Pending>,
     preparing: Option<u64>,
     request: u64,
-    attempts: [VecDeque<Instant>; 2],
-    notices: [Option<Notice>; 2],
+    attempts: [VecDeque<Instant>; 3],
+    notices: [Option<Notice>; 3],
     stopped: bool,
     open: bool,
 }
@@ -435,7 +537,7 @@ impl Scheduler {
     pub(super) fn counts(&self) -> (usize, usize, usize, usize) {
         (
             usize::from(self.active.is_some()),
-            usize::from(self.pending.is_some()),
+            usize::from(self.pending.is_some()) + self.storage.len(),
             self.notices.iter().filter(|n| n.is_some()).count(),
             self.attempts.iter().map(VecDeque::len).sum(),
         )
@@ -458,6 +560,9 @@ impl Scheduler {
             active.superseded = true;
         }
         if let Some(pending) = self.pending.take() {
+            pending.operation.reject(None);
+        }
+        for pending in self.storage.drain(..) {
             pending.operation.reject(None);
         }
         for notice in &mut self.notices {
@@ -641,7 +746,19 @@ impl HomeReads {
         if queue.active.is_some() || queue.preparing.is_some() {
             return None;
         }
-        if let Some(pending) = queue.pending.take() {
+        loop {
+            let storage_first = queue.storage.front().is_some_and(|storage| {
+                queue
+                    .pending
+                    .as_ref()
+                    .is_none_or(|page| storage.request < page.request)
+            });
+            let pending = if storage_first {
+                queue.storage.pop_front()
+            } else {
+                queue.pending.take()
+            };
+            let pending = pending?;
             if queue.stopped
                 || pending.operation.closed()
                 || pending.namespace_generation != self.generation.load(Ordering::Acquire)
@@ -656,7 +773,6 @@ impl HomeReads {
                 return Some(pending);
             }
         }
-        None
     }
 
     fn enqueue(
@@ -675,20 +791,29 @@ impl HomeReads {
             operation.reject(None);
             return Ok(());
         }
-        let context = if initial && preparation.running && preparation.error.is_none() {
-            None
-        } else {
-            if current.is_none() && !preparation.ready {
-                operation.reject(Some(preparation.error.unwrap_or(UNAVAILABLE).into()));
-                return Ok(());
-            }
-            let context = current.clone().ok_or(UNAVAILABLE)?;
-            if context.namespace == super::Namespace::Live && !preparation.ready {
-                operation.reject(Some(preparation.error.unwrap_or(SCHEMA_FAILED).into()));
-                return Ok(());
-            }
-            Some(context)
-        };
+        let context =
+            if (initial || key.storage()) && preparation.running && preparation.error.is_none() {
+                None
+            } else {
+                if current.is_none() && !preparation.ready {
+                    operation.reject(Some(preparation.error.unwrap_or(UNAVAILABLE).into()));
+                    return Ok(());
+                }
+                if key.storage()
+                    && current
+                        .as_ref()
+                        .is_none_or(|c| c.namespace != super::Namespace::Live)
+                {
+                    operation.reject(None);
+                    return Ok(());
+                }
+                let context = current.clone().ok_or(UNAVAILABLE)?;
+                if context.namespace == super::Namespace::Live && !preparation.ready {
+                    operation.reject(Some(preparation.error.unwrap_or(SCHEMA_FAILED).into()));
+                    return Ok(());
+                }
+                Some(context)
+            };
         let Some(request) = queue.request.checked_add(1) else {
             queue.retire();
             operation.reject(Some(UNAVAILABLE.into()));
@@ -696,7 +821,7 @@ impl HomeReads {
         };
         queue.request = request;
         if let Some(active) = &mut queue.active {
-            if active.key == key {
+            if !key.storage() && active.key == key {
                 active.superseded = true;
             }
         }
@@ -709,7 +834,13 @@ impl HomeReads {
             context,
             operation,
         };
-        if let Some(previous) = queue.pending.replace(pending) {
+        if pending.key.storage() {
+            if queue.storage.len() >= 8 {
+                pending.operation.busy();
+            } else {
+                queue.storage.push_back(pending);
+            }
+        } else if let Some(previous) = queue.pending.replace(pending) {
             previous.operation.reject(None);
         }
         if waiting {
@@ -729,16 +860,23 @@ impl HomeReads {
                         return;
                     }
                     queue.preparing = None;
-                    if let Some(mut pending) = queue.pending.take() {
+                    let fill_context = |mut pending: Pending| {
                         if generation != owner.generation.load(Ordering::Acquire) {
                             pending.operation.reject(None);
-                        } else if let Err(error) = result {
-                            pending.operation.reject(Some(error));
+                            None
+                        } else if let Err(error) = &result {
+                            pending.operation.reject(Some(error.clone()));
+                            None
                         } else {
-                            pending.context = context;
-                            queue.pending = Some(pending);
+                            pending.context = context.clone();
+                            Some(pending)
                         }
-                    }
+                    };
+                    queue.pending = queue.pending.take().and_then(fill_context);
+                    queue.storage = std::mem::take(&mut queue.storage)
+                        .into_iter()
+                        .filter_map(fill_context)
+                        .collect();
                     let pending = owner.dispatch_pending(&mut queue);
                     drop(queue);
                     if let Some(pending) = pending {
@@ -835,6 +973,14 @@ impl CaptureRuntime {
         read: impl FnOnce(HomeJob) -> Result<T, String> + Send + 'static,
     ) -> Result<HistoryReply<T>, String> {
         let owner = &self.shared.home;
+        // Storage has an independent bounded FIFO and abuse budget. Neither
+        // page navigation nor another observation can silently displace it.
+        let storage = key.storage();
+        let caller = if storage {
+            HistoryCaller::Storage
+        } else {
+            caller
+        };
         let generation = owner.generation.load(Ordering::Acquire);
         let (send, receive) = oneshot::channel();
         let admitted = {
@@ -844,7 +990,7 @@ impl CaptureRuntime {
             }
             // Capture the rejected attempt's active completion epoch under this lock.
             if queue.abuse(caller, owner.now()) {
-                if queue.active.is_some() {
+                if !storage && queue.active.is_some() {
                     let notice: Notice = Box::new(move |superseded| {
                         let _ = send.send(Ok(if superseded {
                             HistoryReply::Superseded
@@ -865,11 +1011,18 @@ impl CaptureRuntime {
         };
         if let Some(send) = admitted {
             key.validate()?;
+            #[cfg(test)]
+            if storage {
+                let hook = owner.on_storage_admission.lock().unwrap().clone();
+                if let Some(hook) = hook {
+                    hook();
+                }
+            }
             let initial = {
                 let preparation = owner.preparation.lock().map_err(|_| UNAVAILABLE)?;
                 preparation.running && preparation.error.is_none()
             };
-            if !initial {
+            if !initial && !storage {
                 let result = self.ensure_history_ready().await;
                 if generation != owner.generation.load(Ordering::Acquire) {
                     return Ok(HistoryReply::Superseded);
@@ -1149,6 +1302,46 @@ impl CaptureRuntime {
             HistoryCaller::MainWindow,
             HistoryKey::Fight(id.clone()),
             move |job| runtime.read_history(job, || None, |reader| reader.get_fight(&id)),
+        )
+        .await
+    }
+    pub async fn get_run_player(
+        self: &Arc<Self>,
+        run_id: String,
+        player_id: String,
+    ) -> Result<HistoryReply<Option<RunPlayerView>>, String> {
+        let runtime = self.clone();
+        self.submit_history(
+            HistoryCaller::MainWindow,
+            HistoryKey::RunPlayer(run_id.clone(), player_id.clone()),
+            move |job| {
+                runtime.read_history(
+                    job,
+                    || None,
+                    |reader| reader.get_run_player(&run_id, &player_id),
+                )
+            },
+        )
+        .await
+    }
+    pub async fn get_player_context(
+        self: &Arc<Self>,
+        scope_id: String,
+        player_id: String,
+        from: Option<Timestamp>,
+        until: Option<Timestamp>,
+    ) -> Result<HistoryReply<Option<PlayerContextView>>, String> {
+        let runtime = self.clone();
+        self.submit_history(
+            HistoryCaller::MainWindow,
+            HistoryKey::PlayerContext(scope_id.clone(), player_id.clone(), from, until),
+            move |job| {
+                runtime.read_history(
+                    job,
+                    || None,
+                    |reader| reader.get_player_context(&scope_id, &player_id, from, until),
+                )
+            },
         )
         .await
     }

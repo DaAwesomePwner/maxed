@@ -8,9 +8,10 @@ use rusqlite::params;
 
 const MAX_STRIP_BYTES: usize = 256 * 1024;
 // Project only strip fields: full fights can contain megabytes of series/sources.
-const FIGHTS: &str = "WITH strip AS (
+pub(crate) const FIGHTS: &str = "WITH strip AS (
     SELECT json_object(
         'fight_id',f.id,
+        'dps_basis',coalesce(json_extract(f.json,'$.dps_basis'),'whole_target_v0'),
         'target_type',json_extract(s.json,'$.target_type'),
         'target_name',json_extract(s.json,'$.target_name'),
         'boss_type',f.boss_type,

@@ -260,14 +260,14 @@ describe('browser-authoritative history', () => {
 
 describe('safe addresses and feature boundaries', () => {
   it.each(['#/runs/%', '#/runs/%00', '#/runs/', '#/loot/65536', '#/fights/f/players/-0', '#/fights/f/players/NaN', '#/nope'])('recovers invalid address %s', (hash) => {
-    expect(parseRoute(hash, { lootBrowsing: true, logs: false, stats: false }).kind).toBe('not-found');
+    expect(parseRoute(hash, { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false }).kind).toBe('not-found');
   });
   it('round trips encoded IDs and gates direct Loot/item URLs', () => {
     const route: Route = { kind: 'fight', runId: 'run/# %', id: 'fight/日本語' };
     expect(parseRoute(routeHref(route))).toEqual(route);
-    expect(parseRoute('#/loot', { lootBrowsing: false, logs: false, stats: false }).kind).toBe('not-found');
-    expect(parseRoute('#/loot/12', { lootBrowsing: false, logs: false, stats: false }).kind).toBe('not-found');
-    expect(parseRoute('#/loot/12', { lootBrowsing: true, logs: false, stats: false })).toEqual({ kind: 'item', type: 12 });
+    expect(parseRoute('#/loot', { lootBrowsing: false, logs: false, stats: false, party: false, character: false, homeRedesign: false }).kind).toBe('not-found');
+    expect(parseRoute('#/loot/12', { lootBrowsing: false, logs: false, stats: false, party: false, character: false, homeRedesign: false }).kind).toBe('not-found');
+    expect(parseRoute('#/loot/12', { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false })).toEqual({ kind: 'item', type: 12 });
   });
 });
 

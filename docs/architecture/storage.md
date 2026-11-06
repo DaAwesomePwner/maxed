@@ -53,11 +53,15 @@ not delete history; active readers may keep committed pages in the WAL.
 
 ## Schema and recovery
 
-Migrations 001–012 are transactional, with their SHA-256 script checksums and `user_version`
+Migrations 001–016 are transactional, with their SHA-256 script checksums and `user_version`
 written together. Unknown existing databases, changed checksums, and future schema
 versions are rejected. Foreign keys are enabled on all connections. Readers open
 read-only and query-only, with the same bounded busy timeout, and cannot move across
 threads. Chat messages and chat alerts have the bounded retention described below; other summary history has no age-based purge.
+
+Migration 015 is index-only: it adds indexes for loot statistics and dry-streak
+gap reads. It does not rewrite saved fight JSON; fights recorded before the
+party bucket fields were introduced still have no party-average line.
 
 Writer startup closes interrupted sessions/runs/fights through deterministic new
 recovery streams. Interrupted runs retain their completion/death facts; an otherwise
@@ -66,8 +70,35 @@ Recovery emits no new death event. Already closed historical rows remain unchang
 Recovering an interrupted run never shortens its session's already recorded end.
 An open reader alone never performs recovery or migration.
 
+Migration 016 adds empty maintenance/backup metadata and binary receipt tables.
+It does not scan or copy legacy receipts, build an index over them, back up history,
+delete detail, or run VACUUM. Exact v12/v14/v15 histories can start capture without
+requesting maintenance. v12 still pays the existing 013/014 upgrade cost; v12/v14
+also build main’s shipped 015 loot indexes. All three versions still run
+interrupted-session recovery. Installed v1–v10 histories
+require the explicit stopped **Back up and upgrade** action before either native
+entry point opens history. Unknown or insufficient destination space and cancellation
+leave that upgrade pending and capture blocked; there is no backup bypass.
+
+New receipts store the same canonical SHA-256 digest as 32 bytes, keyed by an
+interned stream and sequence in a WITHOUT ROWID table. During conversion retries
+check both formats and reject conflicts; copy, verification, legacy deletion and
+cursor advancement commit together. Settings explicitly requests conversion and its
+verified Online Backup API backup. Restart can resume an unpaused requested job;
+cancellation requires explicit resume. Every receipt remains an idempotency proof,
+and all fight detail, players, sources and history readers remain authoritative.
+
+The first destructive operation retains an initial verified backup; later classes
+or renewals use at most one rolling slot. A failed replacement preserves the previous
+ready image. Backups include committed WAL and have private manifests; database
+backups do not include settings and post-016 backups are not exact v12/v14/v15 downgrade
+images. Failed jobs never automatically rewind the live database. See
+[storage maintenance](../development/storage-maintenance.md) for stopped restore,
+space accounting, measured synthetic costs and pending owner acceptance.
+
 Character aliases rewrite run/fame/death identity references and the entry snapshot
-ID while retaining historical name, gear, and stats. Combat player IDs are independent;
+ID while retaining historical name, gear, and stats. Merges also re-key stored player
+profiles, gear logs, and timelines. Combat player IDs are independent;
 no player is joined by name. Run revisions replace child rows atomically. Drop appearances are retained by
 `(drop_id, slot, item_type)`; revisions cannot erase them. `taken_observed_at`
 records the first observed removal/replacement and remains on reappearance.
@@ -86,7 +117,8 @@ Completion timeline IDs are stable facts, so stronger evidence revises one entry
   the same filter and sort. Missing IDs return None; malformed queries return a safe
   InvalidEvent error.
 - `get_run`: one read transaction, fixed queries for the frozen entry snapshot,
-  fights with embedded players/sources/buckets, drops, timeline, and comparison.
+  lightweight fight summaries, scalar run totals, drops, timeline, and comparison.
+  Full fight/player drill-down is loaded separately.
   Each story collection is limited to 10,000 rows, and JSON collections/pages to
   32 MiB of serialized data; excess is an explicit error,
   never a silently truncated story. No per-player or per-source query loop exists.
@@ -95,9 +127,9 @@ Completion timeline IDs are stable facts, so stronger evidence revises one entry
 - `home_summary`: one transaction; counts run starts in the scope and counts actual
   death events independently, including deaths after clears. Best drop requires a
   recorded rank, with newest/ID ties. Top fight requires exactly one local row and
-  recorded DPS; eligible complete, finalized, unestimated fights beat partial ones.
-  A fallback preserves `complete_capture`, issues, open state, and source estimate
-  reasons: UI must show that evidence and must not label it a personal best.
+  recorded DPS with the current player-active-window basis. Top Active DPS requires
+  complete, ended, issue-free fights with at least 20 seconds between the fight's
+  first and last hit; this is not the local player's active-window duration.
 - Today boundaries are supplied by the caller using local midnight/DST, never an
   assumed 24-hour window. Runs, fights, drops, fame and deaths use explicit session
   IDs in Session scope. Fame and runless deaths inherit the most recent SessionUpdated
@@ -115,12 +147,12 @@ Completion timeline IDs are stable facts, so stronger evidence revises one entry
   samples share `max(0, 120 - mandatory endpoints)` proportionally within segments.
   If mandatory endpoints exceed 512, discard oldest whole segments until the newest
   remaining segments fit. Points remain chronological; `fame_sampled` reports omitted
-  samples. Delta still uses all scoped samples, never the sampled chart. Each Session
-  baseline is the newest sample not owned by that session and strictly before the
-  character's first owned sample, including when that sample precedes the recorded
-  session start. Today uses the newest sample before its supplied midnight. Characters
-  without a baseline contribute no delta; the result is None when no baseline exists
-  or the sum cannot fit i32.
+  samples. Delta still uses all scoped samples, never the sampled chart. Each
+  character's baseline is its first scoped sample, so fame earned while Maxed was not
+  capturing, or before Today's supplied midnight, is not credited to the scope. The
+  result is None when there are no scoped samples or the sum cannot fit i32.
+  `fame_characters` gives each character's first and latest scoped sample, also
+  unsampled, ordered by latest sample; the Home Fame tile reads it.
 - Clear comparison requires at least three earlier same-dungeon Cleared runs and
   observed positive `completed_at - started` durations. Victory or dialogue supports
   observed timing; counter-only next-area fallback timing is excluded, even when
@@ -152,6 +184,15 @@ No owner recording, client asset, gameplay, or power-loss hardware test is invol
 | 010 | `010_map_visits.sql` | Map visits and session-start query index |
 | 011 | `011_exclude_junk_bags.sql` | Remove excluded junk-bag drops and related items, timeline entries and alerts |
 | 012 | `012_event_fts.sql` | Event-name FTS5 index, synchronization triggers and backfill |
+| 013 | `013_player_profiles.sql` | Scope player profiles, gear changes and damage timelines |
+| 014 | `014_party.sql` | Party history and run members, backfilled from saved runs |
+| 015 | `015_loot_stats_indexes.sql` | Index-only migration for loot statistics and dry-streak gaps |
+| 016 | `016_maintenance_receipts.sql` | Additive maintenance jobs, backup metadata, stream registry and binary receipts |
+
+The coordinator measured the migration 014 backfill at 0.30 s on a copy of a
+412 MB real database with 89 runs, producing 1,383 players and 2,849 member rows.
+This measurement applied the raw SQL for 013+014 with Python sqlite3, outside the
+app's migrate path; it is not an app migration timing measurement.
 
 Scripts live in [maxed-store/migrations](../../crates/maxed-store/migrations). Alert claims become visible only after commit; replay/demo contexts suppress external celebrations. Home keeps its Session/Today scoped loot queries; the Loot tab uses separate filtered and all-time history reads through the same history scheduler. These are observations, not an account inventory or proof of who took an item. See [personal bests](personal-bests.md) for revision and migration semantics.
 
@@ -178,7 +219,7 @@ Item place groups expose optional `runs_since`: ended runs started after the lat
 
 The chase list is local `settings.json` data in `AppSettings.loot.chase`, with at most 100 entries containing `item_type`, optional `dungeon` and `pinned_at`. `set_chase_list` patches settings; an ordinary Settings save preserves the current chase list so a stale form cannot overwrite pins. No chase history table is added.
 
-Settings remain version 1. The `loot` field uses `#[serde(default)]`, so older settings load with an empty chase list. **Downgrading is not settings-compatible:** an older Maxed build rejects a settings file saved by this build because its `deny_unknown_fields` contract does not recognize `loot`.
+Settings remain version 1. The `loot` and `party` fields use `#[serde(default)]`, so older settings load with an empty chase list and no Party presets. **Downgrading is not settings-compatible:** older builds reject unrecognized `loot`, `chat`, `party` and alert fields under `deny_unknown_fields`. `AppSettings.party` is always serialized, so any settings saved by this build are rejected by older builds, even with no presets.
 
 ## Chat storage and retention
 
@@ -217,7 +258,7 @@ Deleting rows does not shrink the SQLite file; freed pages are reusable.
 Settings remain version 1. `chat` and the three alert fields (`whisper`,
 `guild_message`, `party_message`) use `#[serde(default)]` for older input files.
 An older build with `deny_unknown_fields` rejects settings saved with these
-fields, just as it does with `loot`; downgrading is not settings-compatible.
+fields, just as it does with `loot` and `party`; downgrading is not settings-compatible.
 
 ## Map visits and Stats
 
@@ -236,14 +277,46 @@ for the next map entry.
 
 Each visit's fame window begins at its start, stops before the next visit's start
 in that session, and includes its own end when that comes first. The baseline is
-the character's last sample strictly before the visit; without it, the first
-sample in the window is the baseline and the UI marks the result “≥”. The final
-visit includes a fame sample at session end. With complete visits and baselines,
-these deltas add up to Home's session fame; missing map coverage is shown as
-Unrecorded in session detail. Backfilled runs cannot absorb later realm fame.
+the character's last sample in the same session strictly before the visit;
+without it, the first sample in the window is the baseline. Fame earned between
+sessions is never credited. The final visit includes a fame sample at session end.
+Session fame uses Home's rule, so a session's visits add up to Home's session fame;
+missing map coverage is shown as Unrecorded in session detail. Backfilled runs
+cannot absorb later realm fame.
 Fame/hour is unavailable below five minutes of recorded time.
 
 Stats uses the shared history reader: Maps and Dungeons return at most 200 rows,
 Sessions pages contain 1–100 rows, and session detail/export includes at most
 500 runs. Session CSV export is capped at 10,000 rows. Exports are local saves
 through the native dialog; paths, player names and CSV contents are not logged.
+
+## Player observations
+
+Migration 013 stores `player_profiles` by `(scope_id, player_id)` with indexed
+`(run_id, player_id)` lookup. The optional run ID is plain text: a missing run row
+must not reject an observation or its transaction. Profiles retain the latest
+observed JSON plus object ID, local-player flag and first/last-seen timestamps.
+
+`PlayerObserved` upserts the profile and records starting gear or an equipment
+change in `player_gear_log` at `last_seen`. Each scope/player log retains at most
+64 rows: the first 63 changes and the latest gear. Equipment JSON is a list of
+`EquipmentView` values.
+
+`ScopeTimelineUpdated` writes bucket bounds, party totals/active counts, and
+compacted/disabled flags to `scope_timelines`; `player_timelines` stores object ID,
+local-player flag and points per scope/player. Partial updates upsert only supplied
+players; omitted rows keep their existing points, even if shorter than the updated
+bucket list. Full updates replace every player row for that scope. A disabled
+update deletes the scope's player rows and stores empty buckets with the disabled
+flag. Character merges use `UPDATE OR REPLACE` to re-key all three player tables.
+
+## Clear party history
+
+Clear party history is available in Settings even while the Party tab is hidden,
+and in Party › Players when enabled. It deletes `party_run_members` and
+`party_players` history, keeping marks and notes unless **Also clear marks and
+notes** is ticked. When marks and notes are kept, each marked or noted player's
+`party_players` row keeps their name and first and last seen times. Only the last
+profile, scope and map are removed from that row. It also deletes other players' `player_profiles`,
+`player_gear_log` and `player_timelines`. It never deletes local player data,
+runs, fights, chat or events.

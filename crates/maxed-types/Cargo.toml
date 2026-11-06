@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "maxed-types"
 description = "Shared domain contracts and generated UI bindings for Maxed."
 version.workspace = true
@@ -13,5 +14,15 @@ thiserror.workspace = true
 semver = "=1.0.28"
 [dev-dependencies]
 serde_json.workspace = true
+toml = "=0.8.2"
 [dependencies.ts-rs]
 workspace = true
+
+# Merge ordinary integration suites; retain documented or process-isolated targets.
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[[test]]
+name = "export_bindings"
+path = "tests/export_bindings.rs"

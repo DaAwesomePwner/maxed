@@ -6,7 +6,7 @@
   import { routeHref } from '../navigation/routes';
   import { chatLineLabel } from './presentation';
   import '../styles/controls.css';
-  let { rows, selectedId, onSelect, onOnly, onHide }: { rows: ChatRow[]; selectedId: string | null; onSelect: (id: string) => void; onOnly: (sender: string) => void; onHide: (sender: string) => void } = $props();
+  let { rows, counts = {}, selectedId, onSelect, onOnly, onHide }: { rows: ChatRow[]; counts?: Record<string, number>; selectedId: string | null; onSelect: (id: string) => void; onOnly: (sender: string) => void; onHide: (sender: string) => void } = $props();
   let copied = $state('');
   let items = $derived(placeGroups(rows, new Date()));
   function select(event: MouseEvent | KeyboardEvent, row: ChatRow) {
@@ -32,7 +32,7 @@
         <tr data-row-id={message.id} tabindex="0" aria-selected={selectedId === message.id} class:selected={selectedId === message.id} class:hidden={row.hidden} onclick={event => select(event, row)} onkeydown={event => select(event, row)}>
           <td>{clockTime(message.at)}</td><td><span class="ch {tag}">{channelTagLabel[tag]}</span></td>
           <td class:local={message.is_local}><strong title={chatLineLabel(message)}>{chatLineLabel(message)}</strong>{#if !message.is_local && message.stars != null}<small>★ {message.stars}</small>{/if}{#if message.is_local}<span class="you">you</span>{/if}</td>
-          <td class="message">{message.text}{message.truncated ? '…' : ''}</td>
+          <td class="message">{message.text}{message.truncated ? '…' : ''}{#if (counts[message.id] ?? 1) > 1} <small class="repeat" title="Consecutive identical messages from this sender">×{counts[message.id]}</small>{/if}</td>
           <td><div class="actions"><button class="ctl ghost" onclick={() => onOnly(message.sender)}>Only</button>{#if message.sender_kind === 'player' && !message.is_local}<button class="ctl ghost" aria-label={`Hide ${message.sender}`} onclick={() => onHide(message.sender)}>Hide</button>{/if}<button class="ctl ghost" onclick={() => copy(row)}>Copy</button></div></td>
         </tr>
       {/if}
@@ -40,6 +40,7 @@
   </tbody>
 </table>
 <style>
+  .repeat { white-space: nowrap; color: var(--text-muted); }
   table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
   .time { width: 68px; } .channel { width: 70px; } .sender { width: 150px; } .actions-col { width: 136px; }
   th { text-align: left; color: var(--text-muted); font-size: 11px; font-weight: 500; padding: 0 6px 6px; }

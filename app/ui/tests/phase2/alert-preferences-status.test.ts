@@ -9,9 +9,10 @@ import type { AppSettings } from '../../src/lib/bindings/AppSettings';
 import { deferred, microtasks, preferences } from './fixtures';
 
 afterEach(cleanup);
-const settings = (): AppSettings => ({ version: 1, adapter_id: null, assets_path: null,
+const settings = (): AppSettings => ({ party: { presets: [], default_preset_id: null }, version: 1, adapter_id: null, assets_path: null,
+  recap_image: { names: true, loot: true, fights: true },
   save_recordings: false, recording_limit_bytes: 1000000000, update_channel: 'stable',
-  hardware_acceleration: false, alerts: preferences(), chat: { store: { public: true, guild: true, party: true, whisper: true }, retention_days: 90, hidden_senders: [], hidden_keywords: [] }, loot: { chase: [] } });
+  hardware_acceleration: false, alerts: preferences(), chat: { store: { public: true, guild: true, party: true, whisper: true }, retention_days: 90, hidden_senders: [], hidden_keywords: [], filter_spam: true }, loot: { chase: [] } });
 
 it('publishes explicit loading, failed, retry and ready states', async () => {
   const read = deferred<AppSettings>();

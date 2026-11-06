@@ -1,5 +1,13 @@
+import CollectionChaseList from '../../src/lib/loot/CollectionChaseList.svelte';
+import { createClient } from '../../src/lib/bridge/client';
+import { createFixtureTransport } from '../../src/lib/bridge/fixture';
+import { homeSnapshot } from '../home/fixtures';
+import { render } from '@testing-library/svelte';
+import CollectionGrid from '../../src/lib/loot/CollectionGrid.svelte';
+import { emptyHomeVisuals } from '../../src/lib/home/visuals';
+import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { expect, it } from 'vitest';
-import { chaseOrder, collectionKpis, dungeonList, sortCells } from '../../src/lib/loot/collection-screen';
+import { collectionDungeons, chaseOrder, collectionKpis, dungeonList, sortCells } from '../../src/lib/loot/collection-screen';
 import type { ChaseRow } from '../../src/lib/bindings/ChaseRow';
 import type { CollectionCell } from '../../src/lib/bindings/CollectionCell';
 import { clockWhen } from '../../src/lib/loot/loot-format';
@@ -60,4 +68,42 @@ it('uses only settings for KPIs when collection observations are unavailable', (
   const { cells } = collectionKpis(null, [row(1, 12, '10').item], 'A');
   expect(cells.map(cell => cell.value)).toEqual(['1', '—', '—', '—']);
   expect(cells.every(cell => cell.sub === null)).toBe(true);
+});
+
+it('opens catalog-level hover cards from collection item links', () => {
+  const page = render(CollectionGrid, { dungeon: 'Invented Hall', dungeons: ['Invented Hall'], cells: [{ item_type: 101, tier: 'UT', count: 3, last_at: '2000000' }], visuals: emptyHomeVisuals(), ready: true, onChange: () => {}, chase: [], sort: 'seen', onSort: () => {}, portals: new Map() });
+  const tile = page.container.querySelector('[data-row-id="collection-101"]')!;
+  expect(tile.getAttribute('data-item-hover')).toBe('101');
+  expect(tile.hasAttribute('title')).toBe(false);
+  expect(tile.querySelector('.name')?.hasAttribute('title')).toBe(false);
+  expect(itemHoverParams(tile)).toEqual({ type: 101, name: '#101', tier: 'UT' });
+  expect(page.container.querySelector('nav button')?.getAttribute('title')).toBe('Invented Hall');
+});
+
+it('opens a catalog-level hover on a chase item while keeping observation titles', async () => {
+  const client = createClient(createFixtureTransport(homeSnapshot()));
+  const settings = await client.querySettings();
+  const chaseRow = { ...row(101, 12, '1000000'), last_at: '2000000' };
+  chaseRow.item.dungeon = 'Invented Hall';
+  settings.loot.chase = [chaseRow.item];
+  const visuals = { ...emptyHomeVisuals(), objects: [
+    { object_type: 101, name: 'Invented sword', item_tier: 'UT', sprite: null, bag: null },
+  ] };
+  const page = render(CollectionChaseList, { client, settings, rows: [chaseRow], visuals, onSaved: () => {} });
+  const link = page.container.querySelector('a[href="#/loot/item/101"]')!;
+  expect(link.getAttribute('data-item-hover')).toBe('101');
+  expect(link.hasAttribute('title')).toBe(false);
+  expect(itemHoverParams(link)).toEqual({ type: 101, name: 'Invented sword', tier: 'UT' });
+  const cells = link.closest('tr')!.querySelectorAll('td');
+  expect(cells[1].getAttribute('title')).toBe('Invented Hall');
+  expect(cells[3].getAttribute('title')).toBe(clockWhen(chaseRow.last_at, new Date()));
+  expect(cells[4].querySelector('.streak')?.getAttribute('title')).toBe('12 runs since last seen');
+});
+
+it('ranks visited dungeons by observed bags then ended visits, retaining missing catalog choices', () => {
+  const dungeon = (name: string, drops: number, visits: number) => ({ dungeon: name, runs_ended: visits, clears: 0,
+    bags: [{ bag_rank: 1, count: drops }], whites: 0, white_runs: 0, avg_runs_per_white: null, longest_dry: visits, runs_since_last_white: null, best: null });
+  expect(collectionDungeons(['Invented A', 'Invented B', 'Invented C'], [
+    dungeon('Invented A', 1, 10), dungeon('Invented B', 9, 1), dungeon('Invented D', 1, 20),
+  ], 'Invented E')).toEqual({ visited: ['Invented B', 'Invented D', 'Invented A'], unvisited: ['Invented C', 'Invented E'] });
 });

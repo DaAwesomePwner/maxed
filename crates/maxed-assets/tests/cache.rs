@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use maxed_assets::{client_fingerprint, load_or_extract, AssetError, AssetPaths, AssetProgress};
 use std::sync::atomic::{AtomicBool, Ordering};
 fn setup() -> (tempfile::TempDir, AssetPaths) {
@@ -662,4 +662,79 @@ fn held_toast_icon_keeps_retirement_retryable() {
         .unwrap()
         .flatten()
         .any(|e| e.path().is_dir() && e.file_name().to_string_lossy().starts_with(".retired-")));
+}
+
+#[test]
+fn character_cache_rejects_v11_and_failed_rebuild_preserves_prior_publication() {
+    let (_dir, paths) = setup();
+    let cancel = AtomicBool::new(false);
+    let cached = load_or_extract(&paths, &cancel, &mut |_| {}).unwrap();
+    let pointer = paths.app_data.join("assets/v1/current");
+    let previous_pointer = std::fs::read(&pointer).unwrap();
+    let manifest_path = cached.root.join("manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    assert_eq!(manifest["version"], 12);
+    manifest["version"] = 11.into();
+    std::fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    assert!(matches!(
+        load_or_extract(&paths, &cancel, &mut |_| {}),
+        Err(AssetError::CacheInvalid)
+    ));
+    // A changed source needs a rebuild. Its failure must not publish an empty/neutral catalog.
+    std::fs::write(&paths.resources, b"synthetic invalid Unity source").unwrap();
+    assert!(load_or_extract(&paths, &cancel, &mut |_| {}).is_err());
+    assert_eq!(std::fs::read(&pointer).unwrap(), previous_pointer);
+    assert!(cached.root.join("catalog.json").is_file());
+}
+
+#[test]
+#[cfg(windows)]
+fn unused_v10_and_v11_generations_and_icons_are_pruned_but_never_loaded() {
+    for version in [10, 11] {
+        let (_dir, paths) = setup();
+        let cancel = AtomicBool::new(false);
+        let old = load_or_extract(&paths, &cancel, &mut |_| {}).unwrap();
+        let generation = old.root.clone();
+        let fingerprint = old.catalog.client_fingerprint.clone();
+        let icons = generation
+            .parent()
+            .unwrap()
+            .join("toast-icons")
+            .join(&fingerprint);
+        std::fs::create_dir_all(&icons).unwrap();
+        std::fs::write(icons.join("42.png"), b"synthetic icon").unwrap();
+        let manifest_path = generation.join("manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["version"] = version.into();
+        std::fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        // A reader-held old generation must be refused, not loaded or repaired.
+        assert!(matches!(
+            load_or_extract(&paths, &cancel, &mut |_| {}),
+            Err(AssetError::CacheInvalid)
+        ));
+        let mut bytes = common::fixture();
+        let at = bytes.windows(10).position(|b| b == b"<Objects/>").unwrap();
+        bytes[at..at + 10].copy_from_slice(b"<Grounds/>");
+        std::fs::write(&paths.resources, bytes).unwrap();
+        let current = load_or_extract(&paths, &cancel, &mut |_| {}).unwrap();
+        assert_ne!(current.root, generation);
+        assert_eq!(
+            maxed_assets::prune_unused_generations(&paths.app_data, &cancel).unwrap(),
+            0
+        );
+        assert!(generation.join("catalog.json").is_file());
+        assert!(generation.join("characters.png").is_file());
+        assert!(generation.join("tiles.pack").is_file());
+        assert!(icons.is_dir());
+        drop(old);
+        assert_eq!(
+            maxed_assets::prune_unused_generations(&paths.app_data, &cancel).unwrap(),
+            1
+        );
+        assert!(!generation.exists());
+        assert!(!icons.exists());
+        assert!(current.root.join("catalog.json").is_file());
+    }
 }

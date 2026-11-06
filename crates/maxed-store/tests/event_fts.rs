@@ -128,6 +128,7 @@ fn every_name_field_uses_safe_prefix_terms() {
             "killed_by" => (
                 "player_death",
                 InstanceEventKind::PlayerDeath {
+                    player_id: None,
                     player_name: "Kestrel".into(),
                     killed_by: Some(name),
                     level: None,

@@ -1,3 +1,8 @@
+import { render } from '@testing-library/svelte';
+import ItemSideCards from '../../src/lib/loot/ItemSideCards.svelte';
+import ItemHistoryView from '../../src/lib/loot/ItemHistoryView.svelte';
+import { emptyHomeVisuals } from '../../src/lib/home/visuals';
+import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { expect, it } from 'vitest';
 import type { ItemHistory } from '../../src/lib/bindings/ItemHistory';
 import { itemKpis, shareRows } from '../../src/lib/loot/item-screen';
@@ -60,4 +65,31 @@ it('scales shares to the maximum without mutating the input', () => {
   expect(rows[0]).not.toHaveProperty('share');
   expect(shareRows([])).toEqual([]);
   expect(shareRows([{ count: 0 }])).toEqual([{ count: 0, share: 0 }]);
+});
+
+it('passes every recorded variant ID to the hover and retains visible IDs', () => {
+  const item = fixture();
+  const page = render(ItemSideCards, { item, visuals: emptyHomeVisuals(), now: new Date() });
+  const cells = page.container.querySelectorAll('table[aria-label="Enchants"] th');
+  expect(cells).toHaveLength(item.enchant_variants.length);
+  for (const [index, cell] of [...cells].entries()) {
+    const variant = item.enchant_variants[index];
+    expect(cell.getAttribute('data-item-hover')).toBe('101');
+    expect(cell.hasAttribute('title')).toBe(false);
+    expect(cell.querySelector('.ids')?.hasAttribute('title') ?? false).toBe(false);
+    expect(itemHoverParams(cell)).toEqual({ type: 101, enchant: { state: variant.state, slots: null, applied: variant.applied, ids: variant.ids } });
+  }
+  expect(cells[0].textContent).toContain('(#1, #2)');
+});
+it('limits item history hover params to the header tile and heading', () => {
+  const page = render(ItemHistoryView, { itemType: 101 });
+  const header = page.container.querySelector('header')!;
+  expect(header.hasAttribute('data-item-hover')).toBe(false);
+  expect(itemHoverParams(header)).toBeUndefined();
+  for (const anchor of [header.querySelector('.header-tile')!, header.querySelector('h2')!]) {
+    expect(anchor.getAttribute('data-item-hover')).toBe('101');
+    expect(anchor.hasAttribute('title')).toBe(false);
+    expect(itemHoverParams(anchor)).toEqual({ type: 101, name: '#101', tier: undefined });
+  }
+  expect(header.querySelector('.actions a')!.closest('[data-item-hover]')).toBeNull();
 });

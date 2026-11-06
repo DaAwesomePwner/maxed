@@ -89,10 +89,68 @@ Unavailable data stays unavailable:
 - This client supplies no supported local crucible damage-multiplier definitions;
   `crucible_bonuses` is empty, not a fabricated multiplier of one.
 
+## Character metadata: Gate X (2026-10-17)
+
+Evidence revision: RealmShark `27d02b70de1c00616228dbe2f5ca4592c0fb4df0`.
+This is a source-derived reference model, **not verified against the owner's RotMG 7.1.0.2.0 client**.
+No installed XML was available on this Mac. No game XML or extracted catalog is included.
+The linked GUI delegates XML loading to `Equip`/`Weapon`; those same-revision sources are included below.
+
+| Field / question | Evidence and extraction decision |
+| --- | --- |
+| Rate units | `RateOfFire` is a decimal multiplier; 1 means 100%. [GUI lines 445–465][x-gui]. |
+| Item rate and count | Child elements `RateOfFire`, `NumProjectiles`. [Equip lines 49–60][x-equip]. |
+| Subattack | Attribute `projectileId` selects a projectile; child `RateOfFire` overrides item rate. [Equip][x-equip]. |
+| Rate inheritance | Missing subattack rate inherits an explicit item rate. [Weapon lines 29–34][x-weapon]. |
+| Omitted fields | No subattacks + explicit item rate: projectile 0, omitted item count 1. [Weapon][x-weapon]. |
+| Missing subattack count | Missing `NumProjectiles` has no supported positive default. [Weapon][x-weapon]. |
+| Missing rate / reference | No default is adopted for missing item rate or `projectileId`. [Weapon][x-weapon]. |
+| Projectile lookup | Groups resolve the `Projectile` attribute `id`, not list position. [Equip][x-equip]. |
+| Damage | Existing fixed `Damage` and ranged `MinDamage`/`MaxDamage` reconstruction stays intact. |
+| Fire together | Plain subattacks are summed in this reference model. [GUI lines 449–467][x-gui]. |
+| Special schedules | Alternating, charged, burst, conditional and interval semantics are unestablished. |
+| Regen structure | `Enchantment` → `Mutators` → `ActivateOnEquip`, attributes `stat`, `amount`. [Parser][x-parse]. |
+| Regen kind / stat | Text `FlatRegen` or `PercentageRegen`; exact stat `HP` or `MP`. [Parser lines 106–164][x-parse]. |
+| Regen units | Flat amount is units/sec; percentage amount is fraction of maximum/sec, without division by 100. |
+| Regen arithmetic | The fractional coefficient multiplies max HP/MP. [Parser lines 446–547][x-reg]. |
+| Interval units | Neither interval attribute nor conversion is established. Explicit intervals remain unsupported. |
+| Regen defaults | Missing/malformed amount or stat is unknown, never zero. Empty reviewed mutators mean no effect. |
+
+The rate-less display fallback in `Weapon.fix` lines 35–43 invents one bullet per projectile; Maxed deliberately
+rejects it. `ScalingDef.shots` remains ability metadata. Missing XML projectile IDs retain the existing positional
+index only for reconstruction; Character cannot treat that index as established firing evidence. Duplicate IDs
+are rejected even when damage is incomplete. Fractional lifetimes remain unavailable, without losing damage.
+
+Supported firing requires explicit positive finite rates (inherited where above), counts 1–256, resolvable
+projectile IDs and the plain normal-fire shape. Item-level normal fire without subattacks selects index 0 with
+an omitted count of 1. Multiple plain subattacks use the reference's additive model, not verified live timing.
+Unknown item firing structure or subattack attributes/children disable the affected schedule. Unreferenced or
+incomplete projectile definitions prevent complete support; valid independently understood groups remain a
+partial subtotal. Reasons are controlled codes, never XML values or names. Groups and projectile lists are
+bounded to 256. Existing valid projectile definitions remain available to combat reconstruction.
+
+Supported regen effects contain an explicit finite nonnegative amount and HP/MP stat, with no extra attributes
+or nested content. Flat and fractional effects remain separate. Explicit intervals (including an apparent
+one-second interval), unknown mutators, and conditional activations stay unsupported; known independent effects
+remain partial. Reviewed damage/rate/loot/stat-damage mutators establish no regen effect, as does an empty
+mutator list. OOC doubling shown by the reference is excluded from this baseline metadata. No description text
+is interpreted. Unknown metadata from old JSON remains absent, distinct from supported empty effects.
+
+[x-gui]: https://github.com/X-com/RealmShark/blob/27d02b70/src/main/java/tomato/gui/myinfo/MyInfoGUI.java#L445-L467
+[x-equip]: https://github.com/X-com/RealmShark/blob/27d02b70/src/main/java/tomato/gui/myinfo/Equip.java#L49-L105
+[x-weapon]: https://github.com/X-com/RealmShark/blob/27d02b70/src/main/java/tomato/gui/myinfo/Weapon.java#L18-L50
+[x-parse]: https://github.com/X-com/RealmShark/blob/27d02b70/src/main/java/tomato/realmshark/ParseEnchants.java#L92-L174
+[x-reg]: https://github.com/X-com/RealmShark/blob/27d02b70/src/main/java/tomato/realmshark/ParseEnchants.java#L446-L547
+
+Version 12 invalidates version 11 fingerprints and manifests so old additions remain unknown until rebuilding.
+Catalog format stays at 1. Rebuild errors preserve the prior publication; native capture already handles these
+errors with an unavailable catalog and missing-assets coverage (`app/src-tauri/src/runtime/storage.rs:101–110`).
+This extraction change does not alter that fallback or claim live capture verification.
+
 ## Cache and cancellation
 
 Generations live at `<app_data>/assets/v1/<fingerprint>/`. Fingerprints cover
-reader/catalog versions, cache format version 10, the SHA-256 of `rules.rs`,
+reader/catalog versions, cache format version 12, the SHA-256 of `rules.rs`,
 and sorted relative input names, sizes and SHA-256
 content hashes, including selected referenced companion resources. Extraction
 hashes inputs before and after; a client patched during extraction is rejected.
@@ -302,3 +360,22 @@ all 41,392 alpha mismatches that the RGB-only rule cannot explain.
 Sprite references include validated trim rectangles for visible-content fitting. Enchant pips are resolved by name rather than fixed atlas coordinates. Dungeon portal visuals use catalog portal types; missing or ambiguous mappings stay unavailable. Consumables, stacks and object-class metadata prevent a game-supplied UT label from making an ordinary potion a chase item. These fields are part of cache version 10; use the cache fingerprint for UI invalidation.
 
 The crate's [UnityPy license](../../crates/maxed-assets/UNITYPY-LICENSE.txt) and root [notices](../../NOTICE.md) preserve attribution. Asset oracle measurements above are historical, tied to the stated client hash; they do not establish compatibility with another client build.
+
+## Character calculation handoff
+
+Character consumes the reviewed [Gate X metadata](#character-metadata-gate-x-2026-10-17)
+from the same catalog generation as the local observation. Gate X establishes the
+source model above; it does not establish current-client firing or regeneration
+behavior. Task 11's Windows acceptance must verify those coefficients separately.
+Only plain normal fire and independently supported subattacks contribute; charged,
+alternating, burst, conditional and interval schedules remain unavailable. Regen
+retains flat units/sec and fractions of maximum/sec separately, without a percent
+or interval guess. Unknown effects preserve supported partial subtotals, never a
+complete fabricated zero.
+
+Cache version 12 invalidates older metadata; catalog format remains 1. The UI uses
+the catalog fingerprint in calculation revisions and refreshes visual lookups on
+catalog replacement. No game XML or art is included in the Character preview:
+synthetic item names and missing-art fallbacks suffice. Missing catalogs preserve
+observations and link to Settings for extraction; they do not create a new network
+metadata source or change capture behavior.

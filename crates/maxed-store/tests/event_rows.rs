@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::*;
 use maxed_store::{apply_batch, migrate, StoreError};
 use maxed_types::*;
@@ -82,8 +82,8 @@ fn receipts_projection_and_head_commit_together_and_retries_are_exact() {
     let events = story_events();
     apply_batch(&mut db, &events).unwrap();
     apply_batch(&mut db, &events).unwrap();
+    assert_eq!(common::receipts::count(&db), 7);
     for (table, count) in [
-        ("event_receipts", 7),
         ("runs", 1),
         ("fights", 1),
         ("fight_players", 1),
@@ -136,12 +136,7 @@ fn receipts_projection_and_head_commit_together_and_retries_are_exact() {
         ]
     )
     .is_err());
-    assert_eq!(
-        db.query_row("SELECT sequence FROM stream_heads", [], |r| r
-            .get::<_, i64>(0))
-            .unwrap(),
-        7
-    );
+    assert_eq!(common::receipts::head(&db, "test-stream").unwrap(), 7);
     assert!(!db
         .prepare("PRAGMA foreign_key_check")
         .unwrap()
@@ -282,12 +277,7 @@ fn unsafe_numeric_values_and_zero_quantities_are_rejected_atomically() {
         fight.players[0].damage = f64::NAN;
     }
     assert!(apply_batch(&mut db, &events).is_err());
-    assert_eq!(
-        db.query_row("SELECT count(*) FROM event_receipts", [], |r| r
-            .get::<_, i64>(0))
-            .unwrap(),
-        0
-    );
+    assert_eq!(common::receipts::count(&db), 0);
     let mut events = story_events();
     events[0].at = Timestamp(u64::MAX);
     assert!(apply_batch(&mut db, &events).is_err());
@@ -339,15 +329,11 @@ fn transport_events_only_receipt_and_alerts_are_typed_summaries() {
     )
     .unwrap();
     assert_eq!(persisted, alert);
-    let digest: String = db
-        .query_row(
-            "SELECT digest FROM event_receipts WHERE sequence=8",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap();
-    assert_eq!(digest.len(), 64);
-    assert!(!digest.contains("synthetic-sensitive"));
+    let digest = common::receipts::lookup(&db, "test-stream", 8).unwrap();
+    assert_eq!(digest.len(), 32);
+    assert!(!digest
+        .windows(b"synthetic-sensitive".len())
+        .any(|part| part == b"synthetic-sensitive"));
 }
 
 #[test]
@@ -366,12 +352,7 @@ fn real_sqlite_full_and_readonly_do_not_commit_a_receipt() {
         apply_batch(&mut db, &[event]),
         Err(StoreError::Full)
     ));
-    assert_eq!(
-        db.query_row("SELECT count(*) FROM event_receipts", [], |r| r
-            .get::<_, i64>(0))
-            .unwrap(),
-        0
-    );
+    assert_eq!(common::receipts::count(&db), 0);
     drop(db);
     let mut readonly =
         Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
@@ -408,21 +389,8 @@ fn death_with_missing_run_is_invalid_and_rolls_back_the_batch() {
             .unwrap(),
         0
     );
-    assert_eq!(
-        db.query_row(
-            "SELECT sequence FROM stream_heads WHERE stream_id='test-stream'",
-            [],
-            |r| r.get::<_, i64>(0)
-        )
-        .unwrap(),
-        7
-    );
-    assert_eq!(
-        db.query_row("SELECT count(*) FROM event_receipts", [], |r| r
-            .get::<_, i64>(0))
-            .unwrap(),
-        7
-    );
+    assert_eq!(common::receipts::head(&db, "test-stream").unwrap(), 7);
+    assert_eq!(common::receipts::count(&db), 7);
     apply_batch(&mut db, &[death(8, Some("demo-run".into()))]).unwrap();
     assert_eq!(
         db.query_row("SELECT session_id FROM deaths", [], |r| r

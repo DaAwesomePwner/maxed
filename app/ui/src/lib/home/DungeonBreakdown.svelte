@@ -14,7 +14,7 @@
 
 <section class="dungeon-breakdown" aria-labelledby={`${id}-title`}>
   <header><h2 id={`${id}-title`}>By dungeon</h2>
-    {#if allTimeHref}<a href={allTimeHref}>See all time</a>{/if}
+    {#if allTimeHref}<a class="history-link" href={allTimeHref}>All time ›</a>{/if}
     {#if pages > 1}<nav aria-label="Dungeon Pages">
       <button type="button" aria-label="Previous Dungeons" aria-disabled={current === 0} onclick={() => { if (current > 0) page = current - 1; }}>&lsaquo;</button>
       <span>{current + 1}/{pages}</span>

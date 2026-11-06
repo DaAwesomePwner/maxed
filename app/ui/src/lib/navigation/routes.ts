@@ -4,15 +4,19 @@ export type ChatTab = 'all' | 'guild' | 'party' | 'whisper';
 export type LootView = 'feed' | 'stats' | 'collection';
 export type Route =
   | { kind: 'stats'; view: StatsView; sessionId?: string }
-  | { kind: 'home' | 'runs' | 'alerts' | 'settings' | 'setup' | 'not-found' }
+  | { kind: 'character' | 'home' | 'runs' | 'alerts' | 'settings' | 'setup' | 'not-found' }
   | { kind: 'logs'; view: LogsView; channel: ChatTab; runId?: string; partner?: string; seedSender?: string }
   | { kind: 'loot'; view: LootView; seed?: { place?: string; item?: number } }
   | { kind: 'run'; id: string; point?: 'death' }
   | { kind: 'fight'; id: string; runId?: string }
   | { kind: 'player'; fightId: string; objectId: number; runId?: string }
+  | { kind: 'run-player'; runId: string; playerId: string }
+  | { kind: 'party-live' | 'party-players' | 'party-presets' }
+  | { kind: 'party-run'; runId: string }
+  | { kind: 'party-player'; key: string }
   | { kind: 'item'; type: number };
 
-export interface Features { lootBrowsing: boolean; logs: boolean; stats: boolean }
+export interface Features { lootBrowsing: boolean; logs: boolean; stats: boolean; party: boolean; homeRedesign: boolean; character: boolean }
 /** Saved relationship reported by the current detail route, never inferred from its URL. */
 export interface FightRelationship {
   entryKey: string;
@@ -21,7 +25,7 @@ export interface FightRelationship {
   fightId: string | null;
   runId: string | null;
 }
-export const productionFeatures: Features = { lootBrowsing: true, logs: true, stats: true };
+export const productionFeatures: Features = { lootBrowsing: true, logs: true, stats: true, party: true, homeRedesign: true, character: true };
 const validId = (id: string) => id.length > 0 && id.length <= 256 && !/[\u0000-\u001f\u007f]/.test(id);
 const validName = (name: string) => name.length > 0 && new TextEncoder().encode(name).length <= 32 && !/[\u0000-\u001f\u007f-\u009f]/.test(name);
 const numeric = (id: string, max: number) => /^\d+$/.test(id) && Number.isSafeInteger(Number(id)) && Number(id) <= max;
@@ -49,7 +53,13 @@ export function routeHref(route: Route): string {
       if (route.view === 'sessions' && route.sessionId) return `#/stats/sessions/${encode(route.sessionId)}`;
       return route.view === 'maps' ? '#/stats' : `#/stats/${route.view}`;
     case 'home': return '#/';
+    case 'party-live': return '#/party';
+    case 'party-run': return `#/party/runs/${encode(route.runId)}`;
+    case 'party-players': return '#/party/players';
+    case 'party-player': return `#/party/players/${encode(route.key)}`;
+    case 'party-presets': return '#/party/presets';
     case 'run': return `#/runs/${encode(route.id)}${route.point ? `/${route.point}` : ''}`;
+    case 'run-player': return `#/runs/${encode(route.runId)}/players/${encode(route.playerId)}`;
     case 'fight': return `${route.runId ? `#/runs/${encode(route.runId)}` : '#'}/fights/${encode(route.id)}`;
     case 'player': return `${routeHref({ kind: 'fight', id: route.fightId, runId: route.runId })}/players/${route.objectId}`;
     case 'loot':
@@ -68,6 +78,15 @@ export function parseRoute(hash: string, features: Features = productionFeatures
     const parts = hash.slice(2).split('/').map(decodeURIComponent);
     if (!parts.every(validId)) return { kind: 'not-found' };
     const [root, id] = parts;
+    if (root === 'character' && parts.length === 1) return { kind: features.character ? 'character' : 'home' };
+    if (root === 'party') {
+      if (!features.party) return { kind: 'home' };
+      if (parts.length === 1) return { kind: 'party-live' };
+      if (parts.length === 2 && id === 'players') return { kind: 'party-players' };
+      if (parts.length === 2 && id === 'presets') return { kind: 'party-presets' };
+      if (parts.length === 3 && id === 'runs') return { kind: 'party-run', runId: parts[2] };
+      if (parts.length === 3 && id === 'players') return { kind: 'party-player', key: parts[2] };
+    }
     if (features.logs && parts.length === 1 && root === 'alerts') return { kind: 'logs', view: 'alerts', channel: 'all' };
     if (root === 'logs' && features.logs) {
       if (parts.length === 3 && id === 'from' && validName(parts[2])) return { kind: 'logs', view: 'chat', channel: 'all', seedSender: parts[2] };
@@ -94,6 +113,7 @@ export function parseRoute(hash: string, features: Features = productionFeatures
       if (parts.length === 2 && numeric(id, 65535)) return { kind: 'item', type: Number(id) };
     }
     if (root === 'runs' && parts.length === 2) return { kind: 'run', id };
+    if (parts.length === 4 && root === 'runs' && parts[2] === 'players') return { kind: 'run-player', runId: id, playerId: parts[3] };
     if (root === 'runs' && parts.length === 3 && parts[2] === 'death') return { kind: 'run', id, point: 'death' };
     const nested = root === 'runs' && parts[2] === 'fights';
     const fight = nested ? parts.slice(2) : parts;
@@ -110,14 +130,23 @@ export function parseRoute(hash: string, features: Features = productionFeatures
 }
 
 export function routeTitle(route: Route): string {
-  return ({ stats: 'Stats', home: 'Home', runs: 'Runs', run: 'Run', fight: 'Fight', player: 'Player', loot: 'Loot', item: 'Item', alerts: 'Alerts', logs: 'Logs', settings: 'Settings', setup: 'Setup', 'not-found': 'Page Not Found' })[route.kind];
+  if (route.kind === 'party-live' || route.kind === 'party-run' || route.kind === 'party-players' || route.kind === 'party-player' || route.kind === 'party-presets') return 'Party';
+  return ({ character: 'Character', stats: 'Stats', home: 'Home', runs: 'Runs', run: 'Run', fight: 'Fight', player: 'Player', 'run-player': 'Player', loot: 'Loot', item: 'Item', alerts: 'Alerts', logs: 'Logs', settings: 'Settings', setup: 'Setup', 'not-found': 'Page Not Found' })[route.kind];
 }
 
-export function breadcrumbs(route: Route): { label: string; href?: string }[] {
+export function breadcrumbs(route: Route, dungeon?: string): { label: string; href?: string }[] {
   const result = [{ label: 'Home', href: '#/' }];
   if (route.kind === 'home') return result;
-  if (['run', 'fight', 'player'].includes(route.kind)) result.push({ label: 'Runs', href: '#/runs' });
-  if ((route.kind === 'fight' || route.kind === 'player') && route.runId) result.push({ label: 'Run', href: routeHref({ kind: 'run', id: route.runId }) });
+  if (route.kind.startsWith('party-')) {
+    result.push({ label: 'Party', href: '#/party' });
+    if (route.kind === 'party-run') result.push(
+      { label: dungeon ?? 'Run', href: routeHref({ kind: 'run', id: route.runId }) },
+      { label: 'Party run', href: routeHref(route) },
+    );
+    return result;
+  }
+  if (['run', 'fight', 'player', 'run-player'].includes(route.kind)) result.push({ label: 'Runs', href: '#/runs' });
+  if ((route.kind === 'fight' || route.kind === 'player' || route.kind === 'run-player') && route.runId) result.push({ label: 'Run', href: routeHref({ kind: 'run', id: route.runId }) });
   if (route.kind === 'player') result.push({ label: 'Fight', href: routeHref({ kind: 'fight', id: route.fightId, runId: route.runId }) });
   if (route.kind === 'item' || (route.kind === 'loot' && route.view !== 'feed')) result.push({ label: 'Loot', href: '#/loot' });
   const logsChild = route.kind === 'logs' && !(route.view === 'chat' && route.channel === 'all' && !route.runId && !route.seedSender);
@@ -126,7 +155,7 @@ export function breadcrumbs(route: Route): { label: string; href?: string }[] {
   const statsChild = route.kind === 'stats' && route.view !== 'maps';
   if (statsChild) result.push({ label: 'Stats', href: '#/stats' });
   if (route.kind === 'stats' && route.sessionId) result.push({ label: 'Sessions', href: '#/stats/sessions' });
-  const label = route.kind === 'stats' ? (route.sessionId ? 'Session' : route.view === 'sessions' ? 'Sessions' : route.view === 'dungeons' ? 'Dungeons' : 'Stats') : logsChild ? logsLabels[route.view] : route.kind === 'loot' && route.view !== 'feed' ? (route.view === 'stats' ? 'Stats' : 'Collection') : routeTitle(route);
+  const label = route.kind === 'stats' ? (route.sessionId ? 'Session' : route.view === 'sessions' ? 'Sessions' : route.view === 'dungeons' ? 'Dungeons' : 'Stats') : logsChild ? logsLabels[route.view] : route.kind === 'loot' && route.view !== 'feed' ? (route.view === 'stats' ? 'Drop rates' : 'Collection') : routeTitle(route);
   result.push({ label, href: routeHref(route) });
   return result;
 }

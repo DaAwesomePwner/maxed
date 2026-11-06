@@ -1,7 +1,8 @@
 //! Last-good catalog leases, bounded presentation lookup and local PNG delivery.
 use maxed_assets::{AssetError, AssetPaths, AssetProgress, CachedCatalog};
 use maxed_types::{
-    AssetCheck, Catalog, ExtractionStage, ItemMatch, ObjectVisual, SetupStatus, VisualPage,
+    AssetCheck, Catalog, EnchantInfo, ExtractionStage, ItemDetail, ItemDetailPage, ItemMatch,
+    ObjectVisual, PotionStat, SetupStatus, VisualPage,
 };
 use std::{
     collections::BTreeSet,
@@ -128,6 +129,19 @@ impl AssetBridge {
                     .items
                     .iter()
                     .map(|item| (item.object_type, item.tier.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn potion_stats(&self) -> Vec<(u16, PotionStat)> {
+        self.cache()
+            .map(|cache| {
+                cache
+                    .catalog
+                    .items
+                    .iter()
+                    .filter_map(|item| item.potion_stat.map(|stat| (item.object_type, stat)))
                     .collect()
             })
             .unwrap_or_default()
@@ -337,6 +351,14 @@ impl AssetBridge {
         let cache = self.cache().ok_or("Client assets are not available yet.")?;
         visuals(&cache.catalog, types)
     }
+    pub fn item_details(
+        &self,
+        types: &[u16],
+        enchant_ids: &[i32],
+    ) -> Result<ItemDetailPage, String> {
+        let cache = self.cache().ok_or("Client assets are not available yet.")?;
+        item_details(&cache.catalog, types, enchant_ids)
+    }
     pub fn search_items(&self, query: &str, limit: u8) -> Result<Vec<ItemMatch>, String> {
         let cache = self.cache().ok_or("Client assets are not available yet.")?;
         search_items(&cache.catalog, query, limit)
@@ -374,6 +396,7 @@ impl AssetBridge {
         main_window: bool,
         method: &tauri::http::Method,
         uri: &str,
+        origin: Option<&str>,
     ) -> tauri::http::Response<Vec<u8>> {
         let result = if main_window && method == tauri::http::Method::GET {
             self.sprite(uri)
@@ -384,7 +407,7 @@ impl AssetBridge {
             Ok(bytes) => (200, bytes),
             Err(_) => (404, Vec::new()),
         };
-        tauri::http::Response::builder()
+        let mut response = tauri::http::Response::builder()
             .status(status)
             .header("Content-Type", "image/png")
             .header("X-Content-Type-Options", "nosniff")
@@ -397,10 +420,122 @@ impl AssetBridge {
                 } else {
                     "no-store"
                 },
-            )
+            );
+        if status == 200 {
+            response = response.header("Vary", "Origin");
+            if let Some(origin) = origin.filter(|origin| app_origin_allowed(origin)) {
+                response = response.header("Access-Control-Allow-Origin", origin);
+            }
+        }
+        response
             .body(bytes)
             .expect("Static sprite response headers")
     }
+}
+
+pub fn app_origin_allowed(origin: &str) -> bool {
+    origin == "http://tauri.localhost"
+        || (cfg!(debug_assertions) && origin == "http://127.0.0.1:1420")
+}
+
+pub fn slot_label(slot_type: u8) -> Option<&'static str> {
+    Some(match slot_type {
+        1 => "Sword",
+        2 => "Dagger",
+        3 => "Bow",
+        4 => "Tome",
+        5 => "Shield",
+        6 => "Leather Armor",
+        7 => "Heavy Armor",
+        8 => "Wand",
+        9 => "Ring",
+        10 => "Consumable",
+        11 => "Spell",
+        12 => "Seal",
+        13 => "Cloak",
+        14 => "Robe",
+        15 => "Quiver",
+        16 => "Helm",
+        17 => "Staff",
+        18 => "Poison",
+        19 => "Skull",
+        20 => "Trap",
+        21 => "Orb",
+        22 => "Prism",
+        23 => "Scepter",
+        24 => "Katana",
+        25 => "Star",
+        26 => "Egg",
+        27 => "Wakizashi",
+        28 => "Lute",
+        29 => "Mace",
+        30 => "Sheath",
+        31 => "Sigil",
+        _ => return None,
+    })
+}
+
+pub fn item_details(
+    catalog: &Catalog,
+    types: &[u16],
+    enchant_ids: &[i32],
+) -> Result<ItemDetailPage, String> {
+    let mut seen = BTreeSet::new();
+    let mut unique = Vec::new();
+    for object_type in types {
+        if seen.insert(*object_type) {
+            unique.push(*object_type);
+        }
+        if unique.len() > 128 {
+            return Err("Request at most 128 unique object types.".into());
+        }
+    }
+    let mut seen_enchants = BTreeSet::new();
+    let mut unique_enchants = Vec::new();
+    for id in enchant_ids {
+        if seen_enchants.insert(*id) {
+            unique_enchants.push(*id);
+        }
+        if unique_enchants.len() > 128 {
+            return Err("Request at most 128 unique enchant IDs.".into());
+        }
+    }
+    let items = unique
+        .into_iter()
+        .map(|object_type| {
+            let item = catalog
+                .items
+                .iter()
+                .find(|item| item.object_type == object_type);
+            let slot_type = item.and_then(|item| item.slot_type);
+            ItemDetail {
+                object_type,
+                name: item.map(|item| item.name.clone()),
+                tier: item.and_then(|item| item.tier.clone()),
+                slot_type,
+                slot_label: slot_type.and_then(slot_label).map(str::to_owned),
+                soulbound: item.and_then(|item| item.soulbound),
+            }
+        })
+        .collect();
+    let enchants = unique_enchants
+        .into_iter()
+        .map(|id| {
+            let enchant = catalog.enchants.iter().find(|enchant| enchant.id == id);
+            EnchantInfo {
+                id,
+                name: enchant.map(|enchant| enchant.name.clone()),
+                description: enchant
+                    .filter(|enchant| !enchant.description.is_empty())
+                    .map(|enchant| enchant.description.clone()),
+            }
+        })
+        .collect();
+    Ok(ItemDetailPage {
+        client_fingerprint: catalog.client_fingerprint.clone(),
+        items,
+        enchants,
+    })
 }
 
 pub fn visuals(catalog: &Catalog, types: &[u16]) -> Result<VisualPage, String> {
@@ -512,4 +647,46 @@ pub fn catalog_dungeon_options(catalog: &Catalog) -> Vec<maxed_types::DungeonDef
     rows.sort_by(|a, b| a.name.cmp(&b.name));
     rows.dedup_by(|a, b| a.name == b.name);
     rows
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "../../../crates/maxed-assets/tests/common/mod.rs"]
+mod fixture;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use maxed_types::PotionStat;
+
+    #[test]
+    fn potion_stats_lists_classified_items() {
+        let bridge = AssetBridge::default();
+        assert!(bridge.potion_stats().is_empty());
+
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AssetPaths {
+            resources: dir.path().join("resources.assets"),
+            app_data: dir.path().join("app"),
+        };
+        std::fs::write(&paths.resources, fixture::fixture()).unwrap();
+        let mut cache =
+            maxed_assets::load_or_extract(&paths, &AtomicBool::new(false), &mut |_| {}).unwrap();
+        let mut item = maxed_types::demo::demo_catalog().items.remove(0);
+        let unclassified = item.clone();
+        item.object_type = 201;
+        item.name = "Synthetic Classified Item".into();
+        item.potion_stat = Some(PotionStat::Speed);
+        let mut other = item.clone();
+        other.object_type = 202;
+        other.potion_stat = Some(PotionStat::Life);
+        Arc::make_mut(&mut cache.catalog).items = vec![unclassified, item, other];
+        let op = bridge.begin().unwrap();
+        bridge.commit(&op, cache, || Ok(())).unwrap();
+
+        assert_eq!(
+            bridge.potion_stats(),
+            vec![(201, PotionStat::Speed), (202, PotionStat::Life)]
+        );
+    }
 }

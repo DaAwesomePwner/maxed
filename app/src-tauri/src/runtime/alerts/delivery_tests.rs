@@ -597,6 +597,7 @@ fn all_routes_mute_focus_namespace_matrix() {
                                             white_bag: level,
                                             personal_best: level,
                                             key_popped: level,
+                                            key_pop_dungeons: None,
                                             muted,
                                             windows_notifications: enabled,
                                             ..Default::default()
@@ -1962,6 +1963,8 @@ fn queued_key_pops_recheck_saved_dungeon_filter() {
                 .unwrap();
             let mut policy = AlertPreferences {
                 windows_notifications: true,
+                key_popped: AlertLoudness::Toast,
+                key_pop_dungeons: None,
                 ..Default::default()
             };
             runtime.update_alert_preferences(policy.clone()).unwrap();
@@ -2030,6 +2033,8 @@ fn key_pop_final_delivery_rechecks_current_dungeon_filter() {
         let runtime = Arc::new(runtime);
         let policy = AlertPreferences {
             windows_notifications: true,
+            key_popped: AlertLoudness::Toast,
+            key_pop_dungeons: None,
             ..Default::default()
         };
         *runtime.shared.views.alert_policy.lock().unwrap() = policy.clone();
@@ -2091,6 +2096,7 @@ fn explicit_key_pop_test_remains_available_with_no_dungeons_selected() {
     let (runtime, calls) = setup("live-test");
     *runtime.shared.views.alert_policy.lock().unwrap() = AlertPreferences {
         key_pop_dungeons: Some(vec![]),
+        key_popped: AlertLoudness::Toast,
         windows_notifications: true,
         ..Default::default()
     };

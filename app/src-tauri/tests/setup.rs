@@ -1,3 +1,4 @@
+use crate::fixture;
 use maxed_app::{
     assets_bridge::{AssetBridge, AssetLoader},
     setup::*,
@@ -16,12 +17,6 @@ use std::{
         Arc, Mutex,
     },
 };
-mod fixture {
-    include!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../crates/maxed-assets/tests/common/mod.rs"
-    ));
-}
 
 #[derive(Default)]
 struct FakeCapture {

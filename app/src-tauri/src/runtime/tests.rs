@@ -706,6 +706,9 @@ fn native_continuous_frames_survive_forward_and_backward_clock_jumps() {
     assert!(session.ended.unwrap() >= session.started);
 }
 
+#[path = "snapshot_reader_tests.rs"]
+mod snapshot_reader_tests;
+
 #[test]
 fn last_direction_closing_waits_and_a_fresh_syn_does_not_restore_stale_live() {
     let runtime = CaptureRuntime::default();

@@ -66,8 +66,7 @@ fn shaitan_fight_ends_at_victory_not_map_exit() {
     assert_eq!(fight.end_reason, Some(FightEnd::Killed));
 }
 
-#[path = "common/combat_fixture.rs"]
-mod combat_fixture;
+use crate::combat_fixture;
 
 #[test]
 fn shaitan_recorded_sources_are_reconstructed_without_false_uncertainty() {

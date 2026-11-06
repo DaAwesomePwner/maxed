@@ -1,7 +1,7 @@
+use crate::common;
 use maxed_store::*;
 use maxed_types::*;
 use rusqlite::Connection;
-mod common;
 #[test]
 fn dungeon_stats_session_and_today_scopes() {
     let dir = tempfile::tempdir().unwrap();

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/svelte';
 import CharacterRail from '../../src/lib/shell/CharacterRail.svelte';
 import Shell from '../../src/lib/shell/Shell.svelte';
+import { productionFeatures } from '../../src/lib/navigation/routes';
 import { railView } from '../../src/lib/shell/rail';
 import { createClient } from '../../src/lib/bridge/client';
 import { createFixtureTransport } from '../../src/lib/bridge/fixture';
@@ -30,7 +31,7 @@ describe('rail navigation cannot fall below the card scroller', () => {
       applyLayoutStyles();
       const { container } = render(CharacterRail, {
         view: railView(fixture), capture: fixture.capture, route: { kind: 'home' },
-        features: { lootBrowsing: true, logs: false, stats: false }, preview: true, busy: false, error: '',
+        features: { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: productionFeatures.homeRedesign }, preview: true, busy: false, error: '',
         onStart: vi.fn(), onStop: vi.fn(), onRetry: vi.fn(),
       });
       container.style.width = `${railWidth}px`; container.style.height = `${height}px`;
@@ -71,5 +72,7 @@ describe('rail navigation cannot fall below the card scroller', () => {
     expect(getComputedStyle(main).flexDirection).toBe('column');
     expect(getComputedStyle(main).placeItems).toBe('normal');
     expect(main.querySelector('.home-content')).toBeTruthy();
+    expect(main.querySelector('[data-home="v4"]')).toBeTruthy();
+    expect(within(main).getByLabelText('Session HUD')).toBeTruthy();
   });
 });

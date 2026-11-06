@@ -5,7 +5,7 @@ import { fakeHistory } from '../navigation/fake-history';
 
 afterEach(cleanup);
 it.each([
-  ['#/stats', 'Lost Halls'],
+  ['#/stats', 'Realm, hubs and other maps'],
   ['#/stats/sessions', 'In progress'],
   ['#/stats/sessions/preview-session-1', 'Unrecorded'],
   ['#/stats/dungeons', 'Pirate Cave'],

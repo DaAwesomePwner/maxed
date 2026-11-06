@@ -1,5 +1,4 @@
-mod common;
-mod d_support;
+use crate::d_support;
 use d_support::*;
 #[test]
 fn run_context_frozen_at_run_start() {

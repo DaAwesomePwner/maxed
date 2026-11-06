@@ -1,4 +1,9 @@
-import { cleanup, fireEvent, screen, within } from '@testing-library/svelte';
+import Runs from '../../src/routes/Runs.svelte';
+import { createHistoryCache } from '../../src/lib/runs/history-cache';
+import { historyKey } from '../../src/lib/runs/history';
+import { defaultFilters } from '../../src/lib/navigation/state';
+import { SHELL_CONNECTION } from '../../src/lib/shell/context';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { RunListSummary } from '../../src/lib/bindings/RunListSummary';
 import type { RunPage } from '../../src/lib/bindings/RunPage';
@@ -116,10 +121,20 @@ it('renders enriched rows, bounds loot previews and leaves unavailable values un
   for (const value of ['TestMage', '25%', 'partial', '+412', '9:12', 'PB', '−0:28', '+3']) expect(row.textContent).toContain(value);
   expect(row.querySelectorAll('[role="img"][aria-label="Observed bag"]')).toHaveLength(3);
   expect(row.querySelectorAll('a, button')).toHaveLength(0);
+  expect(within(row).getAllByText('partial')).toHaveLength(1);
+  expect(within(row).getByText('partial').title).toContain('Damage share');
+  expect(main().getByRole('button', { name: 'Dungeon records' }).getAttribute('aria-describedby')).toBeTruthy();
   expect(main().getByRole('link', { name: /Unknown details/ }).textContent).not.toMatch(/0%|0:00|PB/);
   expect(main().getByText(/100 saved runs/)).toBeTruthy();
 });
 
+it('uses the singular for one run', async () => {
+  const single = { ...summary, runs: 1, fame_observed_runs: 1, total_runs_all_time: 1 };
+  mountRuns({ queries: { listRuns: async () => ready({ ...runPage([run()]), summary: single }) } }); await flush();
+  expect(main().getByText(/^1 saved run ·/)).toBeTruthy();
+  expect(main().getByText('observed in 1 run')).toBeTruthy();
+  expect(screen.getByRole('main').querySelector('.day')?.textContent).toContain('· 1 run ·');
+});
 
 it('leaves the first personal best comparison unknown', async () => {
   const details: NonNullable<RunPage['details']> = [{ run_id: 'run-1', character_name: null, class_id: null,
@@ -188,4 +203,36 @@ it('refreshes day labels and preset selection when a live page arrives after loc
   expect(page.queries.listRuns).toHaveBeenCalledTimes(3);
   expect(screen.getByRole('main').querySelector('.day')?.textContent).toContain('Yesterday');
   expect(main().getByRole('button', { name: 'Today' }).getAttribute('aria-pressed')).toBe('false');
+});
+
+it('coalesces Runs refreshes to a one-second floor while keeping summary values visible', async () => {
+  const page = mountRuns({ queries: { listRuns: async () => ready(summarized()) } }); await flush();
+  const pending = deferred<HistoryReply<RunPage>>();
+  page.queries.listRuns.mockReturnValue(pending.promise);
+  for (let sequence = 13; sequence <= 15; sequence++) {
+    page.event({ run_updated: run() }, String(sequence));
+    page.setStore({ state: 'ready', stream_id: page.snapshot.stream_id, durable: String(sequence), queued: 0, message: '' });
+    await advance(200);
+  }
+  expect(page.queries.listRuns).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('[data-kpi="runs"] .value')?.textContent).toBe('27');
+  await advance(399); expect(page.queries.listRuns).toHaveBeenCalledTimes(1);
+  await advance(1); expect(page.queries.listRuns).toHaveBeenCalledTimes(2);
+  expect(document.querySelector('[data-kpi="runs"] .value')?.textContent).toBe('27');
+  pending.resolve(ready(summarized())); await flush();
+});
+
+it('renders summary cards from a dirty cached reply while refresh is pending', async () => {
+  const page = mountRuns(); await flush(); page.unmount();
+  const cache = createHistoryCache({ route: () => ({ kind: 'runs' }), invalidates: () => true });
+  const input = { query: { kind: 'runs' as const, filter: defaultFilters() }, scopeKey: '', streamId: null, required: null, store: null };
+  cache.put(historyKey(input), { query: input.query, route: { kind: 'runs' }, required: null,
+    value: { kind: 'runs', page: summarized() } });
+  cache.invalidateAll();
+  const pending = deferred<HistoryReply<RunPage>>();
+  page.queries.listRuns.mockClear().mockReturnValue(pending.promise);
+  render(Runs, { props: { client: page.client }, context: new Map([[SHELL_CONNECTION, { historyCache: cache }]]) });
+  await flush();
+  expect(document.querySelector('[data-kpi="runs"] .value')?.textContent).toBe('27');
+  expect(screen.getByRole('link', { name: /Invented Sanctum/ })).toBeTruthy();
 });

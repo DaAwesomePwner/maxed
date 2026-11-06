@@ -22,7 +22,7 @@ function setup() {
   client.listCatalogDungeons = vi.fn(async () => ['Invented vault', 'Muted vault']);
   client.getDungeonPortalType = vi.fn(async () => null);
   const settings = client.querySettings;
-  client.querySettings = vi.fn(async () => { const value = await settings(); return { ...value, alerts: { ...value.alerts, key_pop_dungeons: null, key_pop_excluded_dungeons: ['Muted vault'] } }; });
+  client.querySettings = vi.fn(async () => { const value = await settings(); return { ...value, alerts: { ...value.alerts, key_popped: 'toast' as const, key_pop_dungeons: null, key_pop_excluded_dungeons: ['Muted vault'] } }; });
   return client;
 }
 afterEach(() => { cleanup(); vi.useRealTimers(); window.location.hash = ''; });

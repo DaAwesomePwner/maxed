@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::*;
 use maxed_engine::Engine;
 use maxed_protocol::{key_bytes, DecodeEvent, Decoder, Diagnostic, Packet, PacketDiagnostic, Rc4};

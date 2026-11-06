@@ -1,7 +1,7 @@
+use crate::common;
 use maxed_store::*;
 use maxed_types::*;
 use rusqlite::Connection;
-mod common;
 #[path = "common/d_legacy.rs"]
 mod d_legacy;
 

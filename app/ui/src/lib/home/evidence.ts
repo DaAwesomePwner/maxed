@@ -1,3 +1,4 @@
+import type { SourceDamage } from '../bindings/SourceDamage';
 import type { CoverageIssue } from '../bindings/CoverageIssue';
 import type { Evidence } from '../bindings/Evidence';
 import { formatStat } from '../styles/format';
@@ -10,8 +11,14 @@ export const coverageLabels: Record<CoverageIssue, string> = {
   missing_projectile: 'Some projectile evidence is missing', ambiguous_hit: 'Some hit attribution is uncertain',
   resource_limit: 'Some observations were evicted at the capture limit', clock_regression: 'The capture clock moved backwards',
 };
+const inferredEquippedWeapon = 'inferred-equipped-weapon';
+export function damageUncertain(source: SourceDamage): boolean {
+  return source.reasons.some(reason => reason !== inferredEquippedWeapon)
+    || (source.estimated && source.reasons.length === 0);
+}
 const reasonLabels = new Map([
   ['client-projectile-reconstruction', 'Damage attributed from client-side projectile reconstruction'],
+  [inferredEquippedWeapon, 'Inferred from the equipped weapon'],
   ['resource-limit-source-summary', 'Some damage sources were combined at the capture limit'],
   ['source-not-observed', 'The source was not observed'],
   ['killed-target-same-tick', 'Bag attributed to the target killed in the same or next update (estimated)'],

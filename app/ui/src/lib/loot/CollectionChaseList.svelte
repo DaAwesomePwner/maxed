@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { itemHover } from '../components/item-hover';
   import type { Client } from '../bridge/client';
   import type { AppSettings } from '../bindings/AppSettings';
   import type { ChaseItem } from '../bindings/ChaseItem';
@@ -32,7 +33,7 @@
           {@const name = visual?.name ?? `#${row.item.item_type}`}
           {@const streak = `${row.dry_runs} ${plural(row.dry_runs, 'run')} ${row.last_at === null ? 'since you started chasing' : 'since last seen'}`}
           <tr>
-            <td><a class={tierClass(visual?.item_tier)} title={name} href={`#/loot/item/${row.item.item_type}`} data-row-id={JSON.stringify(['chase', row.item.item_type, row.item.dungeon])}>
+            <td><a class={tierClass(visual?.item_tier)} use:itemHover={{ type: row.item.item_type, name, tier: visual?.item_tier }} href={`#/loot/item/${row.item.item_type}`} data-row-id={JSON.stringify(['chase', row.item.item_type, row.item.dungeon])}>
               <span class="tile"><SpriteImage sprite={visual?.sprite ?? null} sheetUrl={visual?.sprite ? spriteUrl(visuals.client_fingerprint, visual.sprite) : null} fit={24} alt="" /></span>
               <span class="ellipsis">{name}</span>
             </a></td>

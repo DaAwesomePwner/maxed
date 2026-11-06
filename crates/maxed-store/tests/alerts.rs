@@ -1,8 +1,8 @@
 //! Invented summaries derived from the admitted demo; no gameplay recordings.
+use crate::common;
 use maxed_store::*;
 use maxed_types::*;
 use rusqlite::{params, Connection};
-mod common;
 
 #[path = "common/alerts_workload.rs"]
 mod alerts_workload;
@@ -201,6 +201,21 @@ struct Harness {
     seq: u64,
 }
 impl Harness {
+    fn with_stopped_writer(self, operation: impl FnOnce(&std::path::Path)) -> Self {
+        self.writer.shutdown().unwrap();
+        operation(&self.path);
+        let writer = start_writer(
+            self.path.clone(),
+            WriterConfig {
+                stream_id: "test-stream".into(),
+                flush_millis: 60_000,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        Self { writer, ..self }
+    }
+
     fn send_window(&mut self, event: EngineEvent, window: Option<TimeRange>) {
         self.seq += 1;
         let mut ctx = context(AlertLoudness::Banner);
@@ -579,10 +594,14 @@ fn legacy_seed() -> Harness {
         },
         AlertLoudness::Off,
     );
-    // Recreate the exact installed v3 schema for the cold-upgrade fixture.
-    h.db().execute_batch("DROP TABLE map_visits; DROP INDEX play_sessions_started; DROP TABLE chat_fts; DROP TABLE chat_messages; DROP INDEX drops_source; DROP INDEX runs_dungeon_ended; DROP INDEX drops_id_at; DROP INDEX drops_stats; ALTER TABLE drops DROP COLUMN source_type; DROP TRIGGER pd_player_insert; DROP TRIGGER pd_player_delete; DROP TRIGGER pd_player_update; DROP TRIGGER pd_fight_association; DROP TABLE pd_player_contributions; DROP TABLE pd_run_players; DROP INDEX pd_home_session_runs; DROP INDEX pd_home_today_runs; DROP INDEX pd_run_evidence_kind; DROP INDEX pd_fight_players_totals; DROP INDEX pd_runs_comparison; DROP TABLE event_fts; DROP TABLE instance_events; DROP TABLE alert_occurrences; DROP TABLE personal_bests; DROP INDEX alerts_kind_at; DROP INDEX fights_final_boss; DROP INDEX fights_final_boss_key; DROP INDEX fight_players_identity; DROP INDEX character_aliases_verified; DELETE FROM schema_migrations WHERE version>=4; PRAGMA user_version=3;").unwrap();
-    upgrade_history(&h.path).unwrap();
-    h
+    h.with_stopped_writer(|path| {
+        let db = Connection::open(path).unwrap();
+        // Recreate the exact installed v3 schema for the cold-upgrade fixture.
+        alerts_workload::downgrade::remove_maintenance_schema(&db);
+        alerts_workload::downgrade::remove_loot_stats_indexes(&db);
+        db.execute_batch("DROP TABLE party_run_members; DROP TABLE party_players; DROP TABLE player_profiles; DROP TABLE player_gear_log; DROP TABLE scope_timelines; DROP TABLE player_timelines; DROP TABLE map_visits; DROP INDEX play_sessions_started; DROP TABLE chat_fts; DROP TABLE chat_messages; DROP INDEX drops_source; DROP INDEX runs_dungeon_ended; DROP INDEX drops_id_at; DROP INDEX drops_stats; ALTER TABLE drops DROP COLUMN source_type; DROP TRIGGER pd_player_insert; DROP TRIGGER pd_player_delete; DROP TRIGGER pd_player_update; DROP TRIGGER pd_fight_association; DROP TABLE pd_player_contributions; DROP TABLE pd_run_players; DROP INDEX pd_home_session_runs; DROP INDEX pd_home_today_runs; DROP INDEX pd_run_evidence_kind; DROP INDEX pd_fight_players_totals; DROP INDEX pd_runs_comparison; DROP TABLE event_fts; DROP TABLE instance_events; DROP TABLE alert_occurrences; DROP TABLE personal_bests; DROP INDEX alerts_kind_at; DROP INDEX fights_final_boss; DROP INDEX fights_final_boss_key; DROP INDEX fight_players_identity; DROP INDEX character_aliases_verified; DELETE FROM schema_migrations WHERE version>=4; PRAGMA user_version=3;").unwrap();
+        common::installed_schema::upgrade_after_confirmation(path).unwrap();
+    })
 }
 
 #[test]
@@ -638,7 +657,12 @@ fn seeded_receipts_are_limited_and_historical_revisions_stay_silent() {
 
 #[test]
 fn source_baseline_receipt_and_log_rollback_together() {
-    for table in ["fights", "personal_bests", "stream_heads"] {
+    for (table, operation) in [
+        ("fights", "INSERT"),
+        ("personal_bests", "INSERT"),
+        ("event_receipts_v2", "INSERT"),
+        ("event_streams", "UPDATE"),
+    ] {
         let mut h = Harness::new();
         h.send(
             EngineEvent::FightEnded(fight("baseline", 100., "self")),
@@ -646,7 +670,7 @@ fn source_baseline_receipt_and_log_rollback_together() {
         );
         let head = h.seq;
         let db = h.db();
-        db.execute_batch(&format!("CREATE TRIGGER fail_write BEFORE INSERT ON {table} BEGIN SELECT RAISE(ABORT,'injected failure'); END;")).unwrap();
+        db.execute_batch(&format!("CREATE TRIGGER fail_write BEFORE {operation} ON {table} BEGIN SELECT RAISE(ABORT,'injected failure'); END;")).unwrap();
         h.enqueue(
             EngineEvent::FightEnded(fight("winner", 150., "self")),
             AlertLoudness::Banner,
@@ -661,6 +685,7 @@ fn source_baseline_receipt_and_log_rollback_together() {
             100.
         );
         assert_eq!(h.writer.status().durable.unwrap().0 .0, head);
+        assert_eq!(crate::common::receipts::count(&db), head as i64);
         assert!(h.writer.claim_alerts(32).unwrap().is_empty());
         db.execute_batch("DROP TRIGGER fail_write").unwrap();
         h.writer.retry().unwrap();
@@ -858,50 +883,54 @@ fn pb_emission_time_and_bounds_are_preserved() {
 #[test]
 fn malformed_upgrade_rolls_back_and_checksums_stay_installed() {
     let h = Harness::new();
-    let db = h.db();
-    let f = fight("bad", 100., "self");
-    db.execute(
-        "INSERT INTO fights VALUES(?1,NULL,?2,1,2,42,100,1,'broken')",
-        params![f.id, f.session_id],
-    )
-    .unwrap();
-    db.execute_batch("DROP TABLE map_visits; DROP INDEX play_sessions_started; DROP TABLE chat_fts; DROP TABLE chat_messages; DROP INDEX drops_source; DROP INDEX runs_dungeon_ended; DROP INDEX drops_id_at; DROP INDEX drops_stats; ALTER TABLE drops DROP COLUMN source_type; DROP TRIGGER pd_player_insert; DROP TRIGGER pd_player_delete; DROP TRIGGER pd_player_update; DROP TRIGGER pd_fight_association; DROP TABLE pd_player_contributions; DROP TABLE pd_run_players; DROP INDEX pd_home_session_runs; DROP INDEX pd_home_today_runs; DROP INDEX pd_run_evidence_kind; DROP INDEX pd_fight_players_totals; DROP INDEX pd_runs_comparison; DROP TABLE event_fts; DROP TABLE instance_events; DROP TABLE alert_occurrences; DROP TABLE personal_bests; DROP INDEX alerts_kind_at; DROP INDEX fights_final_boss; DROP INDEX fights_final_boss_key; DROP INDEX fight_players_identity; DROP INDEX character_aliases_verified; DELETE FROM schema_migrations WHERE version>=4; PRAGMA user_version=3;").unwrap();
-    let sums: Vec<String> = db
-        .prepare("SELECT checksum FROM schema_migrations ORDER BY version")
-        .unwrap()
-        .query_map([], |r| r.get(0))
-        .unwrap()
-        .collect::<Result<_, _>>()
-        .unwrap();
-    assert!(upgrade_history(&h.path).is_err());
-    assert_eq!(
-        db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
-            .unwrap(),
-        3
-    );
-    assert_eq!(
-        db.query_row(
-            "SELECT count(*) FROM sqlite_schema WHERE name='personal_bests'",
-            [],
-            |r| r.get::<_, i64>(0)
+    h.with_stopped_writer(|path| {
+        let db = Connection::open(path).unwrap();
+        alerts_workload::downgrade::remove_maintenance_schema(&db);
+        alerts_workload::downgrade::remove_loot_stats_indexes(&db);
+        let f = fight("bad", 100., "self");
+        db.execute(
+            "INSERT INTO fights VALUES(?1,NULL,?2,1,2,42,100,1,'broken')",
+            params![f.id, f.session_id],
         )
-        .unwrap(),
-        0
-    );
-    db.execute(
-        "UPDATE fights SET json=?1",
-        [serde_json::to_string(&f).unwrap()],
-    )
-    .unwrap();
-    upgrade_history(&h.path).unwrap();
-    let after: Vec<String> = db
-        .prepare("SELECT checksum FROM schema_migrations WHERE version<=3 ORDER BY version")
-        .unwrap()
-        .query_map([], |r| r.get(0))
-        .unwrap()
-        .collect::<Result<_, _>>()
         .unwrap();
-    assert_eq!(sums, after);
+        db.execute_batch("DROP TABLE party_run_members; DROP TABLE party_players; DROP TABLE player_profiles; DROP TABLE player_gear_log; DROP TABLE scope_timelines; DROP TABLE player_timelines; DROP TABLE map_visits; DROP INDEX play_sessions_started; DROP TABLE chat_fts; DROP TABLE chat_messages; DROP INDEX drops_source; DROP INDEX runs_dungeon_ended; DROP INDEX drops_id_at; DROP INDEX drops_stats; ALTER TABLE drops DROP COLUMN source_type; DROP TRIGGER pd_player_insert; DROP TRIGGER pd_player_delete; DROP TRIGGER pd_player_update; DROP TRIGGER pd_fight_association; DROP TABLE pd_player_contributions; DROP TABLE pd_run_players; DROP INDEX pd_home_session_runs; DROP INDEX pd_home_today_runs; DROP INDEX pd_run_evidence_kind; DROP INDEX pd_fight_players_totals; DROP INDEX pd_runs_comparison; DROP TABLE event_fts; DROP TABLE instance_events; DROP TABLE alert_occurrences; DROP TABLE personal_bests; DROP INDEX alerts_kind_at; DROP INDEX fights_final_boss; DROP INDEX fights_final_boss_key; DROP INDEX fight_players_identity; DROP INDEX character_aliases_verified; DELETE FROM schema_migrations WHERE version>=4; PRAGMA user_version=3;").unwrap();
+        let sums: Vec<String> = db
+            .prepare("SELECT checksum FROM schema_migrations ORDER BY version")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(common::installed_schema::upgrade_after_confirmation(path).is_err());
+        assert_eq!(
+            db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            3
+        );
+        assert_eq!(
+            db.query_row(
+                "SELECT count(*) FROM sqlite_schema WHERE name='personal_bests'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
+        );
+        db.execute(
+            "UPDATE fights SET json=?1",
+            [serde_json::to_string(&f).unwrap()],
+        )
+        .unwrap();
+        common::installed_schema::upgrade_after_confirmation(path).unwrap();
+        let after: Vec<String> = db
+            .prepare("SELECT checksum FROM schema_migrations WHERE version<=3 ORDER BY version")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(sums, after);
+    });
 }
 
 #[test]
@@ -1042,6 +1071,8 @@ fn key_pop_occurrence_uses_instance_id_and_dungeon_filter() {
     let mut h = Harness::new();
     let mut value = serde_json::to_value(context(AlertLoudness::Banner)).unwrap();
     value["key_pop_dungeon"] = serde_json::json!("The Void");
+    value["preferences"]["key_popped"] = serde_json::json!("toast");
+    value["preferences"]["key_pop_dungeons"] = serde_json::Value::Null;
     let ctx: AlertContext = serde_json::from_value(value).unwrap();
     for _ in 0..2 {
         h.seq += 1;
@@ -1223,8 +1254,7 @@ fn run_time_pb_obeys_personal_best_loudness() {
     }
 }
 
-#[path = "../../maxed-engine/tests/common/mod.rs"]
-mod engine_common;
+use crate::engine_common;
 
 #[test]
 fn fully_observed_reconstructed_boss_records_and_beats_dps_pb() {
@@ -1832,4 +1862,22 @@ fn alert_summary_bounds_dates_and_legacy_last_white_text() {
         reader.alert_summary(AlertSummaryRequest::default()),
         Err(StoreError::Limit)
     ));
+}
+
+#[test]
+fn default_key_pop_policy_keeps_events_without_alerts() {
+    let mut h = Harness::new();
+    let ctx = AlertContext {
+        preferences: AlertPreferences::default(),
+        key_pop_dungeon: Some("Synthetic dungeon".into()),
+        ..context(AlertLoudness::Banner)
+    };
+    h.seq += 1;
+    h.writer
+        .try_submit_with_alert_context(common::envelope(h.seq, portal("default-off")), ctx)
+        .unwrap();
+    h.writer.flush().unwrap();
+    assert_eq!(h.count("instance_events"), 1);
+    assert_eq!(h.count("alert_occurrences"), 0);
+    assert!(h.writer.claim_alerts(32).unwrap().is_empty());
 }

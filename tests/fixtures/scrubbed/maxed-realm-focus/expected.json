@@ -1,0 +1,144 @@
+{
+  "pcap": "realm-visit.pcap",
+  "pcap_sha256": "c5ffe28bf67eba20e0d4b97940bc7a4da42d7c706ad7aaaaf1f7eb98acd3b29c",
+  "source_build": "p0@b094bd9 (code identical to p0@11026ce)",
+  "catalog_note": "Not included (client-derived). Build one locally with maxed-cli catalog-root, or construct a minimal in-test catalog from the target_type/name/flags listed here.",
+  "observed_catalog_sha256": "4b092e678034ffb4a106855d30e140dc6062187dbea1f6a57d3720357877d3d9",
+  "visit": {
+    "map": "Realm of the Mad God",
+    "first_packet_us": "1791044634006966",
+    "map_change_us": "1791044787739000",
+    "fight_count": 84,
+    "local_object_id": 250728,
+    "last_packet_us": "1791044787810259"
+  },
+  "observed_ui_focus": [
+    {
+      "from_us": "1791044643197000",
+      "until_us": "1791044787739000",
+      "shown": "Maze Minotaur"
+    }
+  ],
+  "expected_ui_focus_after_fix": [
+    "Maze Minotaur only while it is the active engagement (local player never hits it)",
+    "Man-eating Barnacle (local engages from ~11:24:35)",
+    "Legion General (local engages from ~11:25:20)",
+    "Lost Sentry (local engages 11:26:00-11:26:09; requires #9)"
+  ],
+  "boss_tier_targets": [
+    {
+      "target_id": 244589,
+      "target_type": 34565,
+      "name": "Maze Minotaur",
+      "catalog_flags": {
+        "is_boss": false,
+        "is_miniboss": false,
+        "event_boss": false
+      },
+      "observed_target_kind": "quest",
+      "started_us": "1791044643197000",
+      "first_hit_us": "1791044643197000",
+      "last_hit_us": "1791044645462000",
+      "max_hp": 416700,
+      "target_hp_at_end": 1,
+      "kill": null,
+      "end_reason_at_map_change": "map_changed",
+      "total_damage": 58738.0,
+      "player_count": 13,
+      "local_damage": 0.0,
+      "local_hits": 0
+    },
+    {
+      "target_id": 252023,
+      "target_type": 47930,
+      "name": "Man-eating Barnacle",
+      "catalog_flags": {
+        "is_boss": false,
+        "is_miniboss": false,
+        "event_boss": false
+      },
+      "observed_target_kind": "quest",
+      "started_us": "1791044675845000",
+      "first_hit_us": "1791044675845000",
+      "last_hit_us": "1791044713649000",
+      "max_hp": 439200,
+      "target_hp_at_end": 1,
+      "kill": null,
+      "end_reason_at_map_change": "map_changed",
+      "total_damage": 351800.0,
+      "player_count": 16,
+      "local_damage": 24569.0,
+      "local_hits": 36
+    },
+    {
+      "target_id": 239725,
+      "target_type": 34553,
+      "name": "Sword in the Stone?",
+      "catalog_flags": {
+        "is_boss": false,
+        "is_miniboss": false,
+        "event_boss": false
+      },
+      "observed_target_kind": "quest",
+      "started_us": "1791044719684000",
+      "first_hit_us": "1791044719684000",
+      "last_hit_us": "1791044750136000",
+      "max_hp": 25000,
+      "target_hp_at_end": 1,
+      "kill": null,
+      "end_reason_at_map_change": "map_changed",
+      "total_damage": 7139.0,
+      "player_count": 4,
+      "local_damage": 0.0,
+      "local_hits": 0
+    },
+    {
+      "target_id": 251628,
+      "target_type": 24005,
+      "name": "Legion General",
+      "catalog_flags": {
+        "is_boss": false,
+        "is_miniboss": false,
+        "event_boss": false
+      },
+      "observed_target_kind": "quest",
+      "started_us": "1791044720497000",
+      "first_hit_us": "1791044720497000",
+      "last_hit_us": "1791044742426000",
+      "max_hp": 551700,
+      "target_hp_at_end": 1,
+      "kill": null,
+      "end_reason_at_map_change": "map_changed",
+      "total_damage": 430057.0,
+      "player_count": 19,
+      "local_damage": 10932.0,
+      "local_hits": 14
+    },
+    {
+      "target_id": 250996,
+      "target_type": 22146,
+      "name": "Lost Sentry",
+      "catalog_flags": {
+        "is_boss": false,
+        "is_miniboss": false,
+        "event_boss": false
+      },
+      "observed_target_kind": "ordinary",
+      "started_us": "1791044760767000",
+      "first_hit_us": "1791044760767000",
+      "last_hit_us": "1791044769057000",
+      "max_hp": 125000,
+      "target_hp_at_end": 0,
+      "kill": {
+        "at": "1791044769263000",
+        "evidence": "hp_zero_removed",
+        "provisional": false
+      },
+      "end_reason_at_map_change": "killed",
+      "total_damage": 36665.0,
+      "player_count": 2,
+      "local_damage": 14730.0,
+      "local_hits": 21
+    }
+  ]
+}

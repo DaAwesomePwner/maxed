@@ -35,7 +35,9 @@
   .area-home .area-loot { height: 420px; } .area-home .fight-panel { min-height: 390px; }
 }
 
-.realm-home { grid-template-rows: auto auto auto minmax(140px, 1fr);
+/* Keep the fight track at least as tall as its ranked table. The page scrolls
+   when fight + kills exceed the viewport; an auto track can under-size it. */
+.realm-home { grid-template-rows: auto auto minmax(min-content, auto) minmax(140px, 1fr);
   grid-template-areas: 'head head' 'kpis kpis' 'fight loot' 'kills loot'; }
 .realm-home .realm-fight { gap: 7px; }
 .realm-home .fight-heading { display: flex; gap: 8px; align-items: baseline; }

@@ -24,6 +24,9 @@ describe('honest display formatting', () => {
   it('formats supplied shares without calculating a denominator', () => {
     expect(formatShare(0)).toBe('0%');
     expect(formatShare(.312)).toBe('31.2%');
+    expect(formatShare(.04, true)).toBe('4.0%');
+    expect(formatShare(.039, true)).toBe('3.9%');
+    expect(formatShare(0, true)).toBe('0.0%');
     for (const value of [null, NaN, Infinity, -1, 2]) expect(formatShare(value)).toBe('—');
   });
 });
@@ -81,5 +84,14 @@ describe('clock ranges', () => {
   it('preserves unknown endpoints', () => {
     expect(text(formatClockRange(at('19:35:00'), null, 'en-US', { timeZone: 'UTC' }))).toBe('7:35:00 PM – —');
     expect(formatClockRange('invalid', '99999999999999999999999999', 'en-US', { timeZone: 'UTC' })).toBe('— – —');
+  });
+});
+
+// Decimal units match the existing 1,000,000,000-byte recording quota.
+describe('storage size', () => {
+  it.each([[0, '0 B'], [999, '999 B'], [1000, '1 KB'], [853735820, '854 MB'], [1000000000, '1 GB'],
+    [null, 'Unavailable'], [NaN, 'Unavailable'], [-1, 'Unavailable']] as const)('formats %s as %s', async (input, expected) => {
+    const { formatBytes } = await import('../../src/lib/styles/format');
+    expect(formatBytes(input)).toBe(expected);
   });
 });

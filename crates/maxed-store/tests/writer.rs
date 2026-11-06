@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::*;
 use maxed_store::*;
 use maxed_types::*;
@@ -184,16 +184,9 @@ fn reopening_interrupted_run_preserves_completion_and_never_invents_a_death() {
             .unwrap(),
         0
     );
-    let heads: i64 = db
-        .query_row("SELECT count(*) FROM stream_heads", [], |r| r.get(0))
-        .unwrap();
+    let heads: i64 = common::receipts::heads(&db).len() as i64;
     start_writer(path, config()).unwrap().shutdown().unwrap();
-    assert_eq!(
-        db.query_row("SELECT count(*) FROM stream_heads", [], |r| r
-            .get::<_, i64>(0))
-            .unwrap(),
-        heads
-    );
+    assert_eq!(common::receipts::heads(&db).len() as i64, heads);
 }
 
 #[test]

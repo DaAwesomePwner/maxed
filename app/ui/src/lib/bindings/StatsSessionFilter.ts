@@ -4,6 +4,6 @@ import type { TimeRange } from "./TimeRange";
 
 export type StatsSessionFilter = { range: TimeRange | null, character_id: string | null, 
 /**
- * Include sessions with no fame change, no runs and no deaths.
+ * Include sessions with no fame change, no runs, no deaths and no observed bags.
  */
 include_empty: boolean, cursor: StatsSessionCursor | null, limit: number, };

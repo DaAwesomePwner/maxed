@@ -25,7 +25,7 @@ describe('host live-session regressions', () => {
     const props = { snapshot: homeSnapshot(), history: { phase: 'ready' as const, summary, message: '', retryAvailable: true }, choice: 'session' as const, retry: () => {} };
     const page = render(NexusHome, props);
     await flushHomeRender();
-    expect(screen.getByText('Top DPS')).toBeTruthy();
+    expect(screen.getByText('Top Active DPS')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Top fight source/ })).toBeNull();
     expect(screen.queryByText('Top fight has partial observations.')).toBeNull();
     expect(screen.queryByText('Partial or estimated fight observations.')).toBeNull();

@@ -68,8 +68,9 @@ export function mountPhase2(options: {
 } = {}) {
   let snapshot = homeSnapshot({ stream_id: 'live-phase2', area_kind: 'nexus', run: null, at: '10000000' });
   let store: StoreStatus = saved(snapshot.sequence, snapshot.stream_id);
-  let settings: AppSettings = { version: 1, adapter_id: null, assets_path: null, save_recordings: false,
-    recording_limit_bytes: 1_000_000_000, update_channel: 'stable', hardware_acceleration: false, alerts: preferences(), chat: { store: { public: true, guild: true, party: true, whisper: true }, retention_days: 90, hidden_senders: [], hidden_keywords: [] }, loot: { chase: [] } };
+  let settings: AppSettings = { party: { presets: [], default_preset_id: null }, version: 1, adapter_id: null, assets_path: null, save_recordings: false,
+    recap_image: { names: true, loot: true, fights: true },
+    recording_limit_bytes: 1_000_000_000, update_channel: 'stable', hardware_acceleration: false, alerts: preferences(), chat: { store: { public: true, guild: true, party: true, whisper: true }, retention_days: 90, hidden_senders: [], hidden_keywords: [], filter_spam: true }, loot: { chase: [] } };
   const queries = {
     listRuns: vi.fn<RunFixtureQueries['listRuns']>(options.queries?.listRuns ?? (async () => ready(runPage()))),
     getRun: vi.fn<RunFixtureQueries['getRun']>(options.queries?.getRun ?? (async id => ready(story({ run: run({ id }) })))),

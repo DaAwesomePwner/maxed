@@ -15,6 +15,7 @@ fn missing_enchant() -> EnchantView {
 /// An observed completion with a still-open target window and partial identity.
 pub fn demo_snapshot() -> LiveSnapshot {
     let character = CharacterView {
+        calculation_revision: None,
         stat_panel: None,
         id: "demo-character".into(),
         name: Some("Demo Knight".into()),
@@ -27,6 +28,7 @@ pub fn demo_snapshot() -> LiveSnapshot {
             value: 50,
         }],
         equipment: vec![EquipmentView {
+            observed_empty: None,
             slot: 0,
             item_type: Some(200),
             enchant: missing_enchant(),
@@ -48,6 +50,7 @@ pub fn demo_snapshot() -> LiveSnapshot {
         completed_at: Some(Timestamp(5_000_000)),
         died_at: None,
         outcome: Some(Outcome::Cleared),
+        death: None,
         evidence: vec![EvidenceAt {
             at: Timestamp(5_000_000),
             evidence: Evidence::Victory,
@@ -58,10 +61,12 @@ pub fn demo_snapshot() -> LiveSnapshot {
         issues: character.issues.clone(),
     };
     let fight = FightView {
+        scope_id: None,
         dps_basis: DpsBasis::PlayerActiveWindowV1,
         pending_local_reconciliation: false,
         is_current_quest: false,
         local_last_hit: None,
+        local_active_micros: None,
         kill: None,
         target_hp: None,
         target_kind: None,
@@ -112,12 +117,16 @@ pub fn demo_snapshot() -> LiveSnapshot {
                 until: Timestamp(3_000_000),
                 total: 100.0,
                 local: Some(100.0),
+                others_damage: None,
+                others_presence: None,
             },
             DamageBucket {
                 from: Timestamp(3_000_000),
                 until: Timestamp(4_000_001),
                 total: 200.0,
                 local: Some(200.0),
+                others_damage: None,
+                others_presence: None,
             },
         ],
         complete_capture: false,
@@ -261,6 +270,7 @@ pub fn demo_run_story() -> RunStory {
                 local_damage: None,
                 local_dps: None,
                 local_rank: None,
+                party: None,
                 player_count: fight.players.len() as u32,
                 partial: true,
                 estimated: false,
@@ -294,6 +304,12 @@ pub fn demo_home_summary() -> HomeSummary {
             character_id: "demo-character".into(),
             fame: 1250,
         }],
+        fame_characters: vec![CharacterFame {
+            character_id: "demo-character".into(),
+            first_fame: 1250,
+            last_fame: 1250,
+            last_at: Timestamp(1_000_000),
+        }],
         best_drop: None, // No bag-rank evidence is available in this fixture.
         top_fight: demo_snapshot().fights.into_iter().next().map(|mut fight| {
             fight.ended = story.run.ended;
@@ -323,6 +339,8 @@ pub fn demo_catalog() -> Catalog {
         format_version: 1,
         client_fingerprint: "synthetic-contract-v1".into(),
         items: vec![ItemDef {
+            weapon_firing: None,
+            potion_stat: None,
             soulbound: None,
             stat_bonuses: None,
             object_type: 200,

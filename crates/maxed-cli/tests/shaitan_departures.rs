@@ -1,3 +1,4 @@
+use crate::support;
 use maxed_cli::{demo::replay_engine, Pipeline};
 use maxed_engine::EngineConfig;
 use maxed_protocol::{DecodeEvent, Packet};
@@ -5,7 +6,6 @@ use maxed_recording::PcapReader;
 use maxed_types::{Catalog, EngineEvent, InstanceEventKind, Timestamp};
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, fs, path::PathBuf, sync::Arc};
-mod support;
 
 #[test]
 fn shaitan_post_victory_departures_do_not_count_as_left() {

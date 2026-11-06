@@ -120,6 +120,8 @@ export function mountRuns(options: {
     getRunFightStrip: vi.fn<NonNullable<RunFixtureQueries['getRunFightStrip']>>(options.queries?.getRunFightStrip ?? (async () => ready([]))),
     getFight: vi.fn<RunFixtureQueries['getFight']>(options.queries?.getFight ?? (async id => ready(fight({ id })))),
     getPlayerBreakdown: vi.fn<RunFixtureQueries['getPlayerBreakdown']>(options.queries?.getPlayerBreakdown ?? (async (_, object_id) => ready(player({ object_id })))),
+    getRunPlayer: vi.fn<NonNullable<RunFixtureQueries['getRunPlayer']>>(options.queries?.getRunPlayer ?? (async () => ready(null))),
+    getPlayerContext: vi.fn<NonNullable<RunFixtureQueries['getPlayerContext']>>(options.queries?.getPlayerContext ?? (async () => ready(null))),
   };
   const transport = createFixtureTransport(snapshot, { client_fingerprint: 'synthetic-c2', objects: [] }, homeSummary(), queries);
   const client = createClient(transport);

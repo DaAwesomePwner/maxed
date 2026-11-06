@@ -20,6 +20,7 @@ pub(crate) struct Entity {
     pub present: bool,
     pub stats: BTreeMap<u8, i32>,
     pub name: Option<String>,
+    pub guild: Option<String>,
     pub account: Option<[u8; 32]>,
     pub enchants: Vec<EnchantView>,
     pub crucible: Option<f64>,
@@ -27,6 +28,7 @@ pub(crate) struct Entity {
     pub pos: (f32, f32),
     pub summoner: Option<(i32, u32)>,
     pub last_seen: Timestamp,
+    pub first_seen: Timestamp,
 }
 impl Entity {
     pub fn new(generation: u32, at: Timestamp) -> Self {
@@ -38,6 +40,7 @@ impl Entity {
             present: true,
             stats: BTreeMap::new(),
             name: None,
+            guild: None,
             account: None,
             enchants: vec![],
             crucible: None,
@@ -45,6 +48,7 @@ impl Entity {
             pos: (0., 0.),
             summoner: None,
             last_seen: at,
+            first_seen: at,
         }
     }
     pub fn stat(&self, id: u8) -> Option<i32> {
@@ -78,7 +82,7 @@ impl Engine {
         // the bounded table. Otherwise admission could discard its own evidence.
         let retired = self.retired_entities.remove(&id);
         if let Some(old) = evicted {
-            self.forget_entity(old);
+            self.forget_entity(old, events);
             self.mark(CoverageIssue::ResourceLimit, events);
         }
         let mut entity = Entity::new(self.entity_epoch, self.now);
@@ -139,16 +143,16 @@ impl Engine {
             }
         }
     }
-    pub(crate) fn prune_entities(&mut self) {
+    pub(crate) fn prune_entities(&mut self, events: &mut Vec<EngineEvent>) {
         while let Some(&(at, id)) = self.inactive_entities.first() {
             if self.now.0.saturating_sub(at.0) < 30_000_000 {
                 break;
             }
-            self.forget_entity(id);
+            self.forget_entity(id, events);
         }
     }
-    pub(crate) fn forget_entity(&mut self, id: i32) {
-        self.remove_entity(id);
+    pub(crate) fn forget_entity(&mut self, id: i32, events: &mut Vec<EngineEvent>) {
+        self.remove_entity(id, events);
         if let Some(e) = self.entities.remove(&id) {
             self.inactive_entities.remove(&(e.last_seen, id));
             self.referenced_entities.remove(&id);
@@ -217,7 +221,7 @@ impl Engine {
         if ty.is_some() && old_type.is_some() && old_type != ty {
             self.generation = self.generation.saturating_add(1);
             replacement_generation = Some(self.generation);
-            self.forget_entity(id);
+            self.forget_entity(id, events);
             for (_, (_, reason)) in self.removed_shots.range_mut((id, 0)..=(id, u16::MAX)) {
                 *reason = crate::ReconstructionReason::StaleOwnerGeneration;
             }
@@ -229,6 +233,15 @@ impl Engine {
         let is_bag = ty
             .or(self.entities[&id].object_type)
             .is_some_and(crate::drops::known_bag);
+        let is_player = ty
+            .or(self.entities[&id].object_type)
+            .and_then(|t| self.object_index.get(&t))
+            .is_some_and(|&i| self.catalog.objects[i].is_player);
+        if is_player {
+            if let Some(scope) = &mut self.scope {
+                scope.touched.insert(id);
+            }
+        }
         let entity = self.entities.get_mut(&id).expect("entity inserted");
         self.inactive_entities.remove(&(entity.last_seen, id));
         if let Some(generation) = replacement_generation {
@@ -281,6 +294,19 @@ impl Engine {
                         .filter(|s| !s.is_empty())
                         .map(|s| identity::account(&self.config.identity_key, s));
                 }
+                62 if is_player => {
+                    entity.guild =
+                        stat.stringStatValue
+                            .filter(|s| !s.is_empty())
+                            .map(|mut guild| {
+                                let mut end = guild.len().min(64);
+                                while !guild.is_char_boundary(end) {
+                                    end -= 1;
+                                }
+                                guild.truncate(end);
+                                guild
+                            });
+                }
                 80 => {
                     entity.enchants = crate::enchants::slots(
                         stat.stringStatValue.as_deref(),
@@ -321,6 +347,19 @@ impl Engine {
         let target_type = entity.object_type;
         let max_hp = entity.stat(0).filter(|n| *n > 0);
         let target_hp = entity.stat(1);
+        if self
+            .local
+            .as_ref()
+            .is_some_and(|l| l.object == id && l.area == Some(self.map_ordinal))
+        {
+            if let Some(hp) = hp_observed {
+                self.hp_buffer.observe(HpSample {
+                    at: self.now,
+                    hp,
+                    max_hp,
+                });
+            }
+        }
         if let Some(hp) = hp_observed {
             self.kill_detector.hp((id, generation), hp, self.now);
         }
@@ -368,6 +407,9 @@ impl Engine {
             }
         }
         self.refresh_character(events);
+        if is_player {
+            self.player_presence(id, true, events);
+        }
         if let Some(fame) = fame_observed {
             if self
                 .local
@@ -390,7 +432,11 @@ impl Engine {
         }
         self.observe_bag(id, events);
     }
-    pub(crate) fn remove_entity(&mut self, id: i32) {
+    pub(crate) fn remove_entity(&mut self, id: i32, events: &mut Vec<EngineEvent>) {
+        self.player_presence(id, false, events);
+        if let Some(scope) = &mut self.scope {
+            scope.capped_objects.remove(&id);
+        }
         self.unlink_summoner(id);
         if let Some(children) = self.summons.remove(&id) {
             for child in children {
@@ -404,6 +450,9 @@ impl Engine {
             if e.present {
                 e.present = false;
                 e.last_seen = self.now;
+                if let Some(scope) = &mut self.scope {
+                    scope.touched.insert(id);
+                }
             }
         }
         self.remove_owner_shots(id);

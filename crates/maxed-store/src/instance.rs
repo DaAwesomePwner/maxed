@@ -3,8 +3,23 @@ use crate::{
     project::{json, matching_run, micros, tag, timeline},
     StoreError,
 };
+use maxed_engine::names::display_name;
 use maxed_types::*;
 use rusqlite::{params, Connection, Transaction};
+
+/// Normalize historical display fields without rewriting stored facts or local flags.
+pub(crate) fn normalize_names(mut event: InstanceEventView) -> InstanceEventView {
+    let name = match &mut event.kind {
+        InstanceEventKind::PlayerDeath { player_name, .. } => Some(player_name),
+        InstanceEventKind::PlayerLeft { player_name, .. } => player_name.as_mut(),
+        InstanceEventKind::PortalOpened { opener, .. } => opener.as_mut(),
+        InstanceEventKind::RealmEventKilled { killer, .. } => killer.as_mut(),
+    };
+    if let Some(name) = name {
+        name.truncate(display_name(name).len());
+    }
+    event
+}
 
 pub(crate) fn project(tx: &Transaction<'_>, event: &InstanceEventView) -> Result<(), StoreError> {
     matching_run(tx, event.run_id.as_deref(), &event.session_id)?;
@@ -18,7 +33,8 @@ pub(crate) fn project(tx: &Transaction<'_>, event: &InstanceEventView) -> Result
             "player_death",
             TimelineKind::PartyDeath,
             format!(
-                "{player_name} died{}{}",
+                "{} died{}{}",
+                display_name(player_name),
                 killed_by
                     .as_ref()
                     .map(|s| format!(" to {s}"))
@@ -31,7 +47,10 @@ pub(crate) fn project(tx: &Transaction<'_>, event: &InstanceEventView) -> Result
             TimelineKind::PlayerLeft,
             format!(
                 "{} left (cause unconfirmed)",
-                player_name.as_deref().unwrap_or("Unknown player")
+                player_name
+                    .as_deref()
+                    .map(display_name)
+                    .unwrap_or("Unknown player")
             ),
         ),
         InstanceEventKind::PortalOpened {
@@ -41,7 +60,10 @@ pub(crate) fn project(tx: &Transaction<'_>, event: &InstanceEventView) -> Result
             TimelineKind::PortalOpened,
             format!(
                 "{} opened {}",
-                opener.as_deref().unwrap_or("Unknown player"),
+                opener
+                    .as_deref()
+                    .map(display_name)
+                    .unwrap_or("Unknown player"),
                 dungeon.as_deref().unwrap_or("a portal")
             ),
         ),
@@ -54,7 +76,7 @@ pub(crate) fn project(tx: &Transaction<'_>, event: &InstanceEventView) -> Result
                 "{boss_key} killed{}",
                 killer
                     .as_ref()
-                    .map(|s| format!(" by {s}"))
+                    .map(|s| format!(" by {}", display_name(s)))
                     .unwrap_or_default()
             ),
         ),

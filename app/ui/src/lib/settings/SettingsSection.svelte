@@ -10,6 +10,6 @@
 </section>
 
 <style>
-  section { min-width: 0; padding: var(--space-3); background: var(--surface-panel); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--elevation-card); }
-  h2 { margin: 0 0 var(--space-2); font-size: var(--text-body); line-height: var(--leading-body); font-weight: var(--weight-semibold); }
+  section { min-width: 0; padding: 12px; background: var(--surface-panel); border: 1px solid var(--border); border-radius: 8px; }
+  h2 { margin: 0 0 12px; font-size: 14px; line-height: var(--leading-body); font-weight: var(--weight-semibold); }
 </style>

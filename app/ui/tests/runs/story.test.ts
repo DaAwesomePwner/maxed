@@ -56,7 +56,7 @@ it('shows compact run log links only when enabled', async () => {
   const page = mountRuns({ hash: '#/runs/run-1' }); await flush();
   expect(main().getByRole('link', { name: 'Chat log' }).getAttribute('href')).toBe('#/logs/run/run-1');
   expect(main().getByRole('link', { name: 'Events' }).getAttribute('href')).toBe('#/logs/events/run/run-1');
-  await page.rerender({ features: { lootBrowsing: true, logs: false, stats: false } }); await flush();
+  await page.rerender({ features: { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false } }); await flush();
   expect(main().queryByRole('navigation', { name: 'Run logs' })).toBeNull();
 });
 it('restores focused boss tabs and highlights the featured bag from the timeline', async () => {

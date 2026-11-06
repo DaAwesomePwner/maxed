@@ -1,3 +1,4 @@
+import { setupFixture } from '../setup/fixture';
 import { expect, it } from 'vitest';
 import { alertAction, alertKpis, shownAs, tileFilter, whyItFired } from '../../src/lib/alerts/alerts-screen';
 import { alertKinds, alertKindDisplayOrder } from '../../src/lib/alerts/filters';
@@ -50,4 +51,10 @@ it('omits an unknown dungeon from the last white bag sub-line', () => {
   const now = new Date('2030-01-01T12:00:00Z'), at = String(now.getTime() * 1000);
   const cells = alertKpis({ total: 1, by_kind: [{ kind: 'white_bag', count: 1 }], last_white: { at, run_id: null, dungeon: null }, first_at: at }, null, 0, now);
   expect(cells[1].sub).toBe('last: today');
+});
+
+it.each(['off', 'toast'] as const)('describes %s alerts with no dungeons selected', async loudness => {
+  const preferences = (await setupFixture().client.querySettings()).alerts;
+  preferences.key_popped = loudness;
+  expect(alertKpis(null, null, 129, new Date(), preferences)[3].sub).toBe(loudness === 'off' ? 'Key-pop alerts off' : 'No dungeons selected');
 });

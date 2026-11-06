@@ -6,6 +6,7 @@ import type { LiveSnapshot } from '../bindings/LiveSnapshot';
 import type { LiveSnapshotUpdate } from '../bindings/LiveSnapshotUpdate';
 import type { StoreStatus } from '../bindings/StoreStatus';
 import type { Client } from './client';
+import { isPresentationVisible, observePresentationVisibility, setNativePresentationVisible } from './visibility';
 
 export function classifySequence(previous: string, next: string) {
   const a = BigInt(previous), b = BigInt(next);
@@ -51,6 +52,8 @@ const backoff = (attempt: number) => Math.min(250 * 2 ** attempt, 4000);
 /** One owner per mounted app. Routes consume its state, never create listeners. */
 export function subscribeLive(client: Client, observer: LiveObserver) {
   let disposed = false, registered = false, transitioning = false;
+  let visible = isPresentationVisible();
+  let visibilityRequest = 0;
   let generation = 0, registration = 0, captureRevision = 0;
   let releases: (() => void)[] = [];
   let stream: string | undefined;
@@ -133,6 +136,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
   }
   function startLag() {
     clearLag();
+    if (!visible) return;
     // Track an outstanding checkpoint, not the moving newest watermark. A
     // healthy writer one flush behind keeps retiring these checkpoints.
     lagTarget = durableTarget;
@@ -145,7 +149,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     }, 5001);
   }
   function scheduleStore(idle = false) {
-    if (disposed || transitioning || !registered || stream === undefined || phase === 'failed') return;
+    if (disposed || !visible || transitioning || !registered || stream === undefined || phase === 'failed') return;
     if (storeTimer) {
       if (!storeTimerIdle || idle) return;
       clearTimeout(storeTimer);
@@ -156,7 +160,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     storeTimer = setTimeout(() => { storeTimer = undefined; pollStore(); }, idle ? 10_000 : 1000);
   }
   function pollStore() {
-    if (disposed || transitioning || !registered || stream === undefined || storeRunning || storeTimer || phase === 'failed') return;
+    if (disposed || !visible || transitioning || !registered || stream === undefined || storeRunning || storeTimer || phase === 'failed') return;
     const token = generation, expected = stream;
     storeRunning = true;
     void client.queryStore().then((status) => {
@@ -224,7 +228,9 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
   }
   function requestSync(preserveWindow = false) {
     if (disposed || phase === 'failed') return;
-    syncing = true;
+    // Numeric rebases must not pause or advance the ordered event cursor: the
+    // query can overtake native events that have not reached the UI yet.
+    syncing ||= !preserveWindow;
     requested = true;
     if (!preserveWindow) state(stream === undefined || candidate !== stream ? 'connecting' : 'resyncing');
     void query();
@@ -245,7 +251,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     if (stream === undefined || event.stream_id !== stream || syncing || transitioning) {
       observeStream(event.stream_id);
       buffer(event);
-      if (!transitioning) requestSync();
+      if (!transitioning) requestSync(phase === 'live' && candidate === stream);
       return;
     }
     const relation = classifySequence(cursor.toString(), event.sequence);
@@ -317,7 +323,9 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     scheduleStore();
   }
   async function query() {
-    if (disposed || transitioning || !registered || queryRunning || retryTimer || !requested || phase === 'failed') return;
+    // Ordered events still arrive while hidden; their baseline must drain the
+    // recovery buffer even while ordinary numeric refreshes are paused.
+    if (disposed || (!visible && !syncing) || transitioning || !registered || queryRunning || retryTimer || !requested || phase === 'failed') return;
     queryRunning = true;
     requested = false;
     const token = generation;
@@ -372,7 +380,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
       const events = buffered.filter((event) => event.stream_id === stream)
         .sort((a, b) => BigInt(a.sequence) < BigInt(b.sequence) ? -1 : BigInt(a.sequence) > BigInt(b.sequence) ? 1 : 0);
       buffered = []; bufferedKeys.clear(); bufferedMessages = 0;
-      cursor = BigInt(snapshot.sequence) > cursor ? BigInt(snapshot.sequence) : cursor;
+      if (syncing && BigInt(snapshot.sequence) > cursor) cursor = BigInt(snapshot.sequence);
       // During resync, received discrete events remain deliverable even when the
       // new snapshot covers them. Initial/changed-stream history stays silent.
       if (events.length) transaction(() => {
@@ -400,15 +408,16 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
       }
       if (storeTimer) scheduleStore(); else pollStore();
     } catch {
-      if (!disposed && token === generation) scheduleRetry();
+      if (!disposed && token === generation) scheduleRetry(phase === 'live');
     } finally {
       queryRunning = false;
       if (!disposed && token !== generation && requested) void query();
     }
   }
   function scheduleRetry(preserveWindow = false) {
+    if (!visible && !syncing) return;
     if (++attempts >= 4) { fail(); return; }
-    syncing = true;
+    syncing ||= !preserveWindow;
     requested = true;
     if (!preserveWindow) state('resyncing', 'Refreshing');
     retryTimer = setTimeout(() => { retryTimer = undefined; void query(); }, backoff(attempts - 1));
@@ -423,7 +432,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
       return true;
     };
     try {
-      if (!await add(client.onSnapshot((value) => { if (active()) receiveUpdate(value); }))) return;
+      if (!await add(client.onSnapshot((value) => { if (active() && visible) receiveUpdate(value); }))) return;
       if (!await add(client.onEngineEvent((value) => { if (active()) { messageBuffered = false; receiveEvent(value); } },
         (value) => { if (active()) receiveBatch(value); }))) return;
       if (!await add(client.onCapture((value) => {
@@ -433,6 +442,10 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
         }
       }))) return;
       registered = true;
+      if (!await add(client.onPresentationVisible(value => {
+        if (active()) { visibilityRequest++; setNativePresentationVisible(value); }
+      }))) return;
+      syncDocumentVisibility();
       const before = captureRevision;
       void client.queryCapture().then((value) => {
         if (active() && before === captureRevision) capture(value);
@@ -481,12 +494,35 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     }
   }
 
+  const releaseVisibility = observePresentationVisibility(next => {
+    if (visible === next || disposed) return;
+    visible = next;
+    generation++; clearTimers();
+    pendingSnapshot = undefined; wireSnapshot = undefined; requiredSnapshot = undefined;
+    attempts = 0;
+    if (visible && phase !== 'failed') {
+      // Ordered events continue while hidden. Only numeric snapshots need a
+      // fresh baseline, including when no sequence advanced while hidden.
+      // Re-show the same sequence, but never regress behind hidden events.
+      displayed = -1n;
+      requestSync(phase === 'live');
+    }
+  });
+  const syncDocumentVisibility = () => {
+    const request = ++visibilityRequest;
+    void client.setDocumentVisible(typeof document === 'undefined' || document.visibilityState !== 'hidden')
+      .then(value => { if (!disposed && request === visibilityRequest) setNativePresentationVisible(value); })
+      .catch(() => { /* Native window events still gate delivery if this invocation fails. */ });
+  };
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', syncDocumentVisibility);
   state('connecting');
   void register();
   return {
     dispose() {
       if (disposed) return;
       disposed = true;
+      releaseVisibility();
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', syncDocumentVisibility);
       generation++;
       clearTimers();
       releaseListeners();

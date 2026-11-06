@@ -1,3 +1,4 @@
+import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { setDebugMode } from '../../src/lib/debug/debug';
 // Boss-tier fixtures preserve the existing window/focus checks after trash grouping.
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
@@ -89,4 +90,16 @@ it('death navigation selects a relevant boss and focuses the death anchor', asyn
   expect(main().getAllByRole('tab').filter(tab => tab.getAttribute('aria-selected') === 'true')).toHaveLength(1);
   expect(main().getAllByRole('tab')[1].getAttribute('aria-selected')).toBe('true');
   expect(document.activeElement?.getAttribute('data-anchor')).toBe('death');
+});
+
+it('leaves sources without item types without an item hover or added tab stop', () => {
+  const page = render(SourceBreakdown, { player: player({ sources: [source(), source({ kind: 'unknown', item_type: null }), source({ kind: 'ability', item_type: null })] }) });
+  const cells = [...page.container.querySelectorAll('.identity')];
+  expect(cells[0].getAttribute('data-item-hover')).toBe('1000');
+  expect(itemHoverParams(cells[0])?.type).toBe(1000);
+  for (const cell of cells) expect(cell.hasAttribute('tabindex')).toBe(false);
+  for (const cell of cells.slice(1)) {
+    expect(cell.hasAttribute('data-item-hover')).toBe(false);
+    expect(itemHoverParams(cell)).toBeUndefined();
+  }
 });

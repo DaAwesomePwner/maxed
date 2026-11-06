@@ -1,25 +1,29 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 pub mod assets_bridge;
 pub mod bridge;
 pub mod demo;
+mod gui_smoke;
 pub mod interactive_rail;
 pub mod recording;
 pub mod runtime;
 pub mod settings;
 pub mod setup;
 mod startup_cache;
+mod storage_usage;
 pub mod updater;
 pub mod window_policy;
 
-use maxed_types::{CaptureStatus, LiveSnapshot, StoreStatus};
+use maxed_types::{
+    CaptureStatus, CharacterCalculation, CharacterCalculationRequest, LiveSnapshot, StoreStatus,
+};
 use runtime::CaptureRuntime;
 use setup::SetupService;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use updater::service::UpdateService;
 
 #[derive(Default)]
@@ -99,6 +103,98 @@ async fn cancel_update(
     Ok(service.cancel())
 }
 #[tauri::command]
+async fn get_database_size(setup: tauri::State<'_, Arc<SetupService>>) -> Result<String, String> {
+    let setup = setup.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || setup.database_size().map(|size| size.to_string()))
+        .await
+        .map_err(|_| "Database size unavailable.".to_string())?
+}
+#[tauri::command]
+async fn get_history_upgrade_status(
+    setup: tauri::State<'_, Arc<SetupService>>,
+) -> Result<maxed_types::HistoryUpgradeStatus, String> {
+    let setup = setup.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || setup.history_upgrade_status())
+        .await
+        .map_err(|_| "History upgrade status is unavailable.".to_string())?
+}
+#[tauri::command]
+async fn backup_and_upgrade_history(
+    setup: tauri::State<'_, Arc<SetupService>>,
+) -> Result<maxed_types::HistoryUpgradeStatus, String> {
+    let setup = setup.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || setup.backup_and_upgrade_history())
+        .await
+        .map_err(|_| "History upgrade is unavailable.".to_string())?
+}
+#[tauri::command]
+async fn get_storage_status(
+    estimate: Option<bool>,
+    setup: tauri::State<'_, Arc<SetupService>>,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::StorageStatus, String> {
+    let setup = setup.inner().clone();
+    let status = tauri::async_runtime::spawn_blocking(move || setup.storage_status())
+        .await
+        .map_err(|_| "Storage status is unavailable.".to_string())??;
+    Ok(runtime
+        .inner()
+        .storage_status(status, estimate.unwrap_or(false))
+        .await)
+}
+#[tauri::command]
+async fn compact_storage(
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::StorageCommandOutcome, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.compact_storage())
+        .await
+        .map_err(|_| "Storage maintenance is unavailable.".to_string())?
+}
+#[tauri::command]
+async fn cancel_storage_maintenance(
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::StorageCommandOutcome, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.cancel_storage_maintenance())
+        .await
+        .map_err(|_| "Storage maintenance is unavailable.".to_string())?
+}
+#[tauri::command]
+async fn resume_storage_maintenance(
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::StorageCommandOutcome, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.resume_storage_maintenance())
+        .await
+        .map_err(|_| "Storage maintenance is unavailable.".to_string())?
+}
+#[tauri::command]
+async fn list_storage_backups(
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<Vec<maxed_types::ManagedStorageBackup>, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.list_storage_backups())
+        .await
+        .map_err(|_| "Storage backups are unavailable.".to_string())?
+}
+#[tauri::command]
+async fn delete_storage_backup(
+    id: String,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<(), String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.delete_storage_backup(&id))
+        .await
+        .map_err(|_| "Storage backup could not be deleted.".to_string())?
+}
+#[tauri::command]
+async fn get_storage_backup_location(
+    setup: tauri::State<'_, Arc<SetupService>>,
+) -> Result<String, String> {
+    setup.storage_backup_location()
+}
+#[tauri::command]
 async fn get_recording_status(
     setup: tauri::State<'_, Arc<SetupService>>,
 ) -> Result<maxed_types::RecordingStatus, String> {
@@ -122,17 +218,90 @@ fn get_capture_status(runtime: tauri::State<'_, Arc<CaptureRuntime>>) -> Capture
 }
 
 #[tauri::command]
-fn get_live_snapshot(runtime: tauri::State<'_, Arc<CaptureRuntime>>) -> LiveSnapshot {
-    runtime.snapshot()
+async fn get_live_snapshot(
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<LiveSnapshot, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.snapshot())
+        .await
+        .map_err(|_| "Live snapshot worker failed".into())
+}
+
+#[tauri::command]
+async fn get_character_calculation(
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+    request: CharacterCalculationRequest,
+) -> Result<CharacterCalculation, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.get_character_calculation(request))
+        .await
+        .map_err(|_| "character_calculation_worker_failed".to_string())?
+}
+
+#[tauri::command]
+fn set_document_visible(window: tauri::Window, visible: bool) -> bool {
+    if window.label() != "main" {
+        return true;
+    }
+    window
+        .state::<Arc<bridge::PresentationVisibility>>()
+        .document_visible
+        .store(visible, Ordering::Release);
+    update_presentation_visibility(&window)
+}
+
+fn update_presentation_visibility(window: &tauri::Window) -> bool {
+    if window.label() != "main" {
+        return true;
+    }
+    let state = window.state::<Arc<bridge::PresentationVisibility>>();
+    let visible = state.document_visible.load(Ordering::Acquire)
+        && window.is_visible().unwrap_or(true)
+        && !window.is_minimized().unwrap_or(false);
+    let app = window.app_handle();
+    if !state.set_visible(visible) {
+        return visible;
+    }
+    let epoch = state.epoch();
+    let _ = app.emit("presentation-visible", visible);
+    // The window callback must not wait for the bounded publisher queue.
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if app.state::<Arc<bridge::PresentationVisibility>>().epoch() != epoch {
+            return;
+        }
+        if visible {
+            let runtime = app.state::<Arc<CaptureRuntime>>();
+            if let Ok(publisher) = runtime.publisher(app.clone()) {
+                let snapshot = runtime.snapshot();
+                // A read can wait behind capture/storage work. Do not publish
+                // its restore baseline after another hide/restore transition.
+                if app.state::<Arc<bridge::PresentationVisibility>>().epoch() != epoch {
+                    return;
+                }
+                publisher.publish(bridge::Publication::Snapshot(Box::new(snapshot)));
+                publisher.publish(bridge::Publication::PartyChanged(bridge::PartyChanged {
+                    scope_id: None,
+                }));
+            }
+        }
+    });
+    visible
 }
 
 #[tauri::command]
 fn subscribe_live_payload(
+    app: tauri::AppHandle,
     webview: tauri::Webview,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
     payloads: tauri::State<'_, bridge::channels::LivePayloads>,
     event: String,
     channel: tauri::ipc::Channel,
 ) -> Result<u32, String> {
+    if event == "party-changed" {
+        // Preset picks and annotations can change before capture ever starts.
+        runtime.publisher(app)?;
+    }
     payloads.subscribe(webview.label(), event, channel)
 }
 
@@ -156,6 +325,50 @@ async fn get_home_summary(
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
 ) -> Result<maxed_types::HistoryReply<maxed_types::HomeSummary>, String> {
     runtime.inner().home_summary(scope).await
+}
+
+#[tauri::command]
+async fn get_home_dungeon_streak(
+    request: maxed_types::HomeDungeonStreakRequest,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::HistoryReply<maxed_types::HomeDungeonStreak>, String> {
+    runtime.inner().home_dungeon_streak(request).await
+}
+
+#[tauri::command]
+async fn get_home_hud(
+    scope: maxed_types::HomeScope,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+    setup: tauri::State<'_, Arc<SetupService>>,
+) -> Result<maxed_types::HistoryReply<maxed_types::HomeHud>, String> {
+    runtime
+        .inner()
+        .home_hud(scope, setup.scope_loot_tiers(), setup.potion_stats())
+        .await
+}
+
+#[tauri::command]
+async fn get_run_recap(
+    request: maxed_types::RunRecapRequest,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+    setup: tauri::State<'_, Arc<SetupService>>,
+) -> Result<maxed_types::HistoryReply<Option<maxed_types::RunRecap>>, String> {
+    let chase_types = setup
+        .scope_loot_tiers()
+        .into_iter()
+        .filter_map(|(item_type, tier)| {
+            matches!(tier.as_deref(), Some("UT" | "ST")).then_some(item_type)
+        })
+        .collect();
+    runtime.inner().run_recap(request, chase_types).await
+}
+
+#[tauri::command]
+async fn get_visit_recap(
+    request: maxed_types::VisitRecapRequest,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::HistoryReply<Option<maxed_types::VisitRecap>>, String> {
+    runtime.inner().visit_recap(request).await
 }
 
 #[tauri::command]
@@ -209,6 +422,16 @@ async fn update_chat_settings(
     tauri::async_runtime::spawn_blocking(move || runtime.update_chat_settings(settings))
         .await
         .map_err(|_| "Chat settings worker failed".to_string())?
+}
+#[tauri::command]
+async fn update_party_settings(
+    settings: maxed_types::PartySettings,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<(), String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.update_party_settings(settings))
+        .await
+        .map_err(|_| "Party settings worker failed".to_string())?
 }
 #[tauri::command]
 async fn update_alert_preferences(
@@ -355,6 +578,30 @@ async fn get_stats_dungeons(
 }
 
 #[tauri::command]
+async fn get_boss_history(
+    request: maxed_types::BossHistoryRequest,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::HistoryReply<maxed_types::BossHistory>, String> {
+    runtime.inner().boss_history(request).await
+}
+
+#[tauri::command]
+async fn get_home_boss_baselines(
+    request: maxed_types::BossHistoryRequest,
+    runtime: tauri::State<'_, std::sync::Arc<runtime::CaptureRuntime>>,
+) -> Result<maxed_types::HistoryReply<maxed_types::HomeBossBaselines>, String> {
+    runtime.inner().home_boss_baselines(request).await
+}
+
+#[tauri::command]
+async fn get_dungeon_profile(
+    request: maxed_types::DungeonProfileRequest,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::HistoryReply<maxed_types::DungeonProfile>, String> {
+    runtime.inner().dungeon_profile(request).await
+}
+
+#[tauri::command]
 async fn export_stats_csv(
     app: tauri::AppHandle,
     request: maxed_types::StatsExportRequest,
@@ -430,6 +677,110 @@ async fn get_fight(
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
 ) -> Result<maxed_types::HistoryReply<Option<maxed_types::FightView>>, String> {
     runtime.inner().get_fight(id).await
+}
+
+#[tauri::command]
+async fn get_run_player(
+    run_id: String,
+    player_id: String,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::HistoryReply<Option<maxed_types::RunPlayerView>>, String> {
+    runtime.inner().get_run_player(run_id, player_id).await
+}
+
+#[tauri::command]
+async fn get_party_live(
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::HistoryReply<maxed_types::PartyView>, String> {
+    runtime.inner().get_party_live().await
+}
+
+#[tauri::command]
+async fn get_party_run(
+    run_id: String,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::HistoryReply<Option<maxed_types::PartyView>>, String> {
+    runtime.inner().get_party_run(run_id).await
+}
+
+#[tauri::command]
+async fn get_party_players(
+    query: String,
+    filter: maxed_types::PartyPlayerFilter,
+    sort: maxed_types::PartyPlayerSort,
+    cursor: Option<maxed_types::PartyPlayersCursor>,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::HistoryReply<maxed_types::PartyPlayersPage>, String> {
+    runtime
+        .inner()
+        .get_party_players(query, filter, sort, cursor)
+        .await
+}
+
+#[tauri::command]
+async fn get_party_player(
+    key: String,
+    cursor: Option<maxed_types::PartyRunsCursor>,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::HistoryReply<Option<maxed_types::PartyPlayerView>>, String> {
+    runtime.inner().get_party_player(key, cursor).await
+}
+
+#[tauri::command]
+async fn set_party_mark(
+    key: String,
+    name: String,
+    mark: Option<maxed_types::PartyMark>,
+    note: Option<String>,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<(), String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.set_party_mark(key, name, mark, note))
+        .await
+        .map_err(|_| "Party worker failed".to_string())?
+}
+
+#[tauri::command]
+async fn clear_party_history(
+    options: maxed_types::ClearPartyHistory,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<(), String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.clear_party_history(options))
+        .await
+        .map_err(|_| "Party worker failed".to_string())?
+}
+
+#[tauri::command]
+async fn set_party_preset_pick(
+    preset_id: Option<String>,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<(), String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.set_party_preset_pick(preset_id))
+        .await
+        .map_err(|_| "Party worker failed".to_string())?
+}
+
+#[tauri::command]
+async fn open_realmeye(name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || runtime::open_realmeye(&name))
+        .await
+        .map_err(|_| "Browser handoff failed".to_string())?
+}
+
+#[tauri::command]
+async fn get_player_context(
+    scope_id: String,
+    player_id: String,
+    from: Option<maxed_types::Timestamp>,
+    until: Option<maxed_types::Timestamp>,
+    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
+) -> Result<maxed_types::HistoryReply<Option<maxed_types::PlayerContextView>>, String> {
+    runtime
+        .inner()
+        .get_player_context(scope_id, player_id, from, until)
+        .await
 }
 
 #[tauri::command]
@@ -510,6 +861,9 @@ async fn stop_capture(setup: tauri::State<'_, Arc<SetupService>>) -> Result<(), 
 async fn get_startup_setup_required(
     setup: tauri::State<'_, Arc<SetupService>>,
 ) -> Result<bool, String> {
+    if gui_smoke::enabled() {
+        return Ok(true);
+    }
     #[cfg(feature = "perf-live")]
     if runtime::perf::enabled() {
         return Ok(false);
@@ -614,6 +968,18 @@ async fn get_object_visuals(
     tauri::async_runtime::spawn_blocking(move || setup.visuals(&object_types))
         .await
         .map_err(|_| "Visual worker failed.")?
+}
+
+#[tauri::command]
+async fn get_item_details(
+    object_types: Vec<u16>,
+    enchant_ids: Vec<i32>,
+    setup: tauri::State<'_, Arc<SetupService>>,
+) -> Result<maxed_types::ItemDetailPage, String> {
+    let setup = setup.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || setup.item_details(&object_types, &enchant_ids))
+        .await
+        .map_err(|_| "Item detail worker failed.")?
 }
 
 #[tauri::command]
@@ -724,12 +1090,19 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(CaptureRuntime::default()))
         .manage(bridge::channels::LivePayloads::default())
+        .manage(Arc::new(bridge::PresentationVisibility::default()))
         .on_page_load(|webview, payload| {
             let _ = webview
                 .state::<bridge::channels::LivePayloads>()
                 .page_load(webview.label(), payload.event());
         })
         .on_window_event(|window, event| {
+            if matches!(
+                event,
+                tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(_)
+            ) {
+                update_presentation_visibility(window);
+            }
             // Each app window is a WebviewWindow with the same webview label.
             // Tauri exposes its destruction through the owning window event.
             if matches!(event, tauri::WindowEvent::Destroyed) {
@@ -759,7 +1132,11 @@ pub fn run() {
                 Arc::new(assets_bridge::AssetBridge::default()),
             )
             .map_err(std::io::Error::other)?
-            .with_launcher_root(app.path().local_data_dir().ok());
+            .with_launcher_root(if gui_smoke::enabled() {
+                None
+            } else {
+                app.path().local_data_dir().ok()
+            });
             let service = Arc::new(service);
             let weak_setup = Arc::downgrade(&service);
             service
@@ -772,6 +1149,11 @@ pub fn run() {
             app.manage(service.updates.clone());
             app.state::<Arc<CaptureRuntime>>()
                 .configure_alert_settings(service.settings.clone())?;
+            let storage_notices = app.handle().clone();
+            app.state::<Arc<CaptureRuntime>>()
+                .set_storage_notice_sink(Arc::new(move |notice| {
+                    let _ = storage_notices.emit("storage-maintenance-changed", notice);
+                }));
             app.state::<Arc<CaptureRuntime>>()
                 .initialize_home(root)
                 .map_err(std::io::Error::other)?;
@@ -809,6 +1191,10 @@ pub fn run() {
                         .startup_failed
                         .store(true, Ordering::Release);
                     handle.exit(1);
+                    return;
+                }
+                // Smoke always wins over inherited measurement/demo flags.
+                if gui_smoke::enabled() {
                     return;
                 }
                 #[cfg(feature = "perf-live")]
@@ -860,6 +1246,10 @@ pub fn run() {
                     main_window,
                     request.method(),
                     &request.uri().to_string(),
+                    request
+                        .headers()
+                        .get("Origin")
+                        .and_then(|v| v.to_str().ok()),
                 );
                 responder.respond(response);
             });
@@ -873,11 +1263,27 @@ pub fn run() {
             install_update,
             cancel_update,
             get_recording_status,
+            get_database_size,
+            get_history_upgrade_status,
+            backup_and_upgrade_history,
+            get_storage_status,
+            compact_storage,
+            cancel_storage_maintenance,
+            resume_storage_maintenance,
+            list_storage_backups,
+            delete_storage_backup,
+            get_storage_backup_location,
             report_interactive_rail,
             get_capture_status,
             get_live_snapshot,
+            get_character_calculation,
+            set_document_visible,
             get_store_status,
             get_home_summary,
+            get_home_hud,
+            get_home_dungeon_streak,
+            get_run_recap,
+            get_visit_recap,
             get_scope_loot,
             get_dungeon_bests,
             list_runs,
@@ -897,18 +1303,32 @@ pub fn run() {
             list_stats_sessions,
             get_stats_session,
             get_stats_dungeons,
+            get_boss_history,
+            get_home_boss_baselines,
+            get_dungeon_profile,
             export_stats_csv,
             list_alerts,
             get_alert_summary,
             get_alert_delivery_status,
             update_alert_preferences,
             update_chat_settings,
+            update_party_settings,
             request_notification_permission,
             test_alert_delivery,
             get_run,
             get_fight,
             get_run_fight_strip,
             get_player_breakdown,
+            get_run_player,
+            get_party_live,
+            get_party_run,
+            get_party_players,
+            get_party_player,
+            set_party_mark,
+            clear_party_history,
+            set_party_preset_pick,
+            open_realmeye,
+            get_player_context,
             retry_store,
             exit_without_saving,
             set_demo,
@@ -925,6 +1345,7 @@ pub fn run() {
             search_items,
             set_chase_list,
             get_object_visuals,
+            get_item_details,
             get_dungeon_portal_type,
             list_catalog_dungeon_options,
             list_catalog_dungeons

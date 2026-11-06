@@ -1,3 +1,4 @@
+import { isPresentationVisible, observePresentationVisibility } from '../bridge/visibility';
 import { writable } from 'svelte/store';
 import type { Client } from '../bridge/client';
 import type { RecordingFailure } from '../bindings/RecordingFailure';
@@ -9,8 +10,9 @@ export function createRecordingSession(client: Client, preview = false) {
   let disposed = false;
   let busy = false;
   let failed = false;
+  let pendingRefresh = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const visible = () => typeof document === 'undefined' || document.visibilityState !== 'hidden';
+  const visible = isPresentationVisible;
   function schedule() {
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
@@ -20,12 +22,16 @@ export function createRecordingSession(client: Client, preview = false) {
   }
   function visibilityChanged() {
     // Resume the single status timer, never a backlog of hidden-window reads.
-    if (!busy) schedule();
+    if (visible() && pendingRefresh && !busy) void refresh();
+    else if (!busy) schedule();
     else if (!visible() && timer !== undefined) { clearTimeout(timer); timer = undefined; }
   }
-  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', visibilityChanged);
+  const releaseVisibility = observePresentationVisibility(visibilityChanged);
   async function refresh() {
-    if (disposed || busy) return;
+    if (disposed) return;
+    if (!visible()) { pendingRefresh = true; return; }
+    if (busy) return;
+    pendingRefresh = false;
     if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
     busy = true;
     state.set({ status: current, busy, error: '' });
@@ -39,7 +45,10 @@ export function createRecordingSession(client: Client, preview = false) {
     } catch {
       failed = true;
       if (!disposed) state.set({ status: current, busy: false, error: 'Couldn’t load recording. Retry.' });
-    } finally { busy = false; }
+    } finally {
+      busy = false;
+      if (!disposed && pendingRefresh && visible()) void refresh();
+    }
   }
   return {
     subscribe: state.subscribe,
@@ -47,7 +56,7 @@ export function createRecordingSession(client: Client, preview = false) {
     dispose() {
       disposed = true;
       if (timer !== undefined) clearTimeout(timer);
-      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', visibilityChanged);
+      releaseVisibility();
     },
   };
 }

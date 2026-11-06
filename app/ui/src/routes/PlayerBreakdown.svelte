@@ -1,7 +1,6 @@
 <script lang="ts">
   import BusyStatus from '../lib/status/BusyStatus.svelte';
   import { historyStatus } from '../lib/status/registry';
-  import { formatShare, formatStat } from '../lib/styles/format';
   import { debugMode } from '../lib/debug/debug';
   import DebugNote from '../lib/debug/DebugNote.svelte';
   import { tick, untrack } from 'svelte';
@@ -10,23 +9,33 @@
   import type { ListState } from '../lib/navigation/state';
   import type { FightView } from '../lib/bindings/FightView';
   import type { PlayerDamage } from '../lib/bindings/PlayerDamage';
+  import type { PlayerContextView } from '../lib/bindings/PlayerContextView';
+  import type { RunPlayerFight } from '../lib/bindings/RunPlayerFight';
   import { routeHref, type FightRelationship } from '../lib/navigation/routes';
   import { createRunHistory, type HistoryController, type HistoryState } from '../lib/runs/history';
   import HistoryStatus from '../lib/runs/HistoryStatus.svelte';
   import { HISTORY_CATCH_UP } from '../lib/runs/policy';
-  import { coverageExplanation, damageRank, reconstructionDefaults } from '../lib/runs/damage';
+  import { coverageExplanation, reconstructionDefaults } from '../lib/runs/damage';
   import SourceBreakdown from '../lib/runs/SourceBreakdown.svelte';
   import { createHomeVisuals, emptyHomeVisuals } from '../lib/home/visuals';
-  import SpriteImage from '../lib/components/SpriteImage.svelte';
   import { spriteUrl } from '../lib/bridge/visuals';
   import type { RunFightStripRow } from '../lib/bindings/RunFightStripRow';
   import { objectVisual } from '../lib/bridge/visual-index';
   import { parseObjectId } from '../lib/navigation/routes';
   import Breadcrumbs from '../lib/runs/Breadcrumbs.svelte';
   import KpiStrip from '../lib/home/v3/KpiStrip.svelte';
-  import PlayerSeriesChart from '../lib/runs/PlayerSeriesChart.svelte';
-  import { playerKpis, playerNeighbors, playerRankKey, sourceRows } from '../lib/runs/player-screen';
+  import PlayerHeader from '../lib/players/PlayerHeader.svelte';
+  import ScopeTabs from '../lib/players/ScopeTabs.svelte';
+  import PlayerTimelineChart from '../lib/players/PlayerTimelineChart.svelte';
+  import BossFightsTable from '../lib/players/BossFightsTable.svelte';
+  import GearCard from '../lib/players/GearCard.svelte';
+  import StatsCard from '../lib/players/StatsCard.svelte';
+  import ActivityCard from '../lib/players/ActivityCard.svelte';
+  import { activityItems, durationText, fightPlayerKpis, gearAt, idleGaps, presenceEnd, sliceTimeline, swapsIn,
+    timelineFromFightSeries, timestampMs } from '../lib/players/player-view';
+  import { playerNeighbors, playerRankKey, sourceRows } from '../lib/runs/player-screen';
   import '../lib/home/v3/area-home.css';
+  import '../lib/players/players.css';
   import EmptyState from '../lib/components/EmptyState.svelte';
   let { client, fightId, objectId, runId, streamId = null, scopeKey = '', required = null, store = null,
     entryKey = '', onRowsReady, onRelationship, enabled = true }: {
@@ -40,6 +49,7 @@
   // Metadata is tied to one accepted fight object, never to an independently refreshed row.
   const selections = new WeakMap<FightView, Selection>();
   const strips = new WeakMap<FightView, RunFightStripRow[] | null>();
+  const contexts = new WeakMap<FightView, PlayerContextView | null>();
   let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading player context.', retryAvailable: false });
   let controller = $state.raw<HistoryController>();
   let retryShown = $state(false);
@@ -49,29 +59,66 @@
   let player = $derived(selection?.kind === 'player' ? selection.player : null);
   let visuals = $state.raw(emptyHomeVisuals());
   let visualController = $state.raw<ReturnType<typeof createHomeVisuals>>();
-  let visual = $derived(objectVisual(visuals.objects, player?.class_id ?? null));
   let strip = $derived(fight ? strips.get(fight) ?? null : null);
-  let name = $derived(player?.name ?? 'Unknown player');
+  let context = $derived(fight ? contexts.get(fight) ?? null : null);
+  let profile = $derived(context?.profile ?? null);
+  let name = $derived(profile?.name ?? player?.name ?? 'Unknown player');
+  let classId = $derived(profile?.class_id ?? player?.class_id ?? null);
+  let firstSeen = $derived(timestampMs(profile?.first_seen));
+  let from = $derived(timestampMs(fight?.started));
+  let until = $derived(timestampMs(fight?.ended ?? fight?.last_hit));
+  let fightTimeline = $derived(fight && player ? timelineFromFightSeries(fight, player.player_id)
+    ?? timelineFromFightSeries(fight, player.player_id, true) : null);
+  let slicedTimeline = $derived(fight && player && !fightTimeline && context?.timeline && !context.timeline.disabled
+    && from !== null && until !== null ? sliceTimeline(context.timeline, from, until) : null);
+  let timeline = $derived(fight && player ? fightTimeline ?? slicedTimeline ?? context?.timeline ?? null : null);
+  let lastSeen = $derived(presenceEnd(profile?.last_seen, timeline, fight?.ended == null));
+  let inRunMs = $derived(firstSeen !== null && lastSeen !== null && lastSeen >= firstSeen ? lastSeen - firstSeen : null);
+  let present = $derived(firstSeen !== null && lastSeen !== null && from !== null && until !== null
+    ? { from: Math.max(firstSeen, from), until: Math.min(lastSeen, until) } : null);
+  let equipment = $derived(from !== null ? gearAt(context?.gear_log ?? [], from) : null);
+  let baseline = $derived(equipment !== null && from !== null ? { at: from, equipment } : null);
+  let swaps = $derived(from !== null && until !== null ? swapsIn(context?.gear_log ?? [], from, until) : []);
   let bossName = $derived(strip?.find(row => row.fight_id === fight?.id)?.target_name ?? objectVisual(visuals.objects, fight?.target_type ?? fight?.boss_type ?? null)?.name ?? 'Unknown target');
   let neighbors = $derived(fight ? playerNeighbors(fight, objectId) : { previous: null, next: null });
   let cells = $derived.by(() => {
     if (!player || !fight) return [];
     const best = sourceRows(player, visuals).filter(row => row.bestHit !== null).sort((a, b) => b.bestHit! - a.bestHit!)[0];
-    return playerKpis(player, fight).map(cell => cell.key === 'best_hit' ? { ...cell, sub: best?.name ?? '—' }
-      : cell.key === 'rank' ? { ...cell, value: damageRank(player!.rank), of: String(fight!.players.length) } : cell);
+    return fightPlayerKpis(fight, player, context?.deaths ?? [], timeline,
+      present ? Math.max(0, present.until - present.from) : null, profile)
+      .map(cell => cell.key === 'best_hit' ? { ...cell, sub: best?.name ?? '—' } : cell);
   });
   const fightHref = (id: string) => routeHref({ kind: 'fight', id, runId: fight?.run_id ?? undefined });
   const playerHref = (row: PlayerDamage | null) => row && fight && parseObjectId(String(row.object_id)) !== null
     && fight.players.filter(value => value.object_id === row.object_id).length === 1
     ? routeHref({ kind: 'player', fightId: fight.id, objectId: row.object_id, runId: fight.run_id ?? undefined }) : undefined;
   const stripName = (row: RunFightStripRow) => row.target_name ?? objectVisual(visuals.objects, row.target_type ?? row.boss_type)?.name ?? 'Unknown target';
-  let selectionLink: HTMLAnchorElement | undefined = $state();
-  function selectPlayer(event: Event) {
-    const row = fight?.players.find(value => String(value.object_id) === (event.currentTarget as HTMLSelectElement).value);
-    const href = playerHref(row ?? null);
-    // Use the shell's existing link interception so Back/Forward keeps its route state.
-    if (href && selectionLink) { selectionLink.setAttribute('href', href); selectionLink.click(); }
-  }
+  let picker = $derived([...(fight?.players ?? [])].sort((a, b) => playerRankKey(a) - playerRankKey(b)
+    || (a.name ?? '').localeCompare(b.name ?? ''))
+    .map(row => ({ href: playerHref(row) ?? null,
+      label: `${row.name ?? 'Unknown player'}${row.is_local ? ' (You)' : ''}`, current: row.player_id === player?.player_id })));
+  // The strip selects contributions by this scope's player ID. Object identity is
+  // stable for that player; absent contributions cannot produce a player link.
+  let fights = $derived((strip ?? []).map((row): RunPlayerFight => ({ ...row, target_name: stripName(row),
+    object_id: row.damage !== null ? player?.object_id ?? null : null,
+    dps_basis: row.fight_id === fight?.id ? fight.dps_basis : 'whole_target_v0',
+    dps: row.fight_id === fight?.id ? player?.dps ?? null : null,
+    deaths: row.fight_id === fight?.id ? (context?.deaths.length || player?.deaths) ?? null : null,
+  })).sort((a, b) => (timestampMs(a.started) ?? 0) - (timestampMs(b.started) ?? 0)));
+  const fightPlayerHref = (row: RunPlayerFight) => row.object_id == null ? null
+    : routeHref({ kind: 'player', runId: fight?.run_id ?? undefined, fightId: row.fight_id, objectId: row.object_id });
+  let tabs = $derived(fight?.run_id && player ? [{ label: 'Whole run', sub: '', current: false,
+    href: routeHref({ kind: 'run-player', runId: fight.run_id, playerId: player.player_id }) }, ...fights.map(row => ({
+      label: row.target_name ?? 'Unknown target', sub: durationText(timestampMs(row.started) !== null && timestampMs(row.ended) !== null
+        ? Math.max(0, timestampMs(row.ended)! - timestampMs(row.started)!) : null),
+      href: fightPlayerHref(row), current: row.fight_id === fight?.id,
+    }))] : []);
+  let activity = $derived.by(() => {
+    const hits = timeline && !timeline.disabled ? timeline.buckets.filter((_, i) => timeline!.points[i] > 0) : [];
+    return activityItems({ firstSeen: firstSeen !== null && from !== null && until !== null && firstSeen >= from && firstSeen < until ? firstSeen : null,
+      firstHit: timestampMs(hits[0]?.from), lastHit: timestampMs(hits.at(-1)?.until), deaths: context?.deaths ?? [], departedAt: null,
+      gaps: timeline && present ? idleGaps(timeline, present) : [] });
+  });
   $effect(() => {
     if (!client || !enabled) return;
     const instance = createHomeVisuals(client, next => { visuals = next; });
@@ -82,8 +129,10 @@
     const instance = visualController;
     const entries = player ? [player] : selection?.kind === 'ambiguous'
       ? fight?.players.filter(row => row.object_id === objectId) ?? [] : [];
-    const types = [fight?.target_type ?? fight?.boss_type ?? null, ...(strip ?? []).map(row => row.target_type ?? row.boss_type), ...entries.flatMap(row => [row.class_id, ...row.sources.map(source => source.item_type)])]
-      .filter((type): type is number => type !== null);
+    const types = [classId, profile?.skin_id, ...(fight?.players ?? []).map(row => row.class_id),
+      ...(profile?.equipment ?? []).map(row => row.item_type), ...(context?.gear_log ?? []).flatMap(row => row.equipment.map(item => item.item_type)),
+      fight?.target_type ?? fight?.boss_type ?? null, ...(strip ?? []).map(row => row.target_type ?? row.boss_type), ...entries.flatMap(row => [row.class_id, ...row.sources.map(source => source.item_type)])]
+      .filter((type): type is number => type != null);
     untrack(() => instance?.update(types));
   });
   let available = $derived(!client || history.value !== null || history.phase === 'error' || (history.phase === 'busy' && history.retryAvailable));
@@ -133,6 +182,21 @@
         } catch { /* Optional context must not fail a coherent player view. */ }
         if (!current) return { status: 'superseded' };
       }
+      let playerContext: PlayerContextView | null = null;
+      if (reply.value !== null && value.scope_id != null) {
+        try {
+          const response = await owner.getPlayerContext(value.scope_id, reply.value.player_id, value.started, value.ended ?? value.last_hit);
+          if (!current) return { status: 'superseded' };
+          if (response.status === 'ready') playerContext = response.value;
+        } catch { /* Optional context must not fail a coherent player view. */ }
+        if (!current) return { status: 'superseded' };
+        if (playerContext?.profile && (playerContext.profile.scope_id !== value.scope_id
+          || playerContext.profile.player_id !== reply.value.player_id || playerContext.profile.object_id !== selectedId)) {
+          coherenceWarning = 'Saved player revisions did not match. Keeping the last coherent view while awaiting a saved revision.';
+          return { status: 'superseded' };
+        }
+      }
+      contexts.set(value, playerContext);
       strips.set(value, runStrip);
       selections.set(value, reply.value === null ? { kind: 'missing' } : { kind: 'player', player: reply.value });
       coherenceWarning = '';
@@ -181,36 +245,21 @@
         <SourceBreakdown player={entry} {visuals} rowPrefix={`source:${entry.player_id}`} label={`${entry.name ?? 'Unknown Player'} Sources`} />
       {/each}
     {:else if player}
-      <header class="area-header">
-        <span class="run-icon"><SpriteImage sprite={visual?.sprite ?? null} sheetUrl={visual?.sprite ? spriteUrl(visuals.client_fingerprint, visual.sprite) : null} fit={28} alt={visual?.name ?? 'Class'} /></span>
-        <div class="title"><h2><span title={name}>{name}</span>{#if player.is_local}<span class="tag you">You</span>{/if}</h2>
-          <p title={`${visual?.name ?? '—'} · rank ${damageRank(player.rank)} of ${fight.players.length} against ${bossName}`}>{visual?.name ?? '—'} · rank {damageRank(player.rank)} of {fight.players.length} against {bossName}</p></div>
-        {#if !fight.complete_capture || fight.issues.length}<span class="tag">partial</span>{/if}
-        <nav class="neighbors" aria-label="Players in this fight">
-          <select class="ctl" aria-label="Player" value={String(player.object_id)} onchange={selectPlayer}>
-            {#each [...fight.players].sort((a, b) => playerRankKey(a) - playerRankKey(b)) as row (row.player_id)}
-              <option value={String(row.object_id)} disabled={!playerHref(row)}>{row.name ?? 'Unknown player'}</option>
-            {/each}
-          </select>
-          <a bind:this={selectionLink} hidden aria-hidden="true" tabindex="-1" href={playerHref(player)}>Open selected player</a>
-          <a class="ctl sq" aria-label={neighbors.previous ? `‹ Previous player: ${neighbors.previous.name ?? 'Unknown player'}` : '‹ Previous player'} aria-disabled={!playerHref(neighbors.previous)} href={playerHref(neighbors.previous)}>‹</a>
-          <a class="ctl sq" aria-label={neighbors.next ? `› Next player: ${neighbors.next.name ?? 'Unknown player'}` : '› Next player'} aria-disabled={!playerHref(neighbors.next)} href={playerHref(neighbors.next)}>›</a>
-        </nav>
-      </header>
-      <div class="area-kpis"><KpiStrip {cells} /></div>
-      <div class="sources"><SourceBreakdown {player} {visuals} rowPrefix={`source:${player.player_id}`} /></div>
-      <aside class="side">
-        <PlayerSeriesChart {fight} {player} />
-        <section class="area-card" aria-label={`${name} this run`}><h3 title={`${name} this run`}>{name} this run</h3>
-          {#if strip?.length}<div class="strip-scroll"><table>
-            <colgroup><col /><col style="width: 72px" /><col style="width: 38px" /><col style="width: 46px" /></colgroup>
-            <thead><tr><th scope="col">Boss</th><th scope="col">Damage</th><th scope="col">Rank</th><th scope="col">Share</th></tr></thead>
-            <tbody>{#each strip as row (row.fight_id)}
-              {@const boss = objectVisual(visuals.objects, row.target_type ?? row.boss_type)}
-              <tr class:current={row.fight_id === fight.id}><th scope="row"><a href={fightHref(row.fight_id)} aria-current={row.fight_id === fight.id ? 'page' : undefined} title={stripName(row)}><span aria-hidden="true"><SpriteImage sprite={boss?.sprite ?? null} sheetUrl={boss?.sprite ? spriteUrl(visuals.client_fingerprint, boss.sprite) : null} fit={24} alt="" /></span><span class="boss-name">{stripName(row)}</span></a></th><td>{formatStat(row.damage)}</td><td class="rank">{damageRank(row.rank)}</td><td>{formatShare(row.share)}</td></tr>
-            {/each}</tbody>
-          </table></div>{:else}<p class="muted">—</p>{/if}
-        </section>
+      <div class="head"><PlayerHeader {name} {classId} isLocal={profile?.is_local ?? player.is_local}
+        live={fight.ended == null} partial={!fight.complete_capture || fight.issues.length > 0} {profile} {inRunMs} presenceUntil={lastSeen} {visuals} {picker}
+        prevHref={playerHref(neighbors.previous) ?? null} nextHref={playerHref(neighbors.next) ?? null}
+        prevName={neighbors.previous?.name ?? null} nextName={neighbors.next?.name ?? null} /></div>
+      {#if tabs.length}<div class="scope"><ScopeTabs {tabs} /></div>{/if}
+      <div class="kpis"><KpiStrip {cells} /></div>
+      <div class="main-column">
+        <PlayerTimelineChart {timeline} bands={[]} note={slicedTimeline ? 'Includes damage to other targets during this fight' : null} missingText={fight.scope_id != null && context === null ? 'Timeline unavailable' : 'Not recorded for this run'} unavailable={timeline === null ? 'legacy' : timeline.disabled ? 'limit' : undefined} />
+        <SourceBreakdown {player} label="Damage by item" {visuals} rowPrefix={`source:${player.player_id}`} showEstimates />
+        <BossFightsTable rows={fights} currentFightId={fight.id} hrefFor={fightPlayerHref} />
+      </div>
+      <aside class="side-column">
+        <GearCard missingText={context !== null ? 'Not seen at fight start' : fight.scope_id != null ? 'Gear unavailable' : 'Not recorded for this run'} {equipment} observedAt={baseline?.at ?? null} {baseline} {swaps} {visuals} resolveSpriteUrl={sprite => spriteUrl(visuals.client_fingerprint, sprite)} />
+        <StatsCard missingText={fight.scope_id != null && context === null ? 'Stats unavailable' : 'Not recorded for this run'} {profile} {visuals} />
+        <ActivityCard items={activity} />
       </aside>
     {:else}
       <EmptyState heading="Player Not Found" description="" />
@@ -242,35 +291,18 @@
 </div>
 
 <style>
+  summary { cursor: pointer; min-height: 26px; }
   .player { overflow-anchor: none; overflow-wrap: anywhere; min-width: 0; }
-  .player-screen { height: auto; grid-template-columns: minmax(0, 1fr) 340px; grid-template-rows: auto auto auto auto; grid-template-areas: 'crumbs crumbs' 'head head' 'kpis kpis' 'src side'; align-content: start; align-items: start; }
+  .player-screen { height: auto; grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: auto auto auto auto auto auto; grid-template-areas: 'crumbs crumbs' 'head head' 'scope scope' 'kpis kpis' 'main side' 'debug debug'; align-content: start; align-items: start; }
   .player-screen.ambiguous { display: flex; flex-direction: column; align-items: stretch; }
   .crumbs { grid-area: crumbs; min-width: 0; }
-  .area-header { flex-wrap: wrap; }
-  .title { flex: 1; min-width: 0; }
-  .title h2 { display: flex; gap: 8px; align-items: center; }
-  .title h2 > span:first-child, .title p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tag { flex: none; font-size: 10px; line-height: 16px; color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
-  .you { color: var(--gold); border-color: #f2c14e55; }
-  .neighbors { display: flex; align-items: center; gap: 6px; margin-left: auto; min-width: 0; }
-  .neighbors select { width: 150px; min-width: 0; text-overflow: ellipsis; }
-  .neighbors a { box-sizing: border-box; min-height: 26px; }
-  .sources { grid-area: src; min-width: 0; }
-  .side { grid-area: side; display: grid; align-self: start; gap: 10px; min-width: 0; padding: 0; border: 0; background: transparent; }
-  .side h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .strip-scroll { max-height: 260px; overflow: auto; }
-  table { width: 100%; table-layout: fixed; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  th, td { text-align: right; height: 30px; padding: 0 4px; font-weight: 400; }
-  th:first-child { text-align: left; }
-  thead th { font-size: 11px; color: var(--text-muted); }
-  tbody tr { border-top: 1px solid var(--border); }
-  td { white-space: nowrap; }
-  table a { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; text-decoration: none; line-height: 30px; }
-  .boss-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  table a > span:first-child { display: flex; flex: none; }
-  .current { background: #f2c14e14; } .current th { box-shadow: inset 2px 0 var(--gold); padding-left: 6px; } .current .rank { color: var(--gold); }
-  .muted { color: var(--text-muted); }
-  summary { cursor: pointer; min-height: 26px; align-content: center; }
-  .area-kpis :global(.value) { overflow: hidden; text-overflow: ellipsis; }
-  @media (max-width: 950px) { .player-screen { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: 'crumbs' 'head' 'kpis' 'src' 'side'; } }
+  .head { grid-area: head; min-width: 0; }
+  .scope { grid-area: scope; min-width: 0; }
+  .kpis { grid-area: kpis; min-width: 0; overflow-x: auto; }
+  .kpis :global(.kpi-strip) { min-width: 800px; }
+  .main-column { grid-area: main; display: grid; gap: 10px; min-width: 0; }
+  .side-column { grid-area: side; display: grid; gap: 10px; min-width: 0; }
+  @media (max-width: 900px) {
+    .player-screen { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'crumbs' 'head' 'scope' 'kpis' 'main' 'side' 'debug'; }
+  }
 </style>

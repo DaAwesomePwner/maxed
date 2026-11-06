@@ -75,9 +75,10 @@ impl crate::Engine {
             .as_ref()
             .and_then(|local| self.entities.get(&local.object))
             .and_then(|entity| entity.name.as_deref())
+            .map(crate::names::display_name)
             .filter(|identity| !identity.is_empty())?;
         // Without a known local identity an own pop can't be ruled out, so stay silent.
-        if local.eq_ignore_ascii_case(opener) {
+        if local.eq_ignore_ascii_case(crate::names::display_name(opener)) {
             return None;
         }
         self.catalog

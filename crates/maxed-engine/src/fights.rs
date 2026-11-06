@@ -26,6 +26,7 @@ pub(crate) struct Fight {
     pub pending: BTreeMap<(i32, u32, u64, u16), Pair>,
     pub series: crate::engine::series::Series,
     pub series_budget: crate::engine::series::SeriesBudget,
+    pub timeline_out: Vec<(Timestamp, PlayerDamage, f64)>,
     local_last_hit: Option<Timestamp>,
     player_windows: BTreeMap<String, (Timestamp, Timestamp)>,
     snapshot_series_cache:
@@ -72,6 +73,10 @@ impl Fight {
                 .max();
         }
         add(&mut self.base, &mut self.series, c);
+        if let Some(player) = &c.player {
+            self.timeline_out
+                .push((c.at, player.clone(), c.source.damage));
+        }
     }
     fn record_activity(&mut self, c: &Contribution) {
         if let Some(p) = &c.player {
@@ -93,9 +98,11 @@ impl Fight {
         // Clone the legacy fields without allocating/copying series that the
         // snapshot will omit. Event callers continue to use project().
         FightView {
+            scope_id: v.scope_id.clone(),
             dps_basis: v.dps_basis,
             is_current_quest: v.is_current_quest,
             local_last_hit: v.local_last_hit,
+            local_active_micros: v.local_active_micros,
             id: v.id.clone(),
             run_id: v.run_id.clone(),
             session_id: v.session_id.clone(),
@@ -178,6 +185,16 @@ impl Fight {
                 .total_cmp(&a.damage)
                 .then_with(|| a.player_id.cmp(&b.player_id))
         });
+        let mut locals = v.players.iter().filter(|p| p.is_local);
+        v.local_active_micros = locals
+            .next()
+            .filter(|_| locals.next().is_none())
+            .filter(|_| !v.issues.contains(&CoverageIssue::MissingIdentity))
+            .and_then(|p| windows.get(&p.player_id))
+            .map(|&(first, last)| {
+                let last = v.ended.map_or(last, |end| last.min(end));
+                last.0.saturating_sub(first.0)
+            });
         let mut last = None;
         let mut rank = 0;
         for (i, p) in v.players.iter_mut().enumerate() {
@@ -196,6 +213,15 @@ impl Fight {
                 p.rank = Some(rank);
             } else {
                 p.rank = None;
+            }
+        }
+        if self.series_budget.disabled
+            || series.is_disabled()
+            || v.players.iter().filter(|p| p.is_local).count() != 1
+        {
+            for bucket in &mut v.buckets {
+                bucket.others_damage = None;
+                bucket.others_presence = None;
             }
         }
         #[cfg(test)]
@@ -290,7 +316,12 @@ impl Fight {
     }
 }
 
-fn bucket(v: &mut FightView, c: &Contribution) {
+fn bucket(
+    v: &mut FightView,
+    c: &Contribution,
+    others_damage: Option<f64>,
+    others_presence: Option<f64>,
+) {
     let at = c.at.0 / 1_000_000 * 1_000_000;
     let local_known = v.players.iter().any(|p| p.is_local);
     let local = c.player.as_ref().is_some_and(|p| p.is_local);
@@ -306,12 +337,16 @@ fn bucket(v: &mut FightView, c: &Contribution) {
         if local {
             b.local = Some(b.local.unwrap_or(0.) + c.source.damage);
         }
+        b.others_damage = b.others_damage.zip(others_damage).map(|(a, b)| a + b);
+        b.others_presence = b.others_presence.zip(others_presence).map(|(a, b)| a + b);
     } else {
         v.buckets.push(DamageBucket {
             from: Timestamp(at),
             until: Timestamp(at.saturating_add(1_000_000)),
             total: c.source.damage,
             local: local_known.then_some(if local { c.source.damage } else { 0. }),
+            others_damage,
+            others_presence,
         });
         v.buckets.sort_by_key(|b| b.from);
     }
@@ -330,6 +365,8 @@ fn bucket(v: &mut FightView, c: &Contribution) {
                         .iter()
                         .all(|b| b.local.is_some())
                         .then(|| pair.iter().map(|b| b.local.unwrap_or(0.)).sum()),
+                    others_damage: pair.iter().map(|b| b.others_damage).sum(),
+                    others_presence: pair.iter().map(|b| b.others_presence).sum(),
                 }
             })
             .collect();
@@ -347,7 +384,14 @@ fn activity(windows: &mut BTreeMap<String, (Timestamp, Timestamp)>, id: &str, at
 }
 
 fn add(v: &mut FightView, series: &mut crate::engine::series::Series, c: &Contribution) {
+    let other = c.player.as_ref().filter(|p| !p.is_local);
+    // Check before insertion/compaction: a cell witnesses the first hit by
+    // this player in the one-second bucket, regardless of later hit count.
+    let first_other = other.is_some_and(|p| !series.has_cell(c.at, &p.player_id));
     series.add(c.at, c.player.as_ref(), c.source.damage);
+    let others_known = !series.is_disabled();
+    let others_damage = others_known.then_some(if other.is_some() { c.source.damage } else { 0. });
+    let others_presence = others_known.then_some(if first_other { 1. } else { 0. });
     let damage = c.source.damage;
     v.total_damage += damage;
     if let Some(player) = &c.player {
@@ -365,7 +409,7 @@ fn add(v: &mut FightView, series: &mut crate::engine::series::Series, c: &Contri
                 if !v.issues.contains(&CoverageIssue::ResourceLimit) {
                     v.issues.push(CoverageIssue::ResourceLimit);
                 }
-                bucket(v, c);
+                bucket(v, c, others_known.then_some(0.), others_known.then_some(0.));
                 return;
             }
             v.players.push(player.clone());
@@ -417,7 +461,7 @@ fn add(v: &mut FightView, series: &mut crate::engine::series::Series, c: &Contri
     } else {
         v.unattributed_damage += damage;
     }
-    bucket(v, c);
+    bucket(v, c, others_damage, others_presence);
 }
 
 impl Engine {
@@ -445,7 +489,7 @@ impl Engine {
             name: e
                 .name
                 .as_deref()
-                .map(|name| name.split(',').next().unwrap_or_default().to_owned()),
+                .map(|name| crate::names::display_name(name).to_owned()),
             class_id: e.object_type,
             is_local,
             damage: 0.,
@@ -459,11 +503,19 @@ impl Engine {
         })
     }
     pub(crate) fn merge_player_identity(&mut self, old: &str, new: &str) {
+        if let Some(scope) = &mut self.scope {
+            scope.merge_identity(old, new);
+        }
         for (key, f) in &mut self.fights {
             self.dirty_fights.insert(*key);
             f.changed();
             f.series.merge_identity(old, new);
             f.series_budget.merge_identity(old, new);
+            for (_, player, _) in &mut f.timeline_out {
+                if player.player_id == old {
+                    player.player_id = new.into();
+                }
+            }
             if let Some((first, last)) = f.player_windows.remove(old) {
                 f.player_windows
                     .entry(new.into())
@@ -503,16 +555,19 @@ impl Engine {
         self.dirty_fights.remove(&key);
         self.observed_kills.remove(&key);
         self.notices.loot_kills.remove(&key);
-        if let Some(mut f) = self.fights.remove(&key) {
+        // Settlement can accept new damage. Drain it while the fight still
+        // belongs to the engine so retirement cannot discard timeline entries.
+        if let Some(f) = self.fights.get_mut(&key) {
             for (pk, p) in &f.pending {
                 self.pair_expiry.remove(&(p.at, key, *pk));
             }
-            // No more reports can reconcile after retirement. Finalize the
-            // same accepted estimates as expiry before publishing the last view.
             let pairs: Vec<_> = f.pending.keys().copied().collect();
             for pair in pairs {
                 f.settle_pair(pair);
             }
+        }
+        self.drain_fight_timelines();
+        if let Some(f) = self.fights.remove(&key) {
             let mut v = f.project();
             v.ended.get_or_insert(crate::clock::millis(self.now));
             v.is_current_quest = false;
@@ -666,10 +721,12 @@ impl Engine {
                 key,
                 Fight {
                     base: FightView {
+                        scope_id: self.scope_id(),
                         dps_basis: DpsBasis::PlayerActiveWindowV1,
                         pending_local_reconciliation: false,
                         is_current_quest: self.is_quest(key),
                         local_last_hit: None,
+                        local_active_micros: None,
                         kill: None,
                         target_hp: self.entities.get(&target).and_then(|e| e.stat(1)),
                         target_kind: self.target_kind(key, ty),
@@ -701,6 +758,7 @@ impl Engine {
                     pending: BTreeMap::new(),
                     series: Default::default(),
                     series_budget: Default::default(),
+                    timeline_out: vec![],
                     local_last_hit: None,
                     player_windows: BTreeMap::new(),
                     snapshot_series_cache: self.snapshot_series_cache.clone(),
@@ -884,8 +942,51 @@ fn issue(v: &mut FightView, i: CoverageIssue) {
 }
 
 #[cfg(test)]
+#[path = "fights_local_window_tests.rs"]
+mod local_window_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn latest_open_fight_hit_ignores_ended_and_hitless_fights() {
+        let mut engine = Engine::new(
+            Default::default(),
+            std::sync::Arc::new(maxed_types::demo::demo_catalog()),
+        )
+        .unwrap();
+        assert_eq!(engine.latest_open_fight_hit(), None);
+
+        engine.advance_to(Timestamp(1_000_000));
+        engine.report(42, 1, 1, true, Ok(100), &mut vec![]);
+        assert_eq!(engine.latest_open_fight_hit(), Some(Timestamp(1_000_000)));
+        engine.advance_to(Timestamp(2_000_000));
+        engine.report(43, 1, 2, true, Ok(100), &mut vec![]);
+        assert_eq!(engine.latest_open_fight_hit(), Some(Timestamp(2_000_000)));
+
+        let latest = engine
+            .fights
+            .values_mut()
+            .find(|f| f.base.target_id == 43)
+            .unwrap();
+        latest.base.ended = Some(Timestamp(2_000_000));
+        assert_eq!(engine.latest_open_fight_hit(), Some(Timestamp(1_000_000)));
+        let open = engine
+            .fights
+            .values_mut()
+            .find(|f| f.base.target_id == 42)
+            .unwrap();
+        open.base.last_hit = None;
+        assert_eq!(engine.latest_open_fight_hit(), None);
+
+        engine.advance_to(Timestamp(7_000_000));
+        engine.report(42, 1, 3, true, Ok(100), &mut vec![]);
+        assert_eq!(engine.latest_open_fight_hit(), Some(Timestamp(7_000_000)));
+        engine.finish(Timestamp(7_000_001), FightEnd::CaptureStopped);
+        assert_eq!(engine.latest_open_fight_hit(), None);
+    }
+
     #[test]
     fn projected_series_cap_latches_independent_of_snapshot_and_cancelled_estimate() {
         let base = maxed_types::demo::demo_snapshot().fights.remove(0);
@@ -915,6 +1016,7 @@ mod tests {
             pending: BTreeMap::new(),
             series,
             series_budget: compact.budget(),
+            timeline_out: vec![],
             local_last_hit: None,
             player_windows: BTreeMap::new(),
             snapshot_series_cache: Default::default(),

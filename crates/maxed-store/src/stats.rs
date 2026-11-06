@@ -23,6 +23,20 @@ pub(crate) fn unsigned(value: i64) -> Result<u64, StoreError> {
     u64::try_from(value).map_err(|_| StoreError::InvalidEvent)
 }
 
+/// Integer median, flooring the even-count mean without overflowing the sum.
+pub(crate) fn median(values: &mut [u64]) -> Option<u64> {
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_unstable();
+    let middle = values.len() / 2;
+    Some(if values.len().is_multiple_of(2) {
+        values[middle - 1] + (values[middle] - values[middle - 1]) / 2
+    } else {
+        values[middle]
+    })
+}
+
 /// A validated filter: range start and end in micros (`None` is all time), and the character.
 pub(crate) type Bounds<'a> = (Option<i64>, Option<i64>, Option<&'a str>);
 
@@ -163,7 +177,7 @@ fn session_row(
     require_activity: bool,
 ) -> Result<Option<StatsSessionRow>, StoreError> {
     let mut statement = conn.prepare_cached(include_str!("stats_session_totals.sql"))?;
-    let (fame, missing, runs, clears, deaths, active) =
+    let (fame, missing, runs, clears, deaths, active, bags, notable_bags) =
         statement.query_row(params![session.id, character], |r| {
             Ok((
                 r.get::<_, i64>(0)?,
@@ -172,6 +186,8 @@ fn session_row(
                 r.get::<_, i64>(3)?,
                 r.get::<_, i64>(4)?,
                 r.get::<_, bool>(5)?,
+                r.get::<_, i64>(6)?,
+                r.get::<_, i64>(7)?,
             ))
         })?;
     if require_activity && !active {
@@ -188,6 +204,10 @@ fn session_row(
         fame,
         missing_baseline: missing > 0,
         fame_per_hour: fame_per_hour(fame, duration_micros),
+        bags: count(bags)?,
+        notable_bags: count(notable_bags)?,
+        bags_per_hour: fame_per_hour(bags, duration_micros),
+        notable_bags_per_hour: fame_per_hour(notable_bags, duration_micros),
         runs: count(runs)?,
         clears: count(clears)?,
         deaths: count(deaths)?,
@@ -212,7 +232,8 @@ fn session_rows(
             let Some(row) = session_row(conn, &session, character, true)? else {
                 continue;
             };
-            if !include_empty && row.fame == 0 && row.runs == 0 && row.deaths == 0 {
+            if !include_empty && row.fame == 0 && row.runs == 0 && row.deaths == 0 && row.bags == 0
+            {
                 continue;
             }
             if rows.len() == limit {
@@ -441,7 +462,7 @@ mod tests {
         for (sql, indexes) in [
             (
                 include_str!("stats_maps.sql"),
-                &["fame_character", "map_visits_session"][..],
+                &["fame_session", "map_visits_session"][..],
             ),
             (
                 include_str!("stats_sessions.sql"),
@@ -451,9 +472,9 @@ mod tests {
                 include_str!("stats_session_totals.sql"),
                 &[
                     "fame_session",
-                    "fame_character",
                     "runs_session",
                     "deaths_session",
+                    "drops_session",
                 ][..],
             ),
         ] {

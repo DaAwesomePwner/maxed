@@ -1,10 +1,138 @@
 //! Synthetic Runs list contracts; no captured identities or traffic.
-mod common;
+use crate::common;
 use common::*;
 use maxed_store::*;
 use maxed_types::*;
 use rusqlite::Connection;
 use serde_json::{json, Value};
+
+#[path = "common/runs_audit.rs"]
+mod runs_audit;
+
+#[test]
+fn scalar_share_query_is_byte_identical_across_multiple_runs() {
+    for players in [30, 360] {
+        let mut db = Connection::open_in_memory().unwrap();
+        let ids = runs_audit::seed(&mut db, 48, players);
+        let legacy = runs_audit::query(true);
+        let current = runs_audit::query(false);
+        assert_eq!(
+            runs_audit::read(&db, &current, &ids),
+            runs_audit::read(&db, &legacy, &ids)
+        );
+        // Positive control: preserve non-null, weighted shares as well as unknowns.
+        db.execute_batch("UPDATE fights SET json=json_set(json,'$.issues',json('[]'),'$.total_damage',1000.0);
+            UPDATE fight_players SET json=json_set(json,'$.is_local',json(CASE WHEN object_id=0 THEN 'true' ELSE 'false' END),'$.share',0.1);").unwrap();
+        let actual = runs_audit::read(&db, &current, &ids);
+        assert_eq!(actual, runs_audit::read(&db, &legacy, &ids));
+        if players == 360 {
+            let rows: Vec<RunRowDetail> = serde_json::from_str(&actual).unwrap();
+            assert!(rows.iter().all(|row| row.local_share == Some(0.1)));
+        }
+    }
+}
+
+#[test]
+fn run_identity_backfill_and_legacy_fallback_preserve_entry_observations() {
+    for mode in ["update", "merge", "legacy"] {
+        for known in ["neither", "name", "class"] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("synthetic.sqlite");
+            let mut db = Connection::open(&path).unwrap();
+            migrate(&mut db).unwrap();
+            let mut entry = demo::demo_run_story().character.unwrap();
+            if known != "name" {
+                entry.name = None;
+            }
+            if known != "class" {
+                entry.class_id = None;
+            }
+            let mut events = story_events();
+            events[1].event = EngineEvent::CharacterUpdated(entry.clone());
+            apply_batch(&mut db, &events).unwrap();
+            let mut later = entry.clone();
+            later.name = Some("Synthetic Mage".into());
+            later.class_id = Some(777);
+            later.observed_at.0 += 1;
+            later.equipment.clear();
+            later.stats.clear();
+            if mode == "merge" {
+                later.id = "synthetic-verified".into();
+            }
+            apply_batch(
+                &mut db,
+                &[envelope(8, EngineEvent::CharacterUpdated(later.clone()))],
+            )
+            .unwrap();
+            if mode == "merge" {
+                apply_batch(
+                    &mut db,
+                    &[envelope(
+                        9,
+                        EngineEvent::CharacterMerged {
+                            provisional_id: entry.id.clone(),
+                            verified_id: later.id.clone(),
+                        },
+                    )],
+                )
+                .unwrap();
+                entry.id = later.id.clone();
+            }
+            if mode == "legacy" {
+                db.execute(
+                    "UPDATE runs SET entry_character_json=?1 WHERE id='demo-run'",
+                    [serde_json::to_string(&entry).unwrap()],
+                )
+                .unwrap();
+            }
+            let expected_name = entry.name.clone().or(later.name);
+            let expected_class = entry.class_id.or(later.class_id);
+            let reader = open_reader(&path).unwrap();
+            let details = reader
+                .list_runs(filter(RunSort::Newest, 100))
+                .unwrap()
+                .details
+                .unwrap();
+            assert_eq!(details[0].character_name, expected_name, "{mode}/{known}");
+            assert_eq!(details[0].class_id, expected_class, "{mode}/{known}");
+            if mode != "legacy" {
+                let stored: String = db
+                    .query_row(
+                        "SELECT entry_character_json FROM runs WHERE id='demo-run'",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap();
+                let stored: CharacterView = serde_json::from_str(&stored).unwrap();
+                assert_eq!(stored.name, expected_name);
+                assert_eq!(stored.class_id, expected_class);
+            }
+            entry.name = expected_name;
+            entry.class_id = expected_class;
+            assert_eq!(
+                reader.get_run("demo-run").unwrap().unwrap().character,
+                Some(entry)
+            );
+            // Even rows with no entry snapshot can display identity in the list,
+            // without fabricating historical gear or stats for the story.
+            db.execute("UPDATE runs SET entry_character_json=NULL", [])
+                .unwrap();
+            let details = reader
+                .list_runs(filter(RunSort::Newest, 100))
+                .unwrap()
+                .details
+                .unwrap();
+            assert_eq!(details[0].character_name.as_deref(), Some("Synthetic Mage"));
+            assert_eq!(details[0].class_id, Some(777));
+            assert!(reader
+                .get_run("demo-run")
+                .unwrap()
+                .unwrap()
+                .character
+                .is_none());
+        }
+    }
+}
 
 fn database() -> (tempfile::TempDir, std::path::PathBuf, Connection) {
     let dir = tempfile::tempdir().unwrap();
@@ -568,4 +696,89 @@ fn previous_best_uses_earlier_qualifying_clears_and_started_id_order() {
         result["details"][0]["previous_best_clear_micros"],
         90_000_000
     );
+}
+
+#[test]
+fn inferred_weapon_labels_do_not_make_saved_damage_partial() {
+    for (estimated, reasons, uncertain) in [
+        (false, vec![], false),
+        (true, vec![], true),
+        (true, vec!["inferred-equipped-weapon"], false),
+        (
+            false,
+            vec!["inferred-equipped-weapon", "inferred-equipped-weapon"],
+            false,
+        ),
+        (
+            true,
+            vec![
+                "inferred-equipped-weapon",
+                "client-projectile-reconstruction",
+            ],
+            true,
+        ),
+        (false, vec!["source-not-observed"], true),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("inferred.db");
+        let mut db = Connection::open(&path).unwrap();
+        migrate(&mut db).unwrap();
+        apply_batch(&mut db, &story_events()[..4]).unwrap();
+        let mut fight = demo::demo_snapshot().fights.remove(0);
+        fight.complete_capture = true;
+        fight.issues.clear();
+        let mut remote = fight.players[0].clone();
+        remote.player_id = "synthetic-remote".into();
+        remote.object_id = 3;
+        remote.is_local = false;
+        for source in &mut fight.players[0].sources {
+            source.estimated = false;
+            source.reasons.clear();
+        }
+        remote.sources.truncate(1);
+        remote.sources[0].estimated = estimated;
+        remote.sources[0].reasons = reasons.iter().map(|r| (*r).into()).collect();
+        fight.players.push(remote);
+        let mut run = demo::demo_run_story().run;
+        run.complete_capture = true;
+        run.issues.clear();
+        apply_batch(
+            &mut db,
+            &[
+                envelope(5, EngineEvent::RunUpdated(run)),
+                envelope(6, EngineEvent::FightUpdated(fight)),
+            ],
+        )
+        .unwrap();
+        let reader = open_reader(&path).unwrap();
+        assert_eq!(
+            reader.get_run("demo-run").unwrap().unwrap().fights[0].estimated,
+            uncertain,
+            "{reasons:?}"
+        );
+        assert_eq!(
+            reader
+                .list_runs(filter(RunSort::Newest, 100))
+                .unwrap()
+                .details
+                .unwrap()
+                .iter()
+                .find(|d| d.run_id == "demo-run")
+                .unwrap()
+                .share_partial,
+            uncertain,
+            "{reasons:?}"
+        );
+        assert_eq!(
+            reader
+                .home_summary(HomeScope::Session {
+                    id: "demo-session".into()
+                })
+                .unwrap()
+                .recent_details[0]
+                .share_partial,
+            uncertain,
+            "{reasons:?}"
+        );
+    }
 }

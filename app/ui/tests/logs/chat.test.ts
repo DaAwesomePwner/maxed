@@ -117,6 +117,7 @@ describe('chat history interactions', () => {
     const overview = vi.spyOn(view.client, 'getChatOverview'), sender = vi.spyOn(view.client, 'getChatSender'), partners = vi.spyOn(view.client, 'listWhisperPartners');
     sender.mockResolvedValue({ status: 'ready', value: { name: 'SynthAlpha', lines: 148, first_at: '1000000', last_at: '2000000', channels: ['guild', 'whisper'], stars: 72, supporter: true, whispers: 41 } });
     await flush(); expect(overview).toHaveBeenCalledTimes(1); expect(sender).not.toHaveBeenCalled(); expect(partners).not.toHaveBeenCalled();
+    await fireEvent.click(view.container.querySelector('[data-row-id="live-1:chat:1"]')!);
     await advance(150); expect(sender).toHaveBeenCalledTimes(1);
     expect(screen.getByText('148')).toBeTruthy(); expect(screen.getByRole('link', { name: 'Whispers with SynthAlpha' }).getAttribute('href')).toBe('#/logs/chat/whisper/SynthAlpha');
     await fireEvent.click(view.container.querySelector('[data-row-id="live-1:chat:2"]')!); await advance(150); expect(sender).toHaveBeenCalledTimes(1);
@@ -147,7 +148,7 @@ describe('chat history interactions', () => {
   it('never attributes the previous sender summary to a new sender while loading or after failure', async () => {
     const view = mount({ listChat: () => ({ rows: [row(1, 'first'), row(2, 'second', { sender: 'Quenby' })], next: null }) });
     const sender = vi.spyOn(view.client, 'getChatSender').mockResolvedValue({ status: 'ready', value: { name: 'SynthAlpha', lines: 148, first_at: '1000000', last_at: '2000000', channels: ['guild'], stars: 72, supporter: false, whispers: 0 } });
-    await flush(); await advance(150); expect(screen.getByText('148')).toBeTruthy();
+    await flush(); await fireEvent.click(view.container.querySelector('[data-row-id="live-1:chat:1"]')!); await advance(150); expect(screen.getByText('148')).toBeTruthy();
     sender.mockRejectedValue(new Error('private sender payload'));
     await fireEvent.click(view.container.querySelector('[data-row-id="live-1:chat:2"]')!); await advance(149);
     expect(screen.queryByText('148')).toBeNull();
@@ -237,7 +238,7 @@ describe('chat history interactions', () => {
     await fireEvent.click(next); await flush();
     expect(screen.getAllByText('older')[0]).toBeTruthy();
     expect(document.activeElement).toBe(next);
-    expect(view.onStateChange.mock.lastCall![0].logsPosition.chat).toEqual({ filter: { ...defaultFilter(), cursor }, previous: [null], selectedId: 'live-1:chat:1' });
+    expect(view.onStateChange.mock.lastCall![0].logsPosition.chat).toEqual({ filter: { ...defaultFilter(), cursor }, previous: [null], selectedId: null });
     await fireEvent.click(screen.getByRole('button', { name: 'Newer lines' })); await flush();
     expect(screen.getAllByText('latest')[0]).toBeTruthy();
     expect(view.onRowsReady).toHaveBeenCalledExactlyOnceWith('chat-entry');
@@ -250,7 +251,7 @@ describe('chat history interactions', () => {
     expect(view.listChat).toHaveBeenCalledTimes(1);
     expect(screen.getAllByText('latest')[0]).toBeTruthy();
     expect(view.pane.scrollTop).toBe(100);
-    expect(screen.getByRole('button', { name: '↑ 12 new lines' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '↑ New lines' })).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: /new lines/i })); await flush();
     expect(screen.getAllByText('new arrival')[0]).toBeTruthy();
     expect(view.pane.scrollTop).toBe(0);
@@ -349,4 +350,58 @@ it('labels outgoing and unknown-direction whispers and invalid timestamps', () =
   expect(chatLineLabel(row(1, 'x', { direction: 'outgoing', counterpart: 'SynthBravo' }).message)).toBe('To SynthBravo');
   expect(chatLineLabel(row(1, 'x', { direction: null, counterpart: null }).message)).toBe('SynthAlpha → Unknown player');
   expect(chatTime('invalid')).toBe('—'); expect(chatTime('999999999999999999999999')).toBe('—');
+});
+
+describe('stable selection and reversible spam presentation', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { cleanup(); document.querySelectorAll('main').forEach(pane => pane.remove()); vi.clearAllTimers(); vi.useRealTimers(); });
+  it('starts unselected and keeps the chosen message after live replacement and pagination', async () => {
+    const view = mount(); await flush();
+    expect(screen.getByText('Select a line to see its sender.')).toBeTruthy();
+    await fireEvent.click(view.container.querySelector('[data-row-id]')!);
+    view.listChat.mockReturnValue({ rows: [row(9, 'synthetic new arrival', { sender: 'SynthBravo' })], next: cursor });
+    await view.rerender({ required: '2' }); await advance();
+    expect(view.container.querySelector('blockquote')?.textContent).toContain('latest');
+    await fireEvent.click(screen.getByRole('button', { name: 'Older lines' })); await flush();
+    expect(view.container.querySelector('blockquote')?.textContent).toContain('latest');
+    expect(view.onStateChange.mock.lastCall![0].logsPosition.chat.selectedId).toBe('live-1:chat:1');
+  });
+  it('keeps the toggle and filtered rows consistent when saving fails', async () => {
+    const view = mount({ listChat: () => ({ rows: [row(1, 'synthgold-shop.com delivery', { channel: 'public' })], next: null }) });
+    vi.spyOn(view.client, 'updateChatSettings').mockRejectedValue(new Error('synthetic save failure'));
+    await flush();
+    const toggle = screen.getByRole('checkbox', { name: 'Filter spam' }) as HTMLInputElement;
+    await fireEvent.click(toggle); await flush();
+    expect(toggle.checked).toBe(true);
+    expect(screen.queryByText('synthgold-shop.com delivery')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toBe('Could not update spam filter. Retry.');
+  });
+  it('persists filtering, shows the hidden count and restores ads when disabled', async () => {
+    const view = mount({ listChat: () => ({ rows: [row(1, 'synthgold-shop.com delivery', { channel: 'public' }), row(2, 'ready'), row(3, 'ready')], next: null }) });
+    await flush();
+    expect(screen.queryByText('synthgold-shop.com delivery')).toBeNull();
+    expect(screen.getByText('1 hidden')).toBeTruthy(); expect(screen.getByText('×2')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Filter spam' })); await flush();
+    expect((await view.client.querySettings()).chat.filter_spam).toBe(false);
+    expect(screen.getByText('synthgold-shop.com delivery')).toBeTruthy();
+    await view.rerender({ enabled: false }); await flush(); await view.rerender({ enabled: true }); await flush();
+    expect((screen.getByRole('checkbox', { name: 'Filter spam' }) as HTMLInputElement).checked).toBe(false);
+  });
+  it('keeps the group containing the selected message highlighted after a duplicate arrives', async () => {
+    const text = 'WTS exalted dex pot for 3 life pm me';
+    const original = row(1, text, { channel: 'public' });
+    const view = mount({ listChat: () => ({ rows: [original], next: null }) }); await flush();
+    await fireEvent.click(view.container.querySelector('[data-row-id]')!);
+    view.listChat.mockReturnValue({ rows: [row(2, text, { channel: 'public' }), original], next: null });
+    await view.rerender({ required: '2' }); await advance();
+    expect(view.container.querySelector('[data-row-id="live-1:chat:2"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('×2')).toBeTruthy();
+    expect(view.container.querySelector('blockquote')?.textContent).toContain(text);
+    expect(view.onStateChange.mock.lastCall![0].logsPosition.chat.selectedId).toBe(original.message.id);
+    // A later separated occurrence must not steal the selected group's highlight.
+    view.listChat.mockReturnValue({ rows: [row(4, text, { channel: 'public' }), row(3, 'ready'), row(2, text, { channel: 'public' }), original], next: null });
+    await view.rerender({ required: '3' }); await advance();
+    expect(view.container.querySelector('[data-row-id="live-1:chat:4"]')?.getAttribute('aria-selected')).toBe('false');
+    expect(view.container.querySelector('[data-row-id="live-1:chat:2"]')?.getAttribute('aria-selected')).toBe('true');
+  });
 });

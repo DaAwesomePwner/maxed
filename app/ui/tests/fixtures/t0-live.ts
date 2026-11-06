@@ -64,6 +64,7 @@ export default {
     "ended": null,
     "completed_at": "5000000",
     "died_at": null,
+    "death": null,
     "outcome": "cleared",
     "evidence": [
       {
@@ -137,13 +138,17 @@ export default {
           "from": "2000000",
           "until": "3000000",
           "total": 100.0,
-          "local": 100.0
+          "local": 100.0,
+          "others_damage": null,
+          "others_presence": null
         },
         {
           "from": "3000000",
           "until": "4000001",
           "total": 200.0,
-          "local": 200.0
+          "local": 200.0,
+          "others_damage": null,
+          "others_presence": null
         }
       ],
       "complete_capture": false,
@@ -157,7 +162,8 @@ export default {
       "target_kind": null,
       "is_current_quest": false,
       "local_last_hit": null,
-      "player_series": null
+      "player_series": null,
+      "scope_id": null
     }
   ],
   "drops": [

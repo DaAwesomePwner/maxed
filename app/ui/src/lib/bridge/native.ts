@@ -18,7 +18,7 @@ export const nativeTransport: Transport = {
     const release = await listen<Events[K] | string>(event, (message) => {
       if (active) receive(decodePayload<Events[K]>(message.payload));
     });
-    if (event === 'capture-status') return () => { active = false; release(); };
+    if (event === 'capture-status' || event === 'presentation-visible') return () => { active = false; release(); };
     const channel = new Channel<ArrayBuffer>();
     const decoder = new TextDecoder();
     channel.onmessage = bytes => {

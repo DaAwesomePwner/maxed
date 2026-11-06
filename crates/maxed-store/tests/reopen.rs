@@ -14,6 +14,7 @@ fn file_writer_uses_wal_and_reader_rejects_future_schema() {
         "wal"
     );
     drop(open_reader(&path).unwrap());
-    db.pragma_update(None, "user_version", 13).unwrap();
+    db.pragma_update(None, "user_version", maxed_store::SCHEMA_VERSION + 1)
+        .unwrap();
     assert!(matches!(open_reader(&path), Err(StoreError::NewerSchema)));
 }

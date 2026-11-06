@@ -9,7 +9,7 @@ import type { HomeSummary } from '../../src/lib/bindings/HomeSummary';
 import { createHomeHistory } from '../../src/lib/home/summary';
 import { localDayRange } from '../../src/lib/home/scope';
 import { emptyHomeVisuals } from '../../src/lib/home/visuals';
-import { saved } from '../home/fixtures';
+import { characterFame, saved } from '../home/fixtures';
 import { catalog, deferred, flush, homeSnapshot, homeSummary, section } from './fixtures';
 
 afterEach(() => { setDebugMode(false); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -63,7 +63,7 @@ it('nexus_scope_watermark_dst_and_preview_limits', async () => {
     dayHistory.dispose(); vi.unstubAllGlobals();
   }
 
-  const summary = homeSummary({ runs: 321, clears: 234, deaths: 17, fame_delta: 4567, fame_missing_baselines: 2, fame_sampled: true });
+  const summary = homeSummary({ runs: 321, clears: 234, deaths: 17, fame_delta: 4567, ...characterFame(4567), fame_missing_baselines: 2, fame_sampled: true });
   summary.recent_runs = Array.from({ length: 10 }, (_, index) => ({ ...summary.recent_runs[0], id: `run-${index}`, dungeon: `Preview dungeon ${index}` }));
   const page = renderNexus(summary);
   expect(page.container.textContent).toContain('321');
@@ -72,9 +72,8 @@ it('nexus_scope_watermark_dst_and_preview_limits', async () => {
   expect(page.container.textContent).not.toMatch(/partial|baseline/i);
   expect(page.container.textContent).not.toMatch(/sampled/i);
   const recent = section('Recent runs');
-  expect(recent.querySelectorAll('[data-row-id]')).toHaveLength(6);
-  await fireEvent.click(within(recent).getByRole('button', { name: /next/i }));
-  expect(recent.querySelectorAll('[data-row-id]')).toHaveLength(4);
+  expect(recent.querySelectorAll('[data-row-id]')).toHaveLength(10);
+  expect(within(recent).queryByRole('button', { name: /next/i })).toBeNull();
   expect(recent.querySelector('[data-row-id="run-6"]')).toBeTruthy();
   expect(page.container.textContent).toContain('321');
 });
@@ -86,7 +85,7 @@ it('dungeon_stats_observed_clear_null_and_cap', async () => {
   })) });
   const page = renderNexus(summary);
   const dungeon = section('By dungeon');
-  expect(within(dungeon).getAllByText(/^Aggregate dungeon/)).toHaveLength(6);
+  expect(within(dungeon).getAllByText(/^Aggregate dungeon/)).toHaveLength(12);
   expect(dungeon.textContent).not.toContain('Server cap: 20 dungeons');
   expect(dungeon.textContent).not.toContain('Observed-clear times only; missing times unavailable.');
   expect(within(dungeon).getByRole('columnheader', { name: 'Dungeon' })).toBeTruthy();
@@ -95,8 +94,8 @@ it('dungeon_stats_observed_clear_null_and_cap', async () => {
   expect(dungeon.textContent).toContain('\u2014');
   expect(dungeon.textContent).toContain('70');
   await fireEvent.click(within(dungeon).getByRole('button', { name: /next/i }));
-  expect(within(dungeon).getAllByText(/^Aggregate dungeon/)).toHaveLength(6);
-  expect(dungeon.textContent).toContain('Aggregate dungeon 6');
+  expect(within(dungeon).getAllByText(/^Aggregate dungeon/)).toHaveLength(8);
+  expect(dungeon.textContent).toContain('Aggregate dungeon 12');
   await page.rerender({ snapshot: nexus(), history: ready({ ...summary, dungeon_stats: null }), choice: 'session', retry: vi.fn() });
   expect(section('By dungeon').textContent).toContain('\u2014');
   await page.rerender({ snapshot: nexus(), history: ready({ ...summary, dungeon_stats: [] }), choice: 'session', retry: vi.fn() });

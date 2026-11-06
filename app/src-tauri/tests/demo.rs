@@ -213,7 +213,6 @@ struct PacedClock {
 }
 impl DemoClock for PacedClock {
     fn wait_until(&self, offset: Duration, stop: &Receiver<()>) -> bool {
-        // Drain delivery before inspecting the state at this wait boundary.
         self.publisher.flush().unwrap();
         if offset >= Duration::from_secs(8) {
             self.hundred_before_eight
@@ -270,7 +269,12 @@ fn paced_waits_publish_the_first_hit_before_the_second_hit_is_due() {
 #[test]
 fn stop_mid_replay_joins_finalizes_once_and_never_delivers_late_frames() {
     let root = tempfile::tempdir().unwrap();
-    let runtime = CaptureRuntime::default();
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime
+        .configure_alert_settings(Arc::new(
+            maxed_app::settings::SettingsStore::new(root.path().into()).unwrap(),
+        ))
+        .unwrap();
     let (reached, wait) = bounded(1);
     let clock = Arc::new(PausedClock {
         reached,
@@ -283,6 +287,12 @@ fn stop_mid_replay_joins_finalizes_once_and_never_delivers_late_frames() {
         .unwrap();
     wait.recv_timeout(Duration::from_secs(5)).unwrap();
     assert!(runtime.is_running());
+    let maxed_types::HistoryReply::Ready { value: party } =
+        tauri::async_runtime::block_on(runtime.get_party_live()).unwrap()
+    else {
+        panic!("demo Party is not ready");
+    };
+    assert!(party.assets_available);
     runtime.stop_and_flush().unwrap();
     assert!(!runtime.is_running());
     assert_eq!(runtime.status().state, CaptureState::Stopped);
@@ -497,7 +507,7 @@ fn setup_transition_keeps_physical_checks_settings_and_sources_separate() {
     assert_eq!(backend.0.load(Ordering::SeqCst), 0);
     let seen = seen.lock().unwrap();
     assert!(
-        matches!(seen.last(), Some(Publication::Snapshot(s)) if s.stream_id.starts_with("stopped-") && s.character.is_none())
+        matches!(seen.iter().rev().find(|p| !matches!(p, Publication::PartyChanged(_))), Some(Publication::Snapshot(s)) if s.stream_id.starts_with("stopped-") && s.character.is_none())
     );
     drop(seen);
     // Explicit Start is the only operation here that probes the physical source.
@@ -604,7 +614,9 @@ fn leaving_demo_after_failed_startup_upgrade_restores_live() {
     assert!(live.character.is_none());
     assert!(live.run.is_none());
     assert!(live.fights.is_empty());
-    assert!(matches!(seen.lock().unwrap().last(), Some(Publication::Snapshot(s)) if **s == live));
+    assert!(
+        matches!(seen.lock().unwrap().iter().rev().find(|p| !matches!(p, Publication::PartyChanged(_))), Some(Publication::Snapshot(s)) if **s == live)
+    );
     // The failed live history gate is restored instead of retaining demo rows.
     assert_eq!(
         tauri::async_runtime::block_on(runtime.home_summary(scope)).unwrap_err(),

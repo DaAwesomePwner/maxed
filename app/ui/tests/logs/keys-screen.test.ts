@@ -1,3 +1,4 @@
+import { setupFixture } from '../setup/fixture';
 import { expect, it } from 'vitest';
 import { keyKpis, mutedDungeons } from '../../src/lib/logs/keys-screen';
 import type { EventSummary } from '../../src/lib/bindings/EventSummary';
@@ -33,4 +34,10 @@ it('mirrors all, all-except and selected alert dungeon modes', () => {
   expect([...mutedDungeons({ ...prefs, key_pop_excluded_dungeons: ['B'] }, ['A', 'B'])]).toEqual(['B']);
   expect([...mutedDungeons({ ...prefs, key_pop_dungeons: ['A'], key_pop_excluded_dungeons: ['A'] }, ['A', 'B'])]).toEqual(['B']);
   expect([...mutedDungeons({ ...prefs, key_pop_dungeons: [] }, ['A', 'B'])]).toEqual(['A', 'B']);
+});
+
+it.each(['off', 'toast'] as const)('describes %s alerts with no dungeons selected', async loudness => {
+  const preferences = (await setupFixture().client.querySettings()).alerts;
+  preferences.key_popped = loudness;
+  expect(keyKpis(null, null, new Set(['Vault']), new Date(), preferences)[3].sub).toBe(loudness === 'off' ? 'Key-pop alerts off' : 'No dungeons selected');
 });

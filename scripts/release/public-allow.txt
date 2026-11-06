@@ -1,5 +1,7 @@
 # Reviewed snapshot findings that are allowed to ship. See
-# scripts/release/Export-PublicSnapshot.ps1 and docs/release/UPDATES.md.
+# scripts/release/Export-PublicSnapshot.ps1 and
+# docs/release/UPDATES.md#one-time-cutover-export-temporary.
+# Delete this file after the one-time cutover.
 #
 # One "<rule> <path> <blob>" entry per line, where <rule> is a built-in rule id
 # printed by a failed export and <blob> is the reviewed git blob
@@ -16,8 +18,7 @@ user-path tests/packaging/audit-bundle.ps1 1302430aacdd3262407016adbbadeac5b38cd
 # Invented canaries that the network audit self-test must redact.
 user-path tests/packaging/network-audit.ps1 718b1ec45ba70b125f5b8339c7b95bbcf1b85dfb
 
-# Synthetic captures (docs/development/fixtures.md). Scrubbed-real captures
-# stay excluded until their publication approval is recorded.
+# Synthetic captures (docs/development/fixtures.md).
 capture tests/fixtures/scrubbed/maxed-demo/story.pcap 08542ca1d79607de8dac4c2692a236b16168046b
 capture tests/fixtures/scrubbed/maxed-home/complete.pcap f4bab00e6897346ddb434c1d802239e256c434ea
 capture tests/fixtures/scrubbed/maxed-home/disconnected.pcap 7250d842b082e7ef1f7ae1c2698e1546602b4a76
@@ -26,3 +27,12 @@ capture tests/fixtures/scrubbed/maxed-runs/complete.pcap f4bab00e6897346ddb434c1
 capture tests/fixtures/scrubbed/maxed-runs/demo.pcap 08542ca1d79607de8dac4c2692a236b16168046b
 capture tests/fixtures/scrubbed/maxed-runs/disconnected.pcap 7250d842b082e7ef1f7ae1c2698e1546602b4a76
 capture tests/fixtures/scrubbed/maxed-runs/zero-duration.pcap b5c49f5fad02b1c323341a7ff08bd09cb0f4f571
+
+# Scrubbed-real captures approved by the owner (maintainer) on 2026-11-05.
+# Review basis and retained limitations: docs/development/fixtures.md and
+# each fixture README. Approval applies only to these exact blobs.
+capture tests/fixtures/scrubbed/maxed-nexus-key-pop/nexus-key-pop.pcap 05c3b280aae2716dfc9d90324b6955ce2e14574b
+capture tests/fixtures/scrubbed/maxed-realm-dungeon-return/realm-visit-dungeon-return.pcap 3ee0ae96f4bcb6f33889b061084dab26cd641b6c
+capture tests/fixtures/scrubbed/maxed-realm-focus/realm-visit.pcap c8dedbc16e18b73af81a31a53a8d93b4878cd28a
+capture tests/fixtures/scrubbed/maxed-realm-plague-doctor/realm-plague-doctor.pcap 17ae55916d75e7afc6fbeda312bd9e8ff0bd7fb6
+capture tests/fixtures/scrubbed/maxed-shaitan-run/lair-of-shaitan-run.pcap 0f8f637002768ccffcaeed588710de5f67a64fef

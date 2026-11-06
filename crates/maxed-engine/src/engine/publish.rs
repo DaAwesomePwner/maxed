@@ -138,6 +138,7 @@ impl Engine {
                 .lines
                 .into_iter()
                 .map(|s| StatLine {
+                    split_evidence: s.split_evidence,
                     stat_id: s.stat_id,
                     total: s.total,
                     base: s.base,
@@ -278,6 +279,7 @@ impl Engine {
                     };
                     let row = matched.as_ref().map(|(_, p)| p);
                     let kind = InstanceEventKind::PlayerDeath {
+                        player_id: row.map(|p| p.player_id.clone()),
                         player_name: player,
                         level,
                         killed_by: Some(enemy),
@@ -321,6 +323,7 @@ impl Engine {
                                 .as_ref()
                                 .and_then(|local| self.entities.get(&local.object))
                                 .and_then(|entity| entity.name.as_deref())
+                                .map(crate::names::display_name)
                                 .filter(|name| !name.is_empty() && !player.is_empty())
                                 .map(|name| name.eq_ignore_ascii_case(&player)),
                             opener: Some(player),

@@ -130,6 +130,8 @@ fn detail(id: usize, players: usize, buckets: usize, large: bool) -> FightView {
             until: Timestamp(START + 1_000_000 + (i as u64 + 1) * 1_000),
             total: fight.total_damage / buckets as f64,
             local: Some(300.0 / buckets as f64),
+            others_damage: None,
+            others_presence: None,
         })
         .collect();
     fight

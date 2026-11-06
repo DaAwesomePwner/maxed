@@ -2,8 +2,35 @@ import { cleanup } from '@testing-library/svelte';
 import { afterEach, expect, it, vi } from 'vitest';
 import { homeSnapshot, saved } from '../home/fixtures';
 import { mountHome, flushHomeRender } from '../home/shell-fixture';
+import { setNativePresentationVisible } from '../../src/lib/bridge/visibility';
 
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); setNativePresentationVisible(true); vi.useRealTimers(); });
+
+it('refreshes PBs once after a hidden completion is durable even when restore has no current run', async () => {
+  vi.useFakeTimers();
+  const source = homeSnapshot({ area_kind: 'nexus', run: null });
+  const app = mountHome(source);
+  const bests = vi.spyOn(app.client, 'queryDungeonBests').mockResolvedValue({ status: 'ready', value: [] });
+  let durable = source.sequence;
+  app.client.queryStore = vi.fn(async () => saved(durable, source.stream_id));
+  await flushHomeRender(); await flushHomeRender();
+  expect(bests).toHaveBeenCalledOnce();
+  setNativePresentationVisible(false);
+  const sequence = String(BigInt(source.sequence) + 1n);
+  app.transport.publishEngineEvent({ stream_id: source.stream_id, sequence, at: source.at,
+    event: { run_ended: { ...homeSnapshot().run!, ended: source.at, completed_at: source.at } } });
+  app.transport.publishSnapshot({ ...source, sequence });
+  await vi.advanceTimersByTimeAsync(60_000); await flushHomeRender();
+  expect(bests).toHaveBeenCalledOnce();
+  setNativePresentationVisible(true); await flushHomeRender();
+  expect(bests).toHaveBeenCalledOnce(); // Restore still waits for durability.
+  durable = sequence;
+  await vi.advanceTimersByTimeAsync(1000); await flushHomeRender();
+  expect(bests).toHaveBeenCalledTimes(2);
+  setNativePresentationVisible(false); setNativePresentationVisible(true);
+  await flushHomeRender(); await vi.advanceTimersByTimeAsync(1000); await flushHomeRender();
+  expect(bests).toHaveBeenCalledTimes(2);
+});
 
 it.each(['run_updated', 'run_ended'] as const)('Shell refreshes PBs for a %s completion followed by a character update', async kind => {
   vi.useFakeTimers();

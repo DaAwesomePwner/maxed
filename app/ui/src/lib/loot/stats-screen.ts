@@ -30,8 +30,8 @@ export function statsKpis(stats: LootStats): KpiCell[] {
   const dry = sortDungeons(stats.dungeons, 'runs_since_last_white', true).find(row => row.runs_since_last_white !== null);
   const best = bestDungeon(stats.dungeons);
   return [
-    { key: 'runs', label: 'Runs', value: empty ? '—' : String(runs), sub: empty ? null : `${clears} cleared · ${runs ? `${Math.round(clears / runs * 100)}%` : '—'}` },
-    { key: 'bags', label: 'Bags', value: empty ? '—' : String(bags), sub: empty ? null : `${runs ? (bags / runs).toFixed(1) : '—'} per run` },
+    { key: 'runs', label: 'Ended runs', value: empty ? '—' : String(runs), sub: empty ? null : `${clears} cleared · ${runs ? `${Math.round(clears / runs * 100)}%` : '—'}` },
+    { key: 'bags', label: 'Bags', value: empty ? '—' : String(bags), sub: empty ? null : `${runs ? (bags / runs).toFixed(1) : '—'} per ended run` },
     { key: 'whites', label: 'White bags', value: empty ? '—' : String(stats.whites), sub: empty ? null : `${whiteRate(stats.whites, runs)} white rate` },
     { key: 'dry', label: 'Longest dry streak', value: dry ? String(dry.runs_since_last_white) : '—', sub: dry ? `runs of ${dry.dungeon} since a white` : null, tone: 'fame' },
     { key: 'best', label: 'Best bag', value: best ? best.best!.bag_rank === 255 ? 'White bag' : 'Bag' : '—', sub: best ? `${best.dungeon} · ${shortWhen(best.best!.at, new Date())}` : null },

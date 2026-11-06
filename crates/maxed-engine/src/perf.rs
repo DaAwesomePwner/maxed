@@ -94,6 +94,8 @@ pub fn catalog() -> Catalog {
         client_fingerprint: "synthetic".into(),
         items: vec![
             ItemDef {
+                weapon_firing: None,
+                potion_stat: None,
                 soulbound: None,
                 stat_bonuses: None,
                 object_type: 200,
@@ -111,6 +113,8 @@ pub fn catalog() -> Catalog {
                 sprite_key: None,
             },
             ItemDef {
+                weapon_firing: None,
+                potion_stat: None,
                 soulbound: None,
                 stat_bonuses: None,
                 object_type: 201,

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { itemHover } from '../components/item-hover';
   import type { ItemHistory } from '../bindings/ItemHistory';
   import type { HomeVisuals } from '../home/visuals';
   import { placeLabel } from './presentation';
@@ -28,8 +29,8 @@
     {/each}
   </tbody></table></div></section>
   <section class="card"><h3>Enchants</h3><div class="scroll"><table aria-label="Enchants"><tbody>
-    {#each shareRows(item.enchant_variants) as variant}<tr><th>
-      <EnchantLabel enchant={{ ...variant, slots: null }} />{#if variant.state === 'recorded' && variant.ids.length}<span class="ids" title={variant.ids.map(id => `#${id}`).join(', ')}> ({variant.ids.map(id => `#${id}`).join(', ')})</span>{/if}
+    {#each shareRows(item.enchant_variants) as variant}<tr><th use:itemHover={{ type: item.item_type, enchant: { state: variant.state, slots: null, applied: variant.applied, ids: variant.ids } }}>
+      <EnchantLabel enchant={{ ...variant, slots: null }} />{#if variant.state === 'recorded' && variant.ids.length}<span class="ids"> ({variant.ids.map(id => `#${id}`).join(', ')})</span>{/if}
     </th><td>{@render share(variant.count, variant.share)}</td></tr>{/each}
   </tbody></table></div></section>
 </aside>

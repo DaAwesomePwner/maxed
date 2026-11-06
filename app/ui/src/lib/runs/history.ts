@@ -1,3 +1,4 @@
+import { isPresentationVisible, observePresentationVisibility } from '../bridge/visibility';
 import type { EventSummary } from '../bindings/EventSummary';
 import type { EventSummaryRequest } from '../bindings/EventSummaryRequest';
 import type { ChatOverviewRequest } from '../bindings/ChatOverviewRequest';
@@ -33,6 +34,7 @@ import type { RunPage } from '../bindings/RunPage';
 import type { RunStory } from '../bindings/RunStory';
 import type { FightView } from '../bindings/FightView';
 import type { PlayerDamage } from '../bindings/PlayerDamage';
+import type { RunPlayerView } from '../bindings/RunPlayerView';
 import type { HistoryReply } from '../bindings/HistoryReply';
 import type { StoreStatus } from '../bindings/StoreStatus';
 import { historyControl, historyFailure, historyWaiting } from './policy';
@@ -54,6 +56,7 @@ export type HistoryQuery =
   | { kind: 'run'; id: string }
   | { kind: 'fight'; id: string }
   | { kind: 'player'; fightId: string; objectId: number }
+  | { kind: 'run-player'; runId: string; playerId: string }
   | { kind: 'drop-summary'; request: DropSummaryRequest }
   | { kind: 'drops'; filter: DropFilter }
   | { kind: 'item-history'; request: ItemHistoryRequest }
@@ -74,6 +77,7 @@ export type HistoryValue =
   | { kind: 'run'; story: RunStory | null }
   | { kind: 'fight'; fight: FightView | null }
   | { kind: 'player'; player: PlayerDamage | null }
+  | { kind: 'run-player'; player: RunPlayerView | null }
   | { kind: 'drops'; page: DropPage }
   | { kind: 'item-history'; history: ItemHistory }
   | { kind: 'loot-stats'; stats: LootStats }
@@ -88,7 +92,7 @@ export interface HistoryState {
   value: HistoryValue | null; message: string; retryAvailable: boolean;
 }
 export interface HistoryController { update(input: HistoryInput): void; retry(): void; dispose(): void }
-type HistoryClient = Pick<Client, 'getEventSummary' | 'getChatOverview' | 'getChatSender' | 'listWhisperPartners' | 'getStatsMaps' | 'listStatsSessions' | 'getStatsSession' | 'getStatsDungeons' | 'listChat' | 'listInstanceEvents' | 'listRuns' | 'getRun' | 'getRunFightStrip' | 'getFight' | 'getPlayerBreakdown' | 'listDrops' | 'getItemHistory' | 'getLootStats' | 'getCollection' | 'getDropSummary'>;
+type HistoryClient = Pick<Client, 'getEventSummary' | 'getChatOverview' | 'getChatSender' | 'listWhisperPartners' | 'getStatsMaps' | 'listStatsSessions' | 'getStatsSession' | 'getStatsDungeons' | 'listChat' | 'listInstanceEvents' | 'listRuns' | 'getRun' | 'getRunFightStrip' | 'getFight' | 'getPlayerBreakdown' | 'getRunPlayer' | 'listDrops' | 'getItemHistory' | 'getLootStats' | 'getCollection' | 'getDropSummary'>;
 async function read(client: HistoryClient, query: HistoryQuery): Promise<HistoryReply<HistoryValue>> {
   const wrap = <T>(reply: HistoryReply<T>, value: (result: T) => HistoryValue): HistoryReply<HistoryValue> =>
     reply.status === 'ready' ? { status: 'ready', value: value(reply.value) } : reply;
@@ -113,6 +117,7 @@ async function read(client: HistoryClient, query: HistoryQuery): Promise<History
     case 'run': return wrap(await client.getRun(query.id), story => ({ kind: 'run', story }));
     case 'fight': return wrap(await client.getFight(query.id), fight => ({ kind: 'fight', fight }));
     case 'player': return wrap(await client.getPlayerBreakdown(query.fightId, query.objectId), player => ({ kind: 'player', player }));
+    case 'run-player': return wrap(await client.getRunPlayer(query.runId, query.playerId), player => ({ kind: 'run-player', player }));
   }
 }
 
@@ -146,6 +151,7 @@ export function historyKey(input: HistoryInput): string {
     : q.kind === 'stats-sessions' ? [q.kind, q.filter.range?.start, q.filter.range?.end, q.filter.character_id,
       q.filter.include_empty, q.filter.cursor?.started, q.filter.cursor?.id, q.filter.limit]
     : q.kind === 'stats-session' ? [q.kind, q.request.id, q.request.character_id]
+    : q.kind === 'run-player' ? [q.kind, q.runId, q.playerId]
     : q.kind === 'player' ? [q.kind, q.fightId, q.objectId] : [q.kind, q.id];
   return JSON.stringify([input.scopeKey, input.streamId, queryKey]);
 }
@@ -176,7 +182,7 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
   const refreshing = () => emit(value ? 'stale' : 'loading', 'Refreshing saved observations.', false);
   const gate = (next: HistoryInput) => pending?.required ?? (hitRequired !== undefined ? hitRequired : next.required);
   function pump() {
-    if (disposed || !input) return;
+    if (disposed || !input || !isPresentationVisible()) return;
     if (control) {
       if (control === 'error') emit('error', failure);
       else { const state = historyControl(control, retryUsed); emit(control, state.message, state.retryAvailable); }
@@ -186,7 +192,7 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
     if (reason) { emit('stale', reason); return; }
     if (active) { refreshing(); return; }
     if (!pending) { emit('ready'); return; }
-    const delay = input.query.kind === 'runs' ? 0 : Math.max(0, 1000 - (Date.now() - lastStart));
+    const delay = Math.max(0, 1000 - (Date.now() - lastStart));
     if (delay > 0) {
       refreshing();
       timer ??= setTimeout(() => { timer = undefined; pump(); }, delay);
@@ -229,6 +235,16 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
       if (!disposed) pump();
     });
   }
+  const releaseVisibility = observePresentationVisibility(visible => {
+    if (!visible) { clearTimeout(timer); timer = undefined; }
+    else {
+      // A hidden backlog needs one read when its newest checkpoint is already
+      // durable. Otherwise retain the fixed older checkpoint to avoid starvation.
+      if (!active && pending && input && latest.version > pending.version
+        && historyWaiting(input, latest.required) === null) pending = latest;
+      pump();
+    }
+  });
   return {
     update(next) {
       if (disposed) return;
@@ -266,6 +282,7 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
       latest = { required: input.required, version: ++version }; pending = latest; pump();
     },
     dispose() {
+      releaseVisibility();
       endRead();
       disposed = true; epoch++; clearTimeout(timer); input = null; pending = null; value = null; emitted = undefined;
     },

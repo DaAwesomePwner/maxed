@@ -1,11 +1,13 @@
 use crate::{
+    maintenance::{Control, ControlResult, JobStatus, MaintenanceService, Step},
     migrate::{digest, open_writer},
-    project::{apply_contexts, json, validate_event},
+    project::{apply_prepared_contexts, json, validate_event},
+    receipts::{self, ReceiptDigest},
     StoreError,
 };
 use crossbeam_channel::{bounded, Receiver, Sender};
 use maxed_types::*;
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::Connection;
 use std::{
     collections::VecDeque,
     path::PathBuf,
@@ -55,8 +57,12 @@ struct Pending {
     context: Arc<crate::AlertContext>,
     bytes: usize,
     ticket: u64,
+    hash: ReceiptDigest,
 }
 struct Shared {
+    path: PathBuf,
+    maintenance_blocked: bool,
+    maintenance_barriers: usize,
     queue: VecDeque<Pending>,
     bytes: usize,
     last_ticket: u64,
@@ -69,6 +75,15 @@ struct Shared {
 }
 type Reply = Sender<Result<FlushReceipt, StoreError>>;
 enum Command {
+    Maintenance(Control, Sender<Result<ControlResult, StoreError>>),
+    PartyMark(
+        String,
+        String,
+        Option<PartyMark>,
+        Option<String>,
+        Sender<Result<(), StoreError>>,
+    ),
+    ClearParty(ClearPartyHistory, Sender<Result<(), StoreError>>),
     Chat(
         crate::chat::ChatMaintenance,
         Sender<Result<u64, StoreError>>,
@@ -91,19 +106,31 @@ pub struct StoreWriter {
     commands: Sender<Command>,
     wake: Sender<()>,
     committed: Receiver<()>,
+    maintenance_notices: Receiver<JobStatus>,
     worker: Option<JoinHandle<()>>,
     _lease: WriterLease,
+    conversion: Option<crate::maintenance::ConversionAccess>,
 }
 
-struct WriterLease(PathBuf);
+pub(crate) struct WriterLease(PathBuf);
 fn writer_paths() -> &'static Mutex<std::collections::HashSet<PathBuf>> {
     static PATHS: std::sync::OnceLock<Mutex<std::collections::HashSet<PathBuf>>> =
         std::sync::OnceLock::new();
     PATHS.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
 }
 impl WriterLease {
-    fn acquire(path: &std::path::Path) -> Result<Self, StoreError> {
-        let path = std::fs::canonicalize(path).map_err(|_| StoreError::Open)?;
+    pub(crate) fn acquire(path: &std::path::Path) -> Result<Self, StoreError> {
+        let path = if path.exists() {
+            std::fs::canonicalize(path).map_err(|_| StoreError::Open)?
+        } else {
+            std::fs::canonicalize(
+                path.parent()
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .unwrap_or(std::path::Path::new(".")),
+            )
+            .map_err(|_| StoreError::Open)?
+            .join(path.file_name().ok_or(StoreError::Open)?)
+        };
         if !writer_paths()
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -112,6 +139,17 @@ impl WriterLease {
             return Err(StoreError::Busy);
         }
         Ok(Self(path))
+    }
+
+    pub(crate) fn has_abandoned_events(&self) -> bool {
+        abandoned()
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .iter()
+            .any(|shared| {
+                let state = lock(shared);
+                state.path == self.0 && !state.queue.is_empty()
+            })
     }
 }
 impl Drop for WriterLease {
@@ -128,6 +166,19 @@ fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
 }
 
 pub fn start_writer(path: PathBuf, config: WriterConfig) -> Result<StoreWriter, StoreError> {
+    let conversion = crate::maintenance::ConversionAccess::new(path.clone());
+    let mut writer = start_writer_with_maintenance(path, config, conversion.service())?;
+    writer.conversion = Some(conversion);
+    Ok(writer)
+}
+
+/// Install the maintenance executor/authorization seams on the single writer.
+/// No jobs are requested by startup. Previously requested unpaused jobs may run.
+pub fn start_writer_with_maintenance(
+    path: PathBuf,
+    config: WriterConfig,
+    mut maintenance: MaintenanceService,
+) -> Result<StoreWriter, StoreError> {
     if config.stream_id.is_empty()
         || config.capacity == 0
         || config.capacity > 1024
@@ -138,17 +189,11 @@ pub fn start_writer(path: PathBuf, config: WriterConfig) -> Result<StoreWriter, 
     {
         return Err(StoreError::InvalidEvent);
     }
-    let mut conn = open_writer(&path)?;
     let lease = WriterLease::acquire(&path)?;
+    let mut conn = open_writer(&path)?;
     recover_interrupted(&mut conn)?;
     conn.execute("UPDATE alert_occurrences SET state='suppressed' WHERE state='pending' AND source_stream_id<>?1", [&config.stream_id])?;
-    let durable = conn
-        .query_row(
-            "SELECT sequence FROM stream_heads WHERE stream_id=?1",
-            [&config.stream_id],
-            |r| r.get::<_, i64>(0),
-        )
-        .optional()?
+    let durable = receipts::head(&conn, &config.stream_id)?
         .map(|n| {
             u64::try_from(n)
                 .map(|n| Sequence(Timestamp(n)))
@@ -157,6 +202,9 @@ pub fn start_writer(path: PathBuf, config: WriterConfig) -> Result<StoreWriter, 
         .transpose()?;
     let (commit_wake, committed) = bounded(1);
     let shared = Arc::new(Mutex::new(Shared {
+        path: lease.0.clone(),
+        maintenance_blocked: lease.has_abandoned_events(),
+        maintenance_barriers: 0,
         queue: VecDeque::new(),
         bytes: 0,
         last_ticket: 0,
@@ -168,6 +216,7 @@ pub fn start_writer(path: PathBuf, config: WriterConfig) -> Result<StoreWriter, 
         accepting: true,
     }));
     let (commands, command_rx) = bounded(8);
+    let (notice_send, maintenance_notices) = bounded(1);
     let (wake, wake_rx) = bounded(1);
     let worker_shared = Arc::clone(&shared);
     let worker_config = config.clone();
@@ -181,6 +230,8 @@ pub fn start_writer(path: PathBuf, config: WriterConfig) -> Result<StoreWriter, 
                     &worker_shared,
                     command_rx,
                     wake_rx,
+                    &mut maintenance,
+                    notice_send,
                 )
             }));
             if result.is_err() {
@@ -197,12 +248,104 @@ pub fn start_writer(path: PathBuf, config: WriterConfig) -> Result<StoreWriter, 
         commands,
         wake,
         committed,
+        maintenance_notices,
         worker: Some(worker),
         _lease: lease,
+        conversion: None,
     })
 }
 
 impl StoreWriter {
+    pub fn list_backups(
+        &self,
+    ) -> Result<Vec<crate::backup::ManagedBackup>, crate::backup::BackupError> {
+        self.conversion
+            .as_ref()
+            .ok_or(crate::backup::BackupError::Invalid)?
+            .list_backups()
+    }
+    pub fn backup_usage(&self) -> Result<crate::backup::BackupUsage, crate::backup::BackupError> {
+        self.conversion
+            .as_ref()
+            .ok_or(crate::backup::BackupError::Invalid)?
+            .backup_usage()
+    }
+    pub fn delete_backup(
+        &self,
+        id: crate::backup::BackupId,
+        env: &dyn crate::backup::BackupEnvironment,
+    ) -> Result<(), crate::backup::BackupError> {
+        self.conversion
+            .as_ref()
+            .ok_or(crate::backup::BackupError::Invalid)?
+            .delete_backup(id, env)
+    }
+    pub fn receipt_backup_task(
+        &self,
+    ) -> Result<crate::maintenance::ReceiptBackupTask, crate::backup::BackupError> {
+        Ok(self
+            .conversion
+            .as_ref()
+            .ok_or(crate::backup::BackupError::Invalid)?
+            .backup_task())
+    }
+
+    /// Explicit user request; call on the orchestration thread, outside capture.
+    pub fn request_receipt_conversion(
+        &self,
+        at: u64,
+    ) -> Result<ControlResult, crate::backup::BackupError> {
+        let request = self
+            .conversion
+            .as_ref()
+            .ok_or(crate::backup::BackupError::Invalid)?
+            .request(at);
+        if matches!(request, Err(crate::backup::BackupError::OwnerPoisoned)) {
+            let _ = self.maintenance(Control::BackupOwnerFailed);
+        }
+        Ok(self.maintenance(Control::Request(request?))?)
+    }
+
+    /// Creates/verifies this class's backup outside the writer, then wakes its
+    /// job. Cancellation never implicitly resumes a durably paused job.
+    pub fn backup_receipt_conversion(
+        &self,
+        env: &dyn crate::backup::BackupEnvironment,
+        cancel: &std::sync::atomic::AtomicBool,
+        between_steps: &mut dyn FnMut(),
+    ) -> Result<crate::backup::BackupInfo, crate::backup::BackupError> {
+        let result = self
+            .conversion
+            .as_ref()
+            .ok_or(crate::backup::BackupError::Invalid)?
+            .backup(env, cancel, between_steps);
+        if matches!(result, Err(crate::backup::BackupError::OwnerPoisoned)) {
+            let _ = self.maintenance(Control::BackupOwnerFailed);
+        }
+        let (info, id) = result?;
+        self.maintenance(Control::AuthorizationChanged(id))?;
+        Ok(info)
+    }
+
+    /// Durable request/pause/resume or metadata-only status on the writer thread.
+    pub fn maintenance(&self, control: Control) -> Result<ControlResult, StoreError> {
+        let (send, recv) = bounded(1);
+        self.commands
+            .send(Command::Maintenance(control, send))
+            .map_err(|_| self.worker_failed())?;
+        wait_response(recv, self.worker.as_ref().ok_or(StoreError::Closed)?)
+    }
+
+    pub fn maintenance_notices(&self) -> Receiver<JobStatus> {
+        self.maintenance_notices.clone()
+    }
+
+    /// The orchestration owner sets this while retaining unaccepted capture
+    /// events outside the writer queue. Clearing it never clears storage failure.
+    pub fn set_maintenance_blocked(&self, blocked: bool) {
+        lock(&self.shared).maintenance_blocked = blocked;
+        let _ = self.wake.try_send(());
+    }
     /// Coalesced durable-head wake for the single owning orchestration loop.
     /// Receivers share one permit; always read status after waking.
     pub fn committed(&self) -> Receiver<()> {
@@ -234,8 +377,13 @@ impl StoreWriter {
         if event.stream_id != self.config.stream_id {
             return Err(SubmitError::Invalid(event));
         }
-        let bytes = match validate_event(&event) {
-            Ok((bytes, _)) => bytes.saturating_add(context_bytes),
+        let (bytes, hash) = match validate_event(&event) {
+            Ok((bytes, hash)) => (
+                bytes
+                    .saturating_add(context_bytes)
+                    .saturating_add(hash.len()),
+                hash,
+            ),
             Err(_) => return Err(SubmitError::Invalid(event)),
         };
         // Never wait for the worker, another producer, or SQLite on the submit path.
@@ -269,6 +417,7 @@ impl StoreWriter {
             context: Arc::new(context),
             bytes,
             ticket,
+            hash,
         });
         drop(shared);
         let _ = self.wake.try_send(());
@@ -283,6 +432,41 @@ impl StoreWriter {
         let (send, recv) = bounded(1);
         self.commands
             .send(Command::Chat(op, send))
+            .map_err(|_| self.worker_failed())?;
+        wait_response(recv, self.worker.as_ref().ok_or(StoreError::Closed)?)
+    }
+
+    pub fn set_party_mark(
+        &self,
+        key: &str,
+        name: &str,
+        mark: Option<PartyMark>,
+        note: Option<&str>,
+    ) -> Result<(), StoreError> {
+        crate::queries::identifier(key)?;
+        crate::queries::identifier(name)?;
+        if note.is_some_and(|n| n.chars().count() > 500) {
+            return Err(StoreError::InvalidEvent);
+        }
+        self.flush()?;
+        let (send, recv) = bounded(1);
+        self.commands
+            .send(Command::PartyMark(
+                key.into(),
+                name.into(),
+                mark,
+                note.map(str::to_owned),
+                send,
+            ))
+            .map_err(|_| self.worker_failed())?;
+        wait_response(recv, self.worker.as_ref().ok_or(StoreError::Closed)?)
+    }
+
+    pub fn clear_party(&self, opts: &ClearPartyHistory) -> Result<(), StoreError> {
+        self.flush()?;
+        let (send, recv) = bounded(1);
+        self.commands
+            .send(Command::ClearParty(opts.clone(), send))
             .map_err(|_| self.worker_failed())?;
         wait_response(recv, self.worker.as_ref().ok_or(StoreError::Closed)?)
     }
@@ -330,11 +514,12 @@ impl StoreWriter {
     }
 
     fn request(&self, retry: bool) -> Result<FlushReceipt, StoreError> {
-        let shared = lock(&self.shared);
+        let mut shared = lock(&self.shared);
         if !shared.accepting {
             return Err(StoreError::Closed);
         }
         let ticket = shared.last_ticket;
+        shared.maintenance_barriers += 1;
         drop(shared);
         let (reply, response) = bounded(1);
         let command = if retry {
@@ -516,17 +701,22 @@ fn commit_next(
         .iter()
         .take_while(|p| p.ticket <= through)
         .take(config.batch_size)
-        .map(|p| (Arc::clone(&p.event), Arc::clone(&p.context)))
+        .map(|p| (Arc::clone(&p.event), Arc::clone(&p.context), p.hash))
         .collect();
     if events.is_empty() {
         return Ok(false);
     }
-    if let Err(error) = apply_contexts(conn, events.iter().map(|(e, c)| (e.as_ref(), c.as_ref()))) {
+    if let Err(error) = apply_prepared_contexts(
+        conn,
+        events
+            .iter()
+            .map(|(e, c, h)| (e.as_ref(), c.as_ref(), Some(h))),
+    ) {
         mark_failed(shared, &error);
         return Err(error);
     }
     let mut shared = lock(shared);
-    for (event, _) in &events {
+    for (event, _, _) in &events {
         if let Some(pending) = shared.queue.pop_front() {
             shared.bytes -= pending.bytes;
         }
@@ -582,29 +772,54 @@ impl StoreError {
     }
 }
 
+fn maintenance_interrupted(shared: &Mutex<Shared>, commands: &Receiver<Command>) -> bool {
+    let state = lock(shared);
+    !commands.is_empty()
+        || !state.queue.is_empty()
+        || state.failure.is_some()
+        || !state.accepting
+        || state.maintenance_blocked
+        || state.maintenance_barriers != 0
+}
+
 fn worker_loop(
     conn: &mut Connection,
     config: &WriterConfig,
     shared: &Mutex<Shared>,
     commands: Receiver<Command>,
     wake: Receiver<()>,
+    maintenance: &mut MaintenanceService,
+    notices: Sender<JobStatus>,
 ) {
     let interval = Duration::from_millis(config.flush_millis);
     let mut last_flush = Instant::now();
+    let mut next_maintenance = Instant::now();
     loop {
         let ready = {
             let state = lock(shared);
             commit_ready(&state, config, last_flush.elapsed())
         };
-        let wait = if ready {
+        let mut wait = if ready {
             Duration::ZERO
         } else {
             interval.saturating_sub(last_flush.elapsed())
         };
-        crossbeam_channel::select! {
+        if maintenance.has_runnable_jobs() {
+            wait = wait.min(next_maintenance.saturating_duration_since(Instant::now()));
+        }
+        crossbeam_channel::select_biased! {
             recv(commands) -> command => {
                 let Ok(command) = command else { break; };
                 let (through,reply,closing,retry) = match command {
+                    Command::Maintenance(control, reply) => {
+                        let wake = matches!(control, Control::Request(_) | Control::Resume(_) | Control::AuthorizationChanged(_));
+                        let result = maintenance.control(conn, control);
+                        if wake && result.is_ok() { next_maintenance = Instant::now(); }
+                        let _ = reply.send(result);
+                        continue;
+                    }
+                    Command::PartyMark(key, name, mark, note, reply) => { let _ = reply.send(crate::party::set_mark(conn, &key, &name, mark, note.as_deref())); continue; }
+                    Command::ClearParty(opts, reply) => { let _ = reply.send(crate::party::clear(conn, &opts)); continue; }
                     Command::Chat(op, reply) => { let _ = reply.send(crate::chat::maintain(conn, op)); continue; }
                     Command::Claim(limit, reply) => { let result = crate::alerts::claim(conn, &config.stream_id, limit); let _ = reply.send(result); continue; }
                     Command::Flush(t,r) => (t,r,false,false), Command::Retry(t,r) => (t,r,false,true), Command::Shutdown(t,r) => (t,r,true,false),
@@ -613,6 +828,7 @@ fn worker_loop(
                     #[cfg(test)]
                     Command::Panic => panic!("synthetic worker failure"),
                 };
+                if !closing { let mut state=lock(shared); state.maintenance_barriers=state.maintenance_barriers.saturating_sub(1); }
                 if retry { let mut state=lock(shared); state.failure=None; state.state=StoreState::Ready; }
                 let result=flush_through(conn,config,shared,through);
                 if closing && result.is_ok() { lock(shared).state=StoreState::Closed; }
@@ -632,6 +848,23 @@ fn worker_loop(
         }
         if last_flush.elapsed() >= interval {
             last_flush = Instant::now();
+        }
+        if maintenance.has_runnable_jobs() && Instant::now() >= next_maintenance {
+            let interrupted = || maintenance_interrupted(shared, &commands);
+            let result = maintenance.step(conn, false, &interrupted);
+            next_maintenance = Instant::now()
+                + if matches!(result, Ok(Step::Committed(_))) {
+                    // Return to the command/capture arbitration between units.
+                    thread::yield_now();
+                    Duration::ZERO
+                } else {
+                    Duration::from_secs(1)
+                };
+        }
+        if !notices.is_full() {
+            if let Some(notice) = maintenance.take_notice() {
+                let _ = notices.try_send(notice);
+            }
         }
     }
 }
@@ -739,13 +972,386 @@ fn read_json_rows<T: serde::de::DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::maintenance::{
+        Environment, Job, JobExecutor, JobRequest, Limits, PauseReason, Record, UnitBudget,
+        UnitOutcome,
+    };
     use crate::project::fault::Point;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct MaintenanceClock;
+    impl Environment for MaintenanceClock {
+        fn monotonic(&self) -> Duration {
+            Duration::ZERO
+        }
+        fn timestamp(&self) -> u64 {
+            100
+        }
+    }
+    struct MaintenanceProbe {
+        entered: Sender<()>,
+        release: Receiver<()>,
+        calls: Arc<AtomicUsize>,
+        failure: Option<i32>,
+    }
+    impl JobExecutor for MaintenanceProbe {
+        fn execute(
+            &mut self,
+            tx: &rusqlite::Transaction<'_>,
+            _: &Job,
+            budget: &mut UnitBudget<'_>,
+        ) -> Result<UnitOutcome, StoreError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            if self.failure.is_some() {
+                assert!(budget.reserve(Record::Receipt, 1));
+            }
+            self.entered.send(()).unwrap();
+            self.release.recv_timeout(Duration::from_secs(10)).unwrap();
+            if self.failure.is_none() && !budget.reserve(Record::Receipt, 1) {
+                return Ok(UnitOutcome::default());
+            }
+            tx.execute(
+                "INSERT INTO event_streams(stream_id) VALUES('synthetic-maintenance')",
+                [],
+            )?;
+            if let Some(code) = self.failure {
+                return Err(
+                    rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(code), None).into(),
+                );
+            }
+            Ok(UnitOutcome {
+                cursor: Some("1".into()),
+                ..Default::default()
+            })
+        }
+    }
+    fn maintenance_request() -> Control {
+        Control::Request(JobRequest {
+            kind: "synthetic".into(),
+            key: "scope".into(),
+            format_version: 1,
+            input_generation: "generation".into(),
+            input_revision: 0,
+        })
+    }
+    fn maintenance_probe(
+        failure: Option<i32>,
+    ) -> (
+        MaintenanceService,
+        Receiver<()>,
+        Sender<()>,
+        Arc<AtomicUsize>,
+    ) {
+        let (entered, observed) = bounded(8);
+        let (release, wait) = bounded(8);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let service = MaintenanceService::new(
+            Box::new(MaintenanceProbe {
+                entered,
+                release: wait,
+                calls: calls.clone(),
+                failure,
+            }),
+            Box::new(|_, _| Ok(true)),
+            Box::new(MaintenanceClock),
+            Limits::default(),
+        )
+        .unwrap();
+        (service, observed, release, calls)
+    }
+
+    #[test]
+    fn maintenance_yields_to_queued_capture_flush_retry_and_shutdown() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("db");
+        let (service, entered, release, calls) = maintenance_probe(None);
+        let mut writer = start_writer_with_maintenance(
+            path.clone(),
+            WriterConfig {
+                stream_id: "fault-test".into(),
+                capacity: 1,
+                flush_millis: 60_000,
+                ..Default::default()
+            },
+            service,
+        )
+        .unwrap();
+        writer.maintenance(maintenance_request()).unwrap();
+        entered.recv_timeout(Duration::from_secs(10)).unwrap();
+        submit(&writer, event(1));
+        assert!(matches!(
+            writer.try_submit(event(2)),
+            Err(SubmitError::Full(_))
+        ));
+        let (flush, flushed) = bounded(1);
+        let (retry, retried) = bounded(1);
+        let (shutdown, stopped) = bounded(1);
+        writer.commands.send(Command::Flush(1, flush)).unwrap();
+        writer.commands.send(Command::Retry(1, retry)).unwrap();
+        writer
+            .commands
+            .send(Command::Shutdown(1, shutdown))
+            .unwrap();
+        release.send(()).unwrap();
+        for reply in [flushed, retried, stopped] {
+            assert_eq!(
+                reply
+                    .recv_timeout(Duration::from_secs(10))
+                    .unwrap()
+                    .unwrap()
+                    .sequence
+                    .0
+                     .0,
+                1
+            );
+        }
+        writer.worker.take().unwrap().join().unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        let db = Connection::open(path).unwrap();
+        assert_eq!(
+            db.query_row(
+                "SELECT count(*) FROM event_streams WHERE stream_id='synthetic-maintenance'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
+        );
+        assert_eq!(crate::receipt_tests::head(&db, "fault-test"), Some(1));
+        assert_eq!(crate::receipt_tests::count(&db), 1);
+        assert_eq!(
+            db.query_row("SELECT processed_records FROM maintenance_jobs", [], |r| {
+                r.get::<_, i64>(0)
+            })
+            .unwrap(),
+            0
+        );
+        assert_eq!(writer.status().queued, 0);
+    }
+
+    #[test]
+    fn maintenance_errors_leave_capture_ready_and_capture_failure_retains_ownership() {
+        for code in [
+            rusqlite::ffi::SQLITE_BUSY,
+            rusqlite::ffi::SQLITE_FULL,
+            rusqlite::ffi::SQLITE_IOERR,
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("db");
+            let (service, entered, release, calls) = maintenance_probe(Some(code));
+            let writer = start_writer_with_maintenance(
+                path.clone(),
+                WriterConfig {
+                    stream_id: "fault-test".into(),
+                    flush_millis: 60_000,
+                    ..Default::default()
+                },
+                service,
+            )
+            .unwrap();
+            let id = writer.maintenance(maintenance_request()).unwrap().status.id;
+            entered.recv_timeout(Duration::from_secs(10)).unwrap();
+            writer.set_maintenance_blocked(true);
+            release.send(()).unwrap();
+            // Wait for a durable-head-independent acknowledgment from the worker.
+            assert!(
+                !writer
+                    .maintenance(Control::Status(id))
+                    .unwrap()
+                    .status
+                    .paused
+            );
+            assert_eq!(writer.status().state, StoreState::Ready);
+            submit(&writer, event(1));
+            writer.flush().unwrap();
+            assert_eq!(writer.status().durable, Some(Sequence(Timestamp(1))));
+            let (send, recv) = bounded(1);
+            writer
+                .commands
+                .send(Command::Inject(Point::Commit, code, send))
+                .unwrap();
+            recv.recv().unwrap();
+            submit(&writer, event(2));
+            assert!(writer.flush().is_err());
+            assert_eq!(writer.status().state, StoreState::Failed);
+            assert_eq!(writer.status().queued, 1);
+            writer.maintenance(Control::Resume(id)).unwrap();
+            assert_eq!(
+                writer
+                    .maintenance(Control::Status(id))
+                    .unwrap()
+                    .status
+                    .processed_records,
+                0
+            );
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            // Keep the job paused while retry drains precisely the retained queue.
+            writer.maintenance(Control::Pause(id)).unwrap();
+            writer.retry().unwrap();
+            assert_eq!(writer.status().durable, Some(Sequence(Timestamp(2))));
+            assert_eq!(writer.status().queued, 0);
+            writer.shutdown().unwrap();
+            let db = Connection::open(path).unwrap();
+            assert_eq!(
+                db.query_row(
+                    "SELECT count(*) FROM event_streams WHERE stream_id='synthetic-maintenance'",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+                0
+            );
+            assert_eq!(crate::receipt_tests::head(&db, "fault-test"), Some(2));
+            assert_eq!(crate::receipt_tests::count(&db), 2);
+        }
+    }
+
+    #[test]
+    fn maintenance_busy_retries_on_worker_cadence_without_resume() {
+        let dir = tempfile::tempdir().unwrap();
+        let (service, entered, release, calls) =
+            maintenance_probe(Some(rusqlite::ffi::SQLITE_BUSY));
+        let writer = start_writer_with_maintenance(
+            dir.path().join("db"),
+            WriterConfig {
+                flush_millis: 60_000,
+                ..Default::default()
+            },
+            service,
+        )
+        .unwrap();
+        let id = writer.maintenance(maintenance_request()).unwrap().status.id;
+        entered.recv_timeout(Duration::from_secs(10)).unwrap();
+        release.send(()).unwrap();
+        // No command wakes maintenance between these attempts. The normal
+        // retry deadline must wake even with a sixty-second capture interval.
+        entered.recv_timeout(Duration::from_secs(10)).unwrap();
+        writer.set_maintenance_blocked(true);
+        release.send(()).unwrap();
+        assert!(
+            !writer
+                .maintenance(Control::Status(id))
+                .unwrap()
+                .status
+                .paused
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(writer.status().state, StoreState::Ready);
+        writer.shutdown().unwrap();
+    }
+
+    #[test]
+    fn maintenance_pressure_checks_include_pending_barriers_and_unsaved_events() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("db");
+        let mut conn = open_writer(&path).unwrap();
+        let (mut service, _, _, calls) = maintenance_probe(None);
+        service.control(&mut conn, maintenance_request()).unwrap();
+        let (commands, command_rx) = bounded(8);
+        let (committed, _) = bounded(1);
+        let shared = Mutex::new(Shared {
+            path: std::fs::canonicalize(&path).unwrap(),
+            maintenance_blocked: false,
+            maintenance_barriers: 0,
+            queue: VecDeque::new(),
+            bytes: 0,
+            last_ticket: 0,
+            urgent_through: 0,
+            committed,
+            state: StoreState::Ready,
+            durable: None,
+            failure: None,
+            accepting: true,
+        });
+        for reason in 0..5 {
+            {
+                let mut state = lock(&shared);
+                state.maintenance_blocked = reason == 0;
+                state.maintenance_barriers = usize::from(reason == 1);
+                state.failure = (reason == 2).then_some(StoreError::Full);
+                state.accepting = reason != 3;
+            }
+            if reason == 4 {
+                let (reply, _) = bounded(1);
+                commands.send(Command::Retry(0, reply)).unwrap();
+            }
+            assert_eq!(
+                service
+                    .step(&mut conn, false, &|| maintenance_interrupted(
+                        &shared,
+                        &command_rx
+                    ))
+                    .unwrap(),
+                Step::Deferred(PauseReason::Capture)
+            );
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(conn.is_autocommit());
+        assert_eq!(
+            conn.query_row("PRAGMA busy_timeout", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            250
+        );
+        // Abandoned capture stays owned and also excludes stopped maintenance.
+        lock(&shared).queue.push_back(Pending {
+            event: Arc::new(event(1)),
+            context: Arc::default(),
+            bytes: 0,
+            ticket: 1,
+            hash: [0; 32],
+        });
+        let shared = Arc::new(shared);
+        retain_abandoned(shared.clone());
+        assert!(matches!(
+            crate::maintenance::StoppedMaintenance::open(&path, MaintenanceService::default()),
+            Err(StoreError::Busy)
+        ));
+        // Remove only this test's exceptional owner; other tests may retain data.
+        abandoned()
+            .lock()
+            .unwrap()
+            .retain(|item| !Arc::ptr_eq(item, &shared));
+        assert_eq!(lock(&shared).queue.len(), 1);
+    }
+
+    #[test]
+    fn prepared_receipt_matches_direct_projection_and_duplicate_validation() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("prepared.sqlite3");
+        let writer = start_writer(
+            path.clone(),
+            WriterConfig {
+                stream_id: "fault-test".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let envelope = event(1);
+        let expected = validate_event(&envelope).unwrap().1;
+        writer.try_submit(envelope.clone()).unwrap();
+        writer.flush().unwrap();
+        let mut conn = open_writer(&path).unwrap();
+        let stored = crate::receipt_tests::lookup(&conn, "fault-test", 1).unwrap();
+        assert_eq!(stored, expected);
+        crate::apply_batch(&mut conn, std::slice::from_ref(&envelope)).unwrap();
+        let mut changed = envelope.clone();
+        changed.at = Timestamp(2);
+        assert!(crate::apply_batch(&mut conn, &[changed]).is_err());
+        let mut direct = open_writer(&dir.path().join("direct.sqlite3")).unwrap();
+        crate::apply_batch(&mut direct, &[envelope]).unwrap();
+        let direct_hash = crate::receipt_tests::lookup(&direct, "fault-test", 1).unwrap();
+        assert_eq!(stored, direct_hash);
+        writer.shutdown().unwrap();
+    }
 
     #[test]
     fn commit_schedule_uses_urgent_ticket_without_advancing_batch_clock() {
         let config = WriterConfig::default();
         let (committed, _) = bounded(1);
         let mut state = Shared {
+            path: PathBuf::new(),
+            maintenance_blocked: false,
+            maintenance_barriers: 0,
             queue: VecDeque::new(),
             bytes: 0,
             last_ticket: 3,
@@ -758,6 +1364,7 @@ mod tests {
         };
         for ticket in 1..=3 {
             state.queue.push_back(Pending {
+                hash: validate_event(&event(ticket)).unwrap().1,
                 event: Arc::new(event(ticket)),
                 context: Arc::new(crate::AlertContext::default()),
                 bytes: 0,
@@ -954,7 +1561,7 @@ mod tests {
             },
         )
         .unwrap();
-        writer.try_submit(event(1)).unwrap();
+        submit(&writer, event(1));
         let mut source = event(2);
         source.event = EngineEvent::Chat(ChatMessageView {
             id: "fault-test:chat:2".into(),
@@ -973,7 +1580,7 @@ mod tests {
             text: "synthetic message".into(),
             truncated: false,
         });
-        writer.try_submit(source).unwrap();
+        submit(&writer, source);
         assert_eq!(
             writer.maintain_chat(crate::ChatMaintenance::Clear).unwrap(),
             1
@@ -1084,24 +1691,14 @@ mod tests {
                 assert_eq!(status.durable, Some(Sequence(Timestamp(1))));
                 assert!(status.message.contains("2..=3"));
                 let db = Connection::open(&path).unwrap();
-                assert_eq!(
-                    db.query_row("SELECT count(*) FROM event_receipts", [], |r| r
-                        .get::<_, i64>(0))
-                        .unwrap(),
-                    1
-                );
+                assert_eq!(crate::receipt_tests::count(&db), 1);
                 assert!(matches!(
                     writer.try_submit(event(4)),
                     Err(SubmitError::Failed(_))
                 ));
                 writer.retry().unwrap();
                 assert_eq!(writer.flush().unwrap().sequence.0 .0, 3);
-                assert_eq!(
-                    db.query_row("SELECT count(*) FROM event_receipts", [], |r| r
-                        .get::<_, i64>(0))
-                        .unwrap(),
-                    3
-                );
+                assert_eq!(crate::receipt_tests::count(&db), 3);
                 assert_eq!(writer.status().queued, 0);
                 writer.shutdown().unwrap();
             }

@@ -55,12 +55,12 @@ it('keyboard_timeline_and_full_source_table_are_reachable', async () => {
   await fireEvent.click(main().getByRole('tab', { name: 'Invented target 51' })); await flush();
   await follow('#/runs/run-1/fights/fight-51');
   await follow('#/runs/run-1/fights/fight-51/players/7');
-  expect(region('Damage sources').getAllByRole('row').slice(1)).toHaveLength(101);
-  expect(region('Damage sources').queryByRole('button', { name: 'Next Window' })).toBeNull();
-  const scrollArea = region('Damage sources').getByRole('region', { name: 'Damage sources table scroll area' });
+  expect(region('Damage by item').getAllByRole('row').slice(1)).toHaveLength(101);
+  expect(region('Damage by item').queryByRole('button', { name: 'Next Window' })).toBeNull();
+  const scrollArea = region('Damage by item').getByRole('region', { name: 'Damage by item table scroll area' });
   scrollArea.focus(); await user.keyboard('{ArrowDown}'); await flush();
   expect(document.activeElement).toBe(scrollArea);
-  expect(region('Damage sources').getByText('3,100', { exact: true })).toBeTruthy();
+  expect(region('Damage by item').getByText('3,100', { exact: true })).toBeTruthy();
   expect(page.queries.getPlayerBreakdown).toHaveBeenCalledTimes(1);
 });
 

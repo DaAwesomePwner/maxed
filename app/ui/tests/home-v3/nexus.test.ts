@@ -1,3 +1,4 @@
+import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { render, screen, fireEvent, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -5,7 +6,7 @@ import NexusHome from '../../src/lib/home/NexusHome.svelte';
 import FameSparkline from '../../src/lib/home/FameSparkline.svelte';
 import ScopeLoot from '../../src/lib/home/v3/ScopeLoot.svelte';
 import { setDebugMode } from '../../src/lib/debug/debug';
-import { homeSnapshot, homeSummary } from '../home/fixtures';
+import { characterFame, homeSnapshot, homeSummary } from '../home/fixtures';
 import { emptyHomeVisuals } from '../../src/lib/home/visuals';
 import { routeHref } from '../../src/lib/navigation/routes';
 import { lootCount } from '../../src/lib/home/nexus';
@@ -14,7 +15,7 @@ import type { ScopeLootPage } from '../../src/lib/bindings/ScopeLootPage';
 
 afterEach(() => { setDebugMode(false); vi.unstubAllGlobals(); });
 const summary = () => homeSummary({ runs: 14, clears: 12, deaths: 1, fame_delta: 3420,
-  fame: [{ at: '1000000', character_id: 'a', fame: 1250 }, { at: '2000000', character_id: 'a', fame: 4670 }],
+  ...characterFame(3420, 1250),
   dungeon_stats: [{ dungeon: 'The Shatters', runs: 5, clears: 4, deaths: 1, observed_clears: 4,
     mean_clear_micros: 768000000, best_clear_micros: 719000000, last_started: '1000000', all_time_best_clear_micros: 719000000 }] });
 const ready = (): HomeHistoryState => ({ phase: 'ready', summary: summary(), retryAvailable: true, message: '' });
@@ -36,6 +37,42 @@ it('shows the divided KPI copy, target link, PB and a single whole-row run desti
   expect(row.getAttribute('href')).toBe('#/runs/demo-run');
   expect(row.querySelector('details')).toBeNull();
   expect(row.querySelectorAll('a')).toHaveLength(0);
+});
+it('uses the singular for deaths in one run', () => {
+  const input = props();
+  render(NexusHome, { ...input, history: { ...input.history, summary: { ...summary(), runs: 1 } } });
+  expect(screen.getByText('in 1 run')).toBeTruthy();
+});
+it('fame tile counts only the current character', () => {
+  const input = props();
+  const id = input.snapshot.character!.id;
+  input.history.summary!.fame_characters = [{ character_id: id, first_fame: 1213, last_fame: 1734, last_at: '3000000' },
+    { character_id: 'other', first_fame: 9000, last_fame: 9500, last_at: '4000000' }];
+  const page = render(NexusHome, input);
+  const tile = page.container.querySelector('[data-kpi="fame"]')!;
+  expect(tile.querySelector('.value')?.textContent).toBe('+521');
+  expect(tile.textContent).toContain('1,213 → 1,734');
+});
+it('fame tile uses unsampled totals, not the sampled chart', () => {
+  const input = props();
+  const id = input.snapshot.character!.id;
+  // Sampling dropped the character's earliest chart points; the totals still start at 1,213.
+  input.history.summary!.fame = [{ at: '2000000', character_id: id, fame: 1600 }, { at: '3000000', character_id: id, fame: 1734 }];
+  input.history.summary!.fame_characters = [{ character_id: id, first_fame: 1213, last_fame: 1734, last_at: '3000000' }];
+  const page = render(NexusHome, input);
+  const tile = page.container.querySelector('[data-kpi="fame"]')!;
+  expect(tile.querySelector('.value')?.textContent).toBe('+521');
+  expect(tile.textContent).toContain('1,213 → 1,734');
+});
+it('fame tile falls back to the latest observed character outside the game', () => {
+  const input = props();
+  input.snapshot.character = null;
+  input.history.summary!.fame_characters = [{ character_id: 'a', first_fame: 100, last_fame: 150, last_at: '3000000' },
+    { character_id: 'b', first_fame: 9000, last_fame: 9500, last_at: '4000000' }];
+  const page = render(NexusHome, input);
+  const tile = page.container.querySelector('[data-kpi="fame"]')!;
+  expect(tile.querySelector('.value')?.textContent).toBe('+500');
+  expect(tile.textContent).toContain('9,000 → 9,500');
 });
 it('Nexus uses the shared 600ms best-bag glow exactly once and disables it for reduced motion', async () => {
   const animate = vi.fn(() => ({ cancel: vi.fn() }));
@@ -155,9 +192,12 @@ it('pages a large aggregate scope with a bounded tile count, pips and fallback l
   expect(view.container.querySelectorAll('.big')).toHaveLength(2);
   expect(screen.getByRole('img', { name: 'Item 0' })).toBeTruthy();
   expect(screen.getAllByText('×1.2k')).toHaveLength(32);
-  expect(view.container.querySelector('[data-loot-type="0"]')?.getAttribute('title')).toBe('Item 0 · 1,234');
+  const tile = view.container.querySelector('[data-loot-type="0"]')!;
+  expect(tile.getAttribute('data-item-hover')).toBe('0');
+  expect(tile.hasAttribute('title')).toBe(false);
+  expect(itemHoverParams(tile)).toEqual({ type: 0, name: 'Item 0', tier: 'UT', enchant: page.items[0].best_enchant, suffix: '×1,234', label: 'Best copy' });
   expect(view.container.querySelector('[data-pip="4"]')).toBeTruthy();
-  await fireEvent.click(screen.getByRole('button', { name: 'Next Loot' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
   expect(next).toHaveBeenCalledOnce();
   await view.rerender({ page: { ...page, items: page.items.slice(0, 1), next: null }, pageNumber: 2,
     visuals: emptyHomeVisuals(), resolveSpriteUrl: () => null, enabled: true, next, first: vi.fn() });
@@ -183,4 +223,24 @@ it.each([
 ] as const)('uses the %s title fallback without a map name', (area_kind, title) => {
   render(NexusHome, { ...props(), snapshot: homeSnapshot({ area_kind, map: null, run: null }) });
   expect(screen.getByRole('heading', { name: title })).toBeTruthy();
+});
+
+it('labels fame scale ticks and only marks retained run starts inside the plotted range', () => {
+  const page = render(FameSparkline, { period: 'Session', points: [
+    { character_id: 'synthetic-a', at: '1000000', fame: 100 },
+    { character_id: 'synthetic-a', at: '3000000', fame: 200 },
+  ], runs: [{ id: 'before', started: '0', dungeon: 'Synthetic Before' },
+    { id: 'inside', started: '2000000', dungeon: 'Synthetic Inside' },
+    { id: 'after', started: '4000000', dungeon: 'Synthetic After' }] });
+  expect(screen.getByLabelText('Fame scale').textContent).toBe('200150100');
+  expect(page.container.querySelectorAll('[data-run-start]')).toHaveLength(1);
+  expect(page.container.querySelector('[data-run-start="inside"] title')?.textContent).toContain('Synthetic Inside');
+});
+it('keeps a flat fame series and its labeled scale finite', () => {
+  const page = render(FameSparkline, { period: 'Session', points: [
+    { character_id: 'synthetic-a', at: '1000000', fame: 0 },
+    { character_id: 'synthetic-a', at: '3000000', fame: 0 },
+  ] });
+  expect(screen.getByLabelText('Fame scale').textContent).toBe('10');
+  expect(page.container.innerHTML).not.toMatch(/NaN|Infinity/);
 });

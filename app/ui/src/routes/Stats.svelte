@@ -1,4 +1,6 @@
 <script lang="ts">
+  import '../lib/styles/controls.css';
+  import '../lib/stats/stats.css';
   import { untrack } from 'svelte';
   import type { Client } from '../lib/bridge/client';
   import type { StoreStatus } from '../lib/bindings/StoreStatus';
@@ -21,6 +23,7 @@
   }
 </script>
 
+<div class="stats-page">
 <nav aria-label="Stats views">
   <a href="#/stats" aria-current={route.view === 'maps' ? 'page' : undefined}>Maps</a>
   <a href="#/stats/sessions" aria-current={route.view === 'sessions' ? 'page' : undefined}>Sessions</a>
@@ -31,6 +34,8 @@
 {:else if route.view === 'sessions'}<SessionsView {client} {enabled} {position} onChange={change} {streamId} {scopeKey} {required} {store} {entryKey} {onRowsReady} />
 {:else if route.view === 'dungeons'}<DungeonsView {client} {enabled} {position} onChange={change} {streamId} {scopeKey} {required} {store} {entryKey} {onRowsReady} />
 {:else}<MapsView {client} {enabled} {position} onChange={change} {streamId} {scopeKey} {required} {store} {entryKey} {onRowsReady} />{/if}
+
+</div>
 
 <style>
   nav { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }

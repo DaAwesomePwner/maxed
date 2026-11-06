@@ -108,13 +108,15 @@ fn assert_durable(runtime: &CaptureRuntime) {
 
 fn cardinalities(path: &std::path::Path) -> Vec<i64> {
     let db = rusqlite::Connection::open(path).unwrap();
-    ["runs", "fights", "drops", "timeline", "event_receipts"]
+    let mut counts: Vec<i64> = ["runs", "fights", "drops", "timeline"]
         .into_iter()
         .map(|table| {
             db.query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))
                 .unwrap()
         })
-        .collect()
+        .collect();
+    counts.push(super::receipt_tests::count(&db));
+    counts
 }
 
 fn counts(label: &str, mut values: Vec<usize>) {

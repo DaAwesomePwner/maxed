@@ -5,4 +5,4 @@ export type StatsSessionRow = { id: string, started: Timestamp,
 /**
  * `None` while the session is in progress.
  */
-ended: Timestamp | null, duration_micros: number, fame: number, missing_baseline: boolean, fame_per_hour: number | null, runs: number, clears: number, deaths: number, };
+ended: Timestamp | null, duration_micros: number, fame: number, missing_baseline: boolean, fame_per_hour: number | null, bags: number, notable_bags: number, bags_per_hour: number | null, notable_bags_per_hour: number | null, runs: number, clears: number, deaths: number, };

@@ -1,5 +1,5 @@
 //! Invented run-history fixtures, derived from maxed-types' admitted synthetic demo.
-mod common;
+use crate::common;
 use common::*;
 use maxed_store::*;
 use maxed_types::*;
@@ -12,6 +12,40 @@ fn database() -> (tempfile::TempDir, std::path::PathBuf, Connection) {
     migrate(&mut db).unwrap();
     apply_batch(&mut db, &story_events()).unwrap();
     (dir, path, db)
+}
+
+#[test]
+fn death_detail_round_trips_through_run_storage() {
+    let (_dir, path, mut db) = database();
+    let mut run = demo::demo_run_story().run;
+    let detail = DeathDetail {
+        killed_by: Some("Synthetic 300".into()),
+        killed_by_type: Some(300),
+        fame: Some(1260),
+        hp_trace: vec![HpSample {
+            at: Timestamp(5_500_001),
+            hp: 123,
+            max_hp: Some(800),
+        }],
+    };
+    run.death = Some(detail.clone());
+    run.died_at = Some(Timestamp(6_000_000));
+    run.ended = run.died_at;
+    apply_batch(&mut db, &[envelope(8, EngineEvent::RunEnded(run))]).unwrap();
+    let stored: String = db
+        .query_row("SELECT json FROM runs WHERE id='demo-run'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<RunView>(&stored).unwrap().death,
+        Some(detail.clone())
+    );
+    let reader = open_reader(&path).unwrap();
+    assert_eq!(
+        reader.get_run("demo-run").unwrap().unwrap().run.death,
+        Some(detail)
+    );
 }
 
 #[test]

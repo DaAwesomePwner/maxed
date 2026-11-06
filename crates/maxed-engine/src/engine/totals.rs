@@ -43,7 +43,7 @@ pub(crate) fn run_totals_iter<'a>(
             || f.players
                 .iter()
                 .flat_map(|p| &p.sources)
-                .any(|s| s.estimated);
+                .any(|s| s.damage_uncertain());
         for p in &f.players {
             let row = players
                 .entry(p.player_id.clone())
@@ -152,7 +152,7 @@ impl Contribution {
                 || f.players
                     .iter()
                     .flat_map(|p| &p.sources)
-                    .any(|s| s.estimated),
+                    .any(|s| s.damage_uncertain()),
             players: f
                 .players
                 .iter()

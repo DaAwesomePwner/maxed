@@ -174,7 +174,7 @@
   }
 </script>
 <LogsHeader view="alerts" subline={countLine(allTime?.total ?? null, 'alerts', allTime?.first_at ?? null)}><RangeSwitch range={filter.range} label="Logs date range" onChange={range => apply({ ...filter, range, cursor: null })} /></LogsHeader>
-<div class="kpis" aria-label="Alert kinds">{#each alertKpis(summaryKey === rangeKey ? summary : null, filter.range, mutedCount, new Date()) as cell, index}
+<div class="kpis" aria-label="Alert kinds">{#each alertKpis(summaryKey === rangeKey ? summary : null, filter.range, mutedCount, new Date(), preferences) as cell, index}
   <button class="ctl ghost" class:chosen={tile === cell.key} aria-pressed={tile === cell.key} onclick={() => chooseTile(tiles[index])}><span class="label">{cell.label}</span><strong class:gold={cell.tone === 'fame'}>{cell.value}</strong><span class="sub" title={cell.sub ?? undefined}>{cell.sub ?? '\u00a0'}</span></button>
 {/each}</div>
 <BusyStatus message={client && enabled ? historyStatus(history, 'alerts') : null} />

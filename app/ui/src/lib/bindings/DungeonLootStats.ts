@@ -6,4 +6,4 @@ export type DungeonLootStats = { dungeon: string, runs_ended: number, clears: nu
 /**
  * All-time: ended runs of this dungeon that started after the latest white. None = no white ever.
  */
-runs_since_last_white: number | null, best: BestBagRef | null, };
+runs_since_last_white: number | null, white_runs: number, avg_runs_per_white: number | null, longest_dry: number | null, best: BestBagRef | null, };

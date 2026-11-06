@@ -174,7 +174,6 @@ pub(crate) mod tests {
                     "SEARCH fight USING INDEX fights_run",
                     "SEARCH drop_row USING INDEX drops_run",
                     "SEARCH p USING INDEX",
-                    "SEARCH fp USING INDEX",
                     "SEARCH previous_clear USING AUTOMATIC COVERING INDEX (dungeon=?)",
                 ] {
                     assert!(explained.contains(search), "missing {search}:\n{explained}");

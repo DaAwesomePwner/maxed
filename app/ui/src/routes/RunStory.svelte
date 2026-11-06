@@ -5,6 +5,7 @@
   import type { DungeonBest } from '../lib/bindings/DungeonBest';
   import type { SpriteRef } from '../lib/bindings/SpriteRef';
   import { productionFeatures, routeHref, type Features } from '../lib/navigation/routes';
+  import { fightPlayerHref, runPlayerHref } from '../lib/players/links';
   import { emptyListState, normalizeListState, type ListState, type StoryPosition } from '../lib/navigation/state';
   import { createRunHistory, type HistoryController, type HistoryState } from '../lib/runs/history';
   import { HISTORY_CATCH_UP } from '../lib/runs/policy';
@@ -186,7 +187,9 @@
   {:else if !story}<EmptyState state="error" heading="Run Error" description="" />{/if}
   {#if story}
     <div class="area-home run-screen">
-      <div class="run-crumbs"><Breadcrumbs items={runCrumbs(story)} /></div>
+      <div class="run-crumbs"><Breadcrumbs items={runCrumbs(story)} />
+        {#if features.party}<a class="ctl" href={routeHref({ kind: 'party-run', runId })}>Party</a>{/if}
+      </div>
       <header class="area-header" data-story-header tabindex="-1">
         <span class="run-icon">{#if portal?.sprite}<SpriteImage sprite={portal.sprite} sheetUrl={resolveSpriteUrl(portal.sprite)} fit={40} alt={portal.name ?? 'Dungeon'} />{/if}</span>
         <div class="run-heading"><h2>{story.run.dungeon}</h2><p>{runHeaderLine(story, objectVisual(visuals.objects, story.character?.class_id)?.name ?? null)}</p></div>
@@ -220,7 +223,8 @@
                 killedAt={bossOutcome(fight) === 'killed' ? fight.kill && !fight.kill.provisional ? fight.kill.at : fight.ended : null} />
               <p class="fight-meta"><span>{formatStat(fight.total_damage)} damage · {formatDps(fightDps(fight))} DPS · {fight.players.length} players</span><span class="gold">You: best hit {formatStat(self?.biggest_hit ?? null)} · {formatStat(self?.hits ?? null)} hits</span>{#if !fight.complete_capture || fight.issues.length}<span class="quiet-tag">partial</span>{/if}<a class="open-fight" href={fightHref(fight.id)}>Open fight ›</a></p>
             {:else}<p class="fight-meta"><span>{formatStat(totals?.total_damage ?? null)} damage</span><span>{totals ? `${totals.fights} fights · ${totals.kills} kills` : '—'}</span><span class="gold">You: {formatShare(local?.share ?? null)} · rank {formatStat(local?.rank ?? null)}</span></p>{/if}
-            {#if fight || totals}<DamageTable scroll rows={shownRows} total={fight?.players.length ?? totals?.players.length ?? 0} otherDamage={fight?.unattributed_damage ?? totals?.unattributed_damage} {visuals} {resolveSpriteUrl} />
+            {#if fight || totals}<DamageTable basis={fight ? fight.dps_basis : 'whole_run'} scroll rows={shownRows} total={fight?.players.length ?? totals?.players.length ?? 0} otherDamage={fight?.unattributed_damage ?? totals?.unattributed_damage} {visuals} {resolveSpriteUrl}
+              rowHref={row => fight ? fightPlayerHref(fight, row, runId) : runPlayerHref(runId, row)} />
               <ShowMore shown={shownRows.length} total={rows.length} noun="players" onmore={showMore} />{:else}<p>No totals available</p>{/if}
             {#if fight}<FightChart buckets={fight.buckets} /><p class="sr-only">{fight.buckets.length} observed damage intervals. Party damage {formatStat(fight.total_damage)}; your DPS {formatDps(self?.dps)}.</p>{/if}
           {/if}

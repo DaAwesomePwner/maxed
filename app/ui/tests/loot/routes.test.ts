@@ -7,7 +7,7 @@ import { fakeHistory } from '../navigation/fake-history';
 import CharacterRail from '../../src/lib/shell/CharacterRail.svelte';
 import { railView } from '../../src/lib/shell/rail';
 
-const on = { lootBrowsing: true, logs: false, stats: false }, off = { lootBrowsing: false, logs: false, stats: false };
+const on = { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false }, off = { lootBrowsing: false, logs: false, stats: false, party: false, character: false, homeRedesign: false };
 const routes: Array<[string, Route]> = [
   ['#/loot/in/Lost%20Halls', { kind: 'loot', view: 'feed', seed: { place: 'Lost Halls' } }],
   ['#/loot/with/2000', { kind: 'loot', view: 'feed', seed: { item: 2000 } }],
@@ -42,7 +42,7 @@ describe('loot routes', () => {
     ['#/loot', ['Home', 'Loot'], ['#/', '#/loot']],
     ['#/loot/in/Lost%20Halls', ['Home', 'Loot'], ['#/', '#/loot/in/Lost%20Halls']],
     ['#/loot/with/2000', ['Home', 'Loot'], ['#/', '#/loot/with/2000']],
-    ['#/loot/stats', ['Home', 'Loot', 'Stats'], ['#/', '#/loot', '#/loot/stats']],
+    ['#/loot/stats', ['Home', 'Loot', 'Drop rates'], ['#/', '#/loot', '#/loot/stats']],
     ['#/loot/collection', ['Home', 'Loot', 'Collection'], ['#/', '#/loot', '#/loot/collection']],
     ['#/loot/item/7', ['Home', 'Loot', 'Item'], ['#/', '#/loot', '#/loot/item/7']],
   ])('builds breadcrumbs for %s', (hash, labels, hrefs) => {
@@ -57,8 +57,8 @@ describe('loot routes', () => {
       expect(screen.queryByRole('navigation', { name: 'Loot views' })).toBeNull();
     } else {
       const nav = within(screen.getByRole('navigation', { name: 'Loot views' }));
-      const active = route.kind === 'loot' && route.view !== 'feed' ? route.view === 'stats' ? 'Stats' : 'Collection' : 'Feed';
-      for (const [name, href] of [['Feed', '#/loot'], ['Stats', '#/loot/stats'], ['Collection', '#/loot/collection']]) {
+      const active = route.kind === 'loot' && route.view !== 'feed' ? route.view === 'stats' ? 'Drop rates' : 'Collection' : 'Feed';
+      for (const [name, href] of [['Feed', '#/loot'], ['Drop rates', '#/loot/stats'], ['Collection', '#/loot/collection']]) {
         const link = nav.getByRole('link', { name });
         expect(link.getAttribute('href')).toBe(href);
         expect(link.getAttribute('aria-current')).toBe(name === active ? 'page' : null);

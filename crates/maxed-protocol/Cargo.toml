@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "maxed-protocol"
 description = "RotMG packet framing, decryption, and decoding for Maxed."
 version.workspace = true
@@ -15,3 +16,8 @@ serde_json.workspace = true
 serde_json.workspace = true
 [dependencies.maxed-types]
 path = "../maxed-types"
+
+# Merge ordinary integration suites; retain documented or process-isolated targets.
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

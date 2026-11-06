@@ -146,7 +146,14 @@ pub struct ChatSettings {
     pub hidden_senders: Vec<String>,
     #[serde(default)]
     pub hidden_keywords: Vec<String>,
+    // Client-side display filter only; stored chat remains unchanged.
+    #[serde(default = "default_spam_filter")]
+    pub filter_spam: bool,
 }
+fn default_spam_filter() -> bool {
+    true
+}
+
 impl Default for ChatSettings {
     fn default() -> Self {
         Self {
@@ -154,6 +161,7 @@ impl Default for ChatSettings {
             retention_days: DEFAULT_CHAT_RETENTION_DAYS,
             hidden_senders: vec![],
             hidden_keywords: vec![],
+            filter_spam: true,
         }
     }
 }

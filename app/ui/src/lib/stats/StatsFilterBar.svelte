@@ -22,11 +22,11 @@
 
 <div class="filters" role="group" aria-label="Stats filters">
   {#if showRange}
-    <label>Range <select value={range} onchange={e => onChange({ range: e.currentTarget.value as StatsRange })}>
+    <label>Range <select class="ctl" value={range} onchange={e => onChange({ range: e.currentTarget.value as StatsRange })}>
       <option value="all">All time</option><option value="30d">Last 30 days</option><option value="7d">Last 7 days</option>
     </select></label>
   {/if}
-  <label>Character <select value={characterId ?? ''} onchange={e => onChange({ characterId: e.currentTarget.value || null })}>
+  <label>Character <select class="ctl" value={characterId ?? ''} onchange={e => onChange({ characterId: e.currentTarget.value || null })}>
     <option value="">All characters</option>
     {#if characterId && !characters.some(c => c.id === characterId)}<option value={characterId}>Selected character</option>{/if}
     {#each characters as character (character.id)}<option value={character.id}>{label(character)}</option>{/each}
@@ -36,5 +36,4 @@
 <style>
   .filters { display: flex; flex-wrap: wrap; gap: var(--space-3); }
   label { display: grid; gap: var(--space-1); }
-  select { font: inherit; color: var(--text-primary); min-height: var(--target-min); border-radius: var(--radius-control); background: var(--surface-panel); border: 1px solid var(--border-strong); padding: var(--space-2) var(--space-3); }
 </style>

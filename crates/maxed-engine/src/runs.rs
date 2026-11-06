@@ -1,6 +1,39 @@
 use crate::{clock, CompletionCounts, Engine};
-use maxed_protocol::defs::MapInfo;
+use maxed_protocol::defs::{Death, MapInfo};
 use maxed_types::*;
+use std::collections::VecDeque;
+
+#[derive(Default)]
+pub(crate) struct HpBuffer {
+    samples: VecDeque<HpSample>,
+    frozen: bool,
+}
+
+impl HpBuffer {
+    pub(crate) fn observe(&mut self, sample: HpSample) {
+        if self.frozen {
+            return;
+        }
+        let cutoff = sample.at.0.saturating_sub(8_000_000);
+        while self.samples.front().is_some_and(|s| s.at.0 < cutoff) {
+            self.samples.pop_front();
+        }
+        self.samples.push_back(sample);
+        while self.samples.len() > 64 {
+            self.samples.pop_front();
+        }
+    }
+
+    fn freeze(&mut self, at: Timestamp) -> Vec<HpSample> {
+        self.frozen = true;
+        let cutoff = at.0.saturating_sub(5_000_000);
+        self.samples
+            .iter()
+            .filter(|s| s.at.0 >= cutoff)
+            .cloned()
+            .collect()
+    }
+}
 
 pub(crate) struct Run {
     pub view: RunView,
@@ -18,15 +51,28 @@ pub(crate) struct Preceding {
 
 impl Engine {
     pub(crate) fn enter_map(&mut self, p: MapInfo, events: &mut Vec<EngineEvent>) {
+        self.hp_buffer = Default::default();
         let carry = self
             .local
             .as_ref()
             .is_some_and(|l| l.area.is_none() || !l.materialized);
         let pending = if carry { self.local.take() } else { None };
-        let buffered_entity = pending
-            .as_ref()
-            .filter(|l| l.area.is_none())
-            .and_then(|l| self.entities.remove(&l.object).map(|e| (l.object, e)));
+        // Before the first MAPINFO, remote players can be buffered too.
+        let buffered_ids: Vec<_> = self
+            .entities
+            .iter()
+            .filter_map(|(&id, entity)| {
+                (pending
+                    .as_ref()
+                    .is_some_and(|local| local.area.is_none() && local.object == id)
+                    || entity.present && self.map.is_none() && self.is_player(id))
+                .then_some(id)
+            })
+            .collect();
+        let buffered_entities: Vec<_> = buffered_ids
+            .into_iter()
+            .filter_map(|id| self.entities.remove(&id).map(|entity| (id, entity)))
+            .collect();
         self.close_map(FightEnd::MapChanged, true, events);
         self.clear_world();
         self.issues.clear();
@@ -37,7 +83,7 @@ impl Engine {
             }
         }
         self.local = pending;
-        if let Some((id, mut entity)) = buffered_entity {
+        for (id, mut entity) in buffered_entities {
             entity.generation = self.entity_epoch;
             self.entities.insert(id, entity);
         }
@@ -92,6 +138,7 @@ impl Engine {
                 ended: None,
                 completed_at: None,
                 died_at: None,
+                death: None,
                 outcome: None,
                 evidence: vec![],
                 party_size: None,
@@ -108,7 +155,28 @@ impl Engine {
                 fame_samples: None,
             });
         }
+        let run_id = self.run.as_ref().map(|r| r.view.id.clone());
+        let id = run_id
+            .clone()
+            .unwrap_or_else(|| self.id("map", self.map_ordinal));
+        let mut scope = crate::players::Scope::new(id, run_id, self.now);
+        // CREATE/UPDATE can precede MAPINFO; include all buffered player entities.
+        scope.touched.extend(
+            self.entities
+                .keys()
+                .copied()
+                .filter(|id| self.is_player(*id)),
+        );
+        self.scope = Some(scope);
         self.refresh_character(events);
+        let present: Vec<_> = self
+            .entities
+            .iter()
+            .filter_map(|(&id, entity)| (entity.present && self.is_player(id)).then_some(id))
+            .collect();
+        for id in present {
+            self.player_presence(id, true, events);
+        }
     }
     pub(crate) fn update_party(&mut self, events: &mut Vec<EngineEvent>) {
         let count = self
@@ -151,7 +219,7 @@ impl Engine {
         order_evidence(&mut r.view);
         events.push(EngineEvent::RunUpdated(r.view.clone()));
     }
-    pub(crate) fn die(&mut self, events: &mut Vec<EngineEvent>) {
+    pub(crate) fn die(&mut self, packet: Death, events: &mut Vec<EngineEvent>) {
         if self.death_seen
             || self.character.as_ref().is_some_and(|c| c.died_at.is_some())
             || self.run.as_ref().is_some_and(|r| r.view.died_at.is_some())
@@ -159,6 +227,7 @@ impl Engine {
             return;
         }
         self.death_seen = true;
+        let hp_trace = self.hp_buffer.freeze(self.now);
         let at = clock::millis(self.now);
         if let Some(c) = &mut self.character {
             c.died_at = Some(at);
@@ -173,6 +242,18 @@ impl Engine {
             run_id,
         });
         if let Some(r) = &mut self.run {
+            let killed_by = packet.killedBy.trim();
+            r.view.death = Some(DeathDetail {
+                killed_by: (!killed_by.is_empty()).then(|| killed_by.to_owned()),
+                killed_by_type: self
+                    .object_name_index
+                    .get(&killed_by.to_lowercase())
+                    .filter(|_| !killed_by.is_empty())
+                    .copied()
+                    .flatten(),
+                fame: self.character.as_ref().and_then(|c| c.fame),
+                hp_trace,
+            });
             r.death_create = Some(self.create_number);
             r.view.died_at = Some(at);
             r.view.ended = Some(at);
@@ -249,6 +330,7 @@ impl Engine {
             self.retire_fight(target, reason.clone(), events);
         }
         self.flush_bags(events);
+        self.end_scope(events);
         if let Some(run) = self.run.take() {
             self.preceding = Some(Preceding {
                 last_seen: self.map_last_traffic,
@@ -332,4 +414,45 @@ fn order_evidence(view: &mut RunView) {
         Evidence::CompletionCounter { .. } => 2,
         _ => 3,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hp_buffer_bounds_and_freeze() {
+        let mut buffer = HpBuffer::default();
+        for at in [0, 1, 8_000_000] {
+            buffer.observe(HpSample {
+                at: Timestamp(at),
+                hp: 100,
+                max_hp: None,
+            });
+        }
+        assert_eq!(buffer.samples.len(), 3);
+        buffer.observe(HpSample {
+            at: Timestamp(8_000_001),
+            hp: 90,
+            max_hp: None,
+        });
+        assert_eq!(buffer.samples.len(), 3);
+        assert_eq!(buffer.samples.front().unwrap().at, Timestamp(1));
+        for i in 0..100 {
+            buffer.observe(HpSample {
+                at: Timestamp(9_000_000 + i),
+                hp: i as i32,
+                max_hp: None,
+            });
+        }
+        assert_eq!(buffer.samples.len(), 64);
+        assert_eq!(buffer.samples.front().unwrap().hp, 36);
+        let trace = buffer.freeze(Timestamp(9_000_100));
+        buffer.observe(HpSample {
+            at: Timestamp(20_000_000),
+            hp: 0,
+            max_hp: None,
+        });
+        assert_eq!(buffer.samples.iter().cloned().collect::<Vec<_>>(), trace);
+    }
 }

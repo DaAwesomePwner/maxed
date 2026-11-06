@@ -3,6 +3,8 @@
 -- A visit's fame window runs from its start until the next visit in its session starts; a visit
 -- also stops at its own end, inclusive, so a session's last visit keeps a sample taken at the
 -- session's end and a backfilled run never takes later realm fame.
+-- A visit counts from the character's last earlier sample in the same session, else from its own
+-- first sample, so fame earned while Maxed was not capturing is not credited.
 WITH selected AS (
     SELECT v.id,v.session_id,v.character_id,v.run_id,v.map,v.kind,v.started,v.ended
     FROM map_visits v
@@ -24,11 +26,10 @@ WITH selected AS (
             WHERE f.session_id=visit.session_id AND f.at BETWEEN visit.started AND visit.until_at
               AND f.character_id=visit.character_id
             ORDER BY f.at DESC,f.stream_id DESC,f.sequence DESC LIMIT 1) AS last_fame,
-        (SELECT f.fame FROM fame_samples f INDEXED BY fame_character
-            WHERE f.character_id=visit.character_id
-              AND f.at=(SELECT max(g.at) FROM fame_samples g INDEXED BY fame_character
-                  WHERE g.character_id=visit.character_id AND g.at<visit.started)
-            ORDER BY f.stream_id DESC,f.sequence DESC LIMIT 1) AS baseline
+        (SELECT f.fame FROM fame_samples f INDEXED BY fame_session
+            WHERE f.session_id=visit.session_id AND f.at<visit.started
+              AND f.character_id=visit.character_id
+            ORDER BY f.at DESC,f.stream_id DESC,f.sequence DESC LIMIT 1) AS baseline
     FROM bounded visit
 ), visit_fame AS (
     SELECT s.*,
@@ -38,7 +39,7 @@ WITH selected AS (
                 WHERE f.session_id=s.session_id AND f.at BETWEEN s.started AND s.until_at
                   AND f.character_id=s.character_id
                 ORDER BY f.at,f.stream_id,f.sequence LIMIT 1) END AS fame,
-        s.last_fame IS NOT NULL AND s.baseline IS NULL AS missing
+        0 AS missing
     FROM sampled s
 ), grouped AS (
     SELECT CASE v.kind WHEN 'dungeon' THEN 'dungeon' WHEN 'realm' THEN 'realm'

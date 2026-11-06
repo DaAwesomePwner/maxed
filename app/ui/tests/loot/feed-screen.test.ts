@@ -1,3 +1,7 @@
+import { render } from '@testing-library/svelte';
+import BagPanel from '../../src/lib/loot/BagPanel.svelte';
+import { emptyHomeVisuals } from '../../src/lib/home/visuals';
+import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { afterEach, expect, it, vi } from 'vitest';
 import { feedKpis, dayGroups, dayLine, headerLine } from '../../src/lib/loot/feed-screen';
 import type { DropTotals } from '../../src/lib/bindings/DropTotals';
@@ -49,4 +53,15 @@ it('uses singular enchant wording and omits an unknown best enchant count', () =
 });
 it('explains the missing white-rate denominator outside a run', () => {
   expect(feedKpis({ totals: totals({ runs_ended: null }), days: [] })[2].sub).toBe('Outside a run: counts only');
+});
+
+it('passes taken item evidence from the selected bag to the hover card', () => {
+  const drop = homeSnapshot().drops[0];
+  drop.contents[0].taken_observed_at = '2000000';
+  const page = render(BagPanel, { row: { drop, dungeon: null }, visuals: emptyHomeVisuals(), resolveSpriteUrl: () => null, now: new Date() });
+  const tile = page.container.querySelector('li')!;
+  expect(tile.getAttribute('data-item-hover')).toBe(String(drop.contents[0].item_type));
+  expect(tile.hasAttribute('title')).toBe(false);
+  expect(tile.querySelector('.name')?.hasAttribute('title')).toBe(false);
+  expect(itemHoverParams(tile)).toEqual({ type: drop.contents[0].item_type, enchant: drop.contents[0].enchant, name: `#${drop.contents[0].item_type}`, tier: undefined, note: 'Removal observed' });
 });

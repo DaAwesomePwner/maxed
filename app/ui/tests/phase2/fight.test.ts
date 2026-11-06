@@ -28,10 +28,10 @@ it('phase2_fight_identity_series_and_sources', async () => {
   const row = region('Players').getByRole('link', { name: /Invented Archer/ });
   expect(row.getAttribute('aria-label')).toBe('4 Invented Archer');
   expect(within(row.closest('tr')!).getByLabelText('Share').textContent).toMatch(/^23\s*%$/);
-  expect(within(row.closest('tr')!).getByLabelText('DPS').textContent).toBe('17');
+  expect(within(row.closest('tr')!).getByLabelText('Active DPS').textContent).toBe('17');
   await follow('#/fights/fight-1/players/-7');
   expect(page.queries.getPlayerBreakdown).toHaveBeenCalledWith('fight-1', -7);
-  const sources = main().getByRole('region', { name: 'Damage sources' });
+  const sources = main().getByRole('region', { name: 'Damage by item' });
   // All saved rows remain separate even with identical item IDs.
   expect(sources.textContent).toContain('111'); expect(sources.textContent).toContain('222');
   expect(sources.textContent).toContain('42'); expect(sources.textContent).toContain('<img src=x onerror=alert(1)>');
@@ -100,16 +100,16 @@ it('phase2_player_coherent_revision_and_full_table_focus', async () => {
     const objectId = Number(link.getAttribute('href')!.split('/').at(-1));
     expect(link.getAttribute('aria-label')).toBe(`${objectId + 21} Invented player ${objectId}`);
     expect(within(link.closest('tr')!).getByLabelText('Share').textContent).toMatch(/^1\.3\s*%$/);
-    expect(within(link.closest('tr')!).getByLabelText('DPS').textContent).toBe('321');
+    expect(within(link.closest('tr')!).getByLabelText('Active DPS').textContent).toBe('321');
   }
   const selected = links.at(-1)!; selected.focus();
   const href = selected.getAttribute('href')!; await follow(href, region('Players')); await click('Back', history());
   expect(document.activeElement?.getAttribute('href')).toBe(href);
   await follow(href, region('Players'));
-  const oldText = main().getByRole('region', { name: 'Damage sources' }).textContent;
+  const oldText = main().getByRole('region', { name: 'Damage by item' }).textContent;
   page.queries.getPlayerBreakdown.mockResolvedValue(ready(player({ player_id: 'wrong-revision', object_id: 11, sources: [source({ damage: 999999 })] })));
   page.event({ fight_ended: fight({ players }) }, '13'); page.setStore(saved('13', 'live-phase2')); await advance();
-  expect(main().getByRole('region', { name: 'Damage sources' }).textContent).toBe(oldText);
+  expect(main().getByRole('region', { name: 'Damage by item' }).textContent).toBe(oldText);
   expect(main().queryByText(/999[ ,]?999/)).toBeNull();
   expect(main().getAllByText(/stale|changed|coherent|mismatch|revision/i).length).toBeGreaterThan(0);
 });

@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::chat::*;
 use maxed_store::{AlertContext, ChatContext};
 use maxed_types::*;
@@ -74,13 +74,7 @@ fn switched_off_channel_is_not_stored_but_sequence_continues() {
         .collect::<Result<_, _>>()
         .unwrap();
     assert_eq!(texts, ["before", "after"]);
-    let head: i64 = db
-        .query_row(
-            "SELECT sequence FROM stream_heads WHERE stream_id='test-stream'",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap();
+    let head: i64 = common::receipts::head(&db, "test-stream").unwrap();
     assert_eq!(head, 4);
 }
 

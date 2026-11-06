@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::stats::v9_database as v9;
 use rusqlite::{params, Connection};
 
@@ -8,10 +8,10 @@ fn version(db: &Connection) -> i64 {
 }
 
 #[test]
-fn fresh_database_is_version_12_with_map_visits() {
+fn fresh_database_uses_current_schema_with_map_visits() {
     let mut db = Connection::open_in_memory().unwrap();
     maxed_store::migrate(&mut db).unwrap();
-    assert_eq!(version(&db), 12);
+    assert_eq!(version(&db), maxed_store::SCHEMA_VERSION);
     db.execute("INSERT INTO play_sessions VALUES('s',0,0,NULL,'{}')", [])
         .unwrap();
     let insert = "INSERT INTO map_visits VALUES(?1,'stream','s',NULL,NULL,'Nexus',?2,NULL,?3,?4,'live','{}')";
@@ -33,7 +33,7 @@ fn fresh_database_is_version_12_with_map_visits() {
 }
 
 #[test]
-fn v9_database_upgrades_to_12_and_backfills_ended_runs() {
+fn v9_database_upgrades_to_current_schema_and_backfills_ended_runs() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("v9");
     let mut db = v9(&path);
@@ -47,7 +47,7 @@ fn v9_database_upgrades_to_12_and_backfills_ended_runs() {
     )
     .unwrap();
     maxed_store::migrate(&mut db).unwrap();
-    assert_eq!(version(&db), 12);
+    assert_eq!(version(&db), maxed_store::SCHEMA_VERSION);
     let visits = common::stats::visits(&db);
     assert_eq!(
         visits,
@@ -87,10 +87,11 @@ fn v9_database_upgrades_to_12_and_backfills_ended_runs() {
 }
 
 #[test]
-fn version_12_is_refused() {
+fn newer_schema_is_refused() {
     let mut db = Connection::open_in_memory().unwrap();
     maxed_store::migrate(&mut db).unwrap();
-    db.pragma_update(None, "user_version", 13).unwrap();
+    db.pragma_update(None, "user_version", maxed_store::SCHEMA_VERSION + 1)
+        .unwrap();
     assert!(matches!(
         maxed_store::migrate(&mut db),
         Err(maxed_store::StoreError::NewerSchema)
@@ -139,7 +140,8 @@ fn run_open_at_upgrade_is_recovered_without_a_visit() {
     )
     .unwrap();
     drop(db);
-    // The writer migrates first, then recovers the open run.
+    // Confirm the stopped legacy upgrade before the writer recovers the open run.
+    common::installed_schema::upgrade_after_confirmation(&path).unwrap();
     let writer =
         maxed_store::start_writer(path.clone(), maxed_store::WriterConfig::default()).unwrap();
     writer.shutdown().unwrap();

@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { rankShade, sortDungeons, stackSegments, statsKpis } from '../../src/lib/loot/stats-screen';
 import { whiteRate } from '../../src/lib/loot/loot-format';
 import type { DungeonLootStats } from '../../src/lib/bindings/DungeonLootStats';
-const row = (dungeon: string, runs = 10): DungeonLootStats => ({ dungeon, runs_ended: runs, clears: 5, bags: [], whites: 0, runs_since_last_white: null, best: null });
+const row = (dungeon: string, runs = 10): DungeonLootStats => ({ dungeon, runs_ended: runs, clears: 5, bags: [], whites: 0, runs_since_last_white: null, white_runs: 0, avg_runs_per_white: null, longest_dry: null, best: null });
 it.each([
   [255, 'var(--bag-white)'],
   [null, 'var(--text-muted)'],
@@ -42,7 +42,7 @@ it('sums run outcomes, takes the longest streak and chooses the newest highest r
   const b = { ...row('Burrow'), runs_since_last_white: 2, best: { drop_id: 'b', run_id: null, bag_rank: 255, at: '2000000' } };
   const cells = statsKpis({ dungeons: [a, b], sources: [], totals: [{ bag_rank: 255, count: 3 }], whites: 3 });
   expect(cells[0]).toMatchObject({ value: '30', sub: '10 cleared · 33%' });
-  expect(cells[1]).toMatchObject({ value: '3', sub: '0.1 per run' });
+  expect(cells[1]).toMatchObject({ value: '3', sub: '0.1 per ended run' });
   expect(cells[2].sub).toBe('10.0% white rate');
   expect(cells[3]).toMatchObject({ value: '22', sub: 'runs of Abbey since a white', tone: 'fame' });
   expect(cells[4].sub).toMatch(/^Burrow · /);

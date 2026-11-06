@@ -83,6 +83,25 @@ impl Series {
     pub fn dimensions(&self) -> (usize, usize) {
         (self.players.len(), self.buckets.len())
     }
+    pub fn bucket_totals(&self) -> Vec<(f64, u16)> {
+        let mut totals = vec![(0., 0u16); self.buckets.len()];
+        for ((_, index), damage) in &self.cells {
+            totals[*index].0 += damage;
+            if *damage > 0. {
+                totals[*index].1 = totals[*index].1.saturating_add(1);
+            }
+        }
+        totals
+    }
+    pub fn has_cell(&self, at: Timestamp, player_id: &str) -> bool {
+        self.buckets
+            .iter()
+            .position(|(from, until)| *from <= at && at < *until)
+            .is_some_and(|index| self.cells.contains_key(&(player_id.into(), index)))
+    }
+    pub fn is_disabled(&self) -> bool {
+        self.disabled
+    }
     pub fn budget(&self) -> SeriesBudget {
         SeriesBudget {
             buckets: self.buckets.clone(),

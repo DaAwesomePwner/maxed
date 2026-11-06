@@ -140,7 +140,7 @@ it('phase2_settings_assets_update_and_demo_isolation', async () => {
   await open(/Assets Path/i);
   expect(screen.getByRole('textbox', { name: 'Assets Path' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Extract' })).toBeTruthy();
-  await open(/retention/i);
+  expect(screen.getByRole('heading', { name: 'Recording quota' })).toBeTruthy();
   expect(screen.getByText('Limit: 1 GB')).toBeTruthy();
   expect(screen.getByText('Oldest recordings auto-delete at the limit.')).toBeTruthy();
   expect(screen.queryByText(/Installed version.*1\b/i)).toBeNull();

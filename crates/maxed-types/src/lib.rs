@@ -9,9 +9,13 @@ pub mod domain;
 mod finite;
 pub mod live;
 mod loot;
+pub mod party;
+pub mod players;
 pub mod queries;
+mod recap;
 pub mod recording;
 mod stats;
+mod storage;
 pub mod updates;
 
 pub use alerts::*;
@@ -21,9 +25,13 @@ pub use chat::*;
 pub use domain::*;
 pub use live::*;
 pub use loot::*;
+pub use party::*;
+pub use players::*;
 pub use queries::*;
+pub use recap::*;
 pub use recording::*;
 pub use stats::*;
+pub use storage::*;
 pub use updates::*;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

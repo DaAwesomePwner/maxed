@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::*;
 use maxed_engine::Engine;
 use maxed_protocol::{defs::ServerPlayerShoot, Packet};
@@ -173,6 +173,7 @@ fn ability_enchant_products_are_applied_and_unknown_ids_or_legacy_metadata_are_c
         for mode in 0..3 {
             let mut cat = catalog();
             cat.enchants.push(EnchantDef {
+                regeneration: None,
                 id: 123,
                 name: "Synthetic".into(),
                 description: String::new(),
@@ -180,6 +181,7 @@ fn ability_enchant_products_are_applied_and_unknown_ids_or_legacy_metadata_are_c
             });
             if mode != 1 {
                 cat.enchants.push(EnchantDef {
+                    regeneration: None,
                     id: 124,
                     name: "Synthetic".into(),
                     description: String::new(),

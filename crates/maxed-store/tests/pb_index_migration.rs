@@ -1,8 +1,8 @@
+use crate::common;
 use maxed_store::migrate;
 use maxed_types::*;
 use rusqlite::{params, Connection};
 use sha2::{Digest, Sha256};
-mod common;
 
 #[test]
 fn v6_upgrade_adds_pb_indexes_without_rewriting_prior_checksums() {
@@ -54,7 +54,7 @@ fn v6_upgrade_adds_pb_indexes_without_rewriting_prior_checksums() {
 );",
     )
     .unwrap();
-    maxed_store::apply_batch(&mut db, &events).unwrap();
+    common::apply_legacy_story(&mut db, &events);
     db.execute_batch("DROP TABLE map_visits").unwrap();
     db.execute("UPDATE fights SET json=json_remove(json,'$.dps_basis')", [])
         .unwrap();
@@ -94,7 +94,7 @@ fn v6_upgrade_adds_pb_indexes_without_rewriting_prior_checksums() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        12
+        maxed_store::SCHEMA_VERSION
     );
     for name in ["personal_bests_fight", "fights_final_boss_key"] {
         assert!(db
@@ -135,7 +135,7 @@ fn v6_upgrade_adds_pb_indexes_without_rewriting_prior_checksums() {
         db.query_row("SELECT count(*) FROM schema_migrations", [], |r| r
             .get::<_, i64>(0))
             .unwrap(),
-        12
+        maxed_store::SCHEMA_VERSION
     );
     drop(db);
     let writer = maxed_store::start_writer(

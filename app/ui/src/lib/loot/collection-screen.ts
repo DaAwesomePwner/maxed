@@ -1,3 +1,5 @@
+import type { DungeonLootStats } from '../bindings/DungeonLootStats';
+import { bagTotal } from './stats-screen';
 import type { Collection } from '../bindings/Collection';
 import type { CollectionCell } from '../bindings/CollectionCell';
 import type { ChaseItem } from '../bindings/ChaseItem';
@@ -12,6 +14,13 @@ export function chaseOrder(rows: ChaseRow[]): ChaseRow[] {
 }
 export function dungeonList(catalog: string[], chosen: string | null): string[] {
   return [...new Set([...catalog, ...(chosen === null ? [] : [chosen])])];
+}
+/** Rank observed dungeons ahead of catalog-only choices, preserving missing catalog names. */
+export function collectionDungeons(catalog: string[], stats: DungeonLootStats[], chosen: string | null): { visited: string[]; unvisited: string[] } {
+  const observed = stats.filter(row => row.runs_ended > 0 || bagTotal(row.bags) > 0)
+    .sort((a, b) => bagTotal(b.bags) - bagTotal(a.bags) || b.runs_ended - a.runs_ended || a.dungeon.localeCompare(b.dungeon));
+  const visited = observed.map(row => row.dungeon);
+  return { visited, unvisited: dungeonList(catalog, chosen).filter(name => !visited.includes(name)).sort((a, b) => a.localeCompare(b)) };
 }
 export function sortCells(cells: CollectionCell[], sort: CollectionSort, nameOf: (type: number) => string): CollectionCell[] {
   return [...cells].sort((a, b) => (sort === 'seen' ? b.count - a.count : sort === 'recent' ? compareTime(b.last_at, a.last_at) : 0)

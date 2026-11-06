@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { itemHover } from '../components/item-hover';
   import { debugMode } from '../debug/debug';
   import DebugNote from '../debug/DebugNote.svelte';
   import type { PlayerDamage } from '../bindings/PlayerDamage';
@@ -10,8 +11,8 @@
   import { formatShare, formatStat } from '../styles/format';
   import { nonnegative, sourceExplanation, sourceLabels } from './damage';
   import { sourceRows } from './player-screen';
-  let { player, label = 'Damage sources', visuals = emptyHomeVisuals(), rowPrefix = 'source' }: {
-    player: PlayerDamage; label?: string; visuals?: HomeVisuals; rowPrefix?: string;
+  let { player, label = 'Damage sources', visuals = emptyHomeVisuals(), rowPrefix = 'source', showEstimates = false }: {
+    player: PlayerDamage; label?: string; visuals?: HomeVisuals; rowPrefix?: string; showEstimates?: boolean;
   } = $props();
   let rows = $derived(sourceRows(player, visuals));
 </script>
@@ -25,23 +26,30 @@
       <colgroup><col style="width: 30%" /><col style="width: 9%" /><col /><col style="width: 58px" /><col style="width: 52px" /><col style="width: 62px" /><col style="width: 64px" /></colgroup>
       <thead><tr><th scope="col">Source</th><th scope="col">Type</th><th scope="col">Damage</th><th scope="col">Share</th><th scope="col">Hits</th><th scope="col">Avg hit</th><th scope="col">Best hit</th></tr></thead>
       <tbody>
-        {#each rows as row (row.key)}
+        {#each rows as row, index (row.key)}
           {@const visual = objectVisual(visuals.objects, row.itemType)}
           {@const count = enchantCount(row.enchant)}
           <tr data-row-id={`${rowPrefix}:${row.key}`} tabindex="-1">
-            <th scope="row"><div class="identity">
-              <ItemTile sprite={visual?.sprite ?? null} resolveSpriteUrl={sprite => spriteUrl(visuals.client_fingerprint, sprite)} alt={row.name} fit={32} enchant={row.enchant} />
-              <div class="item-text"><span class="name" class:ut={row.tier === 'UT'} class:st={row.tier === 'ST'} title={row.name}>{row.name}</span>
-                <div class="meta"><span class:ut={row.tier === 'UT'} class:st={row.tier === 'ST'}>{row.tier ?? '—'}</span>
-                  {#if count !== null}
-                    {#if count > 0}<span class="enchant-pips" aria-hidden="true">{'•'.repeat(count)}</span>{/if}
-                    {@const summary = count === 0 ? 'no enchants' : `${rarityName(count)} · ${count} ${count === 1 ? 'enchant' : 'enchants'}`}
-                    <span title={summary}>{summary}</span>
+            <th scope="row">
+              {#snippet itemIdentity()}
+                <ItemTile sprite={visual?.sprite ?? null} resolveSpriteUrl={sprite => spriteUrl(visuals.client_fingerprint, sprite)} alt={row.name} fit={32} enchant={row.enchant} />
+                <div class="item-text"><span class="name" class:ut={row.tier === 'UT'} class:st={row.tier === 'ST'}>{row.name}</span>
+                  <div class="meta"><span class:ut={row.tier === 'UT'} class:st={row.tier === 'ST'}>{row.tier ?? '—'}</span>
+                    {#if count !== null}
+                      {#if count > 0}<span class="enchant-pips" aria-hidden="true">{'•'.repeat(count)}</span>{/if}
+                      {@const summary = count === 0 ? 'no enchants' : `${rarityName(count)} · ${count} ${count === 1 ? 'enchant' : 'enchants'}`}
+                      <span>{summary}</span>
+                    {/if}
+                  </div>
+                  {#if showEstimates && player.sources[index].reasons.includes('inferred-equipped-weapon')}
+                    <span class="inferred-note">Inferred from the equipped weapon</span>
                   {/if}
                 </div>
-              </div>
-            </div></th>
-            <td class="kind">{sourceLabels[row.kind]}{#if row.estimated && $debugMode}<span class="estimated">estimated</span>{/if}</td>
+              {/snippet}
+              {#if row.itemType !== null}<div class="identity" use:itemHover={{ type: row.itemType, enchant: row.enchant, name: row.name, tier: row.tier }}>{@render itemIdentity()}</div>
+              {:else}<div class="identity">{@render itemIdentity()}</div>{/if}
+            </th>
+            <td class="kind">{sourceLabels[row.kind]}{#if row.estimated && (showEstimates || $debugMode)}<span class="estimated">{showEstimates ? 'est.' : 'estimated'}</span>{/if}</td>
             <td><span class="amount" class:local={player.is_local}><span class="damage-fill" style:width={`${(row.share ?? 0) * 100}%`}></span><b>{formatStat(row.damage)}</b></span></td>
             <td>{formatShare(row.share)}</td><td>{formatStat(row.hits)}</td><td>{formatStat(row.avgHit)}</td><td>{formatStat(row.bestHit)}</td>
           </tr>
@@ -76,6 +84,7 @@
   .meta { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 10px; }
   .meta > span:first-child { flex: none; }
   .meta .enchant-pips { flex: none; color: var(--gold); letter-spacing: -1px; }
+  .inferred-note { display: block; color: var(--text-muted); font-size: 10px; white-space: normal; }
   .kind { color: var(--text-muted); font-size: 10px; white-space: normal; overflow-wrap: anywhere; }
   .estimated { display: block; width: fit-content; font-size: 9px; border: 1px solid var(--border); border-radius: 4px; padding: 0 3px; }
   .amount { position: relative; display: block; height: 18px; background: var(--surface-inset, #0c0b11); border-radius: 3px; }

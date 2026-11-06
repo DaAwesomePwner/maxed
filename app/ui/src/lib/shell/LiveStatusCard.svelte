@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { observePresentationVisibility } from '../bridge/visibility';
   import DebugNote from '../debug/DebugNote.svelte';
   import { debugMode } from '../debug/debug';
   import { untrack } from 'svelte';
   import type { CaptureStatus } from '../bindings/CaptureStatus';
   import { captureGuidance, captureLabels, type RailView } from './rail';
+  import { liveDuration } from './live-duration';
   import { formatDps } from '../styles/format';
   let { view, capture, busy, error, preview = false, onStart, onStop, onRetry }: {
     view: RailView; capture: CaptureStatus | null; busy: boolean; error: string; preview?: boolean;
@@ -22,7 +24,7 @@
   let clockStream: string | null = null;
   let captureState = $derived(capture?.state ?? null);
   let clockLive = $derived(captureState === 'Live' && !preview && !view.stale);
-  let elapsed = $derived(`${Math.floor(liveMs / 60000)}:${Math.floor(liveMs / 1000 % 60).toString().padStart(2, '0')}`);
+  let elapsed = $derived(liveDuration(liveMs));
   let reconnect = $derived(capture === null && error !== '');
   let actionLabel = $derived(reconnect ? 'Reconnect Capture' : active ? 'Stop Capture'
     : failed && !restartRequired ? 'Retry Capture' : 'Start Capture');
@@ -35,9 +37,14 @@
     if (!state || ['Stopped', 'Failed', 'NpcapMissing', 'NpcapIncompatible', 'PermissionDenied'].includes(state)) liveMs = 0;
     if (!clockLive) return;
     const base = untrack(() => liveMs), start = Date.now();
-    const timer = setInterval(() => { liveMs = base + Math.max(0, Date.now() - start); }, 1000);
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const update = () => { liveMs = base + Math.max(0, Date.now() - start); };
+    const releaseVisibility = observePresentationVisibility(visible => {
+      clearInterval(timer); timer = undefined;
+      if (visible) { update(); timer = setInterval(update, 1000); }
+    });
     return () => {
-      clearInterval(timer);
+      releaseVisibility(); clearInterval(timer);
       // Preserve the partial second when capture pauses between display ticks.
       liveMs = base + Math.max(0, Date.now() - start);
     };
@@ -55,7 +62,7 @@
     <h2 class="where" title={view.map}><i class:live={capture?.state === 'Live' && !view.stale && !preview} aria-hidden="true"></i><span class="where-name">{view.map}</span></h2>
     <div class="state">
       <span class="capture-state" class:failed role="status" aria-live="polite" aria-atomic="true">{preview ? 'Preview · ' : ''}{stateText}</span>
-      {#if active}<span aria-hidden="true"> · </span><span class="elapsed" aria-label="Capture live elapsed">{preview ? '—' : elapsed}</span>{/if}
+      {#if active}<span class="separator" aria-hidden="true"> · </span><span class="elapsed" aria-label="Capture live elapsed">{preview ? '—' : elapsed}</span>{/if}
     </div>
     <button class="toggle" class:start={!active} aria-label={actionLabel} title={actionLabel}
       aria-disabled={actionUnavailable} aria-busy={busy} onclick={toggle}>
@@ -99,6 +106,7 @@
   .where i { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #6b6478; }
   .where i.live { background: var(--success); box-shadow: 0 0 8px #75dfa188; }
   .state { grid-column: 1; min-width: 0; display: block; font-size: 11px; font-weight: 400; color: var(--text-muted); }
+  .separator { display: inline-block; padding-inline: 3px; font-family: system-ui, sans-serif; font-weight: 700; }
   .elapsed { font-variant-numeric: tabular-nums; white-space: nowrap; }
   .toggle { grid-column: 2; grid-row: 1 / span 2; box-sizing: border-box; width: 30px; height: 30px; min-height: 30px; padding: 0; display: grid; place-items: center; border: 1px solid #ff9b9b55; border-radius: 6px; background: #ff9b9b14; color: var(--danger); }
   .toggle.start { border-color: #75dfa155; background: #75dfa114; color: var(--success); }

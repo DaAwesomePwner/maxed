@@ -1,3 +1,4 @@
+import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { emptyHomeLiveWindow } from '../../src/lib/home/v2/live';
@@ -65,7 +66,19 @@ it.each(['enemy', 'item', 'bag'] as const)('catalog-missing %s has a readable fa
   await flushHomeRender();
   expect(screen.getByText(`${kind[0].toUpperCase()}${kind.slice(1)}`)).toBeTruthy();
   expect(page.container.textContent).not.toContain('65432');
-  expect(page.container.querySelector('[title]')?.getAttribute('title')).toBe('Catalog ID: 65432');
+  if (kind === 'item') {
+    const tile = page.container.querySelector('[data-item-hover]')!;
+    expect(tile.getAttribute('data-item-hover')).toBe('65432');
+    expect(page.container.querySelector('[title]')).toBeNull();
+    expect(itemHoverParams(tile)).toEqual({ type: 65432, enchant: null, name: undefined, tier: undefined });
+    const known = catalog([65432]);
+    known.objects[0].item_tier = 'UT';
+    await page.rerender({ type: 65432, kind, visuals: { ...known, phase: 'ready' } });
+    expect(itemHoverParams(tile)).toEqual({ type: 65432, enchant: null, name: 'Catalog name 65432', tier: 'UT' });
+  } else {
+    expect(page.container.querySelector('[title]')?.getAttribute('title')).toBe('Catalog ID: 65432');
+    expect(page.container.querySelector('[data-item-hover]')).toBeNull();
+  }
   await page.rerender({ type: 65432, kind, visuals: { ...catalog([]), phase: 'unavailable' } }); await flushHomeRender();
   expect(screen.queryByText(`Unknown ${kind}`)).toBeNull();
   expect(page.container.textContent).toContain(`${kind[0].toUpperCase()}${kind.slice(1)}`);
@@ -98,6 +111,73 @@ it('rejects retired catalog responses, retries after invalidation and releases i
   expect(getObjectVisuals).toHaveBeenCalledTimes(2);
   loader.dispose(); expect(release).toHaveBeenCalledOnce();
   invalidate(); await flush(); expect(getObjectVisuals).toHaveBeenCalledTimes(2);
+});
+
+it('retains resolved visuals during incremental lookups and fetches only missing types', async () => {
+  const pending = deferred<VisualPage>();
+  const getObjectVisuals = vi.fn(async (types: number[]) => catalog(types));
+  const states: HomeVisuals[] = [];
+  const loader = createHomeVisuals({ getObjectVisuals, onVisualsChanged: () => () => {} }, value => states.push(value));
+  disposals.push(loader.dispose);
+  loader.update([1]); await flush();
+  getObjectVisuals.mockReturnValueOnce(pending.promise);
+  loader.update([1, 2]); await flush();
+  expect(states.at(-1)?.objects).toEqual(catalog([1]).objects);
+  expect(getObjectVisuals.mock.calls).toEqual([[[1]], [[2]]]);
+  pending.resolve(catalog([2])); await flush();
+  expect(states.at(-1)).toMatchObject({ phase: 'ready', objects: catalog([1, 2]).objects });
+  loader.update([2]); await flush();
+  expect(states.at(-1)?.objects).toEqual(catalog([2]).objects);
+  expect(getObjectVisuals).toHaveBeenCalledTimes(2);
+});
+
+it.each(['ready', 'failure'] as const)('clears invalidated catalog names, sprites and fingerprint through %s', async outcome => {
+  const pending = deferred<VisualPage>();
+  let invalidate = () => {};
+  const getObjectVisuals = vi.fn(async (types: number[]) => catalog(types));
+  const states: HomeVisuals[] = [];
+  const loader = createHomeVisuals({ getObjectVisuals, onVisualsChanged: callback => { invalidate = callback; return () => {}; } }, value => states.push(value));
+  disposals.push(loader.dispose);
+  loader.update([1]); await flush();
+  getObjectVisuals.mockReturnValueOnce(pending.promise);
+  invalidate(); await flush();
+  expect(states.at(-1)).toEqual({ client_fingerprint: '', objects: [], phase: 'loading' });
+  expect(getObjectVisuals.mock.calls).toEqual([[[1]], [[1]]]);
+  const next = { ...catalog([1]), client_fingerprint: 'b'.repeat(64) };
+  if (outcome === 'ready') pending.resolve(next);
+  else pending.reject(new Error('Synthetic catalog unavailable'));
+  await flush();
+  expect(states.at(-1)).toEqual(outcome === 'ready' ? { ...next, phase: 'ready' }
+    : { client_fingerprint: '', objects: [], phase: 'unavailable' });
+  loader.update([1, 2]);
+  expect(states.at(-1)).toEqual(outcome === 'ready' ? { ...next, phase: 'loading' }
+    : { client_fingerprint: '', objects: [], phase: 'loading' });
+  await flush();
+});
+
+it('trims cached types when they move away and fetches them again when they return', async () => {
+  const getObjectVisuals = vi.fn(async (types: number[]) => catalog(types));
+  const states: HomeVisuals[] = [];
+  const loader = createHomeVisuals({ getObjectVisuals, onVisualsChanged: () => () => {} }, value => states.push(value));
+  disposals.push(loader.dispose);
+  loader.update([1, 2]); await flush();
+  loader.update([2]); await flush();
+  expect(states.at(-1)?.objects).toEqual(catalog([2]).objects);
+  loader.update([1, 2]); await flush();
+  expect(getObjectVisuals.mock.calls).toEqual([[[1, 2]], [[1]]]);
+  expect(states.at(-1)?.objects).toEqual(catalog([1, 2]).objects);
+});
+
+it('does not mix cached visuals with a new fingerprint discovered during an incremental read', async () => {
+  const getObjectVisuals = vi.fn(async (types: number[]) => catalog(types));
+  const states: HomeVisuals[] = [];
+  const loader = createHomeVisuals({ getObjectVisuals, onVisualsChanged: () => () => {} }, value => states.push(value));
+  disposals.push(loader.dispose);
+  loader.update([1]); await flush();
+  getObjectVisuals.mockImplementation(async types => ({ ...catalog(types), client_fingerprint: 'b'.repeat(64) }));
+  loader.update([1, 2]); await flush();
+  expect(getObjectVisuals.mock.calls).toEqual([[[1]], [[2]], [[1]]]);
+  expect(states.at(-1)).toEqual({ ...catalog([1, 2]), client_fingerprint: 'b'.repeat(64), phase: 'ready' });
 });
 
 it('memoizes fight visual traversal by array identity and invalidates revised fights', () => {

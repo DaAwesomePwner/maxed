@@ -1,3 +1,4 @@
+import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, expect, it, vi } from 'vitest';
 import LootBagTable from '../../src/lib/loot/LootBagTable.svelte';
@@ -36,6 +37,14 @@ it('keeps Feed columns, item tiles and row selection unchanged', async () => {
   const page = render(LootBagTable, { rows: data, visuals: emptyHomeVisuals(), now: new Date(), columns: 'feed', resolveSpriteUrl: () => null, onSelect });
   expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Time', 'Bag', 'Contents', 'Source', 'Place', 'Run']);
   expect(screen.getAllByRole('link', { name: '#101' })).toHaveLength(4);
+  const tile = screen.getAllByRole('link', { name: '#101' })[0];
+  expect(tile.getAttribute('data-item-hover')).toBe('101');
+  expect(tile.hasAttribute('title')).toBe(false);
+  expect(itemHoverParams(tile)).toEqual({ type: 101, enchant: enchants[0], name: '#101', tier: undefined, note: 'Removal observed' });
+  const best = page.container.querySelector('.contents > span')!;
+  expect(best.getAttribute('data-item-hover')).toBe('101');
+  expect(best.hasAttribute('title')).toBe(false);
+  expect(itemHoverParams(best)).toEqual({ type: 101, enchant: enchants[0], name: '#101', tier: undefined });
   await fireEvent.click(page.container.querySelector('[data-row-id]')!);
   expect(onSelect).toHaveBeenCalledExactlyOnceWith(data[0]);
 });

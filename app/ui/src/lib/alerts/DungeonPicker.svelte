@@ -135,7 +135,7 @@
 {#if mode !== 'all'}
   <fieldset {disabled}>
     <legend>{mode === 'except' ? 'Muted dungeons' : 'Chosen dungeons'}</legend>
-    {#if mode === 'selected' && selected.length === 0}<p class="warning" role="alert">No dungeons selected; key-pop alerts are silent.</p>{/if}
+    {#if mode === 'selected' && selected.length === 0}<p class="note">Choose dungeons to receive key-pop alerts. None selected means no alerts.</p>{/if}
     <div class="chips" aria-label="Selected dungeons">
       {#each selected as dungeon (dungeon)}<button type="button" aria-label={`Remove ${dungeon}`} onclick={() => select(selected.filter(name => name !== dungeon))}><DungeonPortal portal={portals.get(dungeon) ?? fallbackPortals.get(dungeon) ?? null} />{dungeon} ×</button>{/each}
     </div>
@@ -152,11 +152,11 @@
   </fieldset>
 {/if}
 <style>
-  fieldset { min-width: 0; border: 1px solid var(--border); margin: var(--space-2) 0; }
+  fieldset { min-width: 0; padding: 12px; border-radius: 6px; border: 1px solid var(--border); margin: var(--space-2) 0; }
   .results { max-height: 14rem; overflow: auto; margin-top: var(--space-2); }
   .choice, .chips button { display: flex; align-items: center; gap: var(--space-1); min-height: var(--target-min); }
   .chips, .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0; }
-  .warning { padding: var(--space-2); border: 1px solid var(--danger); color: var(--text-primary); font-weight: var(--weight-semibold); }
+  .note { color: var(--text-secondary); font-size: 12px; }
   button, select, input[type="search"] { min-height: var(--target-min); max-width: 100%; box-sizing: border-box; color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-control); font: inherit; padding: var(--space-1) var(--space-2); }
   input[type="search"] { display: block; width: 100%; }
   input { accent-color: var(--violet); }

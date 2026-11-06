@@ -352,6 +352,56 @@ fn loot_500k() {
 }
 
 #[test]
+#[ignore = "release timing comparison: Home streak versus all-time Loot at 50k and 500k drops"]
+fn home_streak_50k_500k() {
+    if cfg!(debug_assertions) {
+        panic!("timing requires --release");
+    }
+    let _guard = BENCHMARK.lock().unwrap_or_else(|e| e.into_inner());
+    for count in [50_000, 500_000] {
+        let t = workload(count);
+        let reader = t.reader();
+        let request = HomeDungeonStreakRequest {
+            dungeon: "Dungeon-00".into(),
+        };
+        let mut streak_samples = Vec::new();
+        let mut stats_samples = Vec::new();
+        // Alternate order so warming one query does not always favor the other.
+        for round in 0..6 {
+            let mut streak = None;
+            let mut stats = None;
+            for offset in 0..2 {
+                let start = Instant::now();
+                if (round + offset) % 2 == 0 {
+                    streak = Some(reader.home_dungeon_streak(request.clone()).unwrap());
+                    streak_samples.push(start.elapsed());
+                } else {
+                    stats = Some(reader.loot_stats(LootStatsFilter { range: None }).unwrap());
+                    stats_samples.push(start.elapsed());
+                }
+            }
+            let streak = streak.unwrap();
+            let stats = stats.unwrap();
+            let row = stats
+                .dungeons
+                .iter()
+                .find(|row| row.dungeon == request.dungeon)
+                .unwrap();
+            assert_eq!(streak.runs_ended, row.runs_ended);
+            assert_eq!(streak.runs_since_last_white, row.runs_since_last_white);
+            assert_eq!(streak.avg_runs_per_white, row.avg_runs_per_white);
+        }
+        eprintln!("home streak {count} samples: {streak_samples:?}; full loot: {stats_samples:?}");
+        streak_samples.sort_unstable();
+        stats_samples.sort_unstable();
+        let streak_median = (streak_samples[2] + streak_samples[3]) / 2;
+        let stats_median = (stats_samples[2] + stats_samples[3]) / 2;
+        eprintln!("home streak {count} medians: scoped={streak_median:?}, full={stats_median:?}, speedup={:.2}x",
+            stats_median.as_secs_f64() / streak_median.as_secs_f64());
+    }
+}
+
+#[test]
 fn summary_plan_uses_covering_bags_and_indexed_appearances() {
     let t = LootDb::new();
     let sql = include_str!("../src/drop_summary.sql")

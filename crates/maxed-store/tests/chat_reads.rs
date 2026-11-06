@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use common::chat::*;
 use maxed_store::HiddenLists;
 use maxed_types::*;
@@ -1156,6 +1156,7 @@ fn event_search_matches_name_prefixes_and_ignores_punctuation() {
         "death",
         10,
         InstanceEventKind::PlayerDeath {
+            player_id: None,
             player_name: "Vexlin%".into(),
             killed_by: Some("Quenby_".into()),
             level: None,

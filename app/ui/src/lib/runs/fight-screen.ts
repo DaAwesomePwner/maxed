@@ -1,9 +1,29 @@
 import type { FightView } from '../bindings/FightView';
 import type { PlayerDamage } from '../bindings/PlayerDamage';
+import type { SourceDamage } from '../bindings/SourceDamage';
 import type { RunFightStripRow } from '../bindings/RunFightStripRow';
 import type { KpiCell } from '../home/v3/types';
 import { formatDps, formatElapsed, formatShare, formatStat } from '../styles/format';
 import { damageRank, nonnegative } from './damage';
+
+import { dpsMetric } from './dps-metric';
+
+/** Group only the display rows; preserve the saved attribution buckets. */
+export function fightSourceRows(sources: SourceDamage[]) {
+  const rows = new Map<number | null, { item_type: number | null; damage: number;
+    estimatedDamage: number; enchant: SourceDamage['enchant'] | null }>();
+  for (const source of sources) {
+    const row = rows.get(source.item_type);
+    if (row) {
+      row.damage += source.damage;
+      row.estimatedDamage += source.estimated ? source.damage : 0;
+      // A grouped item can include multiple copies; do not invent shared enchants.
+      if (JSON.stringify(row.enchant) !== JSON.stringify(source.enchant)) row.enchant = null;
+    } else rows.set(source.item_type, { item_type: source.item_type, damage: source.damage,
+      estimatedDamage: source.estimated ? source.damage : 0, enchant: source.enchant });
+  }
+  return [...rows.values()].sort((a, b) => b.damage - a.damage);
+}
 
 export function fightKpis(fight: FightView, self: PlayerDamage | null): KpiCell[] {
   const duration = fight.first_hit !== null && fight.last_hit !== null
@@ -14,7 +34,7 @@ export function fightKpis(fight: FightView, self: PlayerDamage | null): KpiCell[
     { key: 'duration', label: 'Duration', value: duration, sub: 'first to last hit' },
     { key: 'damage', label: 'Damage', value: formatStat(nonnegative(fight.total_damage)), sub: `${fight.players.length} players · ${formatStat(nonnegative(fight.unattributed_damage))} unattributed` },
     { key: 'party_dps', label: 'Party DPS', value: formatDps(seconds > 0 ? fight.total_damage / seconds : null), sub: `peak ${formatDps(rates.length ? Math.max(...rates) : null)}` },
-    { key: 'your_dps', label: 'Your DPS', value: formatDps(self?.dps), tone: 'fame', sub: self ? `rank ${damageRank(self.rank)} of ${fight.players.length} · ${formatShare(self.share)} share` : '—' },
+    { key: 'your_dps', ...dpsMetric(fight.dps_basis), value: formatDps(self?.dps), tone: 'fame', sub: self ? `rank ${damageRank(self.rank)} of ${fight.players.length} · ${formatShare(self.share)} share` : '—' },
     { key: 'best_hit', label: 'Your best hit', value: formatStat(nonnegative(self?.biggest_hit ?? null)), sub: self ? `${formatStat(nonnegative(self.hits))} hits · ${formatStat(nonnegative(self.deaths))} deaths` : '—' },
   ];
 }

@@ -1,0 +1,5 @@
+# Development and test builds link with the rust-lld shipped in the pinned
+# toolchain, which links the workspace's many test binaries much faster than
+# link.exe. scripts/build-release.ps1 keeps releases on the MSVC linker.
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"

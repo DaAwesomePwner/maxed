@@ -1,6 +1,88 @@
+use crate::common;
 use maxed_assets::{build_catalog, ExtractedAssets, TextAsset};
-use maxed_types::BagDef;
-mod common;
+use maxed_types::{BagDef, PotionStat};
+
+#[test]
+fn potion_stat_maps_all_24_stat_potion_names() {
+    for (name, stat) in [
+        ("Life", PotionStat::Life),
+        ("Mana", PotionStat::Mana),
+        ("Attack", PotionStat::Attack),
+        ("Defense", PotionStat::Defense),
+        ("Speed", PotionStat::Speed),
+        ("Dexterity", PotionStat::Dexterity),
+        ("Vitality", PotionStat::Vitality),
+        ("Wisdom", PotionStat::Wisdom),
+    ] {
+        for potion in [
+            format!("Potion of {name}"),
+            format!("Potion of {name} (SB)"),
+            format!("Greater Potion of {name}"),
+        ] {
+            assert_eq!(
+                maxed_assets::rules::potion_stat(&potion),
+                Some(stat),
+                "{potion}"
+            );
+        }
+    }
+}
+
+#[test]
+fn potion_stat_accepts_greater_soulbound_pattern() {
+    assert_eq!(
+        maxed_assets::rules::potion_stat("Greater Potion of Life (SB)"),
+        Some(PotionStat::Life)
+    );
+}
+
+#[test]
+fn potion_stat_rejects_other_items() {
+    for name in [
+        "Elixir of Life",
+        "Potion of Lifelike",
+        "potion of life",
+        "Greater Potion of Life Fragment",
+        "Potion of Luck",
+        " Potion of Life",
+        "Potion of Life ",
+        "Greater Greater Potion of Life",
+        "Potion of Life (SB) (SB)",
+    ] {
+        assert_eq!(maxed_assets::rules::potion_stat(name), None, "{name}");
+    }
+}
+
+#[test]
+fn extracted_catalog_sets_potion_stat() {
+    let catalog = build_catalog(
+        ExtractedAssets {
+            english: Default::default(),
+            texts: vec![TextAsset {
+                name: "synthetic".into(),
+                bytes: br#"<Objects>
+                  <Object type="1" id="Potion of Speed"><Class>Equipment</Class></Object>
+                  <Object type="2" id="Synth Sword"><Class>Equipment</Class></Object>
+                </Objects>"#
+                    .to_vec(),
+            }],
+            textures: vec![],
+            sprite_mapping: vec![],
+        },
+        "a".repeat(64),
+    )
+    .unwrap();
+    assert_eq!(catalog.items[0].potion_stat, Some(PotionStat::Speed));
+    assert_eq!(catalog.items[1].potion_stat, None);
+    let mut json = serde_json::to_value(&catalog).unwrap();
+    assert_eq!(json["items"][0]["potion_stat"], "speed");
+    assert_eq!(catalog, serde_json::from_value(json.clone()).unwrap());
+    for item in json["items"].as_array_mut().unwrap() {
+        item.as_object_mut().unwrap().remove("potion_stat");
+    }
+    let old: maxed_types::Catalog = serde_json::from_value(json).unwrap();
+    assert!(old.items.iter().all(|item| item.potion_stat.is_none()));
+}
 
 #[test]
 fn catalog_populates_new_fields() {
@@ -95,7 +177,7 @@ fn cache_version_bumped_invalidates_old_generation() {
     assert!(phases.contains(&AssetProgress::Reading));
     let manifest: serde_json::Value =
         serde_json::from_slice(&fs::read(cached.root.join("manifest.json")).unwrap()).unwrap();
-    assert_eq!(manifest["version"], 11);
+    assert_eq!(manifest["version"], 12);
     assert_eq!(
         fs::read_to_string(root.join("current")).unwrap(),
         cached.catalog.client_fingerprint
@@ -131,7 +213,7 @@ fn cache_rebuilds_manifest_from_before_consumable_tier_rules() {
     assert!(phases.contains(&AssetProgress::Reading));
     let manifest: serde_json::Value =
         serde_json::from_slice(&fs::read(rebuilt.root.join("manifest.json")).unwrap()).unwrap();
-    assert_eq!(manifest["version"], 11);
+    assert_eq!(manifest["version"], 12);
     phases.clear();
     load_or_extract(&paths, &flag, &mut |p| phases.push(p)).unwrap();
     assert!(!phases.contains(&AssetProgress::Reading));

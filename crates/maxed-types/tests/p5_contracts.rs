@@ -79,7 +79,7 @@ fn key_pop_settings_round_trip_and_old_settings_defaults() {
         saved["alerts"]["key_pop_excluded_dungeons"],
         serde_json::json!([])
     );
-    assert_eq!(saved["alerts"]["key_popped"], "toast");
+    assert_eq!(saved["alerts"]["key_popped"], "off");
     assert_eq!(saved["alerts"]["key_pop_dungeons"], serde_json::Value::Null);
 }
 

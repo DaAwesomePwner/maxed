@@ -54,6 +54,265 @@ fn enchant_stat_multiplier(n: &Node) -> Result<f64, AssetError> {
     Ok(f64::from(multiplier))
 }
 
+// Gate X evidence and intentionally unsupported shapes: docs/architecture/assets.md.
+const FIRING_REASONS: &[&str] = &[
+    "invalid_rate",
+    "invalid_count",
+    "missing_projectile_reference",
+    "unresolved_projectile",
+    "unreferenced_projectile",
+    "unsupported_schedule",
+];
+const REGEN_REASONS: &[&str] = &["unsupported_regen_effect"];
+const REGEN_UNITS: &[&str] = &["fraction_of_max_per_second", "units_per_second"];
+
+fn support(known: bool, reasons: &[String]) -> CatalogSupport {
+    if reasons.is_empty() {
+        CatalogSupport::Supported
+    } else if known {
+        CatalogSupport::Partial
+    } else {
+        CatalogSupport::Unsupported
+    }
+}
+
+fn reason(reasons: &mut Vec<String>, code: &str) {
+    if !reasons.iter().any(|r| r == code) {
+        reasons.push(code.into());
+        reasons.sort();
+    }
+}
+
+// Reject duplicate scalars and extensions rather than silently choosing a value.
+fn scalar<'a>(n: &'a Node, tag: &str) -> Result<Option<&'a str>, ()> {
+    let mut nodes = n.children.iter().filter(|c| c.tag == tag);
+    let Some(value) = nodes.next() else {
+        return Ok(None);
+    };
+    if nodes.next().is_some() || !value.attrs.is_empty() || !value.children.is_empty() {
+        return Err(());
+    }
+    Ok(Some(value.text.trim()))
+}
+
+fn firing_rate(n: &Node) -> Option<f64> {
+    scalar(n, "RateOfFire")
+        .ok()
+        .flatten()
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|v| v.is_finite() && *v > 0.0)
+}
+
+fn weapon_firing(
+    n: &Node,
+    projectile_nodes: &[&Node],
+    projectiles: &BTreeMap<i16, ProjectileDef>,
+) -> Result<Option<WeaponFiringDef>, AssetError> {
+    let subattacks: Vec<_> = n.children.iter().filter(|c| c.tag == "Subattack").collect();
+    if subattacks.len() > 256 {
+        return Err(AssetError::LimitExceeded);
+    }
+    if projectile_nodes.is_empty() && subattacks.is_empty() && n.child("RateOfFire").is_none() {
+        return Ok(None);
+    }
+    // A deliberately narrow normal-fire shape. Unreviewed item mechanics disable all schedules.
+    let normal_shape = n.attrs.keys().all(|k| matches!(k.as_str(), "id" | "type"))
+        && n.children.iter().all(|c| {
+            matches!(
+                c.tag.as_str(),
+                "Class"
+                    | "DisplayId"
+                    | "Description"
+                    | "SlotType"
+                    | "Tier"
+                    | "Labels"
+                    | "Texture"
+                    | "AnimatedTexture"
+                    | "Soulbound"
+                    | "RateOfFire"
+                    | "NumProjectiles"
+                    | "Projectile"
+                    | "Subattack"
+            )
+        });
+    let explicit: BTreeSet<i16> = projectile_nodes
+        .iter()
+        .filter_map(|p| p.attr("id").and_then(|id| num(id).ok()))
+        .collect();
+    let indices: BTreeSet<i16> = projectile_nodes
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            p.attr("id")
+                .map(num)
+                .transpose()
+                .map(|id| id.unwrap_or(i as i16))
+        })
+        .collect::<Result<_, _>>()?;
+    let mut f = WeaponFiringDef {
+        support: CatalogSupport::Unsupported,
+        groups: vec![],
+        omitted_projectile_indices: vec![],
+        reasons: vec![],
+    };
+    let mut omitted = BTreeSet::new();
+    let mut referenced = BTreeSet::new();
+    let implicit = subattacks.is_empty();
+    let attacks = if implicit { vec![n] } else { subattacks };
+    for (i, attack) in attacks.into_iter().enumerate() {
+        let index = if implicit {
+            Some(0)
+        } else {
+            attack
+                .attr("projectileId")
+                .and_then(|s| num::<i16>(s).ok())
+                .filter(|v| *v >= 0)
+        };
+        let Some(index) = index else {
+            reason(&mut f.reasons, "missing_projectile_reference");
+            continue;
+        };
+        referenced.insert(index);
+        if !explicit.contains(&index) || !projectiles.contains_key(&index) {
+            omitted.insert(index);
+            reason(&mut f.reasons, "unresolved_projectile");
+            continue;
+        }
+        let rate = if !implicit && attack.child("RateOfFire").is_none() {
+            firing_rate(n)
+        } else {
+            firing_rate(attack)
+        };
+        let Some(rate_factor) = rate else {
+            reason(&mut f.reasons, "invalid_rate");
+            continue;
+        };
+        let count = match scalar(attack, "NumProjectiles") {
+            Ok(Some(s)) => num::<u16>(s).ok().filter(|v| (1..=256).contains(v)),
+            Ok(None) if implicit => Some(1),
+            _ => None,
+        };
+        let Some(count) = count else {
+            reason(&mut f.reasons, "invalid_count");
+            continue;
+        };
+        let normal_group = implicit
+            || (attack.attrs.keys().all(|k| k == "projectileId")
+                && attack.text.trim().is_empty()
+                && attack
+                    .children
+                    .iter()
+                    .all(|c| matches!(c.tag.as_str(), "RateOfFire" | "NumProjectiles")));
+        let mut group = WeaponAttackGroup {
+            group_id: format!("attack_{i}"),
+            projectile_index: index,
+            count,
+            rate_factor,
+            schedule: WeaponSchedule::Simultaneous,
+            reasons: vec![],
+        };
+        if !normal_shape || !normal_group {
+            group.schedule = WeaponSchedule::Unsupported;
+            reason(&mut group.reasons, "unsupported_schedule");
+            reason(&mut f.reasons, "unsupported_schedule");
+        }
+        f.groups.push(group);
+    }
+    for index in indices.difference(&referenced) {
+        omitted.insert(*index);
+        reason(&mut f.reasons, "unreferenced_projectile");
+    }
+    f.omitted_projectile_indices = omitted.into_iter().collect();
+    f.support = support(
+        f.groups
+            .iter()
+            .any(|g| g.schedule == WeaponSchedule::Simultaneous),
+        &f.reasons,
+    );
+    Ok(Some(f))
+}
+
+fn enchant_regeneration(n: &Node) -> Result<EnchantRegenDef, AssetError> {
+    let mut r = EnchantRegenDef {
+        support: CatalogSupport::Supported,
+        hp: vec![],
+        mp: vec![],
+        reasons: vec![],
+        source_units: vec![],
+    };
+    if n.children
+        .iter()
+        .any(|c| !matches!(c.tag.as_str(), "DisplayId" | "Description" | "Mutators"))
+        || n.attrs.keys().any(|k| !matches!(k.as_str(), "type" | "id"))
+    {
+        reason(&mut r.reasons, "unsupported_regen_effect");
+    }
+    for container in n.children.iter().filter(|c| c.tag == "Mutators") {
+        if !container.attrs.is_empty() || !container.text.trim().is_empty() {
+            reason(&mut r.reasons, "unsupported_regen_effect");
+            continue;
+        }
+        for effect in &container.children {
+            // These reviewed mutators affect other domains, not baseline regeneration.
+            if matches!(
+                effect.tag.as_str(),
+                "MultiplyMinDamage" | "MultiplyMaxDamage" | "MultiplyRateOfFire"
+            ) && effect.attrs.is_empty()
+                && effect.children.is_empty()
+            {
+                continue;
+            }
+            let kind = effect.text.trim();
+            if effect.tag == "ActivateOnEquip"
+                && matches!(kind, "LootBonus" | "StatModMult")
+                && effect.children.is_empty()
+                && effect.attrs.keys().all(|k| k == "amount")
+            {
+                continue;
+            }
+            let amount = effect
+                .attr("amount")
+                .and_then(|s| s.parse::<f64>().ok())
+                .filter(|v| v.is_finite() && *v >= 0.0);
+            if effect.tag != "ActivateOnEquip"
+                || !matches!(kind, "FlatRegen" | "PercentageRegen")
+                || !matches!(effect.attr("stat"), Some("HP" | "MP"))
+                || amount.is_none()
+                || !effect.children.is_empty()
+                || effect
+                    .attrs
+                    .keys()
+                    .any(|k| !matches!(k.as_str(), "stat" | "amount"))
+            {
+                reason(&mut r.reasons, "unsupported_regen_effect");
+                continue;
+            }
+            if r.hp.len() + r.mp.len() >= 256 {
+                return Err(AssetError::LimitExceeded);
+            }
+            let flat = kind == "FlatRegen";
+            let units = if flat {
+                "units_per_second"
+            } else {
+                "fraction_of_max_per_second"
+            };
+            reason(&mut r.source_units, units);
+            let normalized = RegenEffect {
+                flat_per_sec: if flat { amount } else { None },
+                fraction_of_max_per_sec: if flat { None } else { amount },
+                source_units: vec![units.into()],
+            };
+            if effect.attr("stat") == Some("HP") {
+                r.hp.push(normalized);
+            } else {
+                r.mp.push(normalized);
+            }
+        }
+    }
+    r.support = support(!r.hp.is_empty() || !r.mp.is_empty(), &r.reasons);
+    Ok(r)
+}
+
 pub fn parse_equipment(xml: &[u8]) -> Result<Vec<ItemDef>, AssetError> {
     let mut out = BTreeMap::new();
     xml::records(xml, &mut |n| {
@@ -129,8 +388,15 @@ fn item(n: &Node, english: &BTreeMap<String, String>) -> Result<Option<ItemDef>,
         return Err(AssetError::LimitExceeded);
     }
     let mut projectiles = BTreeMap::new();
+    let mut indices = BTreeSet::new();
     for (i, p) in projectile_nodes.iter().enumerate() {
         let index = p.attr("id").map(num).transpose()?.unwrap_or(i as i16);
+        if index < 0 {
+            return Err(AssetError::InvalidCatalog);
+        }
+        if !indices.insert(index) {
+            return Err(duplicate("projectiles", i64::from(index)));
+        }
         let damage = p.value("Damage");
         let (Some(min), Some(max)) = (
             damage.or(p.value("MinDamage")),
@@ -197,6 +463,8 @@ fn item(n: &Node, english: &BTreeMap<String, String>) -> Result<Option<ItemDef>,
         tracing::warn!(unknown_stats, "unsupported equipment bonus stats omitted");
     }
     Ok(Some(ItemDef {
+        weapon_firing: weapon_firing(n, &projectile_nodes, &projectiles)?,
+        potion_stat: crate::rules::potion_stat(&name),
         soulbound: Some(parse_soulbound(n)),
         stat_bonuses: Some(
             bonuses
@@ -448,11 +716,15 @@ pub(crate) fn build_cancellable(
                 .filter(|n| {
                     matches!(
                         n.tag.as_str(),
-                        "Projectile" | "Activate" | "OnPlayerShootActivate"
+                        "Projectile"
+                            | "Activate"
+                            | "OnPlayerShootActivate"
+                            | "Subattack"
+                            | "ActivateOnEquip"
                     )
                 })
                 .count()
-                * 128;
+                * 512;
             // Includes map/vector overhead, shared item/object names, references,
             // and even overwritten definitions; ignored XML subtrees are freed.
             retained = retained
@@ -592,6 +864,7 @@ pub(crate) fn build_cancellable(
             } else if n.tag == "Enchantment" {
                 let id: i32 = num(n.attr("type").ok_or(AssetError::InvalidCatalog)?)?;
                 let def = EnchantDef {
+                    regeneration: Some(enchant_regeneration(&n)?),
                     id,
                     name: name(&n, &assets.english)?,
                     description: n.value("Description").unwrap_or("").into(),
@@ -737,6 +1010,81 @@ pub(crate) fn build_cancellable(
     Ok(c)
 }
 
+fn valid_codes(values: &[String], allowed: &[&str]) -> bool {
+    values.windows(2).all(|w| w[0] < w[1]) && values.iter().all(|v| allowed.contains(&v.as_str()))
+}
+
+fn validate_firing(item: &ItemDef, f: &WeaponFiringDef) -> bool {
+    let mut ids = BTreeSet::new();
+    let known = f
+        .groups
+        .iter()
+        .any(|g| g.schedule == WeaponSchedule::Simultaneous);
+    (!f.groups.is_empty() || !f.reasons.is_empty())
+        && f.groups.len() <= 256
+        && f.omitted_projectile_indices.len() <= 512
+        && f.omitted_projectile_indices.windows(2).all(|w| w[0] < w[1])
+        && f.omitted_projectile_indices
+            .iter()
+            .all(|i| *i >= 0 && !f.groups.iter().any(|g| g.projectile_index == *i))
+        && (f.support != CatalogSupport::Supported
+            || item
+                .projectiles
+                .iter()
+                .all(|p| f.groups.iter().any(|g| g.projectile_index == p.index)))
+        && valid_codes(&f.reasons, FIRING_REASONS)
+        && f.support == support(known, &f.reasons)
+        && (f.support != CatalogSupport::Supported
+            || (known && f.omitted_projectile_indices.is_empty()))
+        && f.groups.iter().all(|g| {
+            !g.group_id.is_empty()
+                && g.group_id.len() <= 64
+                && g.group_id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                && ids.insert(&g.group_id)
+                && g.rate_factor.is_finite()
+                && g.rate_factor > 0.0
+                && (1..=256).contains(&g.count)
+                && item
+                    .projectiles
+                    .iter()
+                    .any(|p| p.index == g.projectile_index)
+                && valid_codes(&g.reasons, &["unsupported_schedule"])
+                && g.reasons.iter().all(|r| f.reasons.contains(r))
+                && match g.schedule {
+                    WeaponSchedule::Simultaneous => g.reasons.is_empty(),
+                    WeaponSchedule::Unsupported => !g.reasons.is_empty(),
+                }
+        })
+}
+
+fn validate_regeneration(r: &EnchantRegenDef) -> bool {
+    let known = !r.hp.is_empty() || !r.mp.is_empty();
+    let mut units = BTreeSet::new();
+    r.hp.len() + r.mp.len() <= 256
+        && valid_codes(&r.reasons, REGEN_REASONS)
+        && valid_codes(&r.source_units, REGEN_UNITS)
+        && r.support == support(known, &r.reasons)
+        && r.hp.iter().chain(&r.mp).all(|e| {
+            let valid = |v: Option<f64>| v.is_none_or(|v| v.is_finite() && v >= 0.0);
+            let expected: Vec<String> = [
+                e.fraction_of_max_per_sec
+                    .map(|_| "fraction_of_max_per_second".into()),
+                e.flat_per_sec.map(|_| "units_per_second".into()),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            units.extend(expected.iter().cloned());
+            !expected.is_empty()
+                && valid(e.flat_per_sec)
+                && valid(e.fraction_of_max_per_sec)
+                && e.source_units == expected
+        })
+        && r.source_units.iter().eq(units.iter())
+}
+
 pub fn validate_catalog(c: &Catalog) -> Result<(), AssetError> {
     let invalid = || AssetError::InvalidCatalog;
     if c.format_version != 1
@@ -783,6 +1131,9 @@ pub fn validate_catalog(c: &Catalog) -> Result<(), AssetError> {
     if c.enchants.iter().any(|e| {
         e.stat_damage_multiplier
             .is_some_and(|m| !m.is_finite() || m < 0.0 || m > f64::from(f32::MAX))
+            || e.regeneration
+                .as_ref()
+                .is_some_and(|r| !validate_regeneration(r))
     }) {
         return Err(invalid());
     }
@@ -802,6 +1153,13 @@ pub fn validate_catalog(c: &Catalog) -> Result<(), AssetError> {
             if p.min_damage > p.max_damage || p.min_damage < 0 || p.index < 0 {
                 return Err(invalid());
             }
+        }
+        if item
+            .weapon_firing
+            .as_ref()
+            .is_some_and(|f| !validate_firing(item, f))
+        {
+            return Err(invalid());
         }
         if let Some(s) = &item.scaling {
             if !s.damage_per_stat.is_finite()

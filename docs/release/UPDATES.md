@@ -1,6 +1,8 @@
 # Release staging and updates
 
-Releases build in the private `DaAwesomePwner/maxed-rotmg` repository and are distributed from the fixed public repository `DaAwesomePwner/maxed`, which the updater pins at build time. Renaming or transferring the public repository breaks updates for installed clients, because redirects to other GitHub paths are rejected. Public update acceptance requires unauthenticated access to reviewed release artifacts. No repository token ships in Maxed. A pre-release version is not a claim that the public release or installed-update checks are complete.
+Development, CI, release staging and public update downloads all use `daplabs/maxed`. The public repository is the source repository, with version tags identifying the source used to build each release. Public update acceptance requires unauthenticated access to reviewed release artifacts. No repository token ships in Maxed.
+
+Existing v0.1.1 installations pin `DaAwesomePwner/maxed` and need a manual reinstall from [daplabs/maxed releases](https://github.com/daplabs/maxed/releases). Repository redirects are rejected; those installations cannot migrate through the updater.
 
 ## Native updater rationale
 
@@ -18,14 +20,16 @@ Stable is the default; beta requires opt-in. Checking, downloading and installin
 
 | Channel | Fixed feed |
 | --- | --- |
-| Stable | `https://github.com/DaAwesomePwner/maxed/releases/download/update-stable/latest.json` |
-| Beta | `https://github.com/DaAwesomePwner/maxed/releases/download/update-beta/latest.json` |
+| Stable | `https://github.com/daplabs/maxed/releases/download/update-stable/latest.json` |
+| Beta | `https://github.com/daplabs/maxed/releases/download/update-beta/latest.json` |
 
 Pointer releases must be published and publicly downloadable, never drafts. Stable is non-prerelease and beta is prerelease; neither pointer should be marked GitHub's latest release. Clients use explicit URLs, not `/releases/latest`. Immutable installers use the exact `v<version>/Maxed_<version>_x64-setup.exe` path.
 
 Every request begins at GitHub over HTTPS. Redirects are limited to `release-assets.githubusercontent.com` with a validated decimal repository ID and canonical UUID path; subsequent redirects retain that path, up to five redirects. Credentials, explicit ports, fragments and arbitrary hosts are rejected. Proxy use, automatic retries and referrer headers are disabled. See [privacy](../../PRIVACY.md) and [network auditing](network-audit.md).
 
 ## Build and stage
+
+Before tagging, run the tests workflow on `main` (`gh workflow run tests.yml --ref main`) and wait for it to pass. That run confirms `main` is green and is the only kind of run that saves the Rust build cache: a passing run on `main` saves the Cargo registry and third-party `target` output, keyed on `rust-toolchain.toml` and `Cargo.lock`. The tag run's tests restore that cache, since tag runs can read caches from the default branch. Pull request and tag runs never save it, and the signing job never uses it, so signed installers are always built from scratch.
 
 The release workflow builds version tags and stages artifacts; publication and channel promotion remain separate operations. The workflow uses read-only repository contents permission and a protected `release-signing` package step. Verify the actual workflow, immutable action pins, tag restrictions and environment approvals for each release. Node 22.16.0 and Rust 1.99.0 are pinned; use `npm ci` and locked Cargo dependencies.
 
@@ -40,7 +44,7 @@ $version = '0.1.1'
 $notes = [IO.File]::ReadAllText('reviewed-notes.txt')
 ./scripts/release/New-ReleaseMetadata.ps1 `
   -Version $version -Channel 'stable' `
-  -Repository 'DaAwesomePwner/maxed' `
+  -Repository 'daplabs/maxed' `
   -Installer "target/release/bundle/nsis/Maxed_${version}_x64-setup.exe" `
   -Signature "target/release/bundle/nsis/Maxed_${version}_x64-setup.exe.sig" `
   -OutputDir 'release-stage' `
@@ -54,17 +58,22 @@ Resolve the actual target directory with Cargo metadata when it differs. Version
 
 Staging copies the exact installer/signature, `LICENSE` and `NOTICE.md`, writes `latest.json`, `license-inventory.json` and `release-manifest.json`, and records hashes/byte counts. The static [distribution inventory](distribution-inventory.json) must cover actual shipped stable resources. Each static inventory input row has exactly `file`, `license` and `sha256`: a validated payload-relative path, its license identifier, and the lowercase SHA-256 of the exact shipped bytes. The only installer-private path form is `$PLUGINSDIR/` followed by one filename. Metadata generation cannot infer installer completeness. Run `tests/packaging/audit-bundle.ps1` against the real installer and staged `release-manifest.json`; the workflow invokes this audit before upload. Never bypass a failed audit. A partial failed stage is unusable. The separate staged download allowlist currently omits `THIRD-PARTY-NOTICES.md` even though it is included inside the installer. Adding it to standalone release assets requires coordinated metadata, manifest and test changes; do not claim the current script emits it.
 
-## Public source snapshot
+## One-time cutover export (temporary)
 
-Release downloads must be publicly readable, so they live in a public repository whose source is a reviewed snapshot of each release commit, never this repository's history. Export the tagged commit:
+Move development from the private build repository to `daplabs/maxed` by exporting
+it once into a clean public clone. Run the export with the owner's account name
+as a deny pattern and the destination clone explicitly supplied:
 
 ```powershell
-./scripts/release/Export-PublicSnapshot.ps1 -Commit "v$version" -OutputDir 'public-snapshot' -DenyPattern '<your account name>'
+./scripts/release/Export-PublicSnapshot.ps1 -Commit HEAD -OutputDir 'public-cutover' `
+  -DenyPattern '<owner account name>' -PublicClone '<path to clean public clone>'
 ```
 
-The export contains the commit's tracked files minus [public-exclude.txt](../../scripts/release/public-exclude.txt); untracked, ignored and uncommitted files never reach it. It then rejects recording, database (including SQLite sidecars), log, key and environment files, private keys, Tauri signing keys (plain or base64), GitHub tokens, local user paths and every `-DenyPattern` regular expression. Pass personal patterns at run time rather than committing them. Captures, found by `.pcap` name or pcap/pcapng magic, are denied by default: [public-allow.txt](../../scripts/release/public-allow.txt) lists each synthetic or publication-approved capture file and each reviewed invented canary, with the approved git blob for every entry, so any change to an allowed file needs renewed review. Stale exclude or allow entries fail the export, and a failed export leaves no output. The scan backs up the snapshot review in the [checklist](CHECKLIST.md); it does not replace it.
-
-To publish, add `-PublicClone <path>` with a clean clone of the public repository. After a passing export, the script replaces the clone's tracked files with the snapshot and stages them with the source file modes. A plain copy followed by `git add` would drop executable bits wherever `core.filemode` is false, as on Windows. The script then requires every staged blob and mode to match the reviewed commit; it never commits or pushes. Review `git diff --cached`, commit once as `Maxed <version>`, tag that commit `v<version>` and push before creating the version release below.
+Review the staged public clone before committing and publishing it. After the
+move, delete `scripts/release/Export-PublicSnapshot.ps1`,
+`scripts/release/public-allow.txt` and `scripts/release/public-exclude.txt`, and
+remove this temporary subsection. Subsequent development and releases use the
+public source repository directly; no recurring snapshot export is needed.
 
 ## Serialized promotion
 

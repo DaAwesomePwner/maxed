@@ -41,14 +41,19 @@ try {
     $null = Invoke-RepoGit init -q
     # Operator config must not disable the unusual-path review.
     $null = Invoke-RepoGit config core.quotePath false
+    # Keep the index-only executable mode when Save-Commit stages again on Unix.
+    $null = Invoke-RepoGit config core.filemode false
     Copy-Item -LiteralPath "$root/scripts/release/Export-PublicSnapshot.ps1" -Destination "$repo/scripts/release"
     $script:tool = "$repo/scripts/release/Export-PublicSnapshot.ps1"
     Write-RepoFile '.gitattributes' "* text=auto eol=lf`n*.bin binary`n*.pcap binary`n"
     Write-RepoFile 'README.md' "Synthetic Hero companion`n"
     Write-RepoFile 'src/main.rs' "fn main() {}`n"
     Write-RepoFile 'AGENTS.md' "Invented agent notes`n"
-    Write-RepoFile 'internal/plan.md' "Invented plan`n"
-    Write-RepoFile 'internal/deep/notes.md' "Invented notes`n"
+    Write-RepoFile 'CLAUDE.md' "@AGENTS.md`n"
+    Write-RepoFile '.github/workflows/tests.yml' "# Invented workflow`n"
+    Write-RepoFile '.github/dependabot.yml' "# Invented dependency automation`n"
+    Write-RepoFile 'docs/superpowers/plan.md' "Invented plan`n"
+    Write-RepoFile 'docs/superpowers/deep/notes.md' "Invented notes`n"
     Write-RepoFile 'tests/canary.ps1' ("`$canary = '" + 'C:\' + 'Users\invented-canary\private' + "'`n")
     $bytes = [byte[]](0..255)
     $null = New-Item -ItemType Directory -Path "$repo/data", "$repo/tests/fixtures/scrubbed"
@@ -57,7 +62,7 @@ try {
     $null = Invoke-RepoGit add -A
     $null = Invoke-RepoGit update-index --chmod=+x -- scripts/release/Export-PublicSnapshot.ps1
     $clean = Save-Commit 'Synthetic clean tree'
-    $script:exclude = Write-List 'exclude.txt' @('# Invented review list', '', 'AGENTS.md', 'internal/')
+    $script:exclude = Write-List 'exclude.txt' @([IO.File]::ReadAllLines("$root/scripts/release/public-exclude.txt"))
     $captureBlob = Invoke-RepoGit rev-parse "${clean}:tests/fixtures/scrubbed/demo.pcap"
     $capture = "capture tests/fixtures/scrubbed/demo.pcap $captureBlob"
     $canary = 'user-path tests/canary.ps1 ' + (Invoke-RepoGit rev-parse "${clean}:tests/canary.ps1")
@@ -68,11 +73,11 @@ try {
     Write-RepoFile 'notes.txt' "Untracked notes`n"
     $out = Invoke-Export @{}
     $files = @(Get-ChildItem -LiteralPath $out -Recurse -File -Force | ForEach-Object { $_.FullName.Substring($out.Length + 1).Replace('\', '/') } | Sort-Object)
-    $want = @('.gitattributes', 'README.md', 'data/blob.bin', 'scripts/release/Export-PublicSnapshot.ps1', 'src/main.rs', 'tests/canary.ps1', 'tests/fixtures/scrubbed/demo.pcap')
+    $want = @('.gitattributes', '.github/dependabot.yml', '.github/workflows/tests.yml', 'AGENTS.md', 'CLAUDE.md', 'README.md', 'data/blob.bin', 'scripts/release/Export-PublicSnapshot.ps1', 'src/main.rs', 'tests/canary.ps1', 'tests/fixtures/scrubbed/demo.pcap')
     Assert ((@($files) -join '|') -ceq (@($want | Sort-Object) -join '|')) 'exact kept file set'
     Assert ([IO.File]::ReadAllText("$out/README.md") -ceq "Synthetic Hero companion`n") 'committed content, not working tree'
     Assert ((@([IO.File]::ReadAllBytes("$out/data/blob.bin")) -join ',') -ceq ($bytes -join ',')) 'binary bytes preserved'
-    Assert (-not (Test-Path -LiteralPath "$out/internal")) 'directory entry excludes nested files'
+    Assert (-not (Test-Path -LiteralPath "$out/docs/superpowers")) 'directory entry excludes nested files'
     Assert (@(Get-ChildItem -LiteralPath $temp -Filter '*.partial-*').Count -eq 0) 'success leaves no staging'
 
     # The public clone is staged with source modes even when core.filemode is false.

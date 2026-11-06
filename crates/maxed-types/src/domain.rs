@@ -84,6 +84,10 @@ pub struct EnchantView {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct EquipmentView {
+    // True only for wire -1, false for a valid item type; absent/invalid stays unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub observed_empty: Option<bool>,
     pub slot: u8,
     pub item_type: Option<u16>,
     pub enchant: EnchantView,
@@ -95,6 +99,10 @@ pub struct StatView {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct CharacterView {
+    // Presentation-only; engine snapshots and durable events leave this unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub calculation_revision: Option<CharacterInputRevision>,
     pub id: String,
     pub name: Option<String>,
     pub class_id: Option<u16>,
@@ -126,6 +134,18 @@ pub struct SourceDamage {
     pub biggest_hit: Option<f64>,
     pub estimated: bool,
     pub reasons: Vec<String>,
+}
+/// Attribution-only inference preserves the observed damage amount.
+pub const INFERRED_EQUIPPED_WEAPON: &str = "inferred-equipped-weapon";
+
+impl SourceDamage {
+    /// Whether evidence makes the damage amount uncertain, rather than just its label.
+    pub fn damage_uncertain(&self) -> bool {
+        self.reasons
+            .iter()
+            .any(|reason| reason != INFERRED_EQUIPPED_WEAPON)
+            || (self.estimated && self.reasons.is_empty())
+    }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct PlayerDamage {
@@ -171,6 +191,13 @@ pub struct DamageBucket {
     #[serde(with = "crate::finite::optional_f64")]
     #[ts(as = "Option<f64>")]
     pub local: Option<f64>,
+    #[serde(default, with = "crate::finite::optional_f64")]
+    #[ts(optional = nullable, as = "Option<f64>")]
+    pub others_damage: Option<f64>,
+    // Non-local player-seconds; sum alongside damage when buckets merge.
+    #[serde(default, with = "crate::finite::optional_f64")]
+    #[ts(optional = nullable, as = "Option<f64>")]
+    pub others_presence: Option<f64>,
 }
 /// Version of the per-player DPS formula persisted with a fight.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -229,10 +256,18 @@ pub struct FightView {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub local_last_hit: Option<Timestamp>,
+    // Local player's first-to-last hit span, clipped at fight end, without a
+    // minimum duration. None for legacy fights or an unknown/ambiguous local.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable, as = "Option<f64>")]
+    pub local_active_micros: Option<u64>,
     #[serde(default)]
     #[ts(optional = nullable)]
     // snapshot series bounded to 16 prioritized fights; events carry full series
     pub player_series: Option<Vec<PlayerSeries>>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub scope_id: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct DropItem {
@@ -270,6 +305,19 @@ pub struct DropView {
     pub capture_scope: Option<CaptureScope>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct HpSample {
+    pub at: Timestamp,
+    pub hp: i32,
+    pub max_hp: Option<i32>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct DeathDetail {
+    pub killed_by: Option<String>,
+    pub killed_by_type: Option<u16>,
+    pub fame: Option<i32>,
+    pub hp_trace: Vec<HpSample>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct RunView {
     pub id: String,
     pub session_id: String,
@@ -280,6 +328,9 @@ pub struct RunView {
     pub ended: Option<Timestamp>,
     pub completed_at: Option<Timestamp>,
     pub died_at: Option<Timestamp>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub death: Option<DeathDetail>,
     pub outcome: Option<Outcome>,
     pub evidence: Vec<EvidenceAt>,
     pub party_size: Option<u32>,
@@ -363,6 +414,8 @@ pub enum EngineEvent {
         character_id: Option<String>,
         run_id: Option<String>,
     },
+    PlayerObserved(crate::PlayerProfileView),
+    ScopeTimelineUpdated(crate::ScopeTimelineUpdate),
     CharacterUpdated(CharacterView),
     CharacterMerged {
         provisional_id: String,
@@ -551,6 +604,10 @@ pub enum CaptureScope {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct StatLine {
+    // Missing evidence is legacy, never verified exalt placement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub split_evidence: Option<StatSplitEvidence>,
     pub stat_id: u8,
     #[serde(default)]
     #[ts(optional = nullable)]
@@ -597,6 +654,9 @@ pub struct StatPanel {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InstanceEventKind {
     PlayerDeath {
+        #[serde(default)]
+        #[ts(optional = nullable)]
+        player_id: Option<String>,
         player_name: String,
         #[serde(default)]
         #[ts(optional = nullable)]
@@ -661,4 +721,318 @@ pub struct InstanceEventView {
     pub at: Timestamp,
     pub kind: InstanceEventKind,
     pub provisional: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ExaltPlacement {
+    Unresolved,
+    ProvisionalInsideBoost,
+    VerifiedInsideBoost,
+    VerifiedInsideBase,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum StatSplitReason {
+    MissingExalt,
+    InvalidExalt,
+    MissingOperands,
+    Overflow,
+    NegativeBase,
+    NegativeOther,
+    UnverifiedPlacement,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct StatSplitEvidence {
+    pub placement: ExaltPlacement,
+    pub cap_eligible: bool,
+    pub reasons: Vec<StatSplitReason>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct CharacterInputRevision {
+    #[serde(deserialize_with = "character_contract_validation::identifier")]
+    pub stream_id: String,
+    #[serde(deserialize_with = "character_contract_validation::identifier")]
+    pub character_id: String,
+    #[serde(deserialize_with = "character_contract_validation::hash")]
+    pub input_hash: String,
+    #[serde(deserialize_with = "character_contract_validation::optional_hash")]
+    pub catalog_fingerprint: Option<String>,
+}
+
+impl CharacterInputRevision {
+    // Same identifier limits as native history requests; hashes are lowercase SHA-256 hex.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        use character_contract_validation::{valid_hash, valid_identifier};
+        if !valid_identifier(&self.stream_id) || !valid_identifier(&self.character_id) {
+            return Err("invalid_character_revision_identifier");
+        }
+        if !valid_hash(&self.input_hash)
+            || self
+                .catalog_fingerprint
+                .as_deref()
+                .is_some_and(|hash| !valid_hash(hash))
+        {
+            return Err("invalid_character_revision_hash");
+        }
+        Ok(())
+    }
+}
+
+/// Only calculator controls cross the bridge; observed player inputs belong to native code.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct CharacterCalculationRequest {
+    #[serde(deserialize_with = "character_contract_validation::defense")]
+    pub defense: u16,
+    #[serde(deserialize_with = "character_contract_validation::comparisons")]
+    pub comparison_item_types: Vec<u16>,
+    pub expected_revision: CharacterInputRevision,
+}
+
+impl CharacterCalculationRequest {
+    // Also validates directly constructed Rust requests before calculation.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.defense > 10_000 {
+            return Err("invalid_character_defense");
+        }
+        if !character_contract_validation::valid_comparisons(&self.comparison_item_types) {
+            return Err("invalid_character_comparisons");
+        }
+        self.expected_revision.validate()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum CharacterFreshness {
+    Live,
+    LastSeen,
+    Died,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum CalculationEvidence {
+    Catalog,
+    Modeled,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum CalculationCompleteness {
+    Complete,
+    Partial,
+    Unavailable,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct CharacterValue {
+    #[serde(with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub value: Option<f64>,
+    pub evidence: CalculationEvidence,
+    pub completeness: CalculationCompleteness,
+    // Controlled reason codes; never raw observed strings.
+    pub reasons: Vec<String>,
+    pub exclusions: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct CharacterRange {
+    pub min: Option<i32>,
+    pub max: Option<i32>,
+    pub evidence: CalculationEvidence,
+    pub completeness: CalculationCompleteness,
+    pub reasons: Vec<String>,
+    pub exclusions: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct CharacterCalculation {
+    pub revision: CharacterInputRevision,
+    pub observed_at: Timestamp,
+    pub catalog_fingerprint: Option<String>,
+    pub formula_version: String,
+    pub freshness: CharacterFreshness,
+    pub issues: Vec<CoverageIssue>,
+    pub applied_defense: u16,
+    // Equipped weapon first, followed by at most two comparisons at the same observed stats.
+    pub weapons: Vec<CharacterWeaponCalculation>,
+    pub regeneration: CharacterRegeneration,
+    pub exalt_damage: DeferredExaltDamage,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct CharacterWeaponCalculation {
+    pub item_type: Option<u16>,
+    pub groups: Vec<CharacterAttackGroupCalculation>,
+    pub applied_att: Option<i32>,
+    pub applied_dex: Option<i32>,
+    pub applied_primary_mask: Option<u32>,
+    // Unavailable when heterogeneous groups have no single rate/range.
+    pub rate_factor: CharacterValue,
+    pub catalog_range: CharacterRange,
+    pub hit_range: CharacterRange,
+    pub hit_mean: CharacterValue,
+    pub attacks_per_sec: CharacterValue,
+    pub projectiles_per_sec: CharacterValue,
+    pub dps_subtotal: CharacterValue,
+    pub dps_total: CharacterValue,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct CharacterAttackGroupCalculation {
+    pub group_id: String,
+    pub projectile_index: i16,
+    // Missing projectile metadata cannot establish piercing.
+    pub armor_piercing: Option<bool>,
+    pub count: u16,
+    pub rate_factor: CharacterValue,
+    pub catalog_range: CharacterRange,
+    pub hit_range: CharacterRange,
+    pub hit_mean: CharacterValue,
+    pub attacks_per_sec: CharacterValue,
+    pub projectiles_per_sec: CharacterValue,
+    pub dps: CharacterValue,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct CharacterRegeneration {
+    pub applied_wis: Option<i32>,
+    pub wis: CharacterValue,
+    pub effects: Vec<CharacterRegenContribution>,
+    // Supported components only; never label these as full recovery.
+    pub hp_subtotal: CharacterValue,
+    pub mp_subtotal: CharacterValue,
+    pub hp_total: CharacterValue,
+    pub mp_total: CharacterValue,
+    // Excluded/unavailable until separately verified; not assumed zero.
+    pub base_vit: CharacterValue,
+    pub base_mp: CharacterValue,
+}
+
+/// One HP or MP effect from one observed slot/enchant; coefficients retain catalog evidence.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct CharacterRegenContribution {
+    pub source_slot: u8,
+    pub enchant_id: i32,
+    pub resource: CharacterRegenResource,
+    pub applied_maximum: Option<i32>,
+    pub flat_per_sec: CharacterValue,
+    pub fraction_of_max_per_sec: CharacterValue,
+    pub source_units: Vec<String>,
+    pub subtotal: CharacterValue,
+    pub total: CharacterValue,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum CharacterRegenResource {
+    Hp,
+    Mp,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ExaltDamageStatus {
+    Deferred,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct DeferredExaltDamage {
+    pub status: ExaltDamageStatus,
+    #[serde(with = "character_contract_validation::deferred_value")]
+    #[ts(type = "null")]
+    pub value: Option<f64>,
+    pub reason: String,
+}
+
+mod character_contract_validation {
+    use serde::{Deserialize, Deserializer};
+
+    pub(super) fn valid_identifier(value: &str) -> bool {
+        !value.is_empty() && value.len() <= 256 && !value.chars().any(char::is_control)
+    }
+
+    pub(super) fn valid_hash(value: &str) -> bool {
+        value.len() == 64
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    }
+
+    pub(super) fn valid_comparisons(values: &[u16]) -> bool {
+        values.len() <= 2 && (values.len() < 2 || values[0] != values[1])
+    }
+
+    pub(super) fn identifier<'de, D: Deserializer<'de>>(de: D) -> Result<String, D::Error> {
+        let value = String::deserialize(de)?;
+        if !valid_identifier(&value) {
+            return Err(serde::de::Error::custom(
+                "invalid_character_revision_identifier",
+            ));
+        }
+        Ok(value)
+    }
+
+    pub(super) fn hash<'de, D: Deserializer<'de>>(de: D) -> Result<String, D::Error> {
+        let value = String::deserialize(de)?;
+        if !valid_hash(&value) {
+            return Err(serde::de::Error::custom("invalid_character_revision_hash"));
+        }
+        Ok(value)
+    }
+
+    pub(super) fn optional_hash<'de, D: Deserializer<'de>>(
+        de: D,
+    ) -> Result<Option<String>, D::Error> {
+        let value = Option::<String>::deserialize(de)?;
+        if value.as_deref().is_some_and(|hash| !valid_hash(hash)) {
+            return Err(serde::de::Error::custom("invalid_character_revision_hash"));
+        }
+        Ok(value)
+    }
+
+    pub(super) fn defense<'de, D: Deserializer<'de>>(de: D) -> Result<u16, D::Error> {
+        let value = u16::deserialize(de)?;
+        if value > 10_000 {
+            return Err(serde::de::Error::custom("invalid_character_defense"));
+        }
+        Ok(value)
+    }
+
+    pub(super) fn comparisons<'de, D: Deserializer<'de>>(de: D) -> Result<Vec<u16>, D::Error> {
+        let values = Vec::<u16>::deserialize(de)?;
+        if !valid_comparisons(&values) {
+            return Err(serde::de::Error::custom("invalid_character_comparisons"));
+        }
+        Ok(values)
+    }
+
+    pub(super) mod deferred_value {
+        use serde::{Deserializer, Serializer};
+
+        pub fn serialize<S: Serializer>(
+            value: &Option<f64>,
+            serializer: S,
+        ) -> Result<S::Ok, S::Error> {
+            if value.is_some() {
+                return Err(serde::ser::Error::custom("exalt_damage_deferred"));
+            }
+            crate::finite::optional_f64::serialize(value, serializer)
+        }
+
+        pub fn deserialize<'de, D: Deserializer<'de>>(de: D) -> Result<Option<f64>, D::Error> {
+            let value = crate::finite::optional_f64::deserialize(de)?;
+            if value.is_some() {
+                return Err(serde::de::Error::custom("exalt_damage_deferred"));
+            }
+            Ok(value)
+        }
+    }
 }

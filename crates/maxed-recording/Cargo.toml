@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "maxed-recording"
 description = "Bounded local recording and replay file handling for Maxed."
 version.workspace = true
@@ -13,3 +14,8 @@ thiserror.workspace = true
 serde_json.workspace = true
 [dependencies.maxed-types]
 path = "../maxed-types"
+
+# Merge ordinary integration suites; retain documented or process-isolated targets.
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/svelte';
 import { vi } from 'vitest';
 import Shell from '../../src/lib/shell/Shell.svelte';
+import { productionFeatures } from '../../src/lib/navigation/routes';
 import type { EngineEvent } from '../../src/lib/bindings/EngineEvent';
 import type { LiveSnapshot } from '../../src/lib/bindings/LiveSnapshot';
 import type { FightView } from '../../src/lib/bindings/FightView';
@@ -31,7 +32,7 @@ export function catalog(object_type: number, name: string): ObjectVisual {
 }
 
 export function mountV2(snapshot = homeSnapshot(), summary: HomeSummary = homeSummary(), options: {
-  hash?: string; features?: { lootBrowsing: boolean; logs: boolean; stats: boolean }; preview?: boolean; demo?: boolean; objects?: ObjectVisual[];
+  hash?: string; features?: { lootBrowsing: boolean; logs: boolean; stats: boolean; party: boolean; homeRedesign: boolean; character: boolean }; preview?: boolean; demo?: boolean; objects?: ObjectVisual[];
   configure?: (client: Client) => void;
 } = {}) {
   const transport = createFixtureTransport(snapshot, { client_fingerprint: 'a'.repeat(64), objects: options.objects ?? [] }, summary);
@@ -46,7 +47,8 @@ export function mountV2(snapshot = homeSnapshot(), summary: HomeSummary = homeSu
   const listeners = [vi.spyOn(client, 'onSnapshot'), vi.spyOn(client, 'onCapture'), vi.spyOn(client, 'onEngineEvent')];
   const invoke = vi.spyOn(transport, 'invoke');
   const browser = fakeHistory(options.hash);
-  const page = render(Shell, { client, historyAdapter: browser.adapter, features: options.features, preview: options.preview ?? false });
+  // Legacy Home suites exercise the explicit v3 rollback path.
+  const page = render(Shell, { client, historyAdapter: browser.adapter, features: options.features ?? { ...productionFeatures, homeRedesign: false }, preview: options.preview ?? false });
   let sequence = Number(snapshot.sequence);
   const send = (event: EngineEvent, at = '6000000') => transport.publishEngineEvent({
     stream_id: snapshot.stream_id, sequence: String(++sequence), at, event,

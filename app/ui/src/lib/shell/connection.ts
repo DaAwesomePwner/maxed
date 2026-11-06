@@ -9,6 +9,7 @@ import { isBossFight, scopedFights } from './rail';
 import { objectVisualTypes } from '../bridge/visuals';
 import { characterVisualTypes } from '../home/visuals';
 import { createHomeLiveWindow } from '../home/v2/live';
+import { isPresentationVisible, observePresentationVisibility } from '../bridge/visibility';
 import type { HomeLiveWindow } from '../home/v2/contracts';
 
 export type ConnectionErrorSource = 'captureSubscription' | 'snapshot' | 'store';
@@ -22,15 +23,36 @@ export function connectShell(client: Client, receive: {
   state?: (value: LiveState) => void;
   event?: (value: EventEnvelope) => void;
   homeWindow?: (value: HomeLiveWindow) => void;
+  homeWindowObserved?: {
+    onEvent(envelope: EventEnvelope): void;
+    onWindow(value: HomeLiveWindow, snapshot: LiveSnapshot | null): void;
+  };
   liveState?: (value: LiveState) => void;
   historyReady?: (value: StoreStatus) => void;
   historyInvalidates?: (event: EventEnvelope) => boolean;
   historyBaseline?: (snapshot: LiveSnapshot) => void;
   error: (source: ConnectionErrorSource, value: string) => void;
-}) {
+}, options: { homeActive?: boolean } = {}) {
   let disposed = false;
+  let observationSnapshot: LiveSnapshot | null = null;
   let fightWindow: HomeLiveWindow | null = null;
-  const homeWindow = createHomeLiveWindow(value => { fightWindow = value; receive.homeWindow?.(value); });
+  let homeActive = options.homeActive ?? true;
+  let visible = isPresentationVisible();
+  function showWindow() {
+    if (!disposed && homeActive && visible && fightWindow) receive.homeWindow?.(fightWindow);
+  }
+  // Visit membership and finished fights cannot be rebuilt from snapshots.
+  // Keep one event-fed model for the session; gate only its display updates.
+  const homeWindow = createHomeLiveWindow(value => { fightWindow = value; showWindow(); },
+    receive.homeWindowObserved ? {
+      onEvent: envelope => receive.homeWindowObserved!.onEvent(envelope),
+      onWindow: value => receive.homeWindowObserved!.onWindow(value, observationSnapshot),
+    } : undefined);
+  const releaseVisibility = observePresentationVisibility(next => {
+    const restored = !visible && next;
+    visible = next;
+    if (restored) showWindow();
+  });
   let visualRevision = 0;
   let visualKey = '';
   let loadingVisuals = false;
@@ -75,7 +97,7 @@ export function connectShell(client: Client, receive: {
     refreshVisuals();
   });
   const connection = subscribeLive(client, {
-    batch: homeWindow.batch,
+    batch: apply => homeWindow.batch(apply),
     capture: (value) => { homeWindow.capture(value); receive.capture(value); },
     store: receive.store,
     event: (value) => { homeWindow.event(value); receive.event?.(value); },
@@ -94,6 +116,7 @@ export function connectShell(client: Client, receive: {
       receive.error('snapshot', state.phase === 'failed' ? state.message : '');
     },
     snapshot: (snapshot) => {
+      observationSnapshot = snapshot;
       homeWindow.snapshot(snapshot);
       receive.snapshot(snapshot);
       const types = objectVisualTypes([...characterVisualTypes(snapshot.character),
@@ -107,7 +130,12 @@ export function connectShell(client: Client, receive: {
     },
   });
   return Object.assign(() => {
-    disposed = true; homeWindow.dispose(); visualRevision++; pendingVisuals = undefined;
+    disposed = true; homeWindow.dispose(); releaseVisibility(); visualRevision++; pendingVisuals = undefined;
     clearTimeout(visualTimer); releaseVisuals(); connection.dispose();
-  }, { selectFight: homeWindow.select });
+  }, { selectFight: (id: string | null) => homeWindow.select(id),
+    setHomeActive: (active: boolean) => {
+      const activated = !homeActive && active;
+      homeActive = active;
+      if (activated) showWindow();
+    } });
 }

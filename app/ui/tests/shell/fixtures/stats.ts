@@ -20,9 +20,9 @@ export const statsMapRows: StatsMapRow[] = [
 const HOUR = 60 * MIN;
 export const statsSessionRows: StatsSessionRow[] = [
   { id: 'preview-session-2', started: String(30 * HOUR), ended: null, duration_micros: 40 * MIN, fame: 620,
-    missing_baseline: false, fame_per_hour: 930, runs: 2, clears: 1, deaths: 0 },
+    missing_baseline: false, fame_per_hour: 930, bags: 8, notable_bags: 2, bags_per_hour: 12, notable_bags_per_hour: 3, runs: 2, clears: 1, deaths: 0 },
   { id: 'preview-session-1', started: String(5 * HOUR), ended: String(7 * HOUR), duration_micros: 2 * HOUR, fame: 1200,
-    missing_baseline: true, fame_per_hour: 600, runs: 3, clears: 3, deaths: 1 },
+    missing_baseline: true, fame_per_hour: 600, bags: 40, notable_bags: 4, bags_per_hour: 20, notable_bags_per_hour: 2, runs: 3, clears: 3, deaths: 1 },
 ];
 const previewRun = { ...fixture.run!, id: 'preview-run', session_id: 'preview-session-1' };
 

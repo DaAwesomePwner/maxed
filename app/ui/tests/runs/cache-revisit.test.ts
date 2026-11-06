@@ -44,7 +44,9 @@ it('loot_feed_revisit_renders_without_second_read', async () => {
 });
 
 it('stats_maps_revisit_renders_without_second_read', async () => {
-  const getStatsMaps = vi.fn<Client['getStatsMaps']>(async () => ready({ rows: statsMapRows, truncated: false, tracking_since: null, characters: [] }));
+  // Keep the cached dungeon eligible for the default five-run ranking filter.
+  const rows = statsMapRows.map(row => row.map === 'Lost Halls' ? { ...row, visits: 5 } : row);
+  const getStatsMaps = vi.fn<Client['getStatsMaps']>(async () => ready({ rows, truncated: false, tracking_since: null, characters: [] }));
   mountPhase2({ hash: '#/settings', configure(client) { client.getStatsMaps = getStatsMaps; } }); await flush(); await follow('#/stats', primary());
   expect(main().getByRole('rowheader', { name: 'Lost Halls' })).toBeTruthy();
   await follow('#/settings', primary()); await follow('#/stats', primary());

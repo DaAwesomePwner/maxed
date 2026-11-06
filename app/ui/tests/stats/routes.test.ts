@@ -4,7 +4,7 @@ import { breadcrumbs, parseRoute, productionFeatures, routeHref, type Route } fr
 import CharacterRail from '../../src/lib/shell/CharacterRail.svelte';
 import { railView } from '../../src/lib/shell/rail';
 
-const on = { lootBrowsing: true, logs: true, stats: true }, off = { ...on, stats: false };
+const on = { lootBrowsing: true, logs: true, stats: true, party: false, character: false, homeRedesign: false }, off = { ...on, stats: false };
 const routes: Array<[string, Route]> = [
   ['#/stats', { kind: 'stats', view: 'maps' }],
   ['#/stats/sessions', { kind: 'stats', view: 'sessions' }],

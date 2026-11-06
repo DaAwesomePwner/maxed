@@ -140,4 +140,6 @@
   button { justify-self: start; }
   .loot-stats :global([data-kpi="dry"] .value) { color: var(--estimated); }
   .loot-stats :global([data-kpi="best"] .value) { font-size: 20px; overflow: hidden; text-overflow: ellipsis; }
+  .loot-stats :global(.kpi-strip .sub) { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  @media (max-width: 1000px) { .loot-stats :global(.kpi-strip) { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }
 </style>

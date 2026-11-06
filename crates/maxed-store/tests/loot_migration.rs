@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 use maxed_types::*;
 use rusqlite::{params, Connection};
 use sha2::{Digest, Sha256};
@@ -10,7 +10,7 @@ fn fresh_database_has_loot_indexes() {
     let v: i64 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(v, 12);
+    assert_eq!(v, maxed_store::SCHEMA_VERSION);
     assert_loot_indexes(&db);
 }
 
@@ -91,7 +91,7 @@ fn v7_database_upgrades_and_backfills_source_type() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        12
+        maxed_store::SCHEMA_VERSION
     );
     for (id, json, expected) in cases {
         let row: (Option<i64>, String) = db
@@ -119,7 +119,7 @@ fn v7_database_upgrades_and_backfills_source_type() {
         db.query_row("SELECT count(*) FROM schema_migrations", [], |r| r
             .get::<_, i64>(0))
             .unwrap(),
-        12
+        maxed_store::SCHEMA_VERSION
     );
     maxed_store::open_reader(&path).unwrap();
 }
@@ -149,13 +149,7 @@ fn projector_keeps_source_type_in_sync_with_json() {
     for source in [Some(77), None] {
         drop.source_enemy = source;
         drop.at = Timestamp(original_at.0 + 100);
-        let head: i64 = db
-            .query_row(
-                "SELECT sequence FROM stream_heads WHERE stream_id='test-stream'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
+        let head: i64 = common::receipts::head(&db, "test-stream").unwrap();
         maxed_store::apply_batch(
             &mut db,
             &[common::envelope(

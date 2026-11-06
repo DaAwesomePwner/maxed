@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { itemHover } from '../components/item-hover';
   import { SHELL_CONNECTION, type ShellConnection } from '../shell/context';
   import { getContext, tick, untrack } from 'svelte';
   import type { Client } from '../bridge/client';
@@ -150,8 +151,8 @@
   <p class="sr-only" role="status" aria-live="polite">{missingRow}</p>
   <Breadcrumbs items={[{ label: 'Loot', href: '#/loot' }, { label: name }]} />
   <header>
-    <span class="header-tile {tierClass(visual?.item_tier)}"><ItemTile sprite={visual?.sprite ?? null} resolveSpriteUrl={sprite => spriteUrl(visuals.client_fingerprint, sprite)} fit={40} alt="" /></span>
-    <div class="identity"><h2 class={tierClass(visual?.item_tier)} title={name}>{name}</h2>
+    <span class="header-tile {tierClass(visual?.item_tier)}" use:itemHover={{ type: itemType, name, tier: visual?.item_tier }}><ItemTile sprite={visual?.sprite ?? null} resolveSpriteUrl={sprite => spriteUrl(visuals.client_fingerprint, sprite)} fit={40} alt="" /></span>
+    <div class="identity"><h2 class={tierClass(visual?.item_tier)} use:itemHover={{ type: itemType, name, tier: visual?.item_tier }}>{name}</h2>
       {#if item && item.totals.appearances > 0}<p class="subline"><span class={tierClass(visual?.item_tier)}>{visual?.item_tier ?? '—'}</span> · first seen {item.totals.first_at === null ? '—' : shortWhen(item.totals.first_at, now)} · last seen {item.totals.last_at === null ? '—' : clockWhen(item.totals.last_at, now)}</p>{/if}
     </div>
     <div class="actions"><a class="ctl ghost" href={`#/loot/with/${itemType}`}>Show in feed</a>

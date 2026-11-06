@@ -4,12 +4,26 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { FightView } from '../../src/lib/bindings/FightView';
 import type { HistoryReply } from '../../src/lib/bindings/HistoryReply';
 import type { CoverageIssue } from '../../src/lib/bindings/CoverageIssue';
-import { parseRoute, routeHref } from '../../src/lib/navigation/routes';
+import { breadcrumbs, parseRoute, routeHref, routeTitle } from '../../src/lib/navigation/routes';
 import { advance, click, deferred, fight, flush, follow, main, mountRuns, player, ready, region, saved, source } from './fixtures';
 
 beforeEach(() => { setDebugMode(true);
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2030-01-01T12:00:00Z'));
+});
+
+it.each(['test:player:3:42:0', 'a b%2F/c', 'x:local:1'])('round trips run player identity (%s)', playerId => {
+  const route = { kind: 'run-player' as const, runId: 'a b%2F/c', playerId };
+  expect(parseRoute(routeHref(route))).toEqual(route);
+  expect(routeTitle(route)).toBe('Player');
+  expect(breadcrumbs(route)).toEqual([
+    { label: 'Home', href: '#/' }, { label: 'Runs', href: '#/runs' },
+    { label: 'Run', href: '#/runs/a%20b%252F%2Fc' }, { label: 'Player', href: routeHref(route) },
+  ]);
+});
+
+it.each(['#/runs/run-1/players', '#/runs/run-1/players/'])('rejects a missing run player segment (%s)', hash => {
+  expect(parseRoute(hash)).toEqual({ kind: 'not-found' });
 });
 afterEach(() => { setDebugMode(false);
   cleanup();
@@ -28,8 +42,8 @@ it('run_fight_player_source_chain', async () => {
   await follow('#/runs/run-1/fights/fight-1/players/7');
   expect(main().getByRole('heading', { name: 'Player', level: 1 })).toBeTruthy();
   expect(page.queries.getPlayerBreakdown).toHaveBeenCalledWith('fight-1', 7);
-  expect(region('Damage sources').getByRole('cell', { name: 'Weapon' })).toBeTruthy();
-  expect(region('Damage sources').getByText('321', { exact: true })).toBeTruthy();
+  expect(region('Damage by item').getByRole('cell', { name: 'Weapon' })).toBeTruthy();
+  expect(region('Damage by item').getByText('321', { exact: true })).toBeTruthy();
   expect(page.queries.getRun).toHaveBeenCalledTimes(1);
 });
 
@@ -42,10 +56,10 @@ it('unknown_estimated_and_known_zero_remain_distinct', async () => {
     getFight: async () => ready(fight({ players: [selected] })), getPlayerBreakdown: async () => ready(selected),
   } }); await flush();
   expect(main().getAllByText(/unavailable/i).length).toBeGreaterThan(0);
-  expect(region('Damage sources').getByRole('rowheader', { name: /Unknown Damage/ })).toBeTruthy();
-  expect(region('Damage sources').getAllByText(/^0$/).length).toBeGreaterThan(0);
-  expect(region('Damage sources').getAllByText(/estimated/i).length).toBeGreaterThan(0);
-  expect(region('Damage sources').getByText(/Missing target DEF; assumed zero/)).toBeTruthy();
+  expect(region('Damage by item').getByRole('rowheader', { name: /Unknown Damage/ })).toBeTruthy();
+  expect(region('Damage by item').getAllByText(/^0$/).length).toBeGreaterThan(0);
+  expect(region('Damage by item').getAllByText(/estimated/i).length).toBeGreaterThan(0);
+  expect(region('Damage by item').getByText(/Missing target DEF; assumed zero/)).toBeTruthy();
   expect(main().getByText(/Detailed reconstruction counts were not saved for this run/i)).toBeTruthy();
   expect(page.queries.getPlayerBreakdown).toHaveBeenCalledTimes(1);
 });
@@ -70,7 +84,7 @@ it.each([null, 0, NaN, Infinity, -1])('null_zero_and_nonfinite_metrics_are_guard
   })) } }); await flush();
   const row = region('Players').getByRole('row', { name: /Invented Archer/ });
   expect(row.textContent).not.toMatch(/NaN|Infinity|-1/);
-  for (const label of ['DPS', 'Share', 'Biggest Hit']) {
+  for (const label of ['Active DPS', 'Share', 'Biggest Hit']) {
     const value = within(row).getByLabelText(label).textContent?.trim();
     expect(value).toMatch(dps === 0 ? /^0(?:\s*(?:%|DPS))?$/i : /^\u2014$/);
   }
@@ -133,9 +147,9 @@ it('all seven players are visible and local chart selection does not hide rows',
   expect(region('Players').queryByRole('button', { name: /Details/ })).toBeNull();
   expect(region('Damage over time').getByRole('button', { name: 'Observed player 6' }).getAttribute('aria-pressed')).toBe('true');
   const row = region('Players').getByRole('row', { name: /Observed player 0/ });
-  expect(within(row).getByLabelText('DPS').textContent).toBe('17');
+  expect(within(row).getByLabelText('Active DPS').textContent).toBe('17');
   expect(within(row).getByLabelText('Share').textContent).toBe('23%');
-  await fireEvent.click(within(row).getByLabelText('DPS')); await flush();
+  await fireEvent.click(within(row).getByLabelText('Active DPS')); await flush();
   expect(page.browser.adapter.hash).toBe('#/fights/fight-1/players/0');
 });
 
@@ -148,7 +162,7 @@ it.each([-2147483648, -7, 0, 2147483647])('canonical_signed_object_id_round_trip
   } }); await flush();
   expect(main().getByRole('heading', { name: 'Player', level: 1 })).toBeTruthy();
   expect(page.queries.getPlayerBreakdown).toHaveBeenCalledWith('fight-1', objectId);
-  expect(region('Damage sources').getByText('321', { exact: true })).toBeTruthy();
+  expect(region('Damage by item').getByText('321', { exact: true })).toBeTruthy();
 });
 
 it.each(['-0', '01', '-01', '+1', '-2147483649', '2147483648', '1.5', 'NaN', 'Infinity'])('rejects_noncanonical_player_route (%s)', value => {
@@ -187,7 +201,7 @@ it('sources_preserve_kind_enchant_provenance_and_escaped_reasons', async () => {
     getFight: async () => ready(fight({ run_id: null, players: [selected] })),
     getPlayerBreakdown: async () => ready(selected),
   } }); await flush();
-  const scope = region('Damage sources');
+  const scope = region('Damage by item');
   expect(scope.getAllByRole('row').slice(1)).toHaveLength(7);
   for (const kind of ['Weapon', 'Ability', 'Summon', 'Item Effect', 'Other', 'Unknown']) {
     expect(scope.getAllByRole('cell', { name: new RegExp(kind) }).length).toBeGreaterThan(0);
@@ -197,7 +211,7 @@ it('sources_preserve_kind_enchant_provenance_and_escaped_reasons', async () => {
   expect(scope.getAllByText(/estimated/i).length).toBeGreaterThan(0);
   expect(scope.getByText(/Estimated damage; reconstruction reasons unavailable/i)).toBeTruthy();
   expect(scope.getByText('777', { exact: true })).toBeTruthy();
-  expect(screen.getByRole('region', { name: 'Damage sources' }).querySelector('img[src="x"], img[onerror]')).toBeNull();
+  expect(screen.getByRole('region', { name: 'Damage by item' }).querySelector('img[src="x"], img[onerror]')).toBeNull();
   expect(scope.getAllByRole('img', { name: 'Uncommon, 1 enchant' })).toHaveLength(6);
 
 });
@@ -255,5 +269,18 @@ it.each(['superseded', 'busy'] as const)('player_context_unwraps_control_before_
   else { page.event({ fight_updated: fight({ run_id: null }) }, '13'); page.setStore(saved('13')); await advance(); }
   expect(main().getByRole('heading', { name: 'Player', level: 1 })).toBeTruthy();
   expect(page.queries.getPlayerBreakdown).toHaveBeenCalledTimes(1);
-  expect(region('Damage sources').getByText('321', { exact: true })).toBeTruthy();
+  expect(region('Damage by item').getByText('321', { exact: true })).toBeTruthy();
+});
+
+it('shows one item row with its estimated damage share in the fight summary', async () => {
+  setDebugMode(false);
+  mountRuns({ hash: '#/runs/run-1/fights/fight-1', queries: {
+    getFight: async () => ready(fight({ players: [player({ damage: 100, sources: [
+      source({ damage: 68 }), source({ damage: 32, estimated: true }),
+    ] })] })),
+  } }); await flush();
+  const sources = region('Your damage sources');
+  expect(sources.getAllByText('100', { exact: true })).toHaveLength(1);
+  expect(sources.getByText('~32% est.')).toBeTruthy();
+  expect(sources.queryByText('68', { exact: true })).toBeNull();
 });

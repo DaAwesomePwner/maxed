@@ -4,6 +4,7 @@ export type KpiCell = {
 };
 export type BagOverflow = { bagType: number; count: number };
 export type DamageRow = {
+  player_id: string; object_id: number | null;
   rank: number | null; name: string | null; class_id: number | null;
   is_local: boolean; damage: number; dps: number | null; share: number | null;
 };

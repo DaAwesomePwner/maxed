@@ -1,0 +1,86 @@
+.player-card { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface-panel); color: var(--text-primary); font-size: 12px; }
+.player-card h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
+.player-card-sub { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.player-muted { color: var(--text-muted); }
+.player-card p { margin: 8px 0 0; }
+.player-danger { color: var(--danger); }
+.player-header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; min-width: 0; color: var(--text-primary); }
+.player-avatar { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 8px; background: var(--surface-raised); }
+.player-identity { min-width: 0; flex: 1; }
+.player-identity h2 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0; font-size: 22px; line-height: 1.1; overflow-wrap: anywhere; }
+.player-identity p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.player-tag { font-size: 10px; line-height: 16px; padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-weight: 400; }
+.player-tag.you { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 35%, transparent); }
+.player-tag.live { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, transparent); }
+.player-switcher { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+.player-control { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 26px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font: inherit; color: var(--text-primary); background: var(--surface-raised); text-decoration: none; cursor: pointer; }
+.player-control.square { width: 26px; padding: 0; }
+.player-control:disabled { color: var(--text-disabled); cursor: default; opacity: .6; }
+.player-picker { position: relative; font-size: 12px; }
+.player-picker summary { list-style: none; }
+.player-picker summary::-webkit-details-marker { display: none; }
+.player-picker ul { position: absolute; right: 0; top: 100%; z-index: 3; list-style: none; margin: 4px 0 0; padding: 4px; background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: 6px; min-width: 160px; max-height: 280px; overflow: auto; box-shadow: var(--elevation-popover); }
+.player-picker a, .player-picker button { display: block; padding: 5px 8px; color: var(--text-primary); text-decoration: none; overflow-wrap: anywhere; }
+.player-picker button { width: 100%; border: 0; background: transparent; font: inherit; text-align: left; color: var(--text-disabled); }
+.player-picker a:hover, .player-picker a[aria-current="page"] { background: var(--surface-hover); }
+.player-scope { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+.player-scope a, .player-scope button { display: flex; align-items: center; gap: 6px; padding: 6px 10px 7px; background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--text-secondary); font: inherit; text-decoration: none; }
+.player-scope [aria-current="page"] { color: var(--text-primary); border-bottom-color: var(--gold); }
+.player-scope a:hover { background: var(--surface-hover); }
+.player-scope button:disabled { color: var(--text-disabled); opacity: .6; }
+.player-scope small { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.player-table-scroll { overflow: auto; }
+.player-boss-table { width: 100%; min-width: 480px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.player-boss-table th, .player-boss-table td { padding: 0 6px; text-align: right; height: 30px; font-weight: 400; }
+.player-boss-table th:first-child { text-align: left; }
+.player-boss-table thead th { font-size: 11px; color: var(--text-muted); }
+.player-boss-table tbody tr { border-top: 1px solid var(--border); }
+.player-boss-table tr.linked:hover { background: var(--surface-hover); }
+.player-boss-table tr[data-current="true"] { background: color-mix(in srgb, var(--gold) 8%, transparent); }
+.player-boss-table tr[data-current="true"] th { box-shadow: inset 2px 0 var(--gold); }
+.player-boss-table a { display: block; padding-block: 6px; color: inherit; text-decoration: none; }
+.player-gear { display: grid; gap: 6px; padding: 0; margin: 0; list-style: none; }
+.player-gear li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; align-items: center; }
+.player-gear li > div { min-width: 0; }
+.player-gear b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+.player-gear li > div > span { color: var(--text-muted); font-size: 11px; }
+.player-swaps { margin: 10px 0 0; padding: 8px 0 0; border-top: 1px solid var(--border); list-style: none; display: grid; gap: 4px; }
+.player-swaps li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.player-swaps time { color: var(--text-muted); white-space: nowrap; }
+.player-swaps span { overflow-wrap: anywhere; }
+.player-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; }
+.player-stats > div { background: var(--surface-raised); border-radius: 6px; padding: 5px 6px; text-align: center; font-variant-numeric: tabular-nums; }
+.player-stats dt { font-size: 10px; color: var(--text-muted); letter-spacing: .07em; }
+.player-stats dd { margin: 0; font-size: 14px; font-weight: 700; }
+.player-stats small { font-weight: 400; color: var(--success); font-size: 10px; margin-left: 2px; }
+.player-stats small.player-muted { color: var(--text-muted); }
+.player-stats small.player-danger { color: var(--danger); }
+.player-stats [data-tone="max"] dd { color: var(--gold); }
+.player-meta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 10px 0 0; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.player-meta dt { color: var(--text-muted); }
+.player-meta dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.player-activity { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.player-activity li { display: grid; grid-template-columns: auto 12px minmax(0, 1fr); gap: 6px; align-items: center; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.player-activity time { color: var(--text-muted); white-space: nowrap; }
+.player-activity span { overflow-wrap: anywhere; }
+.player-activity i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+.player-activity [data-kind="death"] i { background: var(--danger); }
+.player-activity [data-kind="first-hit"] i, .player-activity [data-kind="last-hit"] i { background: var(--gold); }
+.player-chart-legend { margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-secondary); }
+.player-chart-legend span::before { content: ''; display: inline-block; width: 14px; margin-right: 5px; vertical-align: middle; }
+.player-line-key::before { border-top: 2px solid var(--gold); }
+.party-line-key::before { border-top: 1.5px dashed var(--violet); }
+.boss-band-key::before { height: 9px; background: color-mix(in srgb, var(--text-primary) 4%, transparent); border: 1px solid var(--border); }
+.player-chart { position: relative; }
+.player-chart svg { display: block; width: 100%; height: 200px; }
+.player-chart-tip { position: absolute; top: 8px; width: 240px; max-width: 100%; box-sizing: border-box; pointer-events: none; background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: 6px; padding: 6px 8px; font-variant-numeric: tabular-nums; box-shadow: var(--elevation-popover); overflow-wrap: anywhere; }
+.player-chart-tip b, .player-chart-tip span { display: block; }
+.player-chart-tip b { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+.player-chart-tip .party-average { color: var(--violet-text); }
+.player-chart-axis { display: flex; justify-content: space-between; margin-top: 3px; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.player-chart-inspect { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
+.player-chart-inspect:focus { position: relative; width: 100%; height: 16px; margin: 4px 0; clip-path: none; accent-color: var(--gold); }
+@media (max-width: 600px) {
+  .player-header .player-switcher { width: 100%; justify-content: flex-end; }
+  .player-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

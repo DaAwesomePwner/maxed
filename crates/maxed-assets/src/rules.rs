@@ -1,6 +1,23 @@
 //! Rules v1, transcribed from RealmShark BundledAreaCatalog and CharacterStatistics.
 //! Unverified Java completion indexes remain unavailable.
-use maxed_types::{AreaKind, BagDef, DungeonDef};
+use maxed_types::{AreaKind, BagDef, DungeonDef, PotionStat};
+
+pub fn potion_stat(name: &str) -> Option<PotionStat> {
+    let name = name.strip_prefix("Greater ").unwrap_or(name);
+    let stat = name.strip_prefix("Potion of ")?;
+    let stat = stat.strip_suffix(" (SB)").unwrap_or(stat);
+    match stat {
+        "Life" => Some(PotionStat::Life),
+        "Mana" => Some(PotionStat::Mana),
+        "Attack" => Some(PotionStat::Attack),
+        "Defense" => Some(PotionStat::Defense),
+        "Speed" => Some(PotionStat::Speed),
+        "Dexterity" => Some(PotionStat::Dexterity),
+        "Vitality" => Some(PotionStat::Vitality),
+        "Wisdom" => Some(PotionStat::Wisdom),
+        _ => None,
+    }
+}
 
 const AREAS: &[(&str, &[&str], AreaKind, Option<u16>)] = &[
     ("Sprite World", &[], AreaKind::Dungeon, Some(10)),

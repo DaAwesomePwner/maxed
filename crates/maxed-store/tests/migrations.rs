@@ -1,5 +1,51 @@
-use maxed_store::{migrate, StoreError};
+use maxed_store::{migrate, StoreError, SCHEMA_VERSION};
 use rusqlite::Connection;
+
+#[test]
+fn every_unconfirmed_file_writer_refuses_legacy_without_changing_bytes() {
+    for version in [2, 6, 10] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("live.sqlite3");
+        let db = Connection::open(&path).unwrap();
+        crate::common::installed_schema::install(&db, version);
+        drop(db);
+        let before = std::fs::read(&path).unwrap();
+        assert!(matches!(
+            maxed_store::upgrade_history(&path),
+            Err(StoreError::HistoryUpgradeRequired)
+        ));
+        assert!(matches!(
+            maxed_store::start_writer(path.clone(), maxed_store::WriterConfig::default()),
+            Err(StoreError::HistoryUpgradeRequired)
+        ));
+        assert!(matches!(
+            maxed_store::maintenance::StoppedMaintenance::open(&path, Default::default()),
+            Err(StoreError::HistoryUpgradeRequired)
+        ));
+        assert!(matches!(
+            maxed_store::maintain_chat_file(&path, maxed_store::ChatMaintenance::Clear),
+            Err(StoreError::HistoryUpgradeRequired)
+        ));
+        assert!(matches!(
+            maxed_store::party_write_file(
+                &path,
+                &maxed_store::PartyWrite::Mark {
+                    key: "synthetic".into(),
+                    name: "Synthetic".into(),
+                    mark: None,
+                    note: None
+                }
+            ),
+            Err(StoreError::HistoryUpgradeRequired)
+        ));
+        assert!(std::fs::read(&path).unwrap() == before);
+        let db = Connection::open(&path).unwrap();
+        assert_eq!(
+            crate::common::installed_schema::user_version(&db),
+            version as i64
+        );
+    }
+}
 
 #[test]
 fn schema_creation_is_idempotent_and_integral() {
@@ -9,7 +55,7 @@ fn schema_creation_is_idempotent_and_integral() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        12
+        SCHEMA_VERSION
     );
     assert_eq!(
         db.query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
@@ -27,7 +73,8 @@ fn schema_creation_is_idempotent_and_integral() {
 #[test]
 fn future_and_tampered_schemas_are_rejected() {
     let mut db = Connection::open_in_memory().unwrap();
-    db.pragma_update(None, "user_version", 13).unwrap();
+    db.pragma_update(None, "user_version", SCHEMA_VERSION + 1)
+        .unwrap();
     assert!(matches!(migrate(&mut db), Err(StoreError::NewerSchema)));
     db.pragma_update(None, "user_version", 0).unwrap();
     migrate(&mut db).unwrap();
@@ -56,7 +103,7 @@ fn unrelated_database_is_untouched() {
 
 fn legacy(path: &std::path::Path) -> Connection {
     let mut db = Connection::open(path).unwrap();
-    migrate(&mut db).unwrap();
+    crate::common::installed_schema::install(&db, 14);
     let snapshot = maxed_types::demo::demo_snapshot();
     let events: Vec<_> = [
         maxed_types::EngineEvent::SessionUpdated(snapshot.session.unwrap()),
@@ -74,8 +121,8 @@ fn legacy(path: &std::path::Path) -> Connection {
         event,
     })
     .collect();
-    maxed_store::apply_batch(&mut db, &events).unwrap();
-    db.execute_batch("DROP TABLE map_visits; DROP INDEX play_sessions_started; DROP TABLE chat_fts; DROP TABLE chat_messages; DROP INDEX drops_source; DROP INDEX runs_dungeon_ended; DROP INDEX drops_id_at; DROP INDEX drops_stats; ALTER TABLE drops DROP COLUMN source_type; DROP TRIGGER pd_player_insert; DROP TRIGGER pd_player_delete; DROP TRIGGER pd_player_update; DROP TRIGGER pd_fight_association; DROP TABLE pd_player_contributions; DROP TABLE pd_run_players; DROP INDEX pd_home_session_runs; DROP INDEX pd_home_today_runs; DROP INDEX pd_run_evidence_kind; DROP INDEX pd_fight_players_totals; DROP INDEX pd_runs_comparison; DROP TABLE event_fts; DROP TABLE instance_events; DROP TABLE alert_occurrences; DROP TABLE personal_bests; DROP INDEX alerts_kind_at; DROP INDEX fights_final_boss; DROP INDEX fights_final_boss_key; DROP INDEX fight_players_identity; DROP INDEX character_aliases_verified; DROP TABLE stream_sessions; DROP INDEX fame_session; DROP INDEX deaths_session;
+    crate::common::apply_legacy_batch(&mut db, &events);
+    db.execute_batch("DROP TABLE party_run_members; DROP TABLE party_players; DROP TABLE player_profiles; DROP TABLE player_gear_log; DROP TABLE scope_timelines; DROP TABLE player_timelines; DROP TABLE map_visits; DROP INDEX play_sessions_started; DROP TABLE chat_fts; DROP TABLE chat_messages; DROP INDEX drops_source; DROP INDEX runs_dungeon_ended; DROP INDEX drops_id_at; DROP INDEX drops_stats; ALTER TABLE drops DROP COLUMN source_type; DROP TRIGGER pd_player_insert; DROP TRIGGER pd_player_delete; DROP TRIGGER pd_player_update; DROP TRIGGER pd_fight_association; DROP TABLE pd_player_contributions; DROP TABLE pd_run_players; DROP INDEX pd_home_session_runs; DROP INDEX pd_home_today_runs; DROP INDEX pd_run_evidence_kind; DROP INDEX pd_fight_players_totals; DROP INDEX pd_runs_comparison; DROP TABLE event_fts; DROP TABLE instance_events; DROP TABLE alert_occurrences; DROP TABLE personal_bests; DROP INDEX alerts_kind_at; DROP INDEX fights_final_boss; DROP INDEX fights_final_boss_key; DROP INDEX fight_players_identity; DROP INDEX character_aliases_verified; DROP TABLE stream_sessions; DROP INDEX fame_session; DROP INDEX deaths_session;
         ALTER TABLE fame_samples DROP COLUMN session_id; ALTER TABLE deaths DROP COLUMN session_id;
         ALTER TABLE drop_items RENAME TO v3_items; DROP INDEX drop_items_type;
         CREATE TABLE drop_items(drop_id TEXT NOT NULL REFERENCES drops(id),slot INTEGER NOT NULL,item_type INTEGER NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),json TEXT NOT NULL,PRIMARY KEY(drop_id,slot));
@@ -105,7 +152,7 @@ fn v1_backfill_is_atomic_and_reopens_as_v8() {
         .query_row("SELECT json FROM fights", [], |r| r.get(0))
         .unwrap();
     db.execute("UPDATE fights SET json='corrupt'", []).unwrap();
-    assert!(maxed_store::upgrade_history(&path).is_err());
+    assert!(crate::common::installed_schema::upgrade_after_confirmation(&path).is_err());
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -121,8 +168,8 @@ fn v1_backfill_is_atomic_and_reopens_as_v8() {
         0
     );
     db.execute("UPDATE fights SET json=?1", [original]).unwrap();
-    maxed_store::upgrade_history(&path).unwrap();
-    maxed_store::upgrade_history(&path).unwrap();
+    crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
+    crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
     let reader = maxed_store::open_reader(&path).unwrap();
     let story = reader.get_run("demo-run").unwrap().unwrap();
     assert_eq!(story.fights.len(), 1);
@@ -152,14 +199,30 @@ fn v1_backfill_is_atomic_and_reopens_as_v8() {
 }
 
 #[test]
-fn upgrade_never_creates_absent_or_initializes_version_zero_database() {
+fn upgrade_never_creates_absent_and_initializes_only_empty_version_zero() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("absent");
     assert!(maxed_store::upgrade_history(&path).is_err());
     assert!(!path.exists());
-    let _db = Connection::open(&path).unwrap();
-    assert!(maxed_store::upgrade_history(&path).is_err());
-    assert!(maxed_store::open_reader(&path).is_err());
+    drop(Connection::open(&path).unwrap());
+    maxed_store::upgrade_history(&path).unwrap();
+    assert_eq!(
+        maxed_store::open_reader(&path)
+            .unwrap()
+            .user_version()
+            .unwrap(),
+        maxed_store::SCHEMA_VERSION
+    );
+    let unknown = dir.path().join("unknown");
+    let db = Connection::open(&unknown).unwrap();
+    db.execute_batch("CREATE TABLE unrecognized_history(value TEXT)")
+        .unwrap();
+    assert!(maxed_store::upgrade_history(&unknown).is_err());
+    assert_eq!(
+        db.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
 }
 
 #[test]
@@ -178,7 +241,7 @@ fn large_legacy_backfill_is_measured_separately_from_summary_reads() {
     }
     tx.commit().unwrap();
     let start = std::time::Instant::now();
-    maxed_store::upgrade_history(&path).unwrap();
+    crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
     eprintln!(
         "synthetic legacy backfill, 3000 fights: {:?}",
         start.elapsed()
@@ -250,7 +313,7 @@ fn cold_v2_upgrade_backfills_only_unambiguous_sessions_and_preserves_checksums()
     // Corrupt legacy JSON must roll back the entire v3 DDL and retain v2.
     db.execute("UPDATE drop_items SET json='corrupt'", [])
         .unwrap();
-    assert!(maxed_store::upgrade_history(&path).is_err());
+    assert!(crate::common::installed_schema::upgrade_after_confirmation(&path).is_err());
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -279,13 +342,13 @@ fn cold_v2_upgrade_backfills_only_unambiguous_sessions_and_preserves_checksums()
         maxed_store::open_reader(&path),
         Err(StoreError::Migration)
     ));
-    maxed_store::upgrade_history(&path).unwrap();
-    maxed_store::upgrade_history(&path).unwrap();
+    crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
+    crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
     let db = Connection::open(&path).unwrap();
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        12
+        SCHEMA_VERSION
     );
     assert_eq!(db.query_row("SELECT group_concat(checksum) FROM schema_migrations WHERE version<=2 ORDER BY version",[],|r|r.get::<_,String>(0)).unwrap(),checksum);
     for table in ["fame_samples", "deaths"] {
@@ -401,7 +464,7 @@ fn large_v2_backfill_is_measured_separately_from_home_reads() {
     tx.commit().unwrap();
     drop(db);
     let start = std::time::Instant::now();
-    maxed_store::upgrade_history(&path).unwrap();
+    crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
     let elapsed = start.elapsed();
     eprintln!("cold v2->v3: 3000 sessions, 10000 runs, 40000 drops/items, 300000 fame samples, 20000 deaths: {elapsed:?}");
     let db = Connection::open(&path).unwrap();
@@ -529,7 +592,7 @@ fn cold_v2_preserves_run_deaths_and_open_session_tails() {
         .unwrap();
     }
     drop(db);
-    maxed_store::upgrade_history(&path).unwrap();
+    crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
     let db = Connection::open(&path).unwrap();
     for table in ["fame_samples", "deaths"] {
         let actual = db
@@ -577,7 +640,7 @@ fn cold_v2_equal_start_open_sessions_remain_ambiguous() {
     db.execute_batch("INSERT INTO play_sessions VALUES('a',100,110,NULL,'{}'),('b',100,120,NULL,'{}'),('next',300,310,NULL,'{}');
         INSERT INTO deaths VALUES('legacy',1,NULL,NULL,250),('legacy',2,NULL,NULL,300),('legacy',3,NULL,NULL,9223372036854775807);").unwrap();
     drop(db);
-    maxed_store::upgrade_history(&path).unwrap();
+    crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
     let db = Connection::open(&path).unwrap();
     let actual = db
         .prepare("SELECT session_id FROM deaths ORDER BY sequence")

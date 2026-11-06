@@ -21,7 +21,7 @@ Tauri from the application's identifier. The app's managed data includes:
 
 | Location within that directory | Contents |
 | --- | --- |
-| `settings.json` | Selected adapter and local game asset path, alert preferences, `chat` channel toggles, retention and hide lists, Loot chase list, recording choice and limit, hardware acceleration choice and update channel. |
+| `settings.json` | Selected adapter and local game asset path, alert preferences, `chat` channel toggles, retention and hide lists, Loot chase list, Party requirement presets, recording choice and limit, hardware acceleration choice and update channel. |
 | `live.sqlite3` | Local character observations, sessions, runs, fights and player summaries, drop observations, fame/death records, timelines, chat messages and alert history. Fight summaries, chat and stored instance events (`instance_events.json`) include other players' names and data; see [other players' data](#other-players-data). |
 | `demo.sqlite3`, `replay.sqlite3` | Separate history namespaces for demo and replay when used. |
 | `recordings/` | Opt-in raw traffic recordings and recording ownership metadata. |
@@ -59,22 +59,40 @@ already keeps:
   chat is shown in the Logs tab. Demo and replay chat is kept in their own
   databases.
 
+Other players' observed gear, stats, stars, fame, skin and guild name are stored
+for players seen in a dungeon run, and outside runs only for players who dealt
+damage. Outside dungeon runs, players who never fought are shown in the live
+Party roster but their profiles are not stored. These profiles have no age-based
+cleanup. Party links players across sessions by name: text before the first comma,
+ASCII-lowercased. A renamed player starts new history. Watch/Ban marks and private
+notes are stored locally; deliberately saving a mark or note can create a history
+entry for a player who has not fought.
+
 Fight summaries and instance events have no age-based cleanup; they are kept
 with the rest of your history. **Stats** CSV exports can include other players'
 names from your runs. Exports are files you choose to save; treat them like the
 rest of your local data.
 
-Planned tabs add more (see the [roadmap](docs/roadmap.md)):
+Party is behind the `party` feature flag, on in production.
+Cross-run Party history is recorded even when the Party tab is disabled.
+On upgrade, migration 014 links history from past runs by name.
+**Clear party history**, available in Settings and in Party › Players when the tab
+is enabled, removes Party history and other players' stored profiles,
+gear logs and DPS timelines. Marks and notes are kept unless **Also clear marks
+and notes** is ticked. Keeping marks and notes also keeps each marked or noted
+player's name and first and last seen times. Their last profile, scope and map
+are removed. Your own data, runs and their damage summaries, chat and
+events are untouched. Surviving run evidence can still populate a saved-run view;
+an open run's members are stored again when it ends.
 
-- **Party / Parse** will store the gear and stats of players in your instance
-  and link them across sessions by name, so you can see players you've met
-  before. This history is kept until you clear it.
+**Open on RealmEye** is a user-initiated browser handoff. It opens the player's
+profile in your default browser through the system `explorer.exe`, sending that
+player's name to RealmEye from your browser. Maxed itself makes no request.
 
-Apart from exports you save, this data stays in the local database. Maxed does
-not upload it or write it to diagnostic logs, and it is excluded from committed
-fixtures. Do not paste chat, player names or other players' gear into public
-issues. This section is updated when each tab
-ships with its exact storage and controls.
+Apart from exports you save and the explicit RealmEye browser handoff, this data
+stays in the local database. Maxed does not upload it or write it to diagnostic
+logs, and it is excluded from committed fixtures. Do not paste chat, player names
+or other players' gear into public issues.
 
 ## Recordings
 

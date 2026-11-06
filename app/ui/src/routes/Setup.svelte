@@ -7,6 +7,8 @@
   import AssetsControl from '../lib/setup/AssetsControl.svelte';
   import AdapterControl from '../lib/settings/AdapterControl.svelte';
   import { createSetupSession } from '../lib/setup/session';
+  import HistoryUpgrade from '../lib/setup/HistoryUpgrade.svelte';
+  import { historyRunning } from '../lib/settings/storage-state';
   import { npcapText, setupProgress } from '../lib/setup/presentation';
   import { captureLabels } from '../lib/shell/rail';
   let { client, preview = false }: { client: Client; preview?: boolean } = $props();
@@ -39,10 +41,12 @@
     })();
     return () => { disposed = true; release?.(); };
   });
-  let checkUnavailable = $derived(preview || $session.busy || $session.extracting || active || restartRequired || $session.setup?.npcap !== 'compatible');
+  let upgrading = $derived($session.upgrading || historyRunning($session.history));
+  let historyUnavailable = $derived(upgrading || $session.historyChecking || $session.history?.phase !== 'ready');
+  let checkUnavailable = $derived(historyUnavailable || preview || $session.busy || $session.extracting || active || restartRequired || $session.setup?.npcap !== 'compatible');
   let adapterUnavailable = $derived(preview || $session.busy || $session.extracting || !$session.settings || !!$session.errors.settings);
-  let startUnavailable = $derived(preview || $session.busy || $session.extracting || active || !$session.capture || restartRequired);
-  let stopUnavailable = $derived(preview || $session.busy || !$session.capture || $session.capture.state === 'Stopped' || restartRequired);
+  let startUnavailable = $derived(historyUnavailable || preview || $session.busy || $session.extracting || active || !$session.capture || restartRequired);
+  let stopUnavailable = $derived(upgrading || preview || $session.busy || !$session.capture || $session.capture.state === 'Stopped' || restartRequired);
   async function applyAdapter() {
     if (adapterUnavailable) return;
     const accepted = await session.action(() => client.setAdapter(adapter || null), 'Couldn’t change adapter. Retry.');
@@ -53,6 +57,7 @@
 <div class="setup-page">
   {#if preview || $session.setup?.demo}<p class="notice">Demo</p>{/if}
   <p class="error-summary" role="alert" aria-atomic="true">{errorText}</p>
+  <HistoryUpgrade {session} {preview} />
   <div class="actions">
     <button onclick={() => session.refreshSetup({ retry: true })}>Retry Checks</button>
     {#if $session.errors.settings}<button onclick={() => session.refreshSettings()}>Retry Settings</button>{/if}

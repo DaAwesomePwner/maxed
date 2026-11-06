@@ -54,17 +54,18 @@ function StepSecretFailures($step, [bool]$allowSigning) {
 function Keys($value) { return (@($value.PSObject.Properties.Name | Sort-Object) -join ',') }
 function Failures($release, $manual, $codeql) {
     if ((@($release.on.PSObject.Properties.Name) -join ',') -cne 'push' -or (@($release.on.push.PSObject.Properties.Name) -join ',') -cne 'tags' -or (@($release.on.push.tags) -join ',') -cne 'v*') { 'release_events' }
-    if ((Keys $manual.on) -cne 'pull_request,push,workflow_call,workflow_dispatch' -or
+    if ((Keys $manual.on) -cne 'pull_request,schedule,workflow_call,workflow_dispatch' -or
         (Keys $manual.on.pull_request) -cne 'branches' -or (@($manual.on.pull_request.branches) -join ',') -cne 'main' -or
-        (Keys $manual.on.push) -cne 'branches' -or (@($manual.on.push.branches) -join ',') -cne 'main' -or
+        @($manual.on.schedule).Count -ne 1 -or
+        (Keys $manual.on.schedule[0]) -cne 'cron' -or $manual.on.schedule[0].cron -cne '17 9 * * *' -or
         (Keys $manual.on.workflow_dispatch) -cne '') { 'tests_events' }
     if ((Keys $manual.on.workflow_call) -cne 'inputs' -or (Keys $manual.on.workflow_call.inputs) -cne 'release' -or
         (Keys $manual.on.workflow_call.inputs.release) -cne 'default,description,type' -or
         $manual.on.workflow_call.inputs.release.type -cne 'boolean' -or
         $manual.on.workflow_call.inputs.release.default -cne $false) { 'reusable_inputs' }
     if ((Keys $manual.jobs) -cne 'tests' -or
-        $manual.jobs.tests.if -cne "github.event_name == 'workflow_dispatch' || format('{0}', github.event.repository.private) == 'false' || inputs.release == true") { 'private_gate' }
-    if ((Keys $manual.jobs.tests) -cne 'defaults,if,runs-on,steps,timeout-minutes' -or
+        'if' -in $manual.jobs.tests.PSObject.Properties.Name) { 'fork_pr_guard' }
+    if ((Keys $manual.jobs.tests) -cne 'defaults,runs-on,steps,timeout-minutes' -or
         (Keys $manual.jobs.tests.defaults) -cne 'run' -or (Keys $manual.jobs.tests.defaults.run) -cne 'shell' -or
         $manual.jobs.tests.defaults.run.shell -cne 'pwsh') { 'tests_job_shape' }
     if ($manual.concurrency.group -cne 'tests-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}' -or
@@ -73,7 +74,7 @@ function Failures($release, $manual, $codeql) {
         (@($release.jobs.package.needs) -join ',') -cne 'tests' -or
         (Keys $release.jobs.tests) -cne 'if,uses,with' -or
         $release.jobs.tests.uses -cne './.github/workflows/tests.yml' -or
-        $release.jobs.tests.if -cne "github.repository == 'DaAwesomePwner/maxed-rotmg' && github.ref_type == 'tag'" -or
+        $release.jobs.tests.if -cne "github.repository == 'daplabs/maxed' && github.ref_type == 'tag'" -or
         (Keys $release.jobs.tests.with) -cne 'release' -or $release.jobs.tests.with.release -cne $true) { 'release_tests' }
     if ((Keys $codeql.on) -cne 'pull_request,push,schedule' -or (Keys $codeql.on.pull_request) -cne 'branches' -or
         (Keys $codeql.on.push) -cne 'branches' -or (@($codeql.on.push.branches) -join ',') -cne 'main' -or
@@ -94,7 +95,10 @@ function Failures($release, $manual, $codeql) {
             if ([object]::ReferenceEquals($job, $release.jobs.tests)) { continue }
             $isCodeql = [object]::ReferenceEquals($w, $codeql) -and [object]::ReferenceEquals($job, $codeql.jobs.analyze)
             $runner = if ($isCodeql) { 'ubuntu-24.04' } else { 'windows-2022' }
-            if ($job.'runs-on' -cne $runner -or $job.'timeout-minutes' -ne 45 -or $job.env -or $job.secrets -or $job.uses) { 'job_policy' }
+            if ($job.'runs-on' -isnot [string] -or $job.'runs-on' -cne $runner) { 'job_policy' }
+            # Hosted runners need longer for the full test job; every other job keeps 45 minutes.
+            $timeout = if ([object]::ReferenceEquals($job, $manual.jobs.tests)) { 90 } else { 45 }
+            if ($job.'timeout-minutes' -ne $timeout -or $job.env -or $job.secrets -or $job.uses) { 'job_policy' }
             # Only CodeQL may upload security results; all repository contents stay read-only.
             if ($isCodeql) {
                 if ((Keys $job.permissions) -cne 'contents,security-events' -or $job.permissions.contents -cne 'read' -or
@@ -102,7 +106,7 @@ function Failures($release, $manual, $codeql) {
             } elseif ($job.permissions) { 'permissions' }
             if (-not [object]::ReferenceEquals($job, $release.jobs.package) -and $job.environment) { 'secret_scope' }
             foreach ($step in $job.steps) {
-                $pin = if ($isCodeql) { '\A(actions/checkout|github/codeql-action/(init|analyze))@[a-f0-9]{40}\z' } else { '\Aactions/(checkout|setup-node|upload-artifact)@[a-f0-9]{40}\z' }
+                $pin = if ($isCodeql) { '\A(actions/checkout|github/codeql-action/(init|analyze))@[a-f0-9]{40}\z' } else { '\Aactions/(checkout|setup-node|upload-artifact|cache/restore|cache/save)@[a-f0-9]{40}\z' }
                 if ($step.uses -and $step.uses -cnotmatch $pin) { 'action_pin' }
                 if ($step.uses -like 'actions/checkout@*' -and $step.with.'persist-credentials' -cne $false) { 'checkout_credentials' }
                 $allowSigning = [object]::ReferenceEquals($w, $release) -and [object]::ReferenceEquals($job, $release.jobs.package) -and $step.name -ceq 'Package and sign'
@@ -114,17 +118,32 @@ function Failures($release, $manual, $codeql) {
         }
     }
     $names = @($manual.jobs.tests.steps | ForEach-Object { $_.name })
-    $expectedNames = @('', '') + @($script:testCommands.Keys)
+    $expectedNames = @('', '', 'Restore Rust cache') + @($script:testCommands.Keys) + @('Prune Rust cache', 'Save Rust cache')
     if ($names.Count -ne $expectedNames.Count -or ($names -join '|') -cne ($expectedNames -join '|')) { 'tests_step_order' }
     for ($i = 0; $i -lt $manual.jobs.tests.steps.Count; $i++) {
         $step = $manual.jobs.tests.steps[$i]
-        if ('continue-on-error' -in $step.PSObject.Properties.Name -or 'if' -in $step.PSObject.Properties.Name) { 'tests_step_policy' }
+        # Only cache management is conditional; every test step must run.
+        $expectedIf = switch -CaseSensitive ($step.name) {
+            'Restore Rust cache' { $script:cacheRestoreIf }
+            'Prune Rust cache' { $script:cacheSaveIf }
+            'Save Rust cache' { $script:cacheSaveIf }
+        }
+        if ('continue-on-error' -in $step.PSObject.Properties.Name -or
+            ('if' -in $step.PSObject.Properties.Name -and -not $expectedIf) -or
+            ($expectedIf -and $step.if -cne $expectedIf)) { 'tests_step_policy' }
         if ($i -lt 2) {
             $action = @('checkout', 'setup-node')[$i]
             $withKey = @('persist-credentials', 'node-version')[$i]
             if ((Keys $step) -cne 'uses,with' -or $step.uses -cnotmatch "\Aactions/$action@[a-f0-9]{40}\z" -or
                 (Keys $step.with) -cne $withKey) { 'tests_step_shape' }
             if ($i -eq 1 -and $step.with.'node-version' -cne '22.16.0') { 'tests_step_shape' }
+        } elseif ($step.name -cin @('Restore Rust cache', 'Save Rust cache')) {
+            $kind = if ($step.name -ceq 'Restore Rust cache') { 'restore' } else { 'save' }
+            if ((Keys $step) -cne 'if,name,uses,with' -or $step.uses -cnotmatch "\Aactions/cache/$kind@[a-f0-9]{40}\z" -or (Keys $step.with) -cne 'key,path' -or
+                $step.with.path -cne $script:cachePath -or $step.with.key -cne $script:cacheKey) { 'rust_cache' }
+        } elseif ($step.name -ceq 'Prune Rust cache') {
+            if ((Keys $step) -cne 'if,name,run') { 'tests_step_shape' }
+            if ($step.run -cne $script:pruneCommand) { 'tests_commands' }
         } else {
             if ((Keys $step) -cne 'name,run') { 'tests_step_shape' }
             if ($step.name -cnotin $script:testCommands.Keys -or $step.run -cne $script:testCommands[$step.name]) { 'tests_commands' }
@@ -142,12 +161,79 @@ function Failures($release, $manual, $codeql) {
     if ($validateIndex -lt 0 -or $packageIndex -lt 0 -or $validateIndex -ge $packageIndex) { 'validation_order' }
     # Exact guard excludes status functions (always/failure/!cancelled), preserving
     # Actions' implicit success() requirement for the tests dependency.
-    if ($release.jobs.package.if -cne "github.repository == 'DaAwesomePwner/maxed-rotmg' && github.ref_type == 'tag'") { 'release_guard' }
-    # Builds run in the private repository; metadata must name the public one the updater pins.
+    if ($release.jobs.package.if -cne "github.repository == 'daplabs/maxed' && github.ref_type == 'tag'") { 'release_guard' }
+    # Builds and updater metadata must use the same public repository.
     $coordinates = @($release.jobs.package.steps | ForEach-Object { [regex]::Matches([string]$_.run, "-Repository '([^']*)'") } | ForEach-Object { $_.Groups[1].Value })
     if ($coordinates.Count -ne 2 -or @($coordinates | Where-Object { $_ -cne $script:updaterRepository }).Count) { 'distribution_repository' }
     $upload = @($release.jobs.package.steps | Where-Object { $_.uses -like 'actions/upload-artifact@*' })
     if ($upload.Count -ne 1 -or $upload[0].with.path -cne 'release-stage/' -or $upload[0].with.'retention-days' -ne 3 -or $upload[0].with.'if-no-files-found' -cne 'error') { 'upload_allowlist' }
+    # Signed packages are always built from scratch: no build cache in the signing job.
+    if (@($release.jobs.package.steps | Where-Object { $_.uses -like 'actions/cache*' }).Count) { 'signing_cache' }
+}
+function GuiFailures($gui) {
+    if ((Keys $gui) -cne 'concurrency,jobs,name,on,permissions') { 'gui_workflow_shape' }
+    if ((Keys $gui.on) -cne 'pull_request,schedule,workflow_dispatch' -or
+        @($gui.on.schedule).Count -ne 1 -or
+        (Keys $gui.on.schedule[0]) -cne 'cron' -or $gui.on.schedule[0].cron -cne '47 9 * * *' -or
+        (Keys $gui.on.pull_request) -cne 'branches' -or (@($gui.on.pull_request.branches) -join ',') -cne 'main' -or
+        (Keys $gui.on.workflow_dispatch) -cne '') { 'gui_events' }
+    if ((Keys $gui.permissions) -cne 'contents' -or $gui.permissions.contents -cne 'read') { 'gui_permissions' }
+    if ((Keys $gui.jobs) -cne 'gui-smoke') { 'gui_job_shape' }
+    $job = $gui.jobs.'gui-smoke'
+    if ($job.'runs-on' -isnot [string] -or $job.'runs-on' -cne 'windows-2022') { 'gui_runner' }
+    if ($job.'timeout-minutes' -ne 45) { 'gui_timeout' }
+    if ('if' -in $job.PSObject.Properties.Name) { 'gui_fork_guard' }
+    if ((Keys $job) -cne 'defaults,runs-on,steps,timeout-minutes' -or
+        (Keys $job.defaults) -cne 'run' -or (Keys $job.defaults.run) -cne 'shell' -or
+        $job.defaults.run.shell -cne 'pwsh') { 'gui_job_shape' }
+    if ('permissions' -in $job.PSObject.Properties.Name) { 'gui_permissions' }
+    foreach ($scope in @($gui, $job) + @($job.steps)) {
+        foreach ($field in @('env', 'secrets', 'environment')) {
+            if ($field -in $scope.PSObject.Properties.Name) { 'gui_scope' }
+        }
+    }
+    foreach ($leaf in @(Leaves $gui '')) {
+        if ((HasSecretExpression $leaf.Value) -or ($leaf.Path + $leaf.Value).IndexOf('TAURI_SIGNING', [StringComparison]::OrdinalIgnoreCase) -ge 0) { 'gui_secrets' }
+    }
+    if ((Keys $gui.concurrency) -cne 'cancel-in-progress,group' -or
+        $gui.concurrency.group -cne 'gui-smoke-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}' -or
+        $gui.concurrency.'cancel-in-progress' -cne '${{ github.event_name == ''pull_request'' }}') { 'gui_concurrency' }
+    $names = @($job.steps | ForEach-Object { $_.name })
+    $expectedNames = @('', '') + @($script:guiCommands.Keys) + @('')
+    if ($names.Count -ne $expectedNames.Count -or ($names -join '|') -cne ($expectedNames -join '|')) { 'gui_step_order' }
+    foreach ($step in $job.steps) {
+        $expectedIf = switch -CaseSensitive ($step.name) {
+            'Ensure GUI smoke stopped' { 'always()' }
+        }
+        if ($step.uses -like 'actions/upload-artifact@*') { $expectedIf = 'always()' }
+        if ('continue-on-error' -in $step.PSObject.Properties.Name -or
+            ('if' -in $step.PSObject.Properties.Name -and -not $expectedIf) -or
+            ($expectedIf -and $step.if -cne $expectedIf)) { 'gui_step_policy' }
+        if ($step.uses) {
+            if ($step.uses -cnotin $script:guiPins) { 'gui_action_pin' }
+            if ($step.uses -like 'actions/checkout@*') {
+                if ((Keys $step) -cne 'uses,with' -or (Keys $step.with) -cne 'persist-credentials' -or
+                    $step.with.'persist-credentials' -cne $false) { 'gui_checkout' }
+            } elseif ($step.uses -like 'actions/setup-node@*') {
+                if ((Keys $step) -cne 'uses,with' -or (Keys $step.with) -cne 'node-version' -or
+                    $step.with.'node-version' -cne '22.16.0') { 'gui_node' }
+            } elseif ($step.uses -like 'actions/upload-artifact@*') {
+                if ((Keys $step) -cne 'if,uses,with' -or (Keys $step.with) -cne 'if-no-files-found,include-hidden-files,name,path,retention-days' -or
+                    $step.with.path -cne '${{ runner.temp }}/gui-smoke-${{ github.run_id }}-${{ github.run_attempt }}/' -or
+                    $step.with.name -cne 'gui-smoke-${{ github.run_id }}-${{ github.run_attempt }}' -or
+                    $step.with.'if-no-files-found' -cne 'warn' -or $step.with.'retention-days' -ne 3 -or
+                    $step.with.'include-hidden-files' -cne $false) { 'gui_upload' }
+            }
+        } else {
+            $shape = if ($expectedIf) { 'if,name,run' } else { 'name,run' }
+            if ((Keys $step) -cne $shape) { 'gui_step_shape' }
+            if ($step.name -cnotin $script:guiCommands.Keys -or $step.run -cne $script:guiCommands[$step.name]) { 'gui_commands' }
+        }
+    }
+    # Exact action positions/counts prevent an upload or checkout replacement
+    # from satisfying the unnamed entries in the name/order check.
+    if ($job.steps.Count -ne 7 -or $job.steps[0].uses -cne $script:guiPins[0] -or
+        $job.steps[1].uses -cne $script:guiPins[1] -or $job.steps[-1].uses -cne $script:guiPins[2]) { 'gui_action_order' }
 }
 $script:bindingsCommand = @'
 git diff --exit-code HEAD -- app/ui/src/lib/bindings app/ui/tests/fixtures crates/maxed-types/tests/fixtures/p1-demo.json
@@ -161,6 +247,16 @@ pwsh -NoProfile -File tests/performance/memory-tooling.test.ps1
 if ($LASTEXITCODE) { throw 'Memory tooling test failed.' }
 pwsh -NoProfile -File tests/performance/p4-memory-profile.test.ps1
 if ($LASTEXITCODE) { throw 'P4 memory profile test failed.' }
+'@ -replace "`r`n", "`n"
+# Hosted Rust cache: saved only by a passing run on main.
+$script:cachePath = "~/.cargo/registry/index`n~/.cargo/registry/cache`n~/.cargo/git/db`ntarget"
+$script:cacheKey = 'rust-${{ runner.os }}-${{ hashFiles(''rust-toolchain.toml'', ''Cargo.lock'') }}'
+$script:cacheRestoreIf = "runner.environment == 'github-hosted'"
+$script:cacheSaveIf = "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'"
+$script:pruneCommand = @'
+Remove-Item -LiteralPath target/debug/incremental -Recurse -Force -ErrorAction SilentlyContinue
+Get-ChildItem target/debug/deps, target/debug/.fingerprint, target/debug/build -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*maxed*' -or $_.Extension -in @('.exe', '.pdb') } | Remove-Item -Recurse -Force
+Get-ChildItem target/debug -File -ErrorAction SilentlyContinue | Remove-Item -Force
 '@ -replace "`r`n", "`n"
 # Independently pinned commands: never derive this baseline from the workflow under test.
 $script:testCommands = [ordered]@{
@@ -182,8 +278,6 @@ if ($LASTEXITCODE) { throw 'Rust tests failed.' }
 '@ -replace "`r`n", "`n"
     'Bindings freshness' = $script:bindingsCommand
     'Perf feature compile' = @'
-cargo check --offline --locked -p maxed-app --all-targets --features perf-live
-if ($LASTEXITCODE) { throw 'Perf feature check failed.' }
 cargo clippy --offline --locked -p maxed-app --all-targets --features perf-live -- -D warnings
 if ($LASTEXITCODE) { throw 'Perf feature clippy failed.' }
 '@ -replace "`r`n", "`n"
@@ -199,32 +293,99 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/performance/home-scena
 if ($LASTEXITCODE) { throw 'Scenario collector self-test failed.' }
 '@ -replace "`r`n", "`n"
 }
+$script:guiPins = @(
+    'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
+    'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1',
+    'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
+)
+$script:guiOutputCommand = '$output = Join-Path $env:RUNNER_TEMP ("gui-smoke-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)")'
+$script:guiCommands = [ordered]@{
+    'Restore locked tools' = @'
+$channel = [regex]::Match((Get-Content rust-toolchain.toml -Raw), '(?m)^channel\s*=\s*"([^"]+)"\s*$')
+if (-not $channel.Success) { throw 'Rust toolchain channel missing.' }
+$toolchain = $channel.Groups[1].Value
+rustup toolchain install $toolchain --profile minimal --component rustfmt --component clippy
+if ($LASTEXITCODE) { throw 'Rust restore failed.' }
+npm.cmd ci --prefix app/ui --no-audit --no-fund
+if ($LASTEXITCODE) { throw 'UI restore failed.' }
+cargo fetch --locked
+if ($LASTEXITCODE) { throw 'Cargo restore failed.' }
+'@ -replace "`r`n", "`n"
+    'Harness unit tests' = @'
+node --test tests/gui-smoke/*.test.mjs
+if ($LASTEXITCODE) { throw 'CDP harness tests failed.' }
+pwsh -NoProfile -File tests/gui-smoke/Invoke-GuiSmoke.test.ps1
+if ($LASTEXITCODE) { throw 'GUI launcher tests failed.' }
+'@ -replace "`r`n", "`n"
+    'Build and run GUI smoke' = $script:guiOutputCommand + "`n" + (@'
+pwsh -NoProfile -File tests/gui-smoke/Invoke-GuiSmoke.ps1 -Port 9238 -TimeoutSeconds 60 -OutputDir $output
+if ($LASTEXITCODE) { throw 'GUI smoke failed.' }
+'@ -replace "`r`n", "`n")
+    'Ensure GUI smoke stopped' = $script:guiOutputCommand + "`n" + (@'
+pwsh -NoProfile -File tests/gui-smoke/Invoke-GuiSmoke.ps1 -CleanupOnly -OutputDir $output
+if ($LASTEXITCODE) { throw 'GUI smoke cleanup failed.' }
+'@ -replace "`r`n", "`n")
+}
 $pin = [regex]::Match((Get-Content "$root/app/src-tauri/src/updater/mod.rs" -Raw), 'pub const REPOSITORY: &str = "([^"]+)";')
 if (-not $pin.Success) { throw 'Updater repository constant not found.' }
 $script:updaterRepository = $pin.Groups[1].Value
+Assert ($script:updaterRepository -ceq 'daplabs/maxed') 'updater pins the public source repository'
 $codeqlText = Get-Content "$root/.github/workflows/codeql.yml" -Raw
 $c = $codeqlText | ConvertFrom-Json
 $releaseText = Get-Content "$root/.github/workflows/release.yml" -Raw
 $manualText = Get-Content "$root/.github/workflows/tests.yml" -Raw
 $r = $releaseText | ConvertFrom-Json; $m = $manualText | ConvertFrom-Json
-Assert (@(Failures $r $m $c).Count -eq 0) 'workflow events, billing gates, release dependency and policy positive control'
+Assert (@(Failures $r $m $c).Count -eq 0) 'workflow events, runner isolation, release dependency and policy positive control'
 $perfStep = @($m.jobs.tests.steps | Where-Object name -CEQ 'Perf feature compile')
-Assert ($perfStep.Count -eq 1 -and $perfStep[0].run.Contains('cargo check --offline --locked -p maxed-app --all-targets --features perf-live')) 'test workflow compiles the perf-only driver offline'
+Assert ($perfStep.Count -eq 1 -and $perfStep[0].run.Contains('cargo clippy --offline --locked -p maxed-app --all-targets --features perf-live')) 'test workflow lints the perf-only driver offline'
+$stepNamed = { param($m, $name) @($m.jobs.tests.steps | Where-Object name -CEQ $name)[0] }
 foreach ($case in @(
+    @{ want = 'job_policy'; mutate = { param($r,$m) $m.jobs.tests.'runs-on' = @('self-hosted', 'windows', 'nuc', 'build') } },
+    @{ want = 'job_policy'; mutate = { param($r,$m) $m.jobs.tests.'runs-on' = 'windows-latest' } },
+    @{ want = 'job_policy'; mutate = { param($r,$m) $m.jobs.tests.'runs-on' = @('self-hosted', 'windows', 'build') } },
+    @{ want = 'job_policy'; mutate = { param($r,$m) $m.jobs.tests.'runs-on' = @('self-hosted', 'windows', 'nuc') } },
+    @{ want = 'job_policy'; mutate = { param($r,$m) $m.jobs.tests.'runs-on' = @('self-hosted', 'windows', 'build', 'nuc') } },
+    @{ want = 'job_policy'; mutate = { param($r,$m) $m.jobs.tests.'runs-on' = 'self-hosted,windows,nuc,build' } },
+    @{ want = 'job_policy'; mutate = { param($r,$m) $m.jobs.tests.'timeout-minutes' = 60 } },
+    @{ want = 'job_policy'; mutate = { param($r,$m) $m.jobs.tests.'timeout-minutes' = 45 } },
+    @{ want = 'job_policy'; mutate = { param($r,$m) $r.jobs.package.'timeout-minutes' = 90 } },
+    @{ want = 'job_policy'; mutate = { param($r,$m) $r.jobs.package.'runs-on' = @('self-hosted', 'windows', 'nuc', 'build') } },
+    @{ want = 'tests_step_policy'; mutate = { param($r,$m) (& $stepNamed $m 'Restore Rust cache').PSObject.Properties.Remove('if') } },
+    @{ want = 'tests_step_policy'; mutate = { param($r,$m) (& $stepNamed $m 'Prune Rust cache').if = "github.ref == 'refs/heads/main'" } },
+    @{ want = 'tests_step_policy'; mutate = { param($r,$m) (& $stepNamed $m 'Save Rust cache').if = "github.ref == 'refs/heads/main'" } },
+    @{ want = 'rust_cache'; mutate = { param($r,$m) (& $stepNamed $m 'Restore Rust cache').with.key = 'rust-${{ runner.os }}' } },
+    @{ want = 'rust_cache'; mutate = { param($r,$m) (& $stepNamed $m 'Save Rust cache').with.key = 'rust-${{ github.sha }}' } },
+    @{ want = 'rust_cache'; mutate = { param($r,$m) (& $stepNamed $m 'Save Rust cache').with.path += "`n~/.cargo/bin" } },
+    @{ want = 'rust_cache'; mutate = { param($r,$m) (& $stepNamed $m 'Restore Rust cache').with | Add-Member 'restore-keys' 'rust-' } },
+    @{ want = 'rust_cache'; mutate = { param($r,$m) $s = & $stepNamed $m 'Restore Rust cache'; $s.uses = $s.uses.Replace('cache/restore@', 'cache/save@') } },
+    @{ want = 'action_pin'; mutate = { param($r,$m) (& $stepNamed $m 'Restore Rust cache').uses = 'actions/cache/restore@v6' } },
+    @{ want = 'tests_step_policy'; mutate = { param($r,$m) (& $stepNamed $m 'Save Rust cache').if = "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main'" } },
+    @{ want = 'tests_step_policy'; mutate = { param($r,$m) (& $stepNamed $m 'Save Rust cache').if = "runner.environment == 'github-hosted' && (github.ref == 'refs/heads/main' || github.event_name == 'pull_request')" } },
+    @{ want = 'tests_step_policy'; mutate = { param($r,$m) (& $stepNamed $m 'Save Rust cache').if = 'always()' } },
+    @{ want = 'tests_step_policy'; mutate = { param($r,$m) (& $stepNamed $m 'Save Rust cache').PSObject.Properties.Remove('if') } },
+    @{ want = 'tests_step_policy'; mutate = { param($r,$m) (& $stepNamed $m 'Prune Rust cache').if = "startsWith(github.ref, 'refs/tags/')" } },
+    @{ want = 'tests_commands'; mutate = { param($r,$m) (& $stepNamed $m 'Prune Rust cache').run += "`nRemove-Item -Recurse -Force target" } },
+    @{ want = 'tests_step_order'; mutate = { param($r,$m) $m.jobs.tests.steps = @($m.jobs.tests.steps | Where-Object name -CNE 'Restore Rust cache') } },
+    @{ want = 'tests_step_order'; mutate = { param($r,$m) $m.jobs.tests.steps = @($m.jobs.tests.steps | Where-Object name -CNE 'Save Rust cache') } },
+    @{ want = 'secret_scope'; mutate = { param($r,$m) (& $stepNamed $m 'Save Rust cache').with.key += '-${{ secrets.OTHER }}' } },
+    @{ want = 'signing_cache'; mutate ={ param($r,$m) $r.jobs.package.steps = @($r.jobs.package.steps[0..1]) + @(& $stepNamed $m 'Restore Rust cache') + @($r.jobs.package.steps[2..($r.jobs.package.steps.Count - 1)]) } },
     @{ want = 'release_events'; mutate = { param($r,$m) $r.on | Add-Member schedule @() } },
-    @{ want = 'tests_events'; mutate = { param($r,$m) $m.on.push.branches = @('*') } },
+    @{ want = 'tests_events'; mutate = { param($r,$m) $m.on | Add-Member push @{ branches = @('main') } } },
+    @{ want = 'tests_events'; mutate = { param($r,$m) $m.on.PSObject.Properties.Remove('schedule') } },
+    @{ want = 'tests_events'; mutate = { param($r,$m) $m.on.schedule[0].cron = '47 9 * * *' } },
     @{ want = 'tests_events'; mutate = { param($r,$m) $m.on.PSObject.Properties.Remove('pull_request') } },
     @{ want = 'tests_events'; mutate = { param($r,$m) $m.on | Add-Member pull_request_target @{} } },
-    @{ want = 'private_gate'; mutate = { param($r,$m) $m.jobs.tests.if = 'true' } },
-    @{ want = 'private_gate'; mutate = { param($r,$m) $m.jobs.tests.if = 'github.event.repository.private == false' } },
-    @{ want = 'private_gate'; mutate = { param($r,$m) $m.jobs.tests.if = "github.event_name == 'workflow_dispatch' || github.event.repository.private == false || inputs.release == true" } },
+    @{ want = 'fork_pr_guard'; mutate = { param($r,$m) $m.jobs.tests | Add-Member if "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository" } },
+    @{ want = 'fork_pr_guard'; mutate = { param($r,$m) $m.jobs.tests | Add-Member if 'true' } },
+    @{ want = 'fork_pr_guard'; mutate = { param($r,$m) $m.jobs.tests | Add-Member if "github.event_name == 'workflow_dispatch' || format('{0}', github.event.repository.private) == 'false' || inputs.release == true" } },
+    @{ want = 'fork_pr_guard'; mutate = { param($r,$m) $m.jobs.tests | Add-Member if "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository" } },
     @{ want = 'tests_job_shape'; mutate = { param($r,$m) $m.jobs.tests | Add-Member 'continue-on-error' $true } },
     @{ want = 'tests_job_shape'; mutate = { param($r,$m) $m.jobs.tests.defaults.run.shell = 'cmd' } },
     @{ want = 'tests_job_shape'; mutate = { param($r,$m) $m.jobs.tests.defaults.run | Add-Member 'working-directory' 'other' } },
     @{ want = 'tests_step_order'; mutate = { param($r,$m) $s = $m.jobs.tests.steps; $old = $s[3]; $s[3] = $s[6]; $s[6] = $old } },
     @{ want = 'tests_step_order'; mutate = { param($r,$m) $m.jobs.tests.steps = @($m.jobs.tests.steps | Where-Object name -CNE 'UI') } },
     @{ want = 'tests_step_order'; mutate = { param($r,$m) $m.jobs.tests.steps += $m.jobs.tests.steps[-1] } },
-    @{ want = 'tests_step_shape'; mutate = { param($r,$m) $m.jobs.tests.steps[3] | Add-Member shell 'cmd' } },
+    @{ want = 'tests_step_shape'; mutate = { param($r,$m) (& $stepNamed $m 'Restore locked tools') | Add-Member shell 'cmd' } },
     @{ want = 'tests_step_shape'; mutate = { param($r,$m) $m.jobs.tests.steps[0].uses = $m.jobs.tests.steps[1].uses } },
     @{ want = 'tests_step_shape'; mutate = { param($r,$m) $m.jobs.tests.steps[1].with.'node-version' = '20' } },
     @{ want = 'reusable_inputs'; mutate = { param($r,$m) $m.on.workflow_call.inputs.release.default = $true } },
@@ -233,6 +394,8 @@ foreach ($case in @(
     @{ want = 'release_tests'; mutate = { param($r,$m) $r.jobs.tests.with.release = $false } },
     @{ want = 'release_tests'; mutate = { param($r,$m) $r.jobs.tests | Add-Member secrets 'inherit' } },
     @{ want = 'release_tests'; mutate = { param($r,$m) $r.jobs.tests.uses = './.github/workflows/other.yml' } },
+    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'daplabs/maxed-rotmg' && github.ref_type == 'tag'" } },
+    @{ want = 'release_tests'; mutate = { param($r,$m) $r.jobs.tests.if = "github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag'" } },
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = 'always()' } },
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = 'always() && ' + $r.jobs.package.if } },
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = 'failure() && ' + $r.jobs.package.if } },
@@ -256,7 +419,7 @@ foreach ($case in @(
     @{ want = 'secret_scope'; mutate = { param($r,$m) $m.jobs.tests.steps[0] | Add-Member env @{ TAURI_SIGNING_PRIVATE_KEY = 'invented' } } },
     @{ want = 'secret_scope'; mutate = { param($r,$m) $r.jobs.package.steps[0] | Add-Member env @{ KEY = '${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}' } } },
     @{ want = 'secret_scope'; mutate = { param($r,$m) $m.jobs.tests.steps[0] | Add-Member env @{ KEY = '${{ secrets[''OTHER''] }}' } } },
-    @{ want = 'secret_scope'; mutate = { param($r,$m) $m.jobs.tests.steps[2].run += '${{ toJSON(secrets) }}' } },
+    @{ want = 'secret_scope'; mutate = { param($r,$m) (& $stepNamed $m 'Restore locked tools').run += '${{ toJSON(secrets) }}' } },
     @{ want = 'secret_scope'; mutate = { param($r,$m) $m.jobs.tests.steps[0].with | Add-Member token '${{ secrets[''OTHER''] }}' } },
     @{ want = 'secret_scope'; mutate = { param($r,$m) ($r.jobs.package.steps | Where-Object name -EQ 'Package and sign').env | Add-Member EXTRA '${{ secrets.OTHER }}' } },
     @{ want = 'secret_scope'; mutate = { param($r,$m) ($r.jobs.package.steps | Where-Object name -EQ 'Package and sign').run += '${{ toJSON(secrets) }}' } },
@@ -267,9 +430,11 @@ foreach ($case in @(
     @{ want = 'validation_order'; mutate = { param($r,$m) $s = $r.jobs.package.steps; $old = $s[3]; $s[3] = $s[4]; $s[4] = $old } },
     @{ want = 'validation_order'; mutate = { param($r,$m) $r.jobs.package.steps[3].name = 'Missing validation' } },
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.ref_type == 'tag'" } },
-    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'DaAwesomePwner/maxed-rotmg'" } },
-    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'DaAwesomePwner/maxed-rotmg' || github.ref_type == 'tag'" } },
-    @{ want = 'distribution_repository'; mutate = { param($r,$m) $s = $r.jobs.package.steps | Where-Object name -EQ 'Verify and stage allowlist'; $s.run = $s.run.Replace("-Repository '$script:updaterRepository'", "-Repository 'DaAwesomePwner/maxed-rotmg'") } },
+    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag'" } },
+    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'daplabs/maxed'" } },
+    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'daplabs/maxed' || github.ref_type == 'tag'" } },
+    @{ want = 'distribution_repository'; mutate = { param($r,$m) $s = $r.jobs.package.steps | Where-Object name -EQ 'Verify and stage allowlist'; $s.run = $s.run.Replace("-Repository '$script:updaterRepository'", "-Repository 'DaAwesomePwner/maxed'") } },
+    @{ want = 'distribution_repository'; mutate = { param($r,$m) $s = $r.jobs.package.steps | Where-Object name -EQ 'Verify and stage allowlist'; $s.run = $s.run.Replace("-Repository '$script:updaterRepository'", "-Repository 'daplabs/maxed-rotmg'") } },
     @{ want = 'distribution_repository'; mutate = { param($r,$m) $s = $r.jobs.package.steps | Where-Object name -EQ 'Validate tag and signing configuration'; $s.run = $s.run.Replace("-Repository '$script:updaterRepository'", '-Repository $env:GITHUB_REPOSITORY') } },
     @{ want = 'signing_step'; mutate = { param($r,$m) ($r.jobs.package.steps | Where-Object name -EQ 'Package and sign').env.TAURI_SIGNING_PRIVATE_KEY = '' } },
     @{ want = 'action_pin'; mutate = { param($r,$m) $r.jobs.package.steps[0].uses = 'actions/checkout@main' } },
@@ -294,10 +459,12 @@ for ($i = 0; $i -lt $baseline.jobs.tests.steps.Count; $i++) {
     foreach ($field in @('continue-on-error', 'if')) {
         $r = $releaseText | ConvertFrom-Json; $m = $manualText | ConvertFrom-Json; $c = $codeqlText | ConvertFrom-Json
         $value = if ($field -ceq 'if') { 'false' } else { $true }
-        $m.jobs.tests.steps[$i] | Add-Member $field $value
+        # Cache management already carries pinned runner/ref conditions; replace them.
+        if ($field -cin $m.jobs.tests.steps[$i].PSObject.Properties.Name) { $m.jobs.tests.steps[$i].$field = $value }
+        else { $m.jobs.tests.steps[$i] | Add-Member $field $value }
         Assert ('tests_step_policy' -in @(Failures $r $m $c)) "reject tests step $i $field"
     }
-    if ($i -ge 2) {
+    if ($i -ge 2 -and $baseline.jobs.tests.steps[$i].run) {
         foreach ($suffix in @('; exit 0', ' || true')) {
             $r = $releaseText | ConvertFrom-Json; $m = $manualText | ConvertFrom-Json; $c = $codeqlText | ConvertFrom-Json
             $m.jobs.tests.steps[$i].run += $suffix
@@ -316,8 +483,66 @@ foreach ($path in @('app/ui/src/lib/bindings', 'app/ui/tests/fixtures', 'crates/
         Assert ('bindings_freshness' -in @(Failures $r $m $c)) "reject missing freshness path $path on line $line"
     }
 }
+$guiText = Get-Content "$root/.github/workflows/gui-smoke.yml" -Raw
+$g = $guiText | ConvertFrom-Json
+Assert (@(GuiFailures $g).Count -eq 0) 'GUI workflow positive control: isolated runner, unit tests before smoke, scoped cleanup/upload'
+foreach ($case in @(
+    @{ want = 'gui_runner'; mutate = { param($g) $g.jobs.'gui-smoke'.'runs-on' = 'windows-latest' } },
+    @{ want = 'gui_runner'; mutate = { param($g) $g.jobs.'gui-smoke'.'runs-on' = @('self-hosted','windows','nuc','gui') } },
+    @{ want = 'gui_runner'; mutate = { param($g) $g.jobs.'gui-smoke'.'runs-on' = @('self-hosted','windows','gui') } },
+    @{ want = 'gui_runner'; mutate = { param($g) $g.jobs.'gui-smoke'.'runs-on' = @('self-hosted','windows','nuc') } },
+    @{ want = 'gui_runner'; mutate = { param($g) $g.jobs.'gui-smoke'.PSObject.Properties.Remove('runs-on') } },
+    @{ want = 'gui_timeout'; mutate = { param($g) $g.jobs.'gui-smoke'.'timeout-minutes' = 60 } },
+    @{ want = 'gui_fork_guard'; mutate = { param($g) $g.jobs.'gui-smoke' | Add-Member if "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository" } },
+    @{ want = 'gui_fork_guard'; mutate = { param($g) $g.jobs.'gui-smoke' | Add-Member if 'true' } },
+    @{ want = 'gui_permissions'; mutate = { param($g) $g.permissions.contents = 'write' } },
+    @{ want = 'gui_permissions'; mutate = { param($g) $g.jobs.'gui-smoke' | Add-Member permissions @{ contents = 'write' } } },
+    @{ want = 'gui_scope'; mutate = { param($g) $g | Add-Member env @{} } },
+    @{ want = 'gui_scope'; mutate = { param($g) $g.jobs.'gui-smoke' | Add-Member secrets $null } },
+    @{ want = 'gui_scope'; mutate = { param($g) $g.jobs.'gui-smoke' | Add-Member environment 'release-signing' } },
+    @{ want = 'gui_scope'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[4] | Add-Member env @{} } },
+    @{ want = 'gui_secrets'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[0].with | Add-Member token '${{ secrets.OTHER }}' } },
+    @{ want = 'gui_secrets'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[2].run += '${{ toJSON(secrets) }}' } },
+    @{ want = 'gui_events'; mutate = { param($g) $g.on | Add-Member pull_request_target @{} } },
+    @{ want = 'gui_events'; mutate = { param($g) $g.on | Add-Member workflow_call @{} } },
+    @{ want = 'gui_events'; mutate = { param($g) $g.on | Add-Member push @{ branches = @('main') } } },
+    @{ want = 'gui_events'; mutate = { param($g) $g.on.PSObject.Properties.Remove('schedule') } },
+    @{ want = 'gui_events'; mutate = { param($g) $g.on.schedule[0].cron = '17 9 * * *' } },
+    @{ want = 'gui_events'; mutate = { param($g) $g.on.PSObject.Properties.Remove('pull_request') } },
+    @{ want = 'gui_concurrency'; mutate = { param($g) $g.concurrency.'cancel-in-progress' = $false } },
+    @{ want = 'gui_action_pin'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[0].uses = 'actions/checkout@v4' } },
+    @{ want = 'gui_action_pin'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[0].uses = 'actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } },
+    @{ want = 'gui_action_pin'; mutate = { param($g) $g.jobs.'gui-smoke'.steps += @{ uses = 'actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' } } },
+    @{ want = 'gui_checkout'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[0].with.'persist-credentials' = $true } },
+    @{ want = 'gui_node'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[1].with.'node-version' = '20' } },
+    @{ want = 'gui_upload'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[-1].with.path = '${{ github.workspace }}/' } },
+    @{ want = 'gui_upload'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[-1].with.path = '${{ runner.temp }}/**' } },
+    @{ want = 'gui_upload'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[-1].with.'include-hidden-files' = $true } },
+    @{ want = 'gui_upload'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[-1].with.'retention-days' = 30 } },
+    @{ want = 'gui_step_order'; mutate = { param($g) $s = $g.jobs.'gui-smoke'.steps; $old = $s[4]; $s[4] = $s[5]; $s[5] = $old } },
+    @{ want = 'gui_step_order'; mutate = { param($g) $g.jobs.'gui-smoke'.steps = @($g.jobs.'gui-smoke'.steps | Where-Object name -CNE 'Build and run GUI smoke') } },
+    @{ want = 'gui_step_order'; mutate = { param($g) $g.jobs.'gui-smoke'.steps = @($g.jobs.'gui-smoke'.steps | Where-Object name -CNE 'Harness unit tests') } },
+    @{ want = 'gui_commands'; mutate = { param($g) $s = $g.jobs.'gui-smoke'.steps[2]; $s.run = $s.run.Replace('cargo fetch --locked', 'cargo fetch') } },
+    @{ want = 'gui_commands'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[3].run = 'echo skipped' } },
+    @{ want = 'gui_commands'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[4].run += '; exit 0' } },
+    @{ want = 'gui_commands'; mutate = { param($g) $g.jobs.'gui-smoke'.steps[5].run = 'taskkill /IM maxed.exe /F' } },
+    @{ want = 'gui_job_shape'; mutate = { param($g) $g.jobs.'gui-smoke' | Add-Member 'continue-on-error' $true } }
+)) {
+    $g = $guiText | ConvertFrom-Json
+    & $case.mutate $g
+    Assert ($case.want -in @(GuiFailures $g)) "reject GUI mutation $($case.want)"
+}
+for ($i = 0; $i -lt 7; $i++) {
+    foreach ($field in @('continue-on-error', 'if')) {
+        $g = $guiText | ConvertFrom-Json
+        $value = if ($field -ceq 'if') { 'false' } else { $true }
+        if ($field -in $g.jobs.'gui-smoke'.steps[$i].PSObject.Properties.Name) { $g.jobs.'gui-smoke'.steps[$i].$field = $value }
+        else { $g.jobs.'gui-smoke'.steps[$i] | Add-Member $field $value }
+        Assert ('gui_step_policy' -in @(GuiFailures $g)) "reject GUI step $i $field"
+    }
+}
 foreach ($file in Get-ChildItem "$root/.github/workflows" -File) {
-    Assert ($file.Name -cin @('release.yml', 'tests.yml', 'codeql.yml')) 'every workflow has an explicit policy'
+    Assert ($file.Name -cin @('release.yml', 'tests.yml', 'codeql.yml', 'gui-smoke.yml')) 'every workflow has an explicit policy'
     $w = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
     if ($file.Name -cne 'release.yml') {
         $forbidden = @(Leaves $w '' | Where-Object {

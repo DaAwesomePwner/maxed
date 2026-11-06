@@ -2397,6 +2397,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "toml 0.8.2",
  "ts-rs",
 ]
 

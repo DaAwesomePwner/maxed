@@ -22,7 +22,7 @@
   let visible = $derived(rows.slice(current * RECENT_PAGE_SIZE, (current + 1) * RECENT_PAGE_SIZE));
 </script>
 <section class="recent-runs" aria-labelledby={`${id}-title`}>
-  <header><h2 id={`${id}-title`}>Recent runs</h2><a href={routeHref({ kind: 'runs' })}>All runs ›</a>
+  <header><h2 id={`${id}-title`}>Recent runs</h2><a class="history-link" href={routeHref({ kind: 'runs' })}>All runs ›</a>
     {#if pages > 1}<nav aria-label="Run Pages"><button aria-label="Previous Runs" aria-disabled={current === 0} onclick={() => { if (current > 0) page = current - 1; }}>‹</button><span>{current + 1}/{pages}</span><button aria-label="Next Runs" aria-disabled={current === pages - 1} onclick={() => { if (current + 1 < pages) page = current + 1; }}>›</button></nav>{/if}
   </header>
   {#if rows.length}
@@ -36,7 +36,7 @@
           <span class="name" title={run.dungeon}>{run.dungeon}</span>
           <span class="result" class:died={result.includes('Died')} class:cleared={!result.includes('Died') && result.includes('Cleared')}>{result}</span>
           <span class="number"><span class="sr-only">Time </span>{observedTime(run.started, run.completed_at ?? run.ended)}</span>
-          <span class="number"><span class="sr-only">Share </span>{formatShare(detail?.local_share ?? null)}</span>
+          <span class="number"><span class="sr-only">Share </span>{formatShare(detail?.local_share ?? null, true)}</span>
           <span class="bag">
             {#if selected}<Tooltip id={`${id}-${run.id}-bag`}>
               {#snippet trigger(tooltipId)}<span aria-describedby={tooltipId}><SpriteImage sprite={visual?.sprite ?? null} sheetUrl={visual?.sprite ? spriteUrl(visuals.client_fingerprint, visual.sprite) : null} fit={24} alt={visual?.name ?? `Bag ${selected.bag_type}`} /></span>{/snippet}
@@ -79,7 +79,6 @@
   .recent-runs nav { font-size: 11px; }
   .recent-runs button { min-width: 24px; min-height: 24px; font: inherit; color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--border); border-radius: 4px; }
   .recent-runs button[aria-disabled="true"] { color: var(--text-muted); }
-  .recent-runs header a { font-size: 12px; color: var(--violet-text); }
   .recent-runs .row-debug { font-size: 11px; overflow-wrap: anywhere; }
   .recent-runs p { margin: 0; color: var(--text-secondary); }
   @media (max-width: 900px) {

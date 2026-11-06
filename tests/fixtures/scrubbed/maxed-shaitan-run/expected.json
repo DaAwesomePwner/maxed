@@ -1,0 +1,156 @@
+{
+  "pcap": "lair-of-shaitan-run.pcap",
+  "pcap_sha256": "ec2099e32279a2f227d9cd9a98023d9e8aee4c0224a3d04faccb3692abd87b53",
+  "source_build": "p0@a4f0e08",
+  "catalog_note": "Not included (client-derived). Build one locally with maxed-cli catalog-root, or construct a minimal in-test catalog from the types listed here.",
+  "observed_catalog_sha256": "137b635ced3cb3e0f7c972851dea5f8c36b8de27c4f7fed2a1c2fc2988f1accf",
+  "scrub_report": "verified=true provisional=false filled_unclassified=924 pseudonymized=58 kept_allowlisted=325",
+  "export_domain_parity": "38 of 38 rows identical between original and scrubbed (only inputSha256 differs)",
+  "run": {
+    "map": "Lair of Shaitan",
+    "started_us": "1791143219485000",
+    "completed_at_us": "1791143305741000",
+    "ended_us": "1791143351227000",
+    "outcome": "cleared",
+    "party_size_peak": 17,
+    "fight_count": 35,
+    "complete_capture": true
+  },
+  "boss_fight": {
+    "target_type": 28058,
+    "name": "Shaitan the Advisor",
+    "catalog_flags": {
+      "is_boss": true,
+      "is_miniboss": false,
+      "event_boss": false
+    },
+    "max_hp": 1080000,
+    "target_hp_last_observed": 48167,
+    "kill": {
+      "at": "1791143305741000",
+      "evidence": "victory_quest_target",
+      "provisional": false
+    },
+    "ended_us_observed_live": "1791143352149000",
+    "end_reason_observed_live": "killed",
+    "complete_capture": false,
+    "issues": [
+      "missing_stats"
+    ],
+    "local_object_id_in_fixture": 271,
+    "local_sources_estimated": [
+      {
+        "kind": "ability",
+        "item_type": 589,
+        "estimated": true
+      },
+      {
+        "kind": "weapon",
+        "item_type": 588,
+        "estimated": true
+      }
+    ]
+  },
+  "departures_observed_live": [
+    "1791143324807000",
+    "1791143325519000",
+    "1791143326025000",
+    "1791143328340000",
+    "1791143330742000",
+    "1791143330952000",
+    "1791143332352000",
+    "1791143332972000",
+    "1791143333976000",
+    "1791143333976000",
+    "1791143334238000",
+    "1791143334238000",
+    "1791143335784000",
+    "1791143343006000",
+    "1791143346308000"
+  ],
+  "party_deaths_observed_live": [
+    "1791143260982000"
+  ],
+  "drops": [
+    {
+      "at_us": "1791143305741000",
+      "bag_type": 1726,
+      "bag_rank": 60,
+      "items": [
+        {
+          "item_type": 2806,
+          "name": "Wand of Recompense",
+          "catalog_tier": "12",
+          "slot_type": 8
+        },
+        {
+          "item_type": 2812,
+          "name": "Acropolis Armor",
+          "catalog_tier": "12",
+          "slot_type": 7
+        },
+        {
+          "item_type": 2793,
+          "name": "Potion of Life",
+          "catalog_tier": "4",
+          "slot_type": 10
+        },
+        {
+          "item_type": 2591,
+          "name": "Potion of Attack",
+          "catalog_tier": "2",
+          "slot_type": 10
+        },
+        {
+          "item_type": 2612,
+          "name": "Potion of Vitality",
+          "catalog_tier": "2",
+          "slot_type": 10
+        },
+        {
+          "item_type": 65075,
+          "name": "Forgotten Relics x14",
+          "catalog_tier": null,
+          "slot_type": 10
+        }
+      ]
+    },
+    {
+      "at_us": "1791143321503000",
+      "bag_type": 1726,
+      "bag_rank": 60,
+      "items": [
+        {
+          "item_type": 2795,
+          "name": "Greater Health Potion",
+          "catalog_tier": "UT",
+          "slot_type": 10
+        },
+        {
+          "item_type": 5466,
+          "name": "Potion of Defense (SB)",
+          "catalog_tier": null,
+          "slot_type": 10
+        },
+        {
+          "item_type": 5469,
+          "name": "Potion of Wisdom (SB)",
+          "catalog_tier": null,
+          "slot_type": 10
+        },
+        {
+          "item_type": 31551,
+          "name": "Agents of Oryx Shard x1",
+          "catalog_tier": null,
+          "slot_type": 10
+        }
+      ]
+    }
+  ],
+  "regression_targets": {
+    "#24": "Kill evidence victory_quest_target at completed_at_us; fight must end there (live it stayed open until ended_us_observed_live, target_hp 48167).",
+    "#27": "All 15 departures are after Victory (completed_at_us); the run's Left count must be 0.",
+    "#25": "Second bag contains Greater Health Potion (2795, catalog_tier UT, slot_type 10); best bag must not prefer it over the T12 wand/armor bag.",
+    "#28": "Local ability (589) and weapon (588) sources are estimated, which blocks personal-best eligibility; complete_capture stays false from this reconnect capture, so do not assert identity/complete_capture here."
+  }
+}

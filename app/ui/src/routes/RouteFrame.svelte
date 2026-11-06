@@ -9,10 +9,13 @@
   import type { LiveState } from '../lib/bridge/live';
   import type { Client } from '../lib/bridge/client';
   import EmptyState from '../lib/components/EmptyState.svelte';
+  import Character from './Character.svelte';
   import Home from './Home.svelte';
   import Runs from './Runs.svelte';
   import Fight from './Fight.svelte';
   import PlayerBreakdown from './PlayerBreakdown.svelte';
+  import RunPlayer from './RunPlayer.svelte';
+  import Party from './Party.svelte';
   import Stats from './Stats.svelte';
   import Logs from './Logs.svelte';
   import Loot from './Loot.svelte';
@@ -37,21 +40,24 @@
   let settingsClient = $derived(client && onDemoChange ? { ...client, setDemo: onDemoChange } : client);
   $effect(() => {
     const key = entryKey, kind = route.kind;
-    if (kind === 'home' || kind === 'runs' || kind === 'run' || kind === 'fight' || kind === 'player' || kind === 'alerts' || kind === 'loot' || kind === 'item' || kind === 'logs' || kind === 'stats') return;
+    if (kind === 'home' || kind === 'runs' || kind === 'run' || kind === 'fight' || kind === 'player' || kind === 'run-player' || kind === 'alerts' || kind === 'loot' || kind === 'item' || kind === 'logs' || kind === 'stats') return;
     // Routes without history rows are ready as soon as they render.
     let current = true;
     void tick().then(() => { if (current) onRowsReady?.(key); });
     return () => { current = false; };
   });
 </script>
-{#if route.kind === 'home'}<Home statsEnabled={features.stats} {snapshot} {capture} {liveState} {event} {historyReady} {client} {syntheticClock} {clockReady} {onClockRetry} {store} {required} {initial} {savedScope} {onScopeChange} {entryKey} {onRowsReady} />
+{#if route.kind === 'home'}<Home statsEnabled={features.stats} redesign={features.homeRedesign} {snapshot} {capture} {liveState} {event} {historyReady} {client} {syntheticClock} {clockReady} {onClockRetry} {store} {required} {initial} {savedScope} {onScopeChange} {entryKey} {onRowsReady} />
+{:else if route.kind === 'character' && features.character}<Character {client} />
 {:else if route.kind === 'run'}<RunStory {features} runId={route.id} point={route.point} {client} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {scopeKey} {required} {store} {savedState} {onStateChange} {entryKey} {onRowsReady} />
 {:else if route.kind === 'runs'}<Runs {client} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {scopeKey} {required} {store} {savedState} {onStateChange} {entryKey} {onRowsReady} />
 {:else if route.kind === 'fight'}<Fight {client} fightId={route.id} runId={route.runId} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {scopeKey} {required} {store} {savedState} {onStateChange} {entryKey} {onRowsReady} {onRelationship} />
 {:else if route.kind === 'player'}<PlayerBreakdown {client} fightId={route.fightId} objectId={route.objectId} runId={route.runId} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {scopeKey} {required} {store} {savedState} {onStateChange} {entryKey} {onRowsReady} {onRelationship} />
+{:else if route.kind === 'run-player'}<RunPlayer {client} runId={route.runId} playerId={route.playerId} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {scopeKey} {required} {store} {savedState} {onStateChange} {entryKey} {onRowsReady} {onRelationship} />
 {:else if route.kind === 'loot' || route.kind === 'item'}<Loot {route} {client} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {scopeKey} {required} {store} {savedState} {onStateChange} {entryKey} {onRowsReady} />
 {:else if route.kind === 'logs'}<Logs {pendingCount} {onHistoryApplied} {route} {client} {preview} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {scopeKey} {required} {store} {savedState} {onStateChange} {entryKey} {onRowsReady} />
 {:else if route.kind === 'stats'}<Stats {route} {client} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {scopeKey} {required} {store} {savedState} {onStateChange} {entryKey} {onRowsReady} />
+{:else if route.kind === 'party-live' || route.kind === 'party-run' || route.kind === 'party-players' || route.kind === 'party-player' || route.kind === 'party-presets'}<Party {route} {client} {preview} />
 {:else if route.kind === 'alerts'}<Alerts {onHistoryApplied} {client} {preview} enabled={liveState?.phase !== 'connecting'} streamId={snapshot?.stream_id ?? null} {scopeKey} {required} {store} {savedState} {onStateChange} {entryKey} {onRowsReady} />
 {:else if route.kind === 'settings' || route.kind === 'setup'}
   {#if client}

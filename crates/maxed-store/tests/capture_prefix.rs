@@ -1,3 +1,4 @@
+use crate::common;
 use maxed_store::{apply_batch, migrate, StoreError};
 use maxed_types::*;
 use rusqlite::Connection;
@@ -28,7 +29,7 @@ fn leading_capture_events_keep_receipts_without_domain_rows() {
         apply_batch(&mut db, &[missing_session]),
         Err(StoreError::InvalidEvent)
     ));
-    assert_eq!(count(&db, "event_receipts"), 1);
+    assert_eq!(common::receipts::count(&db), 1);
     let mut gap = events[0].clone();
     gap.sequence = Sequence(Timestamp(3));
     assert!(matches!(
@@ -48,5 +49,5 @@ fn leading_capture_events_keep_receipts_without_domain_rows() {
     apply_batch(&mut db, &events).unwrap();
     apply_batch(&mut db, &events).unwrap();
     assert_eq!(count(&db, "play_sessions"), 1);
-    assert_eq!(count(&db, "event_receipts"), 3);
+    assert_eq!(common::receipts::count(&db), 3);
 }

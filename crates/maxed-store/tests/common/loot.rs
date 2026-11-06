@@ -17,13 +17,7 @@ impl LootDb {
         migrate(&mut db).unwrap();
         // Seed only session/character dependencies, not an unrelated ended run.
         apply_batch(&mut db, &super::story_events()[..2]).unwrap();
-        let head: i64 = db
-            .query_row(
-                "SELECT sequence FROM stream_heads WHERE stream_id='test-stream'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
+        let head: i64 = super::receipts::head(&db, "test-stream").unwrap();
         Self {
             dir,
             path,

@@ -40,7 +40,7 @@ export function createLogsPreview(variant: 'default' | 'stress'): { client: Clie
       text: stress ? `Synthetic message ${i} `.padEnd(1024, 'x') : i > 0 && i % 17 === 0 ? `Synthetic trade offer ${i}` : `Synthetic chat line ${i}: ready for the next vault`,
       truncated: i % 29 === 0 };
   });
-  let chat: ChatSettings = { store: { public: true, guild: true, party: false, whisper: true }, retention_days: 30,
+  let chat: ChatSettings = { filter_spam: true, store: { public: true, guild: true, party: false, whisper: true }, retention_days: 30,
     hidden_senders: ['Morrow', 'Pallo', 'Brack'], hidden_keywords: ['trade offer', 'synthetic sale', 'synthetic spam', 'synthetic advert', 'synthetic bargain'] };
   const events: InstanceEventView[] = Array.from({ length: stress ? 1024 : 200 }, (_, i) => ({
     id: `${marker}-event-${i}`, session_id: marker, run_id: runId(i), map: runId(i) ? dungeons[i % 9] : i % 9 === 0 ? null : 'Nexus',

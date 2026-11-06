@@ -1,4 +1,5 @@
 //! Reconstruct installed v4 projections, without ever installing v5 triggers.
+use crate::common::receipts;
 use rusqlite::{params, Connection};
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -37,6 +38,9 @@ pub fn copy_v4(source: &Path, db: &Connection) {
         .unwrap();
     db.execute_batch("BEGIN").unwrap();
     for table in tables {
+        if matches!(table.as_str(), "event_receipts" | "stream_heads") {
+            continue;
+        }
         let columns = if table == "drops" {
             "id,session_id,run_id,at,bag_type,bag_rank,json"
         } else {
@@ -47,6 +51,11 @@ pub fn copy_v4(source: &Path, db: &Connection) {
         ))
         .unwrap();
     }
+    let source =
+        Connection::open_with_flags(source, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    receipts::copy_into_legacy(&source, db);
+    assert_eq!(receipts::rows(db), receipts::rows(&source));
+    assert_eq!(receipts::heads(db), receipts::heads(&source));
     db.execute_batch("UPDATE fight_summaries SET json=json_remove(json,'$.kill_count','$.unattributed_damage'); COMMIT; DETACH DATABASE seed;")
         .unwrap();
 }

@@ -55,7 +55,7 @@ fn fresh_install_retains_v5_checksum_at_v8() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        12
+        maxed_store::SCHEMA_VERSION
     );
 }
 #[test]
@@ -63,7 +63,8 @@ fn v6_reader_rejects_newer() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("future");
     let db = Connection::open(&path).unwrap();
-    db.pragma_update(None, "user_version", 13).unwrap();
+    db.pragma_update(None, "user_version", maxed_store::SCHEMA_VERSION + 1)
+        .unwrap();
     assert!(matches!(open_reader(&path), Err(StoreError::NewerSchema)));
 }
 #[test]
@@ -80,7 +81,7 @@ fn v4_to_v5_preserves_rows_and_backfills_ranks() {
             [],
         )
         .unwrap();
-        upgrade_history(&path).unwrap();
+        crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
         open_reader(&path).unwrap();
         let row: (i64, i64) = db
             .query_row(
@@ -94,7 +95,7 @@ fn v4_to_v5_preserves_rows_and_backfills_ranks() {
             db.query_row("SELECT count(*) FROM schema_migrations", [], |r| r
                 .get::<_, i64>(0))
                 .unwrap(),
-            12
+            maxed_store::SCHEMA_VERSION
         );
         assert!(!db
             .prepare("PRAGMA foreign_key_check")
@@ -369,7 +370,7 @@ fn v10_purges_excluded_drops_items_and_alerts() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        12
+        maxed_store::SCHEMA_VERSION
     );
     let checksum: String = db
         .query_row(

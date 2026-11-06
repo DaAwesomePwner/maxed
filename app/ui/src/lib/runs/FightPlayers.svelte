@@ -1,4 +1,6 @@
 <script lang="ts">
+  import DpsLabel from './DpsLabel.svelte';
+  import { dpsMetric } from './dps-metric';
   import type { FightView } from '../bindings/FightView';
   import { emptyHomeVisuals, type HomeVisuals } from '../home/visuals';
   import { objectVisual } from '../bridge/visual-index';
@@ -12,6 +14,7 @@
   import { limitRows, renderCount, RENDER_STEP, type RenderLimit } from './render-limit';
   import ShowMore from './ShowMore.svelte';
   let { fight, visuals = emptyHomeVisuals(), runId }: { fight: FightView; visuals?: HomeVisuals; runId?: string } = $props();
+  let metric = $derived(dpsMetric(fight.dps_basis));
   let counts = $derived.by(() => {
     const result = new Map<number, number>();
     for (const player of fight.players) result.set(player.object_id, (result.get(player.object_id) ?? 0) + 1);
@@ -28,11 +31,11 @@
   }
 </script>
 <section class="area-card players" aria-label="Players">
-  <div class="heading"><h3>Players</h3><span>Click a player for their damage sources</span></div>
+  <div class="heading"><h3>Players</h3><span>Click a player for their damage sources · <DpsLabel basis={fight.dps_basis} /></span></div>
   <div class="damage-table">
     <table aria-label="Fight Players">
-      <colgroup><col style="width: 28px" /><col style="width: 20%" /><col /><col style="width: 64px" /><col style="width: 60px" /><col style="width: 56px" /><col style="width: 64px" /><col style="width: 52px" /></colgroup>
-      <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Damage</th><th scope="col">DPS</th><th scope="col">Share</th><th scope="col">Hits</th><th scope="col">Best hit</th><th scope="col">Deaths</th></tr></thead>
+      <colgroup><col style="width: 28px" /><col style="width: 20%" /><col /><col style="width: 80px" /><col style="width: 60px" /><col style="width: 56px" /><col style="width: 64px" /><col style="width: 52px" /></colgroup>
+      <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Damage</th><th scope="col">{metric.label}</th><th scope="col">Share</th><th scope="col">Hits</th><th scope="col">Best hit</th><th scope="col">Deaths</th></tr></thead>
       <tbody>
         {#each shown as player (player.player_id)}
           {@const visual = objectVisual(visuals.objects, player.class_id)}
@@ -47,7 +50,7 @@
               {#if player.is_local}<span class="you">You</span>{/if}
             </div></th>
             <td aria-label="Damage"><span class="amount"><span class="damage-fill" style:width={`${width(player.damage)}%`}></span><b>{formatStat(nonnegative(player.damage))}</b></span></td>
-            <td aria-label="DPS">{formatDps(player.dps)}</td><td aria-label="Share">{formatShare(player.share)}</td>
+            <td aria-label={metric.label}>{formatDps(player.dps)}</td><td aria-label="Share">{formatShare(player.share)}</td>
             <td aria-label="Hits">{formatStat(nonnegative(player.hits))}</td><td aria-label="Biggest Hit">{formatStat(nonnegative(player.biggest_hit))}</td><td aria-label="Deaths" class:deaths={player.deaths > 0}>{formatStat(nonnegative(player.deaths))}</td>
           </tr>
           {#if !linked && $debugMode}<tr><td colspan="8"><DebugNote text="Player navigation is ambiguous because the object ID was reused or is unavailable." /></td></tr>{/if}
@@ -63,7 +66,7 @@
   .players { grid-area: table; align-self: start; }
   .heading { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .heading > span { color: var(--text-muted); font-size: 11px; }
-  .damage-table { overflow: auto; max-height: 390px; min-width: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .damage-table { overflow-x: clip; min-width: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
   table { width: 100%; table-layout: fixed; border-collapse: collapse; }
   th, td { height: 30px; box-sizing: border-box; padding: 0 4px; text-align: right; white-space: nowrap; }
   thead { position: sticky; top: 0; z-index: 1; background: var(--surface-panel); }

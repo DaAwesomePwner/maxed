@@ -1,3 +1,4 @@
+import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { cleanup, render, screen, within } from '@testing-library/svelte';
 import { afterEach, expect, it } from 'vitest';
 import { tick } from 'svelte';
@@ -8,6 +9,16 @@ import { emptyHomeVisuals } from '../../src/lib/home/visuals';
 import { player, source } from './fixtures';
 
 afterEach(() => { cleanup(); setDebugMode(false); });
+
+it('keeps inferred weapon labels and item hover evidence together outside debug mode', () => {
+  render(SourceBreakdown, { showEstimates: true, player: player({ sources: [
+    source({ estimated: true, reasons: ['inferred-equipped-weapon'] }),
+  ] }) });
+  const row = screen.getByRole('rowheader', { name: /Item 1000/ });
+  expect(within(row).getByText('Inferred from the equipped weapon')).toBeTruthy();
+  expect(screen.getByText('est.')).toBeTruthy();
+  expect(itemHoverParams(row.querySelector('.identity')!)?.type).toBe(1000);
+});
 
 function renderSource(enchant: EnchantView, tier = 'UT') {
   render(SourceBreakdown, { player: player({ sources: [source({ enchant })] }),
@@ -27,6 +38,12 @@ it.each([[1, 'Uncommon'], [2, 'Rare'], [3, 'Legendary'], [4, 'Divine']] as const
   const subline = scope.getByText('UT').parentElement!;
   expect(subline.textContent).toContain('•'.repeat(count));
   expect(subline.textContent).not.toContain('—');
+  const cell = row.querySelector('.identity')!;
+  expect(cell.getAttribute('data-item-hover')).toBe('1000');
+  expect(cell.querySelector('.name')?.hasAttribute('title')).toBe(false);
+  expect(subline.querySelector('[title]')).toBeNull();
+  expect(cell.hasAttribute('title')).toBe(false);
+  expect(itemHoverParams(cell)).toEqual({ type: 1000, name: 'Synthetic source', tier: 'UT', enchant: { state: 'recorded', slots: count, applied: count, ids: Array.from({ length: count }, (_, i) => i + 1) } });
 });
 
 it('shows ST no enchants only when zero enchants were recorded', () => {

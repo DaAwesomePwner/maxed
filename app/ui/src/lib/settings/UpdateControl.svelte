@@ -23,7 +23,7 @@
   let canRestartCapture = $derived(!!capture && !['Live', 'WaitingForGame', 'Recovering'].includes(capture.state));
   let active = $derived(!!$session.status && ['checking', 'downloading', 'installing'].includes($session.status.phase));
 </script>
-<p>Saved Channel: {channel ? titleCase(channel) : '—'}</p>
+<p>Current channel: {channel ? titleCase(channel) : '—'}</p>
 <p role="status">Update: {$session.status ? titleCase($session.status.phase) : ($session.error ? 'Unavailable' : 'Loading')}{#if $session.error && $session.status}<DebugNote inline>Last known; stale</DebugNote>{/if}</p>
 {#if $session.error}<p role="alert">{$session.error}</p>{/if}
 {#if $session.status?.failure}<p role="alert">{failures[$session.status.failure]}</p>{/if}

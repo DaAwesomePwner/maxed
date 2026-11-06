@@ -11,7 +11,7 @@ export function feedKpis(summary: DropSummary | null): KpiCell[] {
   const t = summary?.totals, known = t && t.bags > 0, items = known && t.items_counted === true;
   const tooltip = t && !t.items_counted ? 'Narrow the date range to count items' : null;
   return [
-    { key: 'bags', label: 'Bags', value: known ? count(t.bags) : '—', sub: known ? `in ${count(t.runs)} runs · ${t.runs ? (t.bags / t.runs).toFixed(1) : '—'} per run` : null },
+    { key: 'bags', label: 'Bags', value: known ? count(t.bags) : '—', sub: known ? `in ${count(t.runs)} runs with matching bags · ${t.runs ? (t.bags / t.runs).toFixed(1) : '—'} per run` : null },
     { key: 'whites', label: 'White bags', value: known ? count(t.whites) : '—', sub: t?.last_white ? `last: ${t.last_white.dungeon ?? 'Outside a run'}, ${shortWhen(t.last_white.at, new Date())}` : null },
     { key: 'rate', label: 'White rate', value: known ? whiteRate(t.whites, t.runs_ended) : '—', sub: t ? t.runs_ended === null ? 'Outside a run: counts only' : `over ${count(t.runs_ended)} ended runs` : null },
     { key: 'ut_st', label: 'UT and ST items', value: items && t.ut_items != null && t.st_items != null ? count(t.ut_items + t.st_items) : '—', sub: items ? `${count(t.ut_items)} UT · ${count(t.st_items)} ST` : null, tooltip },

@@ -4,7 +4,7 @@ import ChatSettingsSection from '../../src/lib/logs/ChatSettingsSection.svelte';
 import type { ChatSettings } from '../../src/lib/bindings/ChatSettings';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
-const saved = (): ChatSettings => ({ store: { public: true, guild: true, party: true, whisper: true }, retention_days: 90, hidden_senders: ['SynthAlpha'], hidden_keywords: [] });
+const saved = (): ChatSettings => ({ store: { public: true, guild: true, party: true, whisper: true }, retention_days: 90, hidden_senders: ['SynthAlpha'], hidden_keywords: [], filter_spam: true });
 
 it('saves channel toggles and retention', async () => {
   const update = vi.fn().mockResolvedValue(undefined);
@@ -92,4 +92,14 @@ it('accepts a keyword at the UTF-8 byte boundary', async () => {
   await fireEvent.submit(screen.getByRole('button', { name: 'Add' }).closest('form')!);
   await fireEvent.click(screen.getByRole('button', { name: 'Save chat settings' }));
   await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ hidden_keywords: [keyword] })));
+});
+
+it('saves the spam-filter preference through chat settings', async () => {
+  const update = vi.fn().mockResolvedValue(undefined);
+  render(ChatSettingsSection, { settings: saved(), update, clear: vi.fn(), editable: true });
+  const toggle = screen.getByRole('checkbox', { name: 'Filter spam ads and repeated public messages' });
+  expect((toggle as HTMLInputElement).checked).toBe(true);
+  await fireEvent.click(toggle);
+  await fireEvent.click(screen.getByRole('button', { name: 'Save chat settings' }));
+  await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ filter_spam: false })));
 });

@@ -22,7 +22,11 @@ fn key_pop_notice_is_live_only_filtered_private_and_idempotent() {
         let mut catalog = catalog();
         catalog.objects[2].dungeon_name = Some("The Void".into());
         let views = Arc::new(Views::default());
-        views.alert_policy.lock().unwrap().key_pop_dungeons = selected;
+        {
+            let mut policy = views.alert_policy.lock().unwrap();
+            policy.key_popped = AlertLoudness::Toast;
+            policy.key_pop_dungeons = selected;
+        }
         let mut adapter = Adapter::open(
             path.clone(),
             Arc::new(catalog),

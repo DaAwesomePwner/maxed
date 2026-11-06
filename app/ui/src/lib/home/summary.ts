@@ -1,3 +1,4 @@
+import { isPresentationVisible, observePresentationVisibility } from '../bridge/visibility';
 import type { Client } from '../bridge/client';
 import type { FamePoint } from '../bindings/FamePoint';
 import type { HomeScope } from '../bindings/HomeScope';
@@ -50,7 +51,7 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
   };
   const waiting = historyWaiting;
   function pump(retryInitial = false) {
-    if (disposed || !input) return;
+    if (disposed || !input || !isPresentationVisible()) return;
     if (!input.scope) { emit('unavailable', 'No session captured. Choose Today to view saved observations.'); return; }
     if (input.mode !== 'nexus') { emit('stale', 'Saved history refresh is paused while a live area is visible.'); return; }
     if (failed && attempted === generation) { emit('error', failureMessage); return; }
@@ -98,6 +99,7 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
       if (!disposed && (request !== generation || retryBusy)) pump(retryBusy && readAhead && request === generation);
     });
   }
+  const releaseVisibility = observePresentationVisibility(visible => { if (visible) pump(); });
   return {
     update(next: HomeHistoryInput) {
       if (disposed) return;
@@ -112,6 +114,6 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
       pump();
     },
     retry() { if (!disposed && input && control !== 'superseded') { generation++; namespace++; failed = false; control = null; automaticRetryUsed = false; pump(); } },
-    dispose() { disposed = true; generation++; input = null; summary = null; emitted = undefined; },
+    dispose() { releaseVisibility(); disposed = true; generation++; input = null; summary = null; emitted = undefined; },
   };
 }

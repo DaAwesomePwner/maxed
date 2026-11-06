@@ -1,4 +1,5 @@
 import type { Client } from '../../bridge/client';
+import { createVisibilityPause, isPresentationVisible } from '../../bridge/visibility';
 import type { DungeonBest } from '../../bindings/DungeonBest';
 import type { EventEnvelope } from '../../bindings/EventEnvelope';
 import type { LiveSnapshot } from '../../bindings/LiveSnapshot';
@@ -9,6 +10,7 @@ import { historyWaiting } from '../../runs/policy';
 /** Home's history commands share the native scheduler's single pending slot. */
 export function createHomeReads(owner: Client) {
   let disposed = false;
+  const visibility = createVisibilityPause();
   let tail: Promise<unknown> = Promise.resolve();
   const latest = new Map<string, symbol>();
   function read<T>(kind: string, query: () => Promise<HistoryReply<T>>): Promise<HistoryReply<T>> {
@@ -16,6 +18,7 @@ export function createHomeReads(owner: Client) {
     latest.set(kind, token);
     const result = tail.then(async (): Promise<HistoryReply<T>> => {
       while (!disposed && latest.get(kind) === token) {
+        if (!await visibility.wait() || disposed || latest.get(kind) !== token) break;
         const reply = await query();
         if (disposed || latest.get(kind) !== token) return { status: 'superseded' };
         if (reply.status !== 'superseded') return reply;
@@ -31,12 +34,13 @@ export function createHomeReads(owner: Client) {
     queryScopeLootPage: (scope, cursor, limit) => read('loot', () => owner.queryScopeLootPage(scope, cursor, limit)),
     queryDungeonBests: () => read('bests', () => owner.queryDungeonBests()),
   };
-  return { client, dispose() { disposed = true; latest.clear(); } };
+  return { client, dispose() { disposed = true; visibility.dispose(); latest.clear(); } };
 }
 
 export function createDungeonBests(client: Pick<Client, 'queryDungeonBests'>,
   publish: (rows: DungeonBest[]) => void) {
   let disposed = false, running = false, pending = false;
+  const visibility = createVisibilityPause();
   const completed = new Map<string, boolean>();
   let completionSequence = -1n;
   async function refresh() {
@@ -46,6 +50,8 @@ export function createDungeonBests(client: Pick<Client, 'queryDungeonBests'>,
     running = true;
     try {
       while (pending && !disposed) {
+        if (!isPresentationVisible() && !await visibility.wait()) break;
+        if (disposed) break;
         pending = false;
         try {
           const reply = await client.queryDungeonBests();
@@ -102,7 +108,7 @@ export function createDungeonBests(client: Pick<Client, 'queryDungeonBests'>,
       }
       flush();
     },
-    dispose() { disposed = true; pending = false; },
+    dispose() { disposed = true; visibility.dispose(); pending = false; },
   };
 }
 

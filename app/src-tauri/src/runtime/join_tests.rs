@@ -31,6 +31,8 @@ fn adapter(path: &Path, capacity: usize) -> (Adapter, Arc<Views>, Events) {
     let recorded = events.clone();
     let seen = events.clone();
     let bridge = Bridge {
+        visibility: Arc::default(),
+        party_changed: Arc::new(|_| {}),
         batch: None,
         event: Arc::new(move |event| recorded.lock().unwrap().push(event)),
         snapshot: Arc::new(move |snapshot| {
@@ -152,12 +154,7 @@ fn replay_to_rows_reopens_with_breakdown_and_idempotent_receipts() {
     maxed_store::apply_batch(&mut db, &envelopes).unwrap();
     assert_eq!(reader.get_run(&story.run.id).unwrap().unwrap(), story);
     assert_eq!(reader.list_runs(filter()).unwrap().rows.len(), 1);
-    assert_eq!(
-        db.query_row("SELECT COUNT(*) FROM event_receipts", [], |r| r
-            .get::<_, i64>(0))
-            .unwrap(),
-        count as i64
-    );
+    assert_eq!(super::receipt_tests::count(&db), count as i64);
 }
 
 #[test]
@@ -272,13 +269,7 @@ fn failed_shutdown_transfers_accepted_and_rejected_events_in_original_order() {
             .end_reason,
         Some(FightEnd::AppClosed)
     );
-    let count: i64 = db
-        .query_row(
-            "SELECT COUNT(*) FROM event_receipts WHERE stream_id='demo-join'",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap();
+    let count: i64 = super::receipt_tests::count_stream(&db, "demo-join");
     assert_eq!(count, events.lock().unwrap().len() as i64);
 }
 
@@ -608,7 +599,7 @@ fn presentation_is_coalesced_and_native_status_preserves_engine_diagnostics() {
         "packets only mark presentation dirty"
     );
     adapter.tick(Timestamp(1)).unwrap();
-    adapter.publish_due(Duration::from_millis(250));
+    adapter.publish_due(Duration::from_millis(1000));
     assert_eq!(
         views.snapshot.lock().unwrap().capture.message,
         "Recovering capture"

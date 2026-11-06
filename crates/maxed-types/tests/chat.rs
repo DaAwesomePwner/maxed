@@ -40,6 +40,13 @@ fn chat_settings_default_and_old_files() {
             && settings.store.whisper
     );
     assert_eq!(settings.retention_days, 90);
+    assert!(settings.filter_spam);
+    let disabled: ChatSettings = serde_json::from_str(r#"{"filter_spam":false}"#).unwrap();
+    assert!(!disabled.filter_spam);
+    assert_eq!(
+        serde_json::to_value(&disabled).unwrap()["filter_spam"],
+        false
+    );
     let parsed: ChatSettings = serde_json::from_str("{}").unwrap();
     assert_eq!(parsed, settings);
     assert!(serde_json::from_str::<ChatSettings>(r#"{"unknown":1}"#).is_err());

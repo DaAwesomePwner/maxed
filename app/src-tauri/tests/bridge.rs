@@ -112,14 +112,14 @@ fn leaving_preview_always_allocates_a_fresh_stopped_stream() {
 #[test]
 fn snapshots_are_due_only_when_dirty_and_after_250_monotonic_ms() {
     let mut gate = SnapshotGate::default();
-    assert!(!gate.take_due(Duration::from_secs(10)));
+    assert!(!gate.take_due(Duration::from_secs(10), true));
     gate.dirty = true;
-    assert!(!gate.take_due(Duration::from_millis(249)));
-    assert!(gate.take_due(Duration::from_millis(250)));
-    assert!(!gate.take_due(Duration::from_millis(500)));
+    assert!(!gate.take_due(Duration::from_millis(249), true));
+    assert!(gate.take_due(Duration::from_millis(250), true));
+    assert!(!gate.take_due(Duration::from_millis(500), true));
     gate.dirty = true;
-    assert!(!gate.take_due(Duration::from_millis(100)));
-    assert!(gate.take_due(Duration::from_millis(500)));
+    assert!(!gate.take_due(Duration::from_millis(100), true));
+    assert!(gate.take_due(Duration::from_millis(500), true));
 }
 
 #[test]
@@ -133,6 +133,7 @@ fn every_event_bypasses_the_gate_and_shutdown_flush_preserves_order() {
                 Publication::Events(_) => unreachable!("legacy subscriber receives envelopes"),
                 Publication::Snapshot(_) => 1001,
                 Publication::Capture(_) => 1002,
+                Publication::PartyChanged(_) => 1003,
             };
             values.lock().unwrap().push(value);
             Ok(())
@@ -291,4 +292,39 @@ fn oversized_transactions_are_bounded_and_flush_after_the_final_range() {
             .collect::<Vec<_>>(),
         [(1, 1024), (1025, 2048), (2049, 2049)]
     );
+}
+
+#[test]
+fn idle_snapshots_wait_one_second_but_combat_resumes_at_250_ms() {
+    let mut gate = SnapshotGate {
+        dirty: true,
+        ..Default::default()
+    };
+    for millis in [250, 500, 750, 999] {
+        assert!(!gate.take_due(Duration::from_millis(millis), false));
+        assert!(gate.dirty);
+    }
+    assert!(gate.take_due(Duration::from_secs(1), false));
+    gate.dirty = true;
+    assert!(gate.take_due(Duration::from_millis(1250), true));
+    gate.dirty = true;
+    assert!(!gate.take_due(Duration::from_millis(1500), false));
+    assert!(gate.take_due(Duration::from_millis(2250), false));
+}
+
+#[test]
+fn visibility_epochs_reject_hidden_and_pre_restore_work() {
+    let gate = maxed_app::bridge::PresentationVisibility::default();
+    let before = gate.epoch();
+    assert!(gate.accepts(before));
+    assert!(!gate.set_visible(true));
+    assert!(gate.set_visible(false));
+    let hidden = gate.epoch();
+    assert!(!gate.accepts(before));
+    assert!(!gate.accepts(hidden));
+    assert!(!gate.set_visible(false));
+    assert!(gate.set_visible(true));
+    assert!(!gate.accepts(before));
+    assert!(!gate.accepts(hidden));
+    assert!(gate.accepts(gate.epoch()));
 }

@@ -73,6 +73,7 @@ pub struct Engine {
     pub(crate) config: EngineConfig,
     pub(crate) catalog: Arc<Catalog>,
     pub(crate) object_index: BTreeMap<u16, usize>,
+    pub(crate) object_name_index: BTreeMap<String, Option<u16>>,
     pub(crate) item_index: BTreeMap<u16, usize>,
     pub(crate) enchant_index: BTreeMap<i32, usize>,
     pub(crate) reconstruction: crate::reconstruction::ReconstructionCoverage,
@@ -103,12 +104,15 @@ pub struct Engine {
     pub(crate) local: Option<Local>,
     pub(crate) create_number: u64,
     pub(crate) death_seen: bool,
+    pub(crate) hp_buffer: crate::runs::HpBuffer,
     pub(crate) character: Option<CharacterView>,
     pub(crate) last_fame: BTreeMap<String, i32>,
     pub(crate) issues: Vec<CoverageIssue>,
     pub(crate) recent_issues: Vec<(CoverageIssue, Timestamp)>,
     ignored_unverified_packets: u64,
     pub(crate) run: Option<crate::runs::Run>,
+    pub(crate) scope: Option<crate::players::Scope>,
+    pub(crate) roster_presence: Vec<crate::RosterPresence>,
     pub(crate) preceding: Option<crate::runs::Preceding>,
     pub(crate) fights: BTreeMap<(i32, u32), crate::fights::Fight>,
     pub(crate) retired_targets: BTreeSet<(i32, u32)>,
@@ -156,6 +160,17 @@ impl Engine {
             .enumerate()
             .map(|(i, o)| (o.object_type, i))
             .collect();
+        let mut object_name_index = BTreeMap::new();
+        for object in &catalog.objects {
+            object_name_index
+                .entry(object.name.to_lowercase())
+                .and_modify(|matched| {
+                    if *matched != Some(object.object_type) {
+                        *matched = None;
+                    }
+                })
+                .or_insert(Some(object.object_type));
+        }
         let item_index = catalog
             .items
             .iter()
@@ -172,6 +187,7 @@ impl Engine {
             config,
             catalog,
             object_index,
+            object_name_index,
             item_index,
             enchant_index,
             reconstruction: Default::default(),
@@ -204,10 +220,13 @@ impl Engine {
             last_fame: BTreeMap::new(),
             create_number: 0,
             death_seen: false,
+            hp_buffer: Default::default(),
             issues: vec![],
             recent_issues: vec![],
             ignored_unverified_packets: 0,
             run: None,
+            scope: None,
+            roster_presence: vec![],
             preceding: None,
             fights: BTreeMap::new(),
             retired_targets: BTreeSet::new(),
@@ -246,6 +265,21 @@ impl Engine {
     pub fn ignored_unverified_packets(&self) -> u64 {
         self.ignored_unverified_packets
     }
+    /// Cheap presentation scheduling hint; does not project or change fights.
+    pub fn has_active_fight(&self) -> bool {
+        self.fights.values().any(|fight| fight.base.ended.is_none())
+    }
+
+    /// Latest damage timestamp among open fights, in capture microseconds.
+    /// A scheduling hint only: does not project or change fight state.
+    pub fn latest_open_fight_hit(&self) -> Option<Timestamp> {
+        self.fights
+            .values()
+            .filter(|fight| fight.base.ended.is_none())
+            .filter_map(|fight| fight.base.last_hit)
+            .max()
+    }
+
     fn live_fight_priority(fight: &crate::fights::Fight) -> bool {
         fight.base.is_current_quest
             || matches!(
@@ -420,6 +454,7 @@ impl Engine {
         events
     }
     fn advance_clock(&mut self, at: Timestamp, check_idle: bool) -> Vec<EngineEvent> {
+        self.roster_presence.clear();
         let mut events = vec![];
         let (time, regression) = clock::monotonic(self.now.0, at.0);
         self.now = Timestamp(time);
@@ -429,7 +464,7 @@ impl Engine {
         self.kill_detector.expire_announcements(self.now);
         self.expire_departures(&mut events);
         self.expire_shots();
-        self.prune_entities();
+        self.prune_entities(&mut events);
         if self.now.0.saturating_sub(self.fight_published.0) >= 250_000 {
             for key in std::mem::take(&mut self.dirty_fights) {
                 if let Some(f) = self.fights.get(&key) {
@@ -437,7 +472,10 @@ impl Engine {
                 }
             }
             self.fight_published = self.now;
+            self.drain_fight_timelines();
+            self.flush_profiles(&mut events);
         }
+        self.flush_timeline(false, &mut events);
         if check_idle
             && self.session.as_ref().is_some_and(|s| {
                 s.ended.is_none() && self.now >= crate::idle_deadline(s.last_traffic)
@@ -496,6 +534,7 @@ impl Engine {
         events
     }
     pub fn capture_changed(&mut self, mut status: CaptureStatus) -> Vec<EngineEvent> {
+        self.roster_presence.clear();
         // Native readiness updates do not own the engine's packet counters.
         status.packet_diagnostics = std::mem::take(&mut self.capture.packet_diagnostics);
         self.capture = status.clone();
@@ -508,6 +547,7 @@ impl Engine {
         at: Timestamp,
         kind: Diagnostic,
     ) -> Vec<EngineEvent> {
+        self.roster_presence.clear();
         if self.connection.is_some_and(|c| conn.0 < c.0)
             || self.retired_connections.contains(&conn.0)
         {
@@ -665,6 +705,7 @@ impl Engine {
         self.apply_inner(packet, true)
     }
     fn apply_inner(&mut self, packet: DecodedPacket, observed: bool) -> Vec<EngineEvent> {
+        self.roster_presence.clear();
         if self.connection.is_some_and(|c| packet.conn.0 < c.0)
             || self.retired_connections.contains(&packet.conn.0)
         {
@@ -727,11 +768,12 @@ impl Engine {
             Packet::CreateSuccess(p) => {
                 let replacing = self.local.is_some();
                 if replacing {
-                    self.forget_entity(p.objectId);
+                    self.forget_entity(p.objectId, &mut events);
                     self.character = None;
                 }
                 self.create_number += 1;
                 self.death_seen = false;
+                self.hp_buffer = Default::default();
                 self.local = Some(Local {
                     object: p.objectId,
                     number: p.charId,
@@ -796,7 +838,7 @@ impl Engine {
                         }
                     }
                     self.hold_departure(id);
-                    self.remove_entity(id);
+                    self.remove_entity(id, &mut events);
                 }
                 self.update_party(&mut events);
             }
@@ -874,7 +916,7 @@ impl Engine {
                 }
                 self.emit_chat(&p, &mut events);
             }
-            Packet::Death(_) => self.die(&mut events),
+            Packet::Death(p) => self.die(p, &mut events),
             Packet::Escape(_) => self.end_run(true, None, &mut events),
             Packet::Reconnect(_) => self.expected_reconnect = Some(packet.conn),
             Packet::Unknown { .. } => {}

@@ -1,5 +1,4 @@
-#[path = "../../maxed-engine/tests/common/mod.rs"]
-mod engine_common;
+use crate::engine_common;
 use engine_common::*;
 use maxed_store::{apply_batch, migrate, open_reader};
 use maxed_types::*;

@@ -104,3 +104,26 @@ views. Local server-only pairs remain pending until expiry or retirement. The
 retirement publishes the fully settled `FightEnded`. The golden array was
 regenerated through `replay_engine`; all previous event values (apart from
 sequence numbering) and the pcap bytes are unchanged.
+
+Presence now uses the non-persisted roster path, so it creates no durable event
+receipts and is not sent to the UI as an engine event. `expected.json` was
+regenerated through `replay_engine`, removing the six `player_presence` events
+and restoring the earlier sequence numbers. The golden is byte-identical to the
+version before presence events were added in `5ded13c`; the pcap is unchanged.
+
+The party-average bucket fields (`others_damage`, `others_presence`) were added
+by regenerating `expected.json` through `replay_engine`. All previous values,
+event ordering and sequence numbers are unchanged; the pcap is unchanged.
+
+The optional run death detail was added by regenerating `expected.json` through
+`replay_engine` with the configuration above. This story has no death, so the
+only changes are six `death: null` fields. Existing values, event ordering,
+sequence numbers and pcap bytes are unchanged.
+
+Equipment evidence regeneration through `replay_engine` adds only 28 `observed_empty` fields (21 true, 7 false).
+Existing values, event order, capture bytes, catalog and prior provenance are unchanged.
+
+Shared stat-split evidence regeneration through `replay_engine` adds only 24 `split_evidence` objects.
+Each records `provisional_inside_boost`, `cap_eligible: false` and the reasons `missing_exalt`,
+`unverified_placement`, `missing_operands`: this story does not observe exalt levels. All 37 events, existing
+values, ordering, sequence numbers, pcap bytes, catalog and prior provenance are unchanged.

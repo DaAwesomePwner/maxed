@@ -1,5 +1,5 @@
 //! Synthetic saved-run screen contracts.
-mod common;
+use crate::common;
 use common::{envelope, story_events};
 use maxed_store::*;
 use maxed_types::*;
@@ -178,6 +178,7 @@ fn events_are_run_scoped_and_ordered_with_names() {
     let left = event("z-left", 4_000_000);
     let mut death = event("a-death", 4_000_000);
     death.kind = InstanceEventKind::PlayerDeath {
+        player_id: None,
         player_name: "DemoAlly".into(),
         level: None,
         killed_by: None,

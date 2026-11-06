@@ -87,6 +87,81 @@ fn write_csv(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 impl CaptureRuntime {
+    pub async fn visit_recap(
+        self: &Arc<Self>,
+        request: VisitRecapRequest,
+    ) -> Result<HistoryReply<Option<VisitRecap>>, String> {
+        let runtime = self.clone();
+        self.submit_history(
+            HistoryCaller::MainWindow,
+            HistoryKey::VisitRecap(request.clone()),
+            move |job| runtime.read_history(job, || None, |reader| reader.visit_recap(&request)),
+        )
+        .await
+    }
+
+    pub async fn run_recap(
+        self: &Arc<Self>,
+        request: RunRecapRequest,
+        chase_types: Vec<u16>,
+    ) -> Result<HistoryReply<Option<RunRecap>>, String> {
+        let runtime = self.clone();
+        self.submit_history(
+            HistoryCaller::MainWindow,
+            HistoryKey::RunRecap(request.clone()),
+            move |job| {
+                runtime.read_history(
+                    job,
+                    || None,
+                    |reader| reader.run_recap(&request, &chase_types),
+                )
+            },
+        )
+        .await
+    }
+
+    pub async fn home_dungeon_streak(
+        self: &Arc<Self>,
+        request: HomeDungeonStreakRequest,
+    ) -> Result<HistoryReply<HomeDungeonStreak>, String> {
+        let runtime = self.clone();
+        self.submit_history(
+            HistoryCaller::MainWindow,
+            HistoryKey::HomeDungeonStreak(request.clone()),
+            move |job| {
+                let dungeon = request.dungeon.clone();
+                runtime.read_history(
+                    job,
+                    || HomeDungeonStreak {
+                        dungeon,
+                        ..Default::default()
+                    },
+                    |reader| reader.home_dungeon_streak(request),
+                )
+            },
+        )
+        .await
+    }
+
+    pub async fn home_hud(
+        self: &Arc<Self>,
+        scope: HomeScope,
+        tiers: Vec<(u16, Option<String>)>,
+        potions: Vec<(u16, PotionStat)>,
+    ) -> Result<HistoryReply<HomeHud>, String> {
+        let runtime = self.clone();
+        self.submit_history(
+            HistoryCaller::MainWindow,
+            HistoryKey::HomeHud(scope.clone(), tiers.clone(), potions.clone()),
+            move |job| {
+                runtime.read_history(job, HomeHud::default, |reader| {
+                    reader.home_hud(scope, &tiers, &potions)
+                })
+            },
+        )
+        .await
+    }
+
     pub async fn stats_maps(
         self: &Arc<Self>,
         filter: StatsFilter,
@@ -164,6 +239,78 @@ impl CaptureRuntime {
                         characters: vec![],
                     },
                     |reader| reader.stats_dungeons(filter),
+                )
+            },
+        )
+        .await
+    }
+
+    pub async fn boss_history(
+        self: &Arc<Self>,
+        request: BossHistoryRequest,
+    ) -> Result<HistoryReply<BossHistory>, String> {
+        let runtime = self.clone();
+        self.submit_history(
+            HistoryCaller::MainWindow,
+            HistoryKey::BossHistory(request.clone()),
+            move |job| {
+                runtime.read_history(
+                    job,
+                    || BossHistory {
+                        rows: vec![],
+                        truncated: false,
+                    },
+                    |reader| reader.boss_history(request),
+                )
+            },
+        )
+        .await
+    }
+
+    pub async fn home_boss_baselines(
+        self: &Arc<Self>,
+        request: BossHistoryRequest,
+    ) -> Result<HistoryReply<HomeBossBaselines>, String> {
+        let runtime = self.clone();
+        self.submit_history(
+            HistoryCaller::MainWindow,
+            HistoryKey::HomeBossBaselines(request.clone()),
+            move |job| {
+                runtime.read_history(
+                    job,
+                    || HomeBossBaselines {
+                        rows: vec![],
+                        truncated: false,
+                    },
+                    |reader| reader.home_boss_baselines(request),
+                )
+            },
+        )
+        .await
+    }
+
+    pub async fn dungeon_profile(
+        self: &Arc<Self>,
+        request: DungeonProfileRequest,
+    ) -> Result<HistoryReply<DungeonProfile>, String> {
+        let runtime = self.clone();
+        self.submit_history(
+            HistoryCaller::MainWindow,
+            HistoryKey::DungeonProfile(request.clone()),
+            move |job| {
+                let dungeon = request.dungeon.clone();
+                runtime.read_history(
+                    job,
+                    || DungeonProfile {
+                        dungeon,
+                        clears: 0,
+                        bosses: vec![],
+                        usual_run_dps: None,
+                        run_dps_samples: 0,
+                        usual_clear_micros: None,
+                        clear_samples: 0,
+                    },
+                    |reader| reader.dungeon_profile(request),
                 )
             },
         )

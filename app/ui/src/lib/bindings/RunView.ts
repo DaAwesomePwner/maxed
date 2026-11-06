@@ -2,8 +2,9 @@
 import type { AreaContext } from "./AreaContext";
 import type { AreaKind } from "./AreaKind";
 import type { CoverageIssue } from "./CoverageIssue";
+import type { DeathDetail } from "./DeathDetail";
 import type { EvidenceAt } from "./EvidenceAt";
 import type { Outcome } from "./Outcome";
 import type { Timestamp } from "./Timestamp";
 
-export type RunView = { id: string, session_id: string, character_id: string | null, dungeon: string, area_kind: AreaKind, started: Timestamp, ended: Timestamp | null, completed_at: Timestamp | null, died_at: Timestamp | null, outcome: Outcome | null, evidence: Array<EvidenceAt>, party_size: number | null, party_size_estimated: boolean, complete_capture: boolean, issues: Array<CoverageIssue>, context?: AreaContext | null, };
+export type RunView = { id: string, session_id: string, character_id: string | null, dungeon: string, area_kind: AreaKind, started: Timestamp, ended: Timestamp | null, completed_at: Timestamp | null, died_at: Timestamp | null, death?: DeathDetail | null, outcome: Outcome | null, evidence: Array<EvidenceAt>, party_size: number | null, party_size_estimated: boolean, complete_capture: boolean, issues: Array<CoverageIssue>, context?: AreaContext | null, };

@@ -1,3 +1,6 @@
+#[cfg(test)]
+#[path = "../../../crates/maxed-store/tests/common/receipts.rs"]
+mod receipt_tests;
 mod recording;
 use crate::bridge::{Publication, Publisher};
 use crossbeam_channel::{bounded, select_biased, tick, Receiver, Sender};
@@ -14,10 +17,16 @@ use std::time::{Duration, Instant};
 use tauri::Manager;
 
 pub mod alerts;
+mod character;
 mod chat;
 mod history;
 mod home;
 mod join;
+pub mod maintenance;
+#[cfg(test)]
+mod maintenance_tests;
+mod party;
+pub(crate) use party::open_realmeye;
 #[cfg(feature = "perf-live")]
 pub mod perf;
 mod pipeline;
@@ -32,20 +41,30 @@ pub use storage::{discover_resources, Namespace, RuntimeOptions};
 
 const WORKER_FAILED: &str = "Capture worker failed; restart Maxed";
 type StatusSink = Arc<dyn Fn(CaptureStatus) + Send + Sync>;
+type SnapshotRequest = Sender<maxed_types::LiveSnapshot>;
+#[cfg(test)]
+type BeforeWorkerLoop =
+    Arc<dyn Fn(&Receiver<SnapshotRequest>, &Receiver<()>) -> SnapshotRequest + Send + Sync>;
 
 #[derive(Default)]
 struct Shared {
+    upgrade: maintenance::UpgradeLifecycle,
     recording: crate::recording::RecordingRuntime,
     alerts: Mutex<alerts::AlertSettingsState>,
     #[cfg(test)]
     on_alert_policy_read: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     #[cfg(test)]
     on_alert_policy_save: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    #[cfg(test)]
+    after_character_calculation: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     home: Arc<home::HomeReads>,
     status: Mutex<CaptureStatus>,
     failed: AtomicBool,
     bridge_failed: AtomicBool,
     views: Arc<Views>,
+    snapshot_requests: Mutex<Option<Sender<SnapshotRequest>>>,
+    #[cfg(test)]
+    before_worker_loop: Mutex<Option<BeforeWorkerLoop>>,
     recovery: Mutex<Option<Adapter>>,
     completed: Mutex<Option<Adapter>>,
 }
@@ -128,6 +147,11 @@ impl Shared {
             status.message.clear();
             status.message.push_str(message);
             *current = status.clone();
+            self.views
+                .character
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .capture_changed(status.state.clone());
             self.views.alert_wake.signal();
             // Serialize delivery with snapshot updates and final Stopped publication.
             sink(status);
@@ -233,7 +257,7 @@ impl CaptureRuntime {
         )
     }
 
-    fn publisher(&self, app: tauri::AppHandle) -> Result<Publisher, String> {
+    pub(crate) fn publisher(&self, app: tauri::AppHandle) -> Result<Publisher, String> {
         let mut publisher = self.publisher.lock().map_err(|_| WORKER_FAILED)?;
         if let Some(publisher) = publisher.as_ref() {
             return Ok(publisher.clone());
@@ -253,7 +277,10 @@ impl CaptureRuntime {
     fn domain_bridge(publisher: Publisher) -> Bridge {
         let events = publisher.clone();
         let single = publisher.clone();
+        let party = publisher.clone();
         Bridge {
+            visibility: publisher.visibility(),
+            party_changed: Arc::new(move |notice| party.publish(Publication::PartyChanged(notice))),
             event: Arc::new(move |event| single.publish(Publication::Events(vec![event]))),
             batch: Some(Arc::new(move |batch| {
                 events.publish(Publication::Events(batch))
@@ -279,6 +306,14 @@ impl CaptureRuntime {
 
     /// Setup holds its transition gate throughout this reversible install gate.
     pub(crate) fn prepare_update(&self) -> Result<(), String> {
+        let session = self.session.lock().map_err(|_| WORKER_FAILED)?;
+        self.shared
+            .views
+            .maintenance
+            .update_paused
+            .store(true, Ordering::Release);
+        drop(session);
+        self.shared.upgrade.cancel_and_wait();
         self.stop_and_flush()?;
         if self
             .shared
@@ -296,6 +331,12 @@ impl CaptureRuntime {
 
     pub(crate) fn finish_update(&self) {
         self.shared.home.resume_after_update();
+        self.shared
+            .views
+            .maintenance
+            .update_paused
+            .store(false, Ordering::Release);
+        self.resume_cached_storage();
     }
 
     pub fn publish_preview(
@@ -335,6 +376,9 @@ impl CaptureRuntime {
         if self.closing.load(Ordering::Acquire) {
             return Err("Maxed is closing".into());
         }
+        if self.shared.upgrade.running() {
+            return Err("History upgrade is running; wait for it to finish.".into());
+        }
         if self.shared.failed.load(Ordering::Acquire) {
             return Err(WORKER_FAILED.into());
         }
@@ -363,6 +407,13 @@ impl CaptureRuntime {
         }
         self.close_completed()?;
         let (stop, stopped) = bounded(1);
+        // Rendezvous: Stop cannot strand an unclaimed reply in a buffered queue.
+        let (snapshot_requests, snapshot_reads) = bounded(0);
+        *self
+            .shared
+            .snapshot_requests
+            .lock()
+            .map_err(|_| WORKER_FAILED)? = Some(snapshot_requests);
         let cancel = Arc::new(AtomicBool::new(false));
         let shared = self.shared.clone();
         let worker_sink = sink.clone();
@@ -394,11 +445,18 @@ impl CaptureRuntime {
                         }
                     };
                     let initial = adapter.capture(shared.status());
+                    #[cfg(test)]
+                    let hook = shared.before_worker_loop.lock().unwrap().take();
+                    // Keep any claimed test reply alive through finalization;
+                    // dropping it at worker exit releases the waiting reader.
+                    #[cfg(test)]
+                    let _pending_snapshot_reply = hook.map(|hook| hook(&snapshot_reads, &stopped));
                     let result = if initial.is_ok() {
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                             run_worker(
                                 factory,
                                 stopped,
+                                &snapshot_reads,
                                 worker_cancel,
                                 &shared,
                                 &worker_sink,
@@ -466,6 +524,18 @@ impl CaptureRuntime {
             self.shared.failed.store(true, Ordering::Release);
             poison.into_inner()
         });
+        if self.shared.upgrade.running() {
+            return Err("History upgrade is running; wait for it to finish.".into());
+        }
+        // Retire calculation freshness before joining. A reader released by the
+        // worker's exit must not briefly return Live before final status delivery.
+        self.shared
+            .views
+            .character
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .capture_changed(CaptureState::Stopped);
+        self.shared.views.maintenance.handoff_background();
         self.retire_alert_delivery();
         if let Some(session) = session.take() {
             session.cancel.store(true, Ordering::Release);
@@ -500,11 +570,16 @@ impl CaptureRuntime {
         {
             return Err("Changes are not saved; retry summary storage before closing".into());
         }
-        if self.shared.failed.load(Ordering::Acquire) {
+        let result = if self.shared.failed.load(Ordering::Acquire) {
             Err(WORKER_FAILED.into())
         } else {
             Ok(())
+        };
+        drop(session);
+        if result.is_ok() {
+            self.resume_cached_storage();
         }
+        result
     }
 
     fn close_completed(&self) -> Result<(), String> {
@@ -529,9 +604,16 @@ impl CaptureRuntime {
     /// Only retained unsaved summaries prevent exit. Worker failure is not an
     /// exit veto, and cancelled exit returns the runtime to its normal lifecycle.
     pub fn shutdown(&self) -> Result<(), String> {
-        self.shared.home.close_idle_reader();
+        let session = self.session.lock().unwrap_or_else(|p| p.into_inner());
         self.closing.store(true, Ordering::Release);
+        drop(session);
+        self.shared.upgrade.cancel_and_wait();
+        self.shared.views.maintenance.handoff_background();
+        self.shared.home.close_idle_reader();
         let _ = self.stop();
+        // Join the live owner before rejecting: its last turn may have put a
+        // busy request back on the FIFO after the initial handoff barrier.
+        self.shared.views.maintenance.stop_background();
         // Final events and the terminal snapshot must drain before exit, even
         // when storage failed. Retain an IPC failure in the queryable status.
         let delivery = self.flush_bridge();
@@ -557,8 +639,12 @@ impl CaptureRuntime {
     }
 
     pub fn exit_without_saving(&self) {
+        let session = self.session.lock().unwrap_or_else(|p| p.into_inner());
         self.closing.store(true, Ordering::Release);
+        drop(session);
+        self.shared.upgrade.cancel_and_wait();
         let _ = self.stop();
+        self.shared.views.maintenance.stop_background();
         self.shared.home.shutdown_reads();
         self.shutdown_alert_delivery();
         let _session = self.session.lock().unwrap_or_else(|p| p.into_inner());
@@ -583,6 +669,7 @@ impl Drop for CaptureRuntime {
 fn run_worker(
     factory: impl FnOnce() -> Result<CaptureHandle, CaptureError>,
     stopped: Receiver<()>,
+    snapshot_reads: &Receiver<SnapshotRequest>,
     cancel: Arc<AtomicBool>,
     shared: &Shared,
     sink: &StatusSink,
@@ -625,6 +712,11 @@ fn run_worker(
         let mut disconnected = false;
         select_biased! {
             recv(stopped) -> _ => break,
+            recv(snapshot_reads) -> request => {
+                if let Ok(reply) = request {
+                    let _ = reply.send(adapter.read_snapshot());
+                }
+            },
             recv(committed) -> _ => {
                 if let Err(error) = adapter.drain() { storage_error = Some(error); }
             },
@@ -676,7 +768,7 @@ fn run_worker(
                 // Frames have priority: never advance past buffered capture.
                 if let Err(error) = time.service_tick(adapter, Instant::now()) { storage_error = Some(error); }
                 // Readiness changes must publish even before the first frame.
-                adapter.publish_due(presentation_clock.elapsed());
+                time.publish_due(adapter, presentation_clock.elapsed(), Instant::now());
                 adapter.refresh_store();
             },
         }
@@ -693,7 +785,7 @@ fn run_worker(
             storage_error = Some(error);
         }
         // A continuously populated frame queue must not starve presentation.
-        adapter.publish_due(presentation_clock.elapsed());
+        time.publish_due(adapter, presentation_clock.elapsed(), Instant::now());
         if disconnected || storage_error.is_some() {
             break;
         }
@@ -792,13 +884,22 @@ impl CaptureClock {
     }
     fn service_tick(&self, adapter: &mut Adapter, now: Instant) -> Result<(), String> {
         if let Some(at) = self.tick(now) {
-            // live_tick drains events and services chat maintenance.
+            // live_tick drains events and services storage maintenance.
             adapter.live_tick(at, self.quiet(now))?;
         } else {
-            // Clear and retention do not depend on observing the first frame.
-            adapter.service_chat_maintenance();
+            // History writes and retention do not depend on the first frame.
+            adapter.service_maintenance();
         }
         Ok(())
+    }
+    fn publish_due(&self, adapter: &mut Adapter, elapsed: Duration, now: Instant) {
+        // Presentation recency uses capture time plus the full arrival-clock
+        // elapsed time. The delayed expiry clock must not extend the 4 Hz window.
+        let at = self.anchor.map_or(adapter.at(), |(at, arrived)| {
+            let elapsed = now.saturating_duration_since(arrived);
+            Timestamp(at.0.saturating_add(elapsed.as_micros().min(u64::MAX as u128) as u64))
+        });
+        adapter.publish_due_at(elapsed, at.max(adapter.at()));
     }
     fn tick(&self, now: Instant) -> Option<Timestamp> {
         self.anchor.map(|(at, _)| {
@@ -840,6 +941,8 @@ mod alert_tests;
 #[cfg(test)]
 mod alerts_history;
 #[cfg(test)]
+mod character_tests;
+#[cfg(test)]
 mod chat_tests;
 #[cfg(test)]
 mod history_replay_tests;
@@ -855,6 +958,8 @@ mod join_tests;
 mod key_pop_tests;
 #[cfg(test)]
 mod loot_tests;
+#[cfg(test)]
+mod party_tests;
 #[cfg(test)]
 mod stats_tests;
 #[cfg(test)]

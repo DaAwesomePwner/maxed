@@ -1,7 +1,7 @@
 //! Query contracts. Unknown values remain explicit nulls.
 
 use crate::domain::*;
-use crate::Timestamp;
+use crate::{PotionStat, Timestamp};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -16,6 +16,56 @@ pub struct TimeRange {
 pub enum HomeScope {
     Session { id: String },
     Today { range: TimeRange },
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct HomeDungeonStreakRequest {
+    pub dungeon: String,
+}
+/// All-time white membership for one dungeon. Latest white includes open runs;
+/// counts and the average use ended runs, with one white membership per run.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
+pub struct HomeDungeonStreak {
+    pub dungeon: String,
+    pub runs_ended: u32,
+    pub runs_since_last_white: Option<u32>,
+    pub avg_runs_per_white: Option<f64>,
+    pub last_white_at: Option<Timestamp>,
+}
+/// Session/Today HUD. Fame per hour uses Home's scoped per-character delta over
+/// last_traffic - started (summed and clipped to the day for Today), with a
+/// five-minute minimum. Combat is None without eligible fights.
+///
+/// Whites count scoped bag appearances, not pickups. UT/ST types are distinct,
+/// newest appearance first and capped at twelve; ut_st_count is the uncapped
+/// number of distinct types. Potions count item appearances per stat, sorted by
+/// count descending and then PotionStat declaration order.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
+pub struct HomeHud {
+    pub fame_per_hour: Option<f64>,
+    pub combat: Option<HomeCombat>,
+    pub whites: u32,
+    pub ut_st: Vec<u16>,
+    pub ut_st_count: u32,
+    pub potions: Vec<PotionCount>,
+}
+/// Ended scoped fights with local DPS and a positive hit span within the fight.
+/// weighted_dps = sum(local_dps * span) / sum(span) across eligible fights.
+/// weighted_party_dps uses only eligible fights with an established party average.
+/// vs_party = sum(local_dps * span) / sum(party_dps * span) - 1 on that same paired
+/// subset, or None when the party denominator is zero. avg_rank is the unweighted
+/// mean of non-null local ranks across eligible fights.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct HomeCombat {
+    pub fights: u32,
+    pub weighted_dps: f64,
+    pub weighted_party_dps: Option<f64>,
+    pub vs_party: Option<f64>,
+    pub avg_rank: Option<f64>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct PotionCount {
+    pub stat: PotionStat,
+    pub count: u32,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct ScopeLootItem {
@@ -164,6 +214,15 @@ pub struct FamePoint {
     pub character_id: String,
     pub fame: i32,
 }
+/// A character's first and latest fame sample in a Home scope, before chart sampling.
+/// `HomeSummary::fame_characters` orders these by latest sample, oldest first.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct CharacterFame {
+    pub character_id: String,
+    pub first_fame: i32,
+    pub last_fame: i32,
+    pub last_at: Timestamp,
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct ClearComparison {
     pub previous_clears: u32,
@@ -219,6 +278,14 @@ pub enum HistoryReply<T> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct PartyAverage {
+    #[serde(with = "crate::finite::f64_value")]
+    #[ts(as = "f64")]
+    pub avg_dps: f64,
+    pub players: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct RunFightSummary {
     pub id: String,
     #[serde(default)]
@@ -242,6 +309,10 @@ pub struct RunFightSummary {
     #[ts(as = "Option<f64>")]
     pub local_dps: Option<f64>,
     pub local_rank: Option<u32>,
+    // Mean established DPS of the other players in this fight.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub party: Option<PartyAverage>,
     pub player_count: u32,
     pub partial: bool,
     pub estimated: bool,
@@ -283,6 +354,7 @@ pub struct HomeSummary {
     pub deaths: u32,
     pub fame_delta: Option<i32>,
     pub fame: Vec<FamePoint>,
+    pub fame_characters: Vec<CharacterFame>,
     pub best_drop: Option<DropView>,
     pub top_fight: Option<FightView>,
     pub recent_runs: Vec<RunView>,

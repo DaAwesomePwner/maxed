@@ -1,10 +1,11 @@
 import { createDropScope, emptyDrops, uniqueDrops } from './drop-data';
 import type { FightView } from '../bindings/FightView';
+import type { InstanceEventView } from '../bindings/InstanceEventView';
 import type { KillEvidence } from '../bindings/KillEvidence';
 import type { LiveSnapshot } from '../bindings/LiveSnapshot';
 import type { PlayerDamage } from '../bindings/PlayerDamage';
 import { focusClock, isRealmFightActive, snapshotFight, verifiedSelf } from '../shell/rail';
-import { knownNumber } from './evidence';
+import { damageUncertain, knownNumber } from './evidence';
 import type { HomeLiveWindow, RealmKillSummary } from './v2/contracts';
 import { emptyHomeLiveWindow } from './v2/live';
 import { inRealmVisit, realmVisitElapsed, realmVisitFame, realmVisitPeriod } from './v2/visit';
@@ -37,12 +38,12 @@ const unique = <T extends { id: string }>(rows: T[]): T[] => [...new Map(rows.ma
 
 const scopeDrops = createDropScope();
 const REALM_KILL_MERGE_US = 10_000_000n;
-function mergeKillAnnouncements(fought: RealmKillRow[], announced: RealmKillRow[], window: HomeLiveWindow): RealmKillRow[] {
+function mergeKillAnnouncements(fought: RealmKillRow[], announced: RealmKillRow[], periodOf: (at: string) => number | null): RealmKillRow[] {
   const distance = (a: RealmKillRow, b: RealmKillRow): bigint | null => {
     if (a.targetType === null || a.targetType !== b.targetType) return null;
     // A short trip can fit inside the matching tolerance; separate entries are
     // still distinct observations even when they belong to the same realm visit.
-    if (realmVisitPeriod(window, a.at) !== realmVisitPeriod(window, b.at)) return null;
+    if (periodOf(a.at) !== periodOf(b.at)) return null;
     const left = timestamp(a.at), right = timestamp(b.at);
     if (left === null || right === null) return null;
     const delta = left >= right ? left - right : right - left;
@@ -68,6 +69,33 @@ function mergeKillAnnouncements(fought: RealmKillRow[], announced: RealmKillRow[
   return [...merged, ...announced.filter(row => !consumed.has(row.id))];
 }
 
+/** Shared kill evidence and announcement matching for live and saved realm visits. */
+export function realmKillRows(input: {
+  fights: Array<FightView | RealmKillSummary>; events: InstanceEventView[];
+  self: (fight: FightView | RealmKillSummary) => PlayerDamage | null;
+  inScope: (at: string) => boolean; periodOf: (at: string) => number | null;
+}): RealmKillRow[] {
+  const fought: RealmKillRow[] = [], announced: RealmKillRow[] = [];
+  for (const row of unique(input.fights)) {
+    if (!input.inScope(row.started) || !['boss', 'event_boss', 'miniboss', 'quest'].includes(row.target_kind ?? '') || !row.kill
+      || row.kill.evidence === 'realm_announcement' || !input.inScope(row.kill.at)) continue;
+    fought.push({ id: `fight:${row.id}`, targetType: row.target_type, bossKey: null, at: row.kill.at,
+      evidence: row.kill.evidence, provisional: row.kill.provisional, self: input.self(row),
+      partial: 'partial' in row ? row.partial : fightPartial(row),
+      killer: null, fightId: row.id, started: row.started, ended: row.ended });
+  }
+  for (const row of unique(input.events)) {
+    if (!input.inScope(row.at) || row.kind.type !== 'realm_event_killed') continue;
+    announced.push({ id: `announcement:${row.id}`, targetType: row.kind.object_type ?? null,
+      bossKey: row.kind.boss_key, at: row.at, evidence: 'realm_announcement', provisional: true,
+      self: null, partial: true, killer: row.kind.killer ?? null, fightId: null, started: null, ended: null });
+  }
+  return mergeKillAnnouncements(fought, announced, input.periodOf).sort((a, b) => {
+    const left = timestamp(a.at)!, right = timestamp(b.at)!;
+    return left > right ? -1 : left < right ? 1 : a.id.localeCompare(b.id);
+  });
+}
+
 /** Snapshot metrics override retained visit rows; both obey the current scope. */
 export function realmView(snapshot: LiveSnapshot | null, window: HomeLiveWindow = emptyHomeLiveWindow(), previousId: string | null = null) {
   const realm = snapshot?.area_kind === 'realm' ? snapshot : null;
@@ -85,28 +113,13 @@ export function realmView(snapshot: LiveSnapshot | null, window: HomeLiveWindow 
     (knownNumber(b.damage) ?? -1) - (knownNumber(a.damage) ?? -1) || a.player_id.localeCompare(b.player_id));
   const players = allPlayers.slice(0, 5);
   if (self && !players.some(row => row.player_id === self.player_id)) players.splice(4, 1, self);
-  const fought: RealmKillRow[] = [], announced: RealmKillRow[] = [];
-  for (const row of unique<FightView | RealmKillSummary>(window.realmKills ?? window.fights)) {
-    if (!scoped(row, row.started) || !['boss', 'event_boss', 'miniboss', 'quest'].includes(row.target_kind ?? '') || !row.kill
-      || row.kill.evidence === 'realm_announcement' || !inRealmVisit(window, row.kill.at)) continue;
-    fought.push({ id: `fight:${row.id}`, targetType: row.target_type, bossKey: null, at: row.kill.at,
-      evidence: row.kill.evidence, provisional: row.kill.provisional,
-      self: 'self' in row
-        ? realm?.character?.identity_verified && row.self?.player_id === realm.character.id ? row.self : null
-        : verifiedSelf(realm?.character ?? null, row),
-      partial: 'partial' in row ? row.partial : fightPartial(row),
-      killer: null, fightId: row.id, started: row.started, ended: row.ended });
-  }
-  for (const row of unique(window.realmAnnouncements ?? window.events)) {
-    if (!scoped(row, row.at) || row.kind.type !== 'realm_event_killed') continue;
-    announced.push({ id: `announcement:${row.id}`, targetType: row.kind.object_type ?? null,
-      bossKey: row.kind.boss_key, at: row.at, evidence: 'realm_announcement', provisional: true,
-      self: null, partial: true, killer: row.kind.killer ?? null, fightId: null, started: null, ended: null });
-  }
-  const kills = mergeKillAnnouncements(fought, announced, window);
-  kills.sort((a, b) => {
-    const left = timestamp(a.at)!, right = timestamp(b.at)!;
-    return left > right ? -1 : left < right ? 1 : a.id.localeCompare(b.id);
+  const kills = realmKillRows({
+    fights: unique<FightView | RealmKillSummary>(window.realmKills ?? window.fights).filter(row => scoped(row, row.started)),
+    events: unique(window.realmAnnouncements ?? window.events).filter(row => scoped(row, row.at)),
+    self: row => 'self' in row
+      ? realm?.character?.identity_verified && row.self?.player_id === realm.character.id ? row.self : null
+      : verifiedSelf(realm?.character ?? null, row),
+    inScope: at => inRealmVisit(window, at), periodOf: at => realmVisitPeriod(window, at),
   });
   const score = realm?.instance?.realm_score;
   const scoreKnown = score != null && knownNumber(score.current) !== null
@@ -136,5 +149,5 @@ export function realmView(snapshot: LiveSnapshot | null, window: HomeLiveWindow 
 
 function fightPartial(fight: FightView): boolean {
   return !fight.complete_capture || fight.issues.length > 0
-    || fight.players.some(row => row.sources.some(source => source.estimated));
+    || fight.players.some(row => row.sources.some(damageUncertain));
 }

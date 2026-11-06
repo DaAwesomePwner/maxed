@@ -52,13 +52,23 @@ it.each(['#/runs', '#/runs/run-1', '#/runs/run-1/fights/fight-1', '#/runs/run-1/
   const view = document.querySelector('.runs, .run-story, .fight, .player')!;
   expect(view).toBeTruthy();
   expect(view.querySelector('[data-debug-note]')).toBeNull();
+  let estimate: HTMLElement | null = null;
   if (hash === '#/runs/run-1/fights/fight-1') {
     // Fight v3 retains quiet uncertainty tags while hiding evidence prose.
-    expect(screen.getByText('estimated', { selector: '.tag' })).toBeTruthy();
+    estimate = screen.getByText('~100% est.', { selector: '.tag' });
+    expect(estimate.getAttribute('title')).toBe("Estimated share of this item's damage");
     expect(screen.getByText('partial', { selector: '.tag' })).toBeTruthy();
     expect(view.textContent).not.toMatch(/provisional|partial capture|reconstruction|observed|unverified|coverage/i);
+  } else if (hash === '#/runs/run-1/fights/fight-1/players/7') {
+    // Shared player cards retain missing-data copy and quiet estimate tags.
+    expect(screen.getByText('partial', { selector: '.player-tag' })).toBeTruthy();
+    expect(screen.getByText('est.')).toBeTruthy();
+    expect(screen.getByText('No boss fights observed')).toBeTruthy();
+    expect(view.textContent).not.toMatch(/estimated|provisional|partial capture|reconstruction|unverified|coverage/i);
   } else expect(view.textContent).not.toMatch(/estimated|provisional|partial capture|reconstruction|observed|unverified|coverage/i);
   for (const node of view.querySelectorAll('[title], [aria-label], .sr-only')) {
+    // The item's estimated share is intentional production guidance, checked above.
+    if (node === estimate) continue;
     expect(`${node.getAttribute('title') ?? ''} ${node.getAttribute('aria-label') ?? ''} ${node.classList.contains('sr-only') ? node.textContent : ''}`)
       .not.toMatch(/estimated|provisional|partial|unavailable because|coverage/i);
   }

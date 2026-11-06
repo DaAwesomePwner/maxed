@@ -58,6 +58,7 @@ pub fn session(id: &str, started: u64, last_traffic: u64, ended: Option<u64>) ->
 
 pub fn character_view(id: &str, name: &str, at: u64) -> CharacterView {
     CharacterView {
+        calculation_revision: None,
         id: id.into(),
         name: Some(name.into()),
         class_id: Some(782),
@@ -137,6 +138,7 @@ pub fn run(id: &str, session: &str, dungeon: &str, started: u64) -> RunView {
         ended: None,
         completed_at: None,
         died_at: None,
+        death: None,
         outcome: None,
         evidence: vec![],
         party_size: None,

@@ -1,0 +1,29 @@
+{
+  "name": "Windows GUI smoke",
+  "on": {
+    "schedule": [{ "cron": "47 9 * * *" }],
+    "pull_request": { "branches": ["main"] },
+    "workflow_dispatch": {}
+  },
+  "concurrency": {
+    "group": "gui-smoke-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}",
+    "cancel-in-progress": "${{ github.event_name == 'pull_request' }}"
+  },
+  "permissions": { "contents": "read" },
+  "jobs": {
+    "gui-smoke": {
+      "runs-on": "windows-2022",
+      "timeout-minutes": 45,
+      "defaults": { "run": { "shell": "pwsh" } },
+      "steps": [
+        { "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": { "persist-credentials": false } },
+        { "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": { "node-version": "22.16.0" } },
+        { "name": "Restore locked tools", "run": "$channel = [regex]::Match((Get-Content rust-toolchain.toml -Raw), '(?m)^channel\\s*=\\s*\"([^\"]+)\"\\s*$')\nif (-not $channel.Success) { throw 'Rust toolchain channel missing.' }\n$toolchain = $channel.Groups[1].Value\nrustup toolchain install $toolchain --profile minimal --component rustfmt --component clippy\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }" },
+        { "name": "Harness unit tests", "run": "node --test tests/gui-smoke/*.test.mjs\nif ($LASTEXITCODE) { throw 'CDP harness tests failed.' }\npwsh -NoProfile -File tests/gui-smoke/Invoke-GuiSmoke.test.ps1\nif ($LASTEXITCODE) { throw 'GUI launcher tests failed.' }" },
+        { "name": "Build and run GUI smoke", "run": "$output = Join-Path $env:RUNNER_TEMP (\"gui-smoke-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)\")\npwsh -NoProfile -File tests/gui-smoke/Invoke-GuiSmoke.ps1 -Port 9238 -TimeoutSeconds 60 -OutputDir $output\nif ($LASTEXITCODE) { throw 'GUI smoke failed.' }" },
+        { "name": "Ensure GUI smoke stopped", "if": "always()", "run": "$output = Join-Path $env:RUNNER_TEMP (\"gui-smoke-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)\")\npwsh -NoProfile -File tests/gui-smoke/Invoke-GuiSmoke.ps1 -CleanupOnly -OutputDir $output\nif ($LASTEXITCODE) { throw 'GUI smoke cleanup failed.' }" },
+        { "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9", "if": "always()", "with": { "name": "gui-smoke-${{ github.run_id }}-${{ github.run_attempt }}", "path": "${{ runner.temp }}/gui-smoke-${{ github.run_id }}-${{ github.run_attempt }}/", "if-no-files-found": "warn", "retention-days": 3, "include-hidden-files": false } }
+      ]
+    }
+  }
+}

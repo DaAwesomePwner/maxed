@@ -119,9 +119,17 @@ export const lootQueries = {
       dungeons: lootDungeons.filter(dungeon => rows.some(row => row.dungeon === dungeon) || ended.some(run => run.dungeon === dungeon)).map(dungeon => {
         const bags = rows.filter(row => row.dungeon === dungeon), runs = ended.filter(run => run.dungeon === dungeon);
         const lastWhite = lootBags.find(row => row.dungeon === dungeon && row.drop.bag_rank === 255)?.drop.at;
+        const allRuns = lootRuns.filter(run => run.dungeon === dungeon && run.ended !== null);
+        let whiteRuns = 0, dry = 0, longestDry = 0;
+        // lootRuns is already ordered by start time.
+        for (const run of allRuns) {
+          if (lootBags.some(row => row.drop.run_id === run.id && row.drop.bag_rank === 255)) { whiteRuns++; dry = 0; }
+          else { dry++; longestDry = Math.max(longestDry, dry); }
+        }
         const best = [...bags].filter(row => row.drop.bag_rank !== null).sort((a, b) => b.drop.bag_rank! - a.drop.bag_rank!)[0]?.drop;
         return { dungeon, runs_ended: runs.length, clears: runs.filter(run => run.cleared).length, bags: bagCounts(bags), whites: whites(bags),
           runs_since_last_white: lastWhite ? dryRuns(dungeon, lastWhite) : null,
+          white_runs: whiteRuns, avg_runs_per_white: whiteRuns ? allRuns.length / whiteRuns : null, longest_dry: whiteRuns ? longestDry : null,
           best: best && best.bag_rank !== null ? { drop_id: best.id, run_id: best.run_id, bag_rank: best.bag_rank, at: best.at } : null };
       }),
       sources: groups(rows.filter(row => row.drop.source_enemy !== null), row => JSON.stringify([row.drop.source_enemy, row.dungeon])).map(bags => ({

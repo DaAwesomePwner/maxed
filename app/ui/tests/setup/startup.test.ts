@@ -18,6 +18,40 @@ afterEach(() => {
 });
 
 describe('startup setup routing', () => {
+  it.each([1, 10])('routes legacy v%s to Setup without waiting for assets or the startup hint', async schemaVersion => {
+    const f = setupFixture();
+    f.transport.setHistoryUpgradeFixture({ schemaVersion, freeBytes: '1000000000' });
+    f.client.queryStartupSetupRequired = vi.fn(() => new Promise<never>(() => {}));
+    f.client.querySetup = vi.fn(() => new Promise<never>(() => {}));
+    render(App, { client: f.client }); await flushHomeRender();
+    expect(screen.getByRole('heading', { name: 'Setup', level: 1 })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'History upgrade required' })).toBeTruthy();
+    expect(f.client.backupAndUpgradeHistory).not.toHaveBeenCalled();
+  });
+  it('preserves navigation made before a delayed legacy-upgrade reply', async () => {
+    const f = setupFixture();
+    f.client.queryStartupSetupRequired = vi.fn(async () => false);
+    const pending = deferred<Awaited<ReturnType<typeof f.client.queryHistoryUpgradeStatus>>>();
+    f.client.queryHistoryUpgradeStatus = vi.fn(() => pending.promise);
+    render(App, { client: f.client }); await flushHomeRender();
+    await fireEvent.click(within(screen.getByRole('complementary', { name: 'Character' })).getByRole('link', { name: 'Runs' }));
+    await flushHomeRender();
+    pending.resolve({ phase: 'blocked', schema_version: 10, required_bytes: '100', free_bytes: null, failure: 'space_unknown', last_failure: null });
+    await flushHomeRender();
+    expect(screen.getByRole('heading', { name: 'Runs', level: 1 })).toBeTruthy();
+  });
+  it('ignores retired-client upgrade routing replies', async () => {
+    const a = setupFixture(), b = setupFixture();
+    a.client.queryStartupSetupRequired = vi.fn(async () => false);
+    b.client.queryStartupSetupRequired = vi.fn(async () => false);
+    const pending = deferred<Awaited<ReturnType<typeof a.client.queryHistoryUpgradeStatus>>>();
+    a.client.queryHistoryUpgradeStatus = vi.fn(() => pending.promise);
+    const view = render(App, { client: a.client }); await flushHomeRender();
+    await view.rerender({ client: b.client }); await flushHomeRender();
+    pending.resolve({ phase: 'required', schema_version: 10, required_bytes: '100', free_bytes: '1000', failure: null, last_failure: null });
+    await flushHomeRender();
+    expect(screen.getByRole('heading', { name: 'Home', level: 1 })).toBeTruthy();
+  });
   it.each([true, false])('opens the readiness-selected first route (required=%s)', async required => {
     const { client } = setupFixture();
     const pending = deferred<boolean>();

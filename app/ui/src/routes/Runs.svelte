@@ -19,8 +19,9 @@
   import { clearAndDeath } from '../lib/runs/story';
   import KpiStrip from '../lib/home/v3/KpiStrip.svelte';
   import '../lib/home/v3/area-home.css';
-  import { dayGroups, listKpis, presetFor, presetRange, runDate, shortDate, signedFame, clearTime, vsBest, type RangePreset } from '../lib/runs/runs-list';
+  import { dayGroups, listKpis, presetFor, presetRange, runDate, shortDate, signedFame, clearTime, vsBest, partialReasons, type RangePreset } from '../lib/runs/runs-list';
   import { formatStat, formatShare } from '../lib/styles/format';
+  import { plural } from '../lib/loot/presentation';
   import { createDungeonPortal, createHomeVisuals, emptyHomeVisuals } from '../lib/home/visuals';
   import { objectVisual } from '../lib/bridge/visual-index';
   import { spriteUrl } from '../lib/bridge/visuals';
@@ -92,11 +93,12 @@
     }
     const instance = createRunHistory(owner, next => {
       history = next;
-      if (next.phase === 'ready' && next.value?.kind === 'runs') {
+      if (next.value?.kind === 'runs') {
         now = new Date();
         if (filter.cursor === null) {
           summary = next.value.page.summary ?? null;
-          onStateChange?.({ runsPosition: { previous: $state.snapshot(previous), offset: pageOffset, summary } });
+          // Cached values keep the cards visible; only a ready result saves navigation state.
+          if (next.phase === 'ready') onStateChange?.({ runsPosition: { previous: $state.snapshot(previous), offset: pageOffset, summary } });
         }
       }
       if (next.phase === 'ready' || next.phase === 'error' || next.phase === 'superseded' || (next.phase === 'busy' && next.retryAvailable)) paging = false;
@@ -189,7 +191,7 @@
   <HistoryStatus {history} />
   <p class="sr-only" role="status" aria-live="polite">{missingRow}</p>
   <header class="area-header">
-    <div><h2>Runs</h2><p>{formatStat(summary?.total_runs_all_time ?? null)} saved runs · since {summary?.first_started ? shortDate(summary.first_started) : '—'}</p></div>
+    <div><h2>Runs</h2><p>{formatStat(summary?.total_runs_all_time ?? null)} saved {plural(summary?.total_runs_all_time ?? 0, 'run')} · since {summary?.first_started ? shortDate(summary.first_started) : '—'}</p></div>
     <div class="seg ranges" role="group" aria-label="Date range">
       {#each [['all', 'All time'], ['30d', '30 days'], ['7d', '7 days'], ['today', 'Today']] as [value, label]}
         <button type="button" class:on={preset === value} aria-pressed={preset === value} onclick={() => apply({ range: presetRange(value as RangePreset, new Date()) })}>{label}</button>
@@ -229,10 +231,11 @@
       <div class="table" aria-label="Runs">
         <div class="row labels" aria-hidden="true"><span>Dungeon</span><span>Result</span><span class="number">Clear time</span><span class="number comparison">vs best</span><span>Character</span><span>Your share</span><span class="number">Fame</span><span class="loot">Loot</span><span class="number">Started</span></div>
         {#each groups as group (group.key)}
-          {#if group.label !== null}<div class="day"><b>{group.label}</b> · {group.runs} runs · {group.cleared} cleared · {signedFame(group.fame)} fame</div>{/if}
+          {#if group.label !== null}<div class="day"><b>{group.label}</b> · {group.runs} {plural(group.runs, 'run')} · {group.cleared} cleared · {signedFame(group.fame)} fame</div>{/if}
           {#each group.rows as run (run.id)}
             {@const detail = details.get(run.id)}
             {@const comparison = vsBest(detail)}
+            {@const partial = partialReasons(run, detail)}
             {@const loot = detail?.loot_preview.slice(0, 3) ?? []}
             <a class="row" data-row-id={run.id} href={routeHref({ kind: 'run', id: run.id })}>
               <span class="cell" title={run.dungeon}>{@render icon(portals.get(run.dungeon), '')}<strong class="name">{run.dungeon}</strong></span>
@@ -241,12 +244,12 @@
                 {#if clearAndDeath(run)}<small class="warning tag">Clear and death</small>{/if}
               </span>
               <span class="number">{#if detail?.is_personal_best}<span class="pb">PB</span>{/if}{clearTime(detail?.clear_micros)}</span>
-              <span class="number comparison" class:good={comparison?.tone === 'good'}>{comparison?.text ?? '—'}</span>
+              <span class="number comparison" title={comparison?.title} class:good={comparison?.tone === 'good'}>{comparison?.text ?? '—'}</span>
               <span class="cell" title={detail?.character_name ?? undefined}>{@render icon(detail?.class_id, '')}<span class="name">{detail?.character_name ?? '—'}</span></span>
-              <span class="share">{#if detail?.local_share != null}<i aria-hidden="true"><b style:width={`${Math.max(0, Math.min(1, detail.local_share)) * 100}%`}></b></i>{/if}{formatShare(detail?.local_share ?? null)}{#if detail?.share_partial}<small class="tag" title="Partial share">partial</small>{/if}</span>
+              <span class="share">{#if detail?.local_share != null}<i aria-hidden="true"><b style:width={`${Math.max(0, Math.min(1, detail.local_share)) * 100}%`}></b></i>{/if}{formatShare(detail?.local_share ?? null)}</span>
               <span class="number" class:gold={detail?.fame_delta != null}>{signedFame(detail?.fame_delta ?? null)}</span>
               <span class="loot bags">{#if loot.length}{#each loot as bag}{@render icon(bag.bag_type, 'Observed bag')}{/each}{:else}—{/if}{#if detail && detail.observed_drop_count > loot.length}<small>+{detail.observed_drop_count - loot.length}</small>{/if}</span>
-              <span class="number started">{runDate(run.started).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{#if !run.complete_capture || run.issues.length}<small class="tag">partial</small>{/if}</span>
+              <span class="number started">{runDate(run.started).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{#if partial}<small class="tag" title={partial}>partial</small>{/if}</span>
             </a>
           {/each}
         {/each}
@@ -287,7 +290,7 @@
   .result { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pb { color: var(--gold); border: 1px solid #f2c14e45; background: #f2c14e14; padding: 0 3px; border-radius: 3px; font-size: 9px; margin-right: 4px; }
   .share { display: flex; gap: 4px; align-items: center; font-size: 11px; white-space: nowrap; }
-  .share i { width: 30px; min-width: 10px; flex: 0 1 30px; height: 4px; background: var(--surface-raised); border-radius: 2px; overflow: hidden; }
+  .share i { width: 30px; flex: 0 0 30px; height: 6px; background: var(--border-strong, #555568); border-radius: 2px; overflow: hidden; }
   .share b { display: block; height: 100%; background: var(--violet); }
   .bags { display: flex; align-items: center; gap: 1px; }
   .bags small, .started { color: var(--text-muted); }

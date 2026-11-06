@@ -20,9 +20,9 @@ function fixture(): LootStats {
   return {
     dungeons: [
       { dungeon: 'Invented Abbey', runs_ended: 24, clears: 12, bags: [{ bag_rank: 255, count: 3 }], whites: 3,
-        runs_since_last_white: 4, best: { drop_id: 'bag-a', run_id: 'run-a', bag_rank: 255, at: '1000000' } },
+        runs_since_last_white: 4, white_runs: 3, avg_runs_per_white: 8, longest_dry: 9, best: { drop_id: 'bag-a', run_id: 'run-a', bag_rank: 255, at: '1000000' } },
       { dungeon: 'Invented Burrow', runs_ended: 10, clears: 2, bags: [{ bag_rank: 42, count: 1 }], whites: 0,
-        runs_since_last_white: null, best: { drop_id: 'bag-b', run_id: null, bag_rank: 42, at: '2000000' } },
+        runs_since_last_white: null, white_runs: 0, avg_runs_per_white: null, longest_dry: null, best: { drop_id: 'bag-b', run_id: null, bag_rank: 42, at: '2000000' } },
     ],
     sources: [
       { source_enemy: 900, dungeon: 'Invented Abbey', bags: [{ bag_rank: 255, count: 3 }], whites: 3, runs_ended: 24 },
@@ -233,19 +233,19 @@ it('shows percentage rates including zero whites and no ended runs', async () =>
 it('persists aria-sort through Back and Forward', async () => {
   const browser = fakeHistory('#/loot/stats'), router = createRouter(browser.adapter);
   const page = mount({ savedState: router.state.entry }); await flush();
-  expect(screen.getByRole('button', { name: 'Runs' }).closest('th')?.getAttribute('aria-sort')).toBe('descending');
-  await fireEvent.click(screen.getByRole('button', { name: 'Runs' }));
+  expect(screen.getByRole('button', { name: 'Ended runs' }).closest('th')?.getAttribute('aria-sort')).toBe('descending');
+  await fireEvent.click(screen.getByRole('button', { name: 'Ended runs' }));
   router.save(page.onStateChange.mock.lastCall![0]);
   router.navigate({ kind: 'loot', view: 'feed' }); router.back();
   await page.rerender({ savedState: router.state.entry }); await flush();
-  expect(screen.getByRole('button', { name: 'Runs' }).closest('th')?.getAttribute('aria-sort')).toBe('ascending');
+  expect(screen.getByRole('button', { name: 'Ended runs' }).closest('th')?.getAttribute('aria-sort')).toBe('ascending');
   router.forward(); router.navigate({ kind: 'loot', view: 'stats' });
   await page.rerender({ savedState: router.state.entry }); await flush();
   await fireEvent.click(screen.getByRole('button', { name: 'White rate' }));
   await fireEvent.click(screen.getByRole('button', { name: 'White rate' }));
   router.save(page.onStateChange.mock.lastCall![0]);
   router.back(); router.back(); await page.rerender({ savedState: router.state.entry }); await flush();
-  expect(screen.getByRole('button', { name: 'Runs' }).closest('th')?.getAttribute('aria-sort')).toBe('ascending');
+  expect(screen.getByRole('button', { name: 'Ended runs' }).closest('th')?.getAttribute('aria-sort')).toBe('ascending');
   router.forward(); router.forward(); await page.rerender({ savedState: router.state.entry }); await flush();
   expect(screen.getByRole('button', { name: 'White rate' }).closest('th')?.getAttribute('aria-sort')).toBe('descending');
   router.dispose();

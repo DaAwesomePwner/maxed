@@ -27,7 +27,7 @@ npm --prefix app/ui ci
 npm --prefix app/ui run tauri dev
 ```
 
-Use the npm `tauri` script so the CLI starts at the repository root and finds `app/src-tauri`. In PowerShell, `npm.cmd` is an alternative if script execution policy blocks `npm`.
+Use the npm `tauri` script to start the CLI in `app/src-tauri`, so the `beforeDevCommand` and `beforeBuildCommand` paths in `tauri.conf.json` resolve against `app/` and reach `app/ui`. In PowerShell, `npm.cmd` is an alternative if script execution policy blocks `npm`.
 
 Build a desktop release executable with:
 
@@ -41,7 +41,7 @@ Add `-Offline` when Cargo dependencies are cached. The script builds the UI, ena
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [documentation index](docs/README.md). The project uses a Rust workspace, Tauri 2 and Svelte 5. macOS can run core checks and cross-build Windows test artifacts; it is not a supported application platform.
 
-Use [GitHub issues](https://github.com/DaAwesomePwner/maxed/issues) for bugs and feature requests. Never post raw captures, player names or account data. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md), and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+Use [GitHub issues](https://github.com/daplabs/maxed/issues) for bugs and feature requests. Never post raw captures, player names or account data. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md), and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

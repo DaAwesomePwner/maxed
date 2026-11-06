@@ -7,7 +7,7 @@ mod catalog;
 mod error;
 mod reader;
 mod reference_ids;
-mod rules;
+pub mod rules;
 pub mod sprite_delivery;
 mod sprites;
 mod tiles;

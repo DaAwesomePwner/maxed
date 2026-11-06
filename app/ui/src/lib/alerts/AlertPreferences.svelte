@@ -90,7 +90,7 @@
   {#if $sessionStatus === 'retired'}<p>Disconnected</p>{/if}
   {#if $sessionStatus === 'failed'}
     <p>Couldn't load alert preferences. Retry.</p>
-    <button type="button" disabled={!enabled || preferencesState.busy} onclick={() => { void editor?.refresh(); }}>Retry Preferences</button>
+    <button class="ctl" type="button" disabled={!enabled || preferencesState.busy} onclick={() => { void editor?.refresh(); }}>Retry Preferences</button>
   {/if}
   {#if preview || demo === true}<p>Preview</p>
   {:else if demo === null}<p class="note">Disconnected</p>{/if}
@@ -100,13 +100,15 @@
         {#if kind === 'key_popped'}<h3>Key Popped</h3>{/if}
         <div class="kind-row">
           <label for={`alert-${kind}`}>{alertKindLabels[kind]}</label>
-          <select id={`alert-${kind}`} value={preferencesState.draft?.[kind] ?? ''} disabled={!editable || !preferencesState.draft || kind === 'flawless_run'} onchange={(event) => choose(kind, event.currentTarget.value)}>
+          <select class="ctl" id={`alert-${kind}`} value={preferencesState.draft?.[kind] ?? ''} disabled={!editable || !preferencesState.draft || kind === 'flawless_run'} onchange={(event) => choose(kind, event.currentTarget.value)}>
             {#if !preferencesState.draft}<option value="">Unavailable</option>{/if}
             {#each loudnessChoices as choice}<option value={choice}>{loudnessLabels[choice]}</option>{/each}
           </select>
-          <button type="button" aria-label={`Test ${alertKindLabels[kind]}`} disabled={!testAvailable || kind === 'flawless_run'} onclick={() => { void test(kind); }}>Test</button>
+          <button class="ctl" type="button" aria-label={`Test ${alertKindLabels[kind]}`} disabled={!testAvailable || kind === 'flawless_run'} onclick={() => { void test(kind); }}>Test</button>
         </div>
         {#if kind === 'key_popped' && preferencesState.draft}
+          <p class="note">All observed pops remain in Logs. These choices control alerts only.</p>
+          {#if preferencesState.draft.key_popped === 'off'}<p class="note">Key-pop alerts are off. Choose dungeons, then select Toast or Banner and save to enable them.</p>{/if}
           <DungeonPicker {client} preferences={preferencesState.draft} disabled={!editable} onEdit={patch => editor?.edit(patch)} />
         {/if}
       </section>
@@ -115,11 +117,11 @@
     <p class="note">Sound: {delivery === null ? '—' : delivery.sound_available ? 'Available' : 'Unavailable'}{#if !live}<DebugNote inline>Tests require live capture.</DebugNote>{/if}</p>
     <label class="mute"><input type="checkbox" checked={preferencesState.draft?.muted ?? false} disabled={!editable || !preferencesState.draft} onchange={(event) => editor?.edit({ muted: event.currentTarget.checked })} /> Mute Sounds</label>
     <label class="volume">Volume<input type="range" min="0" max="100" step="1" value={preferencesState.draft?.volume_percent ?? 0} disabled={!editable || !preferencesState.draft} oninput={(event) => editor?.edit({ volume_percent: Number(event.currentTarget.value) })} /><span>{preferencesState.draft ? `${preferencesState.draft.volume_percent}%` : 'Unavailable'}</span></label>
-    <div class="actions"><button type="submit" disabled={!editable || !preferencesState.saved || !preferencesState.dirty || preferencesState.busy}>Save</button><button type="button" disabled={!preferencesState.dirty} onclick={() => editor?.revert()}>Revert</button></div>
-    <p class="note" role="status">{preferencesState.message || (preferencesState.dirty ? 'Unsaved Changes' : preferencesState.saved ? 'Saved' : '')}</p>
+    <div class="actions"><button class="ctl" type="submit" disabled={!editable || !preferencesState.saved || !preferencesState.dirty || preferencesState.busy}>Save</button><button class="ctl" type="button" disabled={!preferencesState.dirty} onclick={() => editor?.revert()}>Revert</button></div>
+    <p class="note" role="status">{(preferencesState.message === 'Saved' ? 'Alert preferences saved' : preferencesState.message) || (preferencesState.dirty ? 'Unsaved Changes' : '')}</p>
   </form>
   <div class="windows-row"><label><input type="checkbox" disabled={!editable || !preferencesState.draft || (delivery?.permission !== 'granted' && !preferencesState.draft.windows_notifications)} checked={preferencesState.draft?.windows_notifications ?? false} onchange={(event) => editor?.edit({ windows_notifications: event.currentTarget.checked })} /> Windows Notifications</label><Badge label={delivery?.permission === 'granted' ? 'Available' : 'Unavailable'} /></div>
-  <button type="button" disabled={!testAvailable || !notificationTestKind || delivery?.permission !== 'granted' || !preferencesState.saved?.windows_notifications} onclick={() => { if (notificationTestKind) void test(notificationTestKind); }}>Test Notification</button>
+  <button class="ctl" type="button" disabled={!testAvailable || !notificationTestKind || delivery?.permission !== 'granted' || !preferencesState.saved?.windows_notifications} onclick={() => { if (notificationTestKind) void test(notificationTestKind); }}>Test Notification</button>
   <details>
     <summary>Delivery</summary>
     <p>Sound: {delivery === null ? '—' : delivery.sound_available ? 'Available' : 'Unavailable'}.</p>
@@ -127,8 +129,8 @@
     <DebugNote text={live ? 'Tests use saved preferences and the native live-capture guard.' : 'Sound tests require live capture and an observed capture clock.'} />
     {#if delivery}<p>Permission: {permissionLabels[delivery.permission]}</p>{/if}
     <div class="actions">
-      {#if client}<button type="button" disabled={checking || !enabled} onclick={() => { void refreshDelivery(); }}>{delivery === null || demo === null ? 'Retry Delivery' : 'Refresh Delivery'}</button>{/if}
-      {#if session && $sessionStatus !== 'failed'}<button type="button" disabled={preferencesState.busy || !enabled || $sessionStatus === 'retired' || $sessionStatus === 'loading' || $sessionStatus === 'saving'} onclick={() => { void editor?.refresh(); }}>{preferencesState.saved === null ? 'Retry Preferences' : 'Refresh Preferences'}</button>{/if}
+      {#if client}<button class="ctl" type="button" disabled={checking || !enabled} onclick={() => { void refreshDelivery(); }}>{delivery === null || demo === null ? 'Retry Delivery' : 'Refresh Delivery'}</button>{/if}
+      {#if session && $sessionStatus !== 'failed'}<button class="ctl" type="button" disabled={preferencesState.busy || !enabled || $sessionStatus === 'retired' || $sessionStatus === 'loading' || $sessionStatus === 'saving'} onclick={() => { void editor?.refresh(); }}>{preferencesState.saved === null ? 'Retry Preferences' : 'Refresh Preferences'}</button>{/if}
     </div>
   </details>
   <p class="note" role="status">{deliveryMessage}</p>

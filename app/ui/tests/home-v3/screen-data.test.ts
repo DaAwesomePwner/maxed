@@ -2,6 +2,17 @@ import { expect, it } from 'vitest';
 import { homeSnapshot } from '../home/fixtures';
 import { emptyHomeVisuals } from '../../src/lib/home/visuals';
 import { bossOnly, damageRows, runRows, personalBest, lootCounts, notificationTip, fightDps } from '../../src/lib/home/v3/screen-data';
+import { rankWindow } from '../../src/lib/home/v3/rank-window';
+
+it('carries player and object ids through fight and run row windows', () => {
+  const seed = homeSnapshot().fights[0].players[0];
+  const rows = damageRows([seed], seed);
+  expect(rows[0]).toMatchObject({ player_id: seed.player_id, object_id: seed.object_id });
+  expect(rankWindow(rows)[0]).toMatchObject({ player_id: seed.player_id, object_id: seed.object_id });
+  const { object_id: _objectId, sources: _sources, ...total } = seed;
+  expect(damageRows([total], total)[0]).toMatchObject({ player_id: seed.player_id, object_id: null });
+  expect(runRows([total], total)[0]).toMatchObject({ player_id: seed.player_id, object_id: null });
+});
 
 it('keeps a short glimpse DPS unavailable and orders nullable player DPS by damage', () => {
   const fight = homeSnapshot().fights[0];

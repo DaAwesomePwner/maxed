@@ -20,7 +20,10 @@ pub struct LivePayloads(Mutex<Subscriptions>);
 
 impl LivePayloads {
     pub fn subscribe(&self, label: &str, event: String, channel: Channel) -> Result<u32, String> {
-        if !matches!(event.as_str(), "live-snapshot" | "engine-event") {
+        if !matches!(
+            event.as_str(),
+            "live-snapshot" | "engine-event" | "party-changed"
+        ) {
             return Err(super::DELIVERY_FAILED.into());
         }
         let mut subscriptions = self.0.lock().map_err(|_| super::DELIVERY_FAILED)?;
@@ -101,6 +104,40 @@ impl LivePayloads {
 mod tests {
     use super::*;
     use std::sync::Arc;
+
+    #[test]
+    fn party_changed_subscribes_and_delivers_only_scope_id() {
+        let payloads = LivePayloads::default();
+        let (send, receive) = std::sync::mpsc::channel();
+        payloads
+            .subscribe(
+                "main",
+                "party-changed".into(),
+                Channel::new(move |body| {
+                    send.send(body).unwrap();
+                    Ok(())
+                }),
+            )
+            .unwrap();
+        payloads
+            .send(
+                "party-changed",
+                &crate::bridge::PartyChanged {
+                    scope_id: Some("synthetic-scope".into()),
+                },
+            )
+            .unwrap();
+        let InvokeResponseBody::Raw(bytes) = receive
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap()
+        else {
+            panic!("expected byte payload")
+        };
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            serde_json::json!({"scope_id":"synthetic-scope"})
+        );
+    }
 
     #[test]
     fn abandoned_subscriptions_do_not_permanently_exhaust_capacity() {
