@@ -153,8 +153,8 @@ Channel storage toggles do not replace alert preferences.
 
 In-app and Windows toasts include the sender and message excerpt, cut to 120
 characters. Key Popped still never shows the opener. All three chat kinds share
-`chat_message.wav` and the existing loudness/global-mute policy. **Owner ear-approval
-of the chat cue is pending.** Chat text and sender names never enter diagnostics.
+`chat_message.wav` and the existing loudness/global-mute policy. The owner approved
+the chat cue on 2026-11-06. Chat text and sender names never enter diagnostics.
 
 Chat alerts follow the chat retention window (90 days by default, 1–3,650 days).
 Clear chat history removes eligible chat alerts along with chat rows; an alert

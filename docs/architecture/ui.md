@@ -313,8 +313,9 @@ through the WebView.
 `#/character` is gated by `productionFeatures.character: true`, on in production
 for owner use. The DEV-only `?preview=character` mounts the real Shell using
 invented DTOs. The owner approved production enablement on 2026-10-20 before
-Task 11; [Windows live acceptance](../development/character-live-acceptance.md#production-enablement)
-remains pending and is being verified in use.
+Task 11 and, on 2026-11-06, accepted weapon/regen values, 100%/150% scaling and keyboard behavior from
+Windows use. The recorded [Task 11 checklist](../development/character-live-acceptance.md#production-enablement)
+remains unexecuted.
 
 The Shell's existing ordered live subscription supplies the local `CharacterView`.
 Observed identity, equipment, totals, raw boosts and coverage stay distinct from

@@ -60,7 +60,8 @@ Windows gameplay and installed-release acceptance remain incomplete.
   game-client observations, Windows WebView2 or installer behavior.
 - The isolated [clipboard spike](development/recap-clipboard-spike.md) verified
   a WebView2 PNG write. The owner accepted copying with real sprites and pasting
-  into Discord from use on 2026-11-06.
+  into Discord from use on 2026-11-06. Segoe UI Variable rendering in the copied
+  image still needs owner acceptance.
 
 ## Party
 
@@ -138,14 +139,15 @@ Diagnostic path redaction is incomplete for some paths with spaces, so local
 reports need inspection before sharing. Installer Npcap guidance is not
 selectable; the [installation guide](release/INSTALL.md) provides the link.
 
-The [release checklist](release/CHECKLIST.md) remains incomplete. The owner
-reports clean install/update/uninstall worked and saw no problems with real
-capture, recording, network behavior, Windows input/DPI/accessibility or
-performance in use (2026-11-06), but the checklist's recorded measurements and
-audits (recording under disk exhaustion, network audit, performance gates) are
-not established. Public readiness also requires rights review, fixture publication
-approval, a Code of Conduct contact, private reporting and legal-notice
-reconciliation.
+The [release checklist](release/CHECKLIST.md) remains incomplete. On 2026-11-06
+the owner reported that clean install/update/uninstall worked when needed, and
+assessed real capture, recording under low disk space, network audit coverage,
+Windows input/DPI/accessibility, performance, and the public-readiness items
+(rights review, fixture publication approval, a Code of Conduct contact, private
+reporting and legal-notice reconciliation) as "all good from what I can tell".
+That is a qualified owner assessment, not the recorded audits, measurements and
+approvals the checklist requires; its boxes stay unchecked until that evidence
+is recorded.
 
 ## Character
 
