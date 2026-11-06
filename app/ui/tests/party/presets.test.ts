@@ -6,6 +6,7 @@ import { createFixtureTransport } from '../../src/lib/bridge/fixture';
 import type { PartySettings } from '../../src/lib/bindings/PartySettings';
 import type { RequirementPreset } from '../../src/lib/bindings/RequirementPreset';
 import { presetCopyText } from '../../src/lib/party/party-screen';
+import { dungeonDef } from '../fixtures/dungeon';
 import { homeSnapshot } from '../home/fixtures';
 import { deferred, flush } from '../runs/fixtures';
 
@@ -17,8 +18,8 @@ async function mount(party: PartySettings = { presets: [preset()] }) {
   const save = vi.spyOn(client, 'updatePartySettings').mockResolvedValue(undefined);
   const generalSave = vi.spyOn(client, 'updateSettings');
   vi.spyOn(client, 'listCatalogDungeonOptions').mockResolvedValue([
-    { name: 'Synthetic Sanctum', aliases: ['synth alias'], portal_type: null, kind: 'dungeon', completion_index: null },
-    { name: 'Synthetic Cavern', aliases: [], portal_type: null, kind: 'dungeon', completion_index: null },
+    dungeonDef({ name: 'Synthetic Sanctum', aliases: ['synth alias'], portal_type: null }),
+    dungeonDef({ name: 'Synthetic Cavern', aliases: [], portal_type: null }),
   ]);
   render(Party, { client, route: { kind: 'party-presets' } }); await flush();
   return { client, save, generalSave };

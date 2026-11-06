@@ -2,6 +2,7 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { AlertPage } from '../../src/lib/bindings/AlertPage';
 import type { HistoryReply } from '../../src/lib/bindings/HistoryReply';
+import { dungeonDef } from '../fixtures/dungeon';
 import { advance, alert, click, deferred, disabled, edit, fight, flush, follow, injectChicagoDate,
   main, microtasks, mountPhase2, preferences, ready, saved, traverse } from './fixtures';
 
@@ -241,7 +242,7 @@ it('Death has no preference or Test entry while legacy history still renders', a
 
 it('Key popped exposes loudness, catalog dungeon selection and a guarded Test', async () => {
   const page = mountPhase2({ hash: '#/settings', configure: client => {
-    client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void'].map(name => ({ name, aliases: [], kind: 'dungeon' as const, completion_index: null })));
+    client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void'].map(name => dungeonDef({ name, aliases: [] })));
     client.queryAlertDelivery = vi.fn(async () => ({ permission: 'unavailable' as const, sound_available: true,
       message: null, flawless_unavailable: 'Flawless evidence is unavailable.' }));
   } }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
@@ -271,7 +272,7 @@ it('Key Popped Kind survives Back navigation', async () => {
 
 it('saving a dungeon filter removes visible and queued key-pop banners without removing PB', async () => {
   const page = mountPhase2({ hash: '#/settings', configure: client => {
-    client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void'].map(name => ({ name, aliases: [], kind: 'dungeon' as const, completion_index: null })));
+    client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void'].map(name => dungeonDef({ name, aliases: [] })));
   } }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   await fireEvent.change(main().getByRole('combobox', { name: 'Key Popped' }), { target: { value: 'banner' } });
   await click('Save');
