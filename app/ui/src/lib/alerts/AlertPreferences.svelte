@@ -1,4 +1,5 @@
 <script lang="ts">
+  import KeyPopRules from './KeyPopRules.svelte';
   import DungeonPicker from './DungeonPicker.svelte';
   import BusyStatus from '../status/BusyStatus.svelte';
   import DebugNote from '../debug/DebugNote.svelte';
@@ -109,6 +110,7 @@
         {#if kind === 'key_popped' && preferencesState.draft}
           <p class="note">All observed pops remain in Logs. These choices control alerts only.</p>
           {#if preferencesState.draft.key_popped === 'off'}<p class="note">Key-pop alerts are off. Choose dungeons, then select Toast or Banner and save to enable them.</p>{/if}
+          <KeyPopRules {client} preferences={preferencesState.draft} disabled={!editable} onEdit={patch => editor?.edit(patch)} />
           <DungeonPicker {client} preferences={preferencesState.draft} disabled={!editable} onEdit={patch => editor?.edit(patch)} />
         {/if}
       </section>

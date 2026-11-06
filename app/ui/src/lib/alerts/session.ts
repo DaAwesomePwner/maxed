@@ -1,3 +1,4 @@
+import { watchDungeonCatalog } from './dungeon-catalog';
 import { readonly, writable, type Readable } from 'svelte/store';
 import type { AlertPreferences } from '../bindings/AlertPreferences';
 import type { Client } from '../bridge/client';
@@ -14,9 +15,10 @@ export interface AlertSession {
 }
 
 /** One accepted namespace owns a session. Shell retires it before entering another. */
-export function createAlertSession(client: Pick<Client, 'querySettings' | 'updateAlertPreferences'>,
+export function createAlertSession(client: Pick<Client, 'querySettings' | 'updateAlertPreferences'> & Partial<Pick<Client, 'listCatalogDungeonOptions' | 'onVisualsChanged'>>,
   receive: (preferences: AlertPreferences | null) => void = () => {},
   canUpdate: () => boolean = () => true): AlertSession {
+  const releaseCatalog = client.listCatalogDungeonOptions && client.onVisualsChanged ? watchDungeonCatalog(client as Client) : () => {};
   const preferences = writable<AlertPreferences | null>(null);
   const status = writable<AlertSessionStatus>('idle');
   let disposed = false, revision = 0;
@@ -76,6 +78,6 @@ export function createAlertSession(client: Pick<Client, 'querySettings' | 'updat
       guard();
       return enqueue(typeof next === 'function' ? next : { ...next });
     },
-    dispose() { if (!disposed) { disposed = true; revision++; publish(null); status.set('retired'); } },
+    dispose() { if (!disposed) { disposed = true; releaseCatalog(); revision++; publish(null); status.set('retired'); } },
   };
 }

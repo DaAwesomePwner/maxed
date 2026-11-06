@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { filteredByRules } from '../alerts/preferences';
+  import { dungeonCatalog, dungeonMetadata, watchDungeonCatalog } from '../alerts/dungeon-catalog';
+  $effect(() => { if (client) return watchDungeonCatalog(client); });
   import { SHELL_CONNECTION, type ShellConnection } from '../shell/context';
   import { createLogsSearch, validLogsQuery } from './search.svelte';
   import { createLogsList } from './list.svelte';
@@ -90,8 +93,9 @@
   });
   let prefs = $state.raw<AlertPreferences | null>(null), prefsRead = $state(false);
   let prefsMessage = $state('');
-  let muted = $derived(prefs ? mutedDungeons(prefs, dungeons) : new Set<string>());
-  let rankedMuted = $derived(prefs ? mutedDungeons(prefs, [...new Set([...dungeons, ...(summaries.summary?.dungeons.map(row => row.dungeon) ?? [])])]) : new Set<string>());
+  let muted = $derived(prefs ? mutedDungeons(prefs, dungeons, $dungeonCatalog) : new Set<string>());
+  let rankedMuted = $derived(prefs ? mutedDungeons(prefs, [...new Set([...dungeons, ...(summaries.summary?.dungeons.map(row => row.dungeon) ?? [])])], $dungeonCatalog) : new Set<string>());
+  let ruleFiltered = $derived([...rankedMuted].filter(name => prefs && filteredByRules(prefs, name, dungeonMetadata(name, $dungeonCatalog))));
   $effect(() => {
     const owner = activeClient, ready = summaries.allTimeRead;
     if (!owner || !ready || prefsRead) return;
@@ -172,7 +176,7 @@
       {/if}
     {/if}
     <footer><span>Portals Maxed saw open. The key's owner is the player who opened it.</span><Pager atLatest={filter.cursor === null} hasOlder={!!page?.next} loading={list.paging} noun="key pops" onLatest={list.first} onNewer={list.back} onOlder={list.next} /></footer>
-  </section><aside><DungeonRanking rows={summaries.summaryKey === rangeKey ? summaries.summary?.dungeons ?? [] : []} muted={rankedMuted} selected={filter.dungeon} range={filter.range} onSelect={toggleDungeon} /></aside></div>
+  </section><aside>{#if ruleFiltered.length}<p>Filtered by rules: {ruleFiltered.join(", ")}. Change rules in Notifications settings.</p>{/if}<DungeonRanking rows={summaries.summaryKey === rangeKey ? summaries.summary?.dungeons ?? [] : []} muted={rankedMuted} selected={filter.dungeon} range={filter.range} onSelect={toggleDungeon} /></aside></div>
 </div>
 <style>
   .feed { overflow-anchor: none; overflow-wrap: anywhere; display: grid; gap: 10px; min-width: 0; }

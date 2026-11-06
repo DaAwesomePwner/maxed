@@ -28,7 +28,7 @@ export function alertKpis(summary: AlertSummary | null, range: TimeRange | null,
     { key: 'all', label: 'All alerts', value: value(summary?.total ?? 0), sub: known ? perDay(summary!.total, range, summary!.first_at, now) : null },
     { key: 'white', label: 'White bags', value: value(count('white_bag')), sub: last ? last.dungeon ? `last: ${last.dungeon}, ${shortWhen(last.at, now)}` : `last: ${shortWhen(last.at, now).toLowerCase()}` : '—' },
     { key: 'pb', label: 'Personal bests', value: value(count('personal_best')), sub: 'best DPS and clear times', tone: 'fame' },
-    { key: 'keys', label: 'Keys popped', value: value(count('key_popped')), sub: preferences?.key_popped === 'off' ? 'Key-pop alerts off' : preferences?.key_pop_dungeons?.length === 0 ? 'No dungeons selected' : `${mutedCount < 0 ? '—' : mutedCount} dungeons muted` },
+    { key: 'keys', label: 'Keys popped', value: value(count('key_popped')), sub: preferences?.key_popped === 'off' ? 'Key-pop alerts off' : preferences?.key_pop_dungeons?.length === 0 ? 'No dungeons selected' : `${mutedCount < 0 ? '—' : mutedCount} dungeons ${preferences?.key_pop_exalt_only || preferences?.key_pop_min_difficulty != null ? 'muted or filtered' : 'muted'}` },
     { key: 'messages', label: 'Messages', value: value(count('whisper') + count('guild_message') + count('party_message')), sub: known ? `${count('whisper')} whisper · ${count('guild_message')} guild · ${count('party_message')} party` : null },
   ];
 }
