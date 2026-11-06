@@ -53,6 +53,20 @@ function StepSecretFailures($step, [bool]$allowSigning) {
 }
 function Keys($value) { return (@($value.PSObject.Properties.Name | Sort-Object) -join ',') }
 function Failures($release, $manual, $codeql) {
+    $publish = $release.jobs.publish
+    if ($publish.environment -cne 'release-publish' -or $publish.concurrency.group -cne 'release-publish' -or
+        $publish.concurrency.'cancel-in-progress' -cne $false -or (@($publish.needs) -join ',') -cne 'package' -or
+        $publish.if -cne "github.repository == 'daplabs/maxed' && github.ref_type == 'tag'") { 'publish_gate' }
+    foreach ($leaf in @(Leaves $publish 'publish')) {
+        if (HasSecretExpression $leaf.Value) { 'secret_scope' }
+        foreach ($expression in @(Expressions $leaf.Value)) {
+            if ($expression -match '(?i)token' -and ($leaf.Path -cne 'publish.steps[2].env.GH_TOKEN' -or $leaf.Value -cne '${{ github.token }}')) { 'secret_scope' }
+        }
+    }
+    $download = @($publish.steps | Where-Object { $_.uses -like 'actions/download-artifact@*' })
+    if ($download.Count -ne 1 -or $download[0].uses -cne 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333' -or
+        $download[0].with.name -cne 'maxed-${{ github.ref_name }}-windows-x64' -or $download[0].with.path -cne 'release-stage/') { 'publish_artifact' }
+    if ($publish.steps[2].env.GH_TOKEN -cne '${{ github.token }}') { 'secret_scope' }
     if ((@($release.on.PSObject.Properties.Name) -join ',') -cne 'push' -or (@($release.on.push.PSObject.Properties.Name) -join ',') -cne 'tags' -or (@($release.on.push.tags) -join ',') -cne 'v*') { 'release_events' }
     if ((Keys $manual.on) -cne 'pull_request,schedule,workflow_call,workflow_dispatch' -or
         (Keys $manual.on.pull_request) -cne 'branches' -or (@($manual.on.pull_request.branches) -join ',') -cne 'main' -or
@@ -70,7 +84,7 @@ function Failures($release, $manual, $codeql) {
         $manual.jobs.tests.defaults.run.shell -cne 'pwsh') { 'tests_job_shape' }
     if ($manual.concurrency.group -cne 'tests-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}' -or
         $manual.concurrency.'cancel-in-progress' -cne '${{ github.event_name == ''pull_request'' }}') { 'tests_concurrency' }
-    if ((Keys $release.jobs) -cne 'package,tests' -or
+    if ((Keys $release.jobs) -cne 'package,publish,tests' -or
         (@($release.jobs.package.needs) -join ',') -cne 'tests' -or
         (Keys $release.jobs.tests) -cne 'if,uses,with' -or
         $release.jobs.tests.uses -cne './.github/workflows/tests.yml' -or
@@ -93,21 +107,25 @@ function Failures($release, $manual, $codeql) {
             # Check presence, including false/null values, before the reusable-job exception.
             if ('continue-on-error' -in $job.PSObject.Properties.Name) { 'job_policy' }
             if ([object]::ReferenceEquals($job, $release.jobs.tests)) { continue }
+            $isPublish = [object]::ReferenceEquals($w, $release) -and [object]::ReferenceEquals($job, $release.jobs.publish)
             $isCodeql = [object]::ReferenceEquals($w, $codeql) -and [object]::ReferenceEquals($job, $codeql.jobs.analyze)
             $runner = if ($isCodeql) { 'ubuntu-24.04' } else { 'windows-2022' }
             if ($job.'runs-on' -isnot [string] -or $job.'runs-on' -cne $runner) { 'job_policy' }
             # Hosted runners need longer for the full test job; every other job keeps 45 minutes.
             $timeout = if ([object]::ReferenceEquals($job, $manual.jobs.tests)) { 90 } else { 45 }
             if ($job.'timeout-minutes' -ne $timeout -or $job.env -or $job.secrets -or $job.uses) { 'job_policy' }
-            # Only CodeQL may upload security results; all repository contents stay read-only.
+            # Only CodeQL uploads security results; only the gated publisher writes contents.
             if ($isCodeql) {
                 if ((Keys $job.permissions) -cne 'contents,security-events' -or $job.permissions.contents -cne 'read' -or
                     $job.permissions.'security-events' -cne 'write') { 'permissions' }
+            } elseif ($isPublish) {
+                if ((Keys $job.permissions) -cne 'contents' -or $job.permissions.contents -cne 'write') { 'permissions' }
             } elseif ($job.permissions) { 'permissions' }
-            if (-not [object]::ReferenceEquals($job, $release.jobs.package) -and $job.environment) { 'secret_scope' }
+            if (-not [object]::ReferenceEquals($job, $release.jobs.package) -and -not $isPublish -and $job.environment) { 'secret_scope' }
             foreach ($step in $job.steps) {
-                $pin = if ($isCodeql) { '\A(actions/checkout|github/codeql-action/(init|analyze))@[a-f0-9]{40}\z' } else { '\Aactions/(checkout|setup-node|upload-artifact|cache/restore|cache/save)@[a-f0-9]{40}\z' }
+                $pin = if ($isCodeql) { '\A(actions/checkout|github/codeql-action/(init|analyze))@[a-f0-9]{40}\z' } else { '\Aactions/(checkout|setup-node|upload-artifact|download-artifact|cache/restore|cache/save)@[a-f0-9]{40}\z' }
                 if ($step.uses -and $step.uses -cnotmatch $pin) { 'action_pin' }
+                if ($step.uses -like 'actions/download-artifact@*' -and -not $isPublish) { 'action_pin' }
                 if ($step.uses -like 'actions/checkout@*' -and $step.with.'persist-credentials' -cne $false) { 'checkout_credentials' }
                 $allowSigning = [object]::ReferenceEquals($w, $release) -and [object]::ReferenceEquals($job, $release.jobs.package) -and $step.name -ceq 'Package and sign'
                 StepSecretFailures $step $allowSigning
@@ -340,6 +358,16 @@ $perfStep = @($m.jobs.tests.steps | Where-Object name -CEQ 'Perf feature compile
 Assert ($perfStep.Count -eq 1 -and $perfStep[0].run.Contains('cargo clippy --offline --locked -p maxed-app --all-targets --features perf-live')) 'test workflow lints the perf-only driver offline'
 $stepNamed = { param($m, $name) @($m.jobs.tests.steps | Where-Object name -CEQ $name)[0] }
 foreach ($case in @(
+    @{ want = 'permissions'; mutate = { param($r,$m) $r.permissions.contents = 'write' } },
+    @{ want = 'permissions'; mutate = { param($r,$m) $r.jobs.package | Add-Member permissions @{ contents = 'write' } } },
+    @{ want = 'permissions'; mutate = { param($r,$m) $r.jobs.publish.permissions | Add-Member actions 'write' } },
+    @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.PSObject.Properties.Remove('environment') } },
+    @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.environment = 'release-signing' } },
+    @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.needs = @('tests') } },
+    @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.if = 'always()' } },
+    @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.concurrency.group = 'per-tag' } },
+    @{ want = 'publish_artifact'; mutate = { param($r,$m) $r.jobs.publish.steps[1].with.name = 'other-artifact' } },
+    @{ want = 'secret_scope'; mutate = { param($r,$m) $r.jobs.publish.steps[2].env.GH_TOKEN = '${{ secrets.OTHER }}' } },
     @{ want = 'job_policy'; mutate = { param($r,$m) $m.jobs.tests.'runs-on' = @('self-hosted', 'windows', 'nuc', 'build') } },
     @{ want = 'job_policy'; mutate = { param($r,$m) $m.jobs.tests.'runs-on' = 'windows-latest' } },
     @{ want = 'job_policy'; mutate = { param($r,$m) $m.jobs.tests.'runs-on' = @('self-hosted', 'windows', 'build') } },

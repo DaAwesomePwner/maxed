@@ -22,7 +22,9 @@ Populate the process environment securely before this wrapper; no secret retriev
 
 ## Release controls
 
-Protect the `release-signing` environment, restrict trusted version tags and require maintainer approval. Restrict who can create release tags; a workflow event filter is not a trust boundary. Verify remote protections before publication rather than treating a historical configuration as current evidence. Only the package step should receive secrets. Pull-request tests and ordinary builds must not receive them.
+Restrict `release-signing` and `release-publish` to `v*` tag deployments. Signing currently has no required reviewer; `release-publish` requires maintainer approval before publication and channel promotion. Only the package step receives signing secrets. Only the publish job has `contents: write`, with `GH_TOKEN` set to the implicit `github.token` in its publish step; the workflow default remains `contents: read`. Pull-request tests and ordinary builds must not receive signing secrets.
+
+Restrict who can create release tags and block updates/deletions of existing `v*` tags; a workflow event filter is not a trust boundary. Verify remote protections before publication rather than treating a historical configuration as current evidence. Failed promotion after immutable publication requires the [manual recovery procedure](UPDATES.md#serialized-promotion), not retagging.
 
 ## Rotation and recovery
 
