@@ -528,3 +528,56 @@ fn complete_firing_metadata_cannot_hide_an_unreferenced_projectile_on_reload() {
     c.items[0].weapon_firing.as_mut().unwrap().groups.pop();
     assert!(validate_catalog(&c).is_err());
 }
+
+#[test]
+fn enriches_dungeons_with_curated_metadata() {
+    use maxed_types::DungeonCategory;
+    let c = build_catalog(assets(br#"<Objects>
+        <Object type="1" id="Ice"><Class>Portal</Class><DungeonName>Ice Cave</DungeonName><DungeonPortal/></Object>
+        <Object type="2" id="Advanced"><Class>Portal</Class><DungeonName>Advanced Nest</DungeonName><DungeonPortal/></Object>
+        <Object type="3" id="Unknown"><Class>Portal</Class><DisplayId>ASW</DisplayId><DungeonName>Uncharted</DungeonName><DungeonPortal/></Object>
+    </Objects>"#), "a".repeat(64)).unwrap();
+    let ice = c.dungeons.iter().find(|d| d.name == "Ice Cave").unwrap();
+    assert_eq!(ice.difficulty, Some(7.0));
+    assert!(ice.exalt);
+    assert_eq!(ice.category, Some(DungeonCategory::Realm));
+    let advanced = c
+        .dungeons
+        .iter()
+        .find(|d| d.name == "Advanced Nest")
+        .unwrap();
+    assert_eq!(advanced.difficulty, Some(8.5));
+    assert!(advanced.exalt);
+    assert_eq!(advanced.category, Some(DungeonCategory::Advanced));
+    let fungal = c
+        .dungeons
+        .iter()
+        .find(|d| d.name == "Fungal Cavern")
+        .unwrap();
+    assert!(fungal.exalt_gateway);
+    assert!(!fungal.exalt);
+    let unknown = c.dungeons.iter().find(|d| d.name == "Uncharted").unwrap();
+    assert!(unknown.aliases.iter().any(|alias| alias == "ASW"));
+    assert_eq!(unknown.difficulty, None);
+    assert_eq!(unknown.category, None);
+    for dungeon in &c.dungeons {
+        let meta = maxed_types::dungeon_meta(&dungeon.name);
+        assert_eq!(dungeon.difficulty, meta.map(|meta| meta.difficulty));
+        assert_eq!(dungeon.category, meta.map(|meta| meta.category));
+        assert_eq!(dungeon.exalt, meta.is_some_and(|meta| meta.exalt));
+        assert_eq!(
+            dungeon.exalt_gateway,
+            meta.is_some_and(|meta| meta.exalt_gateway)
+        );
+        // Existing reviewed names must retain metadata without a catalog-only alias.
+        if dungeon.name != "Uncharted" {
+            assert!(
+                meta.is_some()
+                    || dungeon
+                        .aliases
+                        .iter()
+                        .all(|alias| maxed_types::dungeon_meta(alias).is_none())
+            );
+        }
+    }
+}

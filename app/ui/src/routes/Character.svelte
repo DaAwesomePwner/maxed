@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { settingsHref } from '../lib/navigation/routes';
   import { getContext, onMount, tick } from 'svelte';
   import { readable } from 'svelte/store';
   import type { Client } from '../lib/bridge/client';
@@ -157,8 +158,8 @@
     {#if $viewState.loading}<p role="status">Calculating; previous results remain labelled with their applied inputs.</p>{/if}
     {#if observed && $viewState.error}<p role="status">{$viewState.error}</p>{/if}
     {#if catalogAvailable === false}
-      <p>Weapon calculations unavailable — extract game assets</p><a href="#/settings">Settings</a>
-    {:else if catalogError}<p>{catalogError} <a href="#/settings">Settings</a></p>{/if}
+      <p>Weapon calculations unavailable — extract game assets</p><a href={settingsHref('assets')}>Settings</a>
+    {:else if catalogError}<p>{catalogError} <a href={settingsHref('assets')}>Settings</a></p>{/if}
     <p class="exclusions">Excludes exalt damage, Crucible, Blood Ritual, weapon enchant damage/rate changes,
       unsupported special effects, Berserk, Dazed, Stunned and other firing restrictions; enemy conditions,
       armor break and vulnerability; misses, range falloff, repeat hits and target downtime.

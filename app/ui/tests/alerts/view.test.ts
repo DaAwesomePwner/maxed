@@ -219,3 +219,20 @@ it.each(['foo bar', 'x'.repeat(129)])('preserves a pending or rejected search wh
   if (text.length <= 128) expect(client.listAlerts).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'white_bag', query: 'foo bar' }));
   else expect(screen.getByText('Invalid search.')).toBeTruthy();
 });
+
+it('wires rule-filtered rows and combined muted counts into the alerts view', async () => {
+  const { dungeonDef } = await import('../fixtures/dungeon');
+  const { preferences } = await import('../phase2/fixtures');
+  const client = setup(), settings = client.querySettings;
+  client.querySettings = vi.fn(async () => ({ ...await settings(), alerts: preferences({ key_pop_min_difficulty: 7, key_pop_excluded_dungeons: ['Muted vault'] }) }));
+  client.listCatalogDungeons = vi.fn(async () => ['Low vault', 'Muted vault', 'High vault']);
+  client.listCatalogDungeonOptions = vi.fn(async () => [dungeonDef({ name: 'Low vault', difficulty: 6 }), dungeonDef({ name: 'Muted vault', difficulty: 8 }), dungeonDef({ name: 'High vault', difficulty: 8 })]);
+  client.listAlerts = vi.fn(async () => ({ status: 'ready' as const, value: { rows: ['Low vault', 'Muted vault', 'High vault'].map((dungeon, index) => alert({ id: `pop-${index}`, kind: 'key_popped', details: { type: 'key_popped', dungeon } })), next: null } }));
+  render(AlertsView, { client });
+  await waitFor(() => expect(screen.getByText('2 dungeons muted or filtered')).toBeTruthy());
+  const table = within(screen.getByRole('table', { name: 'Saved alerts' }));
+  expect(table.getByText('Filtered by rules')).toBeTruthy();
+  expect(table.queryByRole('button', { name: 'Unmute Low vault' })).toBeNull();
+  expect(table.getByRole('button', { name: 'Unmute Muted vault' })).toBeTruthy();
+  expect(table.getByRole('button', { name: 'Mute High vault' })).toBeTruthy();
+});

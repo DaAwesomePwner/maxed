@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { render, screen, within } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setDebugMode } from '../../src/lib/debug/debug';
 import Shell from '../../src/lib/shell/Shell.svelte';
@@ -64,7 +64,9 @@ describe('structural layout contracts (no jsdom geometry claims)', () => {
     styles([`routes/${route === 'setup' ? 'Setup' : 'Settings'}.svelte`, 'lib/setup/AssetsControl.svelte', 'lib/settings/AdapterControl.svelte']);
     render(Shell, { client: f.client, historyAdapter: fakeHistory(`#/${route}`).adapter });
     const main = screen.getByRole('main');
+    if (route === 'settings') { await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' })); }
     const input = await within(main).findByRole('textbox', { name: 'Assets Path' }) as HTMLInputElement;
+    if (route === 'settings') { await fireEvent.click(screen.getByRole('tab', { name: 'General' })); }
     // Saved settings arrive separately from the route mount.
     await within(main).findByRole('option', { name: /Synthetic network adapter/ });
     expect(input.value).toBe(path);

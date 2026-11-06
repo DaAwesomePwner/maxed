@@ -101,6 +101,7 @@ it('exposes sticky delivery failure and disables capture retry that cannot repai
 it.each([Setup, Settings])('passes explicit checks and detection retries while mount calls remain passive', async (component) => {
   const { client } = setupFixture({ assets: 'failed' });
   render(component, { client });
+  if (component === Settings) { await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' })); }
   await screen.findByRole('button', { name: 'Retry Detection' }); await flush();
   expect(vi.mocked(client.querySetup).mock.calls.every(args => args.length === 0)).toBe(true);
   vi.mocked(client.querySetup).mockClear();

@@ -11,7 +11,7 @@ pub enum AlertLoudness {
     Banner,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct AlertPreferences {
     pub white_bag: AlertLoudness,
@@ -29,6 +29,10 @@ pub struct AlertPreferences {
     pub party_message: AlertLoudness,
     #[serde(default)]
     pub key_pop_excluded_dungeons: Vec<String>,
+    #[serde(default, deserialize_with = "min_difficulty")]
+    pub key_pop_min_difficulty: Option<f32>,
+    #[serde(default)]
+    pub key_pop_exalt_only: bool,
     #[serde(deserialize_with = "flawless_off")]
     pub flawless_run: AlertLoudness,
     // Legacy preference retained for saved settings; ignored by delivery.
@@ -76,6 +80,8 @@ impl Default for AlertPreferences {
             guild_message: AlertLoudness::QuietLogOnly,
             party_message: AlertLoudness::QuietLogOnly,
             key_pop_excluded_dungeons: Vec::new(),
+            key_pop_min_difficulty: None,
+            key_pop_exalt_only: false,
             flawless_run: AlertLoudness::Off,
             death: AlertLoudness::Off,
             muted: false,
@@ -98,7 +104,8 @@ impl AlertPreferences {
         }
     }
     pub fn valid(&self) -> bool {
-        self.volume_percent <= 100
+        self.key_pop_min_difficulty.is_none_or(valid_difficulty)
+            && self.volume_percent <= 100
             && self.flawless_run == AlertLoudness::Off
             && self
                 .key_pop_dungeons
@@ -112,10 +119,18 @@ impl AlertPreferences {
     pub fn includes_key_pop_dungeon(&self, dungeon: &str) -> bool {
         match &self.key_pop_dungeons {
             Some(names) => names.iter().any(|name| name == dungeon),
-            None => !self
-                .key_pop_excluded_dungeons
-                .iter()
-                .any(|name| name == dungeon),
+            None => {
+                let meta = crate::dungeon_meta(dungeon);
+                !self
+                    .key_pop_excluded_dungeons
+                    .iter()
+                    .any(|name| name == dungeon)
+                    && (!self.key_pop_exalt_only
+                        || meta.is_some_and(|meta| meta.exalt || meta.exalt_gateway))
+                    && self
+                        .key_pop_min_difficulty
+                        .is_none_or(|minimum| meta.is_none_or(|meta| meta.difficulty >= minimum))
+            }
         }
     }
     pub fn allows_alert(&self, alert: &AlertView) -> bool {
@@ -251,4 +266,18 @@ pub struct AlertSummary {
     pub by_kind: Vec<AlertKindCount>,
     pub last_white: Option<AlertLastWhite>,
     pub first_at: Option<Timestamp>,
+}
+
+fn valid_difficulty(value: f32) -> bool {
+    value.is_finite() && (0.0..=10.0).contains(&value) && (value * 2.0).fract() == 0.0
+}
+
+fn min_difficulty<'de, D: Deserializer<'de>>(d: D) -> Result<Option<f32>, D::Error> {
+    let value = Option::<f32>::deserialize(d)?;
+    if !value.is_none_or(valid_difficulty) {
+        return Err(serde::de::Error::custom(
+            "Difficulty must be 0..=10 in 0.5 steps",
+        ));
+    }
+    Ok(value)
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { settingsHref } from '../navigation/routes';
   import { SHELL_CONNECTION, type ShellConnection } from '../shell/context';
   import { validLogsQuery } from './search.svelte';
   import { createLogsList } from './list.svelte';
@@ -201,7 +202,7 @@
   function updateSettings(next: ChatSettings) { settings = next; }
 </script>
 
-<LogsHeader view="chat" subline={chatSubline(overview, settings?.retention_days ?? null)}><a class="ctl ghost" href="#/settings">Chat settings</a></LogsHeader>
+<LogsHeader view="chat" subline={chatSubline(overview, settings?.retention_days ?? null)}><a class="ctl ghost" href={settingsHref('data')}>Chat settings</a></LogsHeader>
 <BusyStatus message={client ? historyStatus(history, 'messages') : null} />
 <div class="feed" bind:this={region}>
   <HistoryStatus {history} />

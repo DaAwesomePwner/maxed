@@ -131,7 +131,11 @@ fn fingerprint(resources: &Path, cancel: &AtomicBool) -> Result<String, AssetErr
             path,
         );
     }
-    let mut hash = fingerprint_prefix(CACHE_VERSION, include_bytes!("rules.rs"));
+    let mut hash = fingerprint_prefix(
+        CACHE_VERSION,
+        include_bytes!("rules.rs"),
+        include_bytes!("../../maxed-types/src/dungeon_meta.rs"),
+    );
     hash.update((inputs.len() as u32).to_le_bytes());
     for (relative, path) in inputs {
         let name = relative
@@ -146,14 +150,16 @@ fn fingerprint(resources: &Path, cancel: &AtomicBool) -> Result<String, AssetErr
     }
     Ok(format!("{:x}", hash.finalize()))
 }
-// Hashing the actual rules source also invalidates generations when a table is
+// Hashing the rules and dungeon metadata sources invalidates generations when a table is
 // edited without a manual version bump. Cache format changes have their own tag.
-fn fingerprint_prefix(cache_version: u32, rules: &[u8]) -> Sha256 {
+fn fingerprint_prefix(cache_version: u32, rules: &[u8], dungeon_meta: &[u8]) -> Sha256 {
     let mut hash = Sha256::new();
     hash.update(b"Maxed-assets\0reader-2\0catalog-1\0cache-version\0");
     hash.update(cache_version.to_le_bytes());
     hash.update(b"rules-sha256\0");
     hash.update(Sha256::digest(rules));
+    hash.update(b"dungeon-meta-sha256\0");
+    hash.update(Sha256::digest(dungeon_meta));
     hash
 }
 
@@ -1047,8 +1053,18 @@ mod tests {
     fn character_metadata_invalidates_version_eleven_fingerprints() {
         assert_eq!(CACHE_VERSION, 12);
         assert_ne!(
-            fingerprint_prefix(CACHE_VERSION, include_bytes!("rules.rs")).finalize(),
-            fingerprint_prefix(11, include_bytes!("rules.rs")).finalize()
+            fingerprint_prefix(
+                CACHE_VERSION,
+                include_bytes!("rules.rs"),
+                include_bytes!("../../maxed-types/src/dungeon_meta.rs")
+            )
+            .finalize(),
+            fingerprint_prefix(
+                11,
+                include_bytes!("rules.rs"),
+                include_bytes!("../../maxed-types/src/dungeon_meta.rs")
+            )
+            .finalize()
         );
     }
 
@@ -1089,15 +1105,19 @@ mod tests {
     }
 
     #[test]
-    fn cache_format_and_rules_changes_invalidate_fingerprints() {
-        let original = fingerprint_prefix(CACHE_VERSION, b"rules v1").finalize();
+    fn cache_format_rules_and_dungeon_metadata_changes_invalidate_fingerprints() {
+        let original = fingerprint_prefix(CACHE_VERSION, b"rules v1", b"dungeons v1").finalize();
         assert_ne!(
             original,
-            fingerprint_prefix(CACHE_VERSION + 1, b"rules v1").finalize()
+            fingerprint_prefix(CACHE_VERSION + 1, b"rules v1", b"dungeons v1").finalize()
         );
         assert_ne!(
             original,
-            fingerprint_prefix(CACHE_VERSION, b"rules v2").finalize()
+            fingerprint_prefix(CACHE_VERSION, b"rules v2", b"dungeons v1").finalize()
+        );
+        assert_ne!(
+            original,
+            fingerprint_prefix(CACHE_VERSION, b"rules v1", b"dungeons v2").finalize()
         );
         assert!(quarantine_identity(".corrupt-unrelated").is_none());
         assert!(quarantine_identity(&format!(".corrupt-{}-1-2-3-extra", "a".repeat(64))).is_none());

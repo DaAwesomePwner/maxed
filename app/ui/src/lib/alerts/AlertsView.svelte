@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { dungeonCatalog, dungeonMetadata, watchDungeonCatalog } from './dungeon-catalog';
+  import { keyPopAllows, filteredByRules } from './preferences';
+  $effect(() => { if (client) return watchDungeonCatalog(client); });
+  import { settingsHref } from '../navigation/routes';
   import { createLogsSearch, validLogsQuery } from '../logs/search.svelte';
   import { createLogsList } from '../logs/list.svelte';
   import { getContext, untrack } from 'svelte';
@@ -80,8 +84,15 @@
   const muteStatus = mute?.status ?? readable('loading');
   const muteFeedback = mute?.state ?? readable({ busy: false });
   let preferences = $derived($mutePreferences ?? prefs);
-  let mutedCount = $derived(!preferences ? -1 : preferences.key_pop_dungeons === null ? preferences.key_pop_excluded_dungeons.length : dungeons === null ? -1 : dungeons.filter(name => !preferences.key_pop_dungeons!.includes(name)).length);
-  const muted = (dungeon: string) => !!preferences && (preferences.key_pop_dungeons !== null ? !preferences.key_pop_dungeons.includes(dungeon) : preferences.key_pop_excluded_dungeons.includes(dungeon));
+  let mutedCount = $derived.by(() => {
+    if (!preferences) return -1;
+    if (preferences.key_pop_dungeons !== null && dungeons === null && !$dungeonCatalog) return -1;
+    const names = new Set([...(dungeons ?? []), ...($dungeonCatalog?.map(row => row.name) ?? []),
+      ...(preferences.key_pop_dungeons === null ? preferences.key_pop_excluded_dungeons : [])]);
+    return [...names].filter(name => !keyPopAllows(preferences!, name, dungeonMetadata(name, $dungeonCatalog))).length;
+  });
+  const muted = (dungeon: string) => !!preferences && !keyPopAllows(preferences, dungeon, dungeonMetadata(dungeon, $dungeonCatalog));
+  const filtered = (dungeon: string) => !!preferences && filteredByRules(preferences, dungeon, dungeonMetadata(dungeon, $dungeonCatalog));
   function toggleMute(dungeon: string) { if (muted(dungeon)) void mute?.unmute(dungeon); else void mute?.mute(dungeon); }
 
   let generation = 0, summaryRequested: string | null = null, allTimeRequested = false, prefsRequested = false;
@@ -183,7 +194,7 @@
   <p class="sr-only" role="status" aria-live="polite">{list.missingRow}</p>
   <div class="toolbar"><input class="ctl" type="search" aria-label="Search alerts" placeholder="Search alerts" bind:value={search.query} />
     <select class="ctl" aria-label="Kind" value={tile === 'messages' ? 'messages' : filter.kind ?? ''} onchange={event => chooseKind(event.currentTarget.value)}><option value="">Any kind</option><option value="messages">Messages</option>{#each alertKindDisplayOrder as kind}<option value={kind}>{kindLabel[kind]}</option>{/each}</select>
-    <button class="ctl" aria-pressed={filter.exclude_kinds?.includes('key_popped') ?? false} onclick={() => apply({ ...filter, exclude_kinds: filter.exclude_kinds?.includes('key_popped') ? [] : ['key_popped'], cursor: null })}>Hide key pops</button><a class="ctl ghost settings" href="#/settings">Alert settings</a>
+    <button class="ctl" aria-pressed={filter.exclude_kinds?.includes('key_popped') ?? false} onclick={() => apply({ ...filter, exclude_kinds: filter.exclude_kinds?.includes('key_popped') ? [] : ['key_popped'], cursor: null })}>Hide key pops</button><a class="ctl ghost settings" href={settingsHref('notifications')}>Alert settings</a>
   </div>
   {#if validation}<p role="alert">{validation}</p>{/if}{#if prefsMessage}<p role="status">{prefsMessage}</p>{/if}
   {#if history.phase === 'error' || history.phase === 'busy' && history.retryAvailable || history.message.startsWith('Saving failed.')}<ErrorBar message="Couldn't load alerts. Your filters are kept." onRetry={() => controller?.retry()} />{/if}
@@ -193,8 +204,8 @@
       {#if history.message && history.message !== HISTORY_CATCH_UP && !/^(Refreshing|Loading)\b/.test(history.message)}<p>{history.message}</p>{/if}
       {#if page}
         {#if !page.rows.length}<div class="empty"><h2>{filter.range ? 'No alerts in this range' : filter.query || filter.kind || filter.kinds?.length || filter.exclude_kinds?.length ? 'No alerts match your filters' : 'No alerts'}</h2>
-          {#if filter.range}<button class="ctl" onclick={() => apply({ ...filter, range: null, cursor: null })}>Show all time</button>{:else if filter.query || filter.kind || filter.kinds?.length || filter.exclude_kinds?.length}<button class="ctl" onclick={() => { tile = 'all'; apply(defaultAlertFilter()); }}>Clear filters</button>{:else}<p>Alerts appear when Maxed observes them in-game.</p><a class="ctl ghost" href="#/settings">Alert settings</a>{/if}</div>
-        {:else}<AlertTable rows={page.rows} selectedId={selected?.id ?? null} onSelect={select} {muted} onMute={toggleMute} canMute={!!mute && $muteStatus === 'ready' && !$muteFeedback.busy && mute.available()} />{/if}
+          {#if filter.range}<button class="ctl" onclick={() => apply({ ...filter, range: null, cursor: null })}>Show all time</button>{:else if filter.query || filter.kind || filter.kinds?.length || filter.exclude_kinds?.length}<button class="ctl" onclick={() => { tile = 'all'; apply(defaultAlertFilter()); }}>Clear filters</button>{:else}<p>Alerts appear when Maxed observes them in-game.</p><a class="ctl ghost" href={settingsHref('notifications')}>Alert settings</a>{/if}</div>
+        {:else}<AlertTable rows={page.rows} selectedId={selected?.id ?? null} onSelect={select} {muted} {filtered} onMute={toggleMute} canMute={!!mute && $muteStatus === 'ready' && !$muteFeedback.busy && mute.available()} />{/if}
       {:else if history.phase === 'loading'}<p>Loading alerts</p>{/if}
     {/if}
     <footer><span>Alerts are kept with your runs. Off and log-only alerts are listed too.</span><Pager atLatest={filter.cursor === null} hasOlder={!!page?.next} loading={list.paging} noun="alerts" onLatest={list.first} onNewer={list.back} onOlder={list.next} /></footer>

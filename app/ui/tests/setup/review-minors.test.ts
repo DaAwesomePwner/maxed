@@ -121,8 +121,10 @@ describe('U5 review regressions', () => {
     const f = setupFixture();
     f.client.setAssetsPath = vi.fn(async () => { f.setSettings({ assets_path: 'C:\\Normalized\\resources.assets' }); });
     render(Settings, { client: f.client });
+    await fireEvent.click(screen.getByRole('tab', { name: 'General' }));
     await screen.findByRole('combobox', { name: 'Update Channel' });
     const user = userEvent.setup();
+    await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' }));
     const assets = screen.getByText('Assets Path', { selector: 'summary' });
     await user.click(assets);
     expect(assets.closest('details')?.open).toBe(true);
@@ -143,8 +145,10 @@ describe('U5 review regressions', () => {
     const f = setupFixture(); const pending = deferred<void>();
     f.client.setAssetsPath = vi.fn(() => pending.promise);
     render(Settings, { client: f.client });
+    await fireEvent.click(screen.getByRole('tab', { name: 'General' }));
     await screen.findByRole('combobox', { name: 'Update Channel' });
     const user = userEvent.setup();
+    await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' }));
     const assets = screen.getByText('Assets Path', { selector: 'summary' });
     await user.click(assets);
     expect(assets.closest('details')?.open).toBe(true);

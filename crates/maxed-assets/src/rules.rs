@@ -316,6 +316,10 @@ pub(crate) fn dungeons() -> Vec<DungeonDef> {
             kind: kind.clone(),
             completion_index: *index,
             portal_type: None,
+            difficulty: None,
+            exalt: false,
+            exalt_gateway: false,
+            category: None,
         })
         .collect()
 }

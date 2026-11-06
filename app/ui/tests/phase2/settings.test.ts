@@ -9,7 +9,7 @@ import type { RecordingStatus } from '../../src/lib/bindings/RecordingStatus';
 import { setupFixture } from '../setup/fixture';
 import { advance, deferred, disabled, flush, microtasks, preferences } from './fixtures';
 
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => { localStorage.removeItem('maxed.settings.tab'); vi.useFakeTimers(); });
 afterEach(() => { cleanup(); vi.clearAllTimers(); vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 async function open(name: RegExp) {
@@ -22,10 +22,12 @@ it('phase2_settings_save_race_and_opt_in', async () => {
   const fixture = setupFixture(); const pending = deferred<void>();
   fixture.client.updateSettings = vi.fn(() => pending.promise);
   render(Settings, { client: fixture.client }); await flush();
+  await fireEvent.click(screen.getByRole('tab', { name: 'Data & history' }));
   const recording = screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement;
   expect(recording.checked).toBe(false);
   const warning = screen.getByText(/passwords and other players' data/i);
   expect(recording.getAttribute('aria-describedby')).toContain(warning.id);
+  await fireEvent.click(screen.getByRole('tab', { name: 'General' }));
   const acceleration = screen.getByRole('checkbox', { name: 'Hardware Acceleration' }) as HTMLInputElement;
   await fireEvent.click(acceleration); await microtasks();
   await fireEvent.change(screen.getByRole('combobox', { name: 'Capture Adapter' }), { target: { value: 'synthetic-ethernet' } });
@@ -48,8 +50,10 @@ it('failed Apply preserves a newer draft and does not report success', async () 
   const fixture = setupFixture(); const pending = deferred<void>();
   fixture.client.updateSettings = vi.fn(() => pending.promise);
   render(Settings, { client: fixture.client }); await flush();
+  await fireEvent.click(screen.getByRole('tab', { name: 'General' }));
   const acceleration = screen.getByRole('checkbox', { name: 'Hardware Acceleration' }) as HTMLInputElement;
   await fireEvent.click(acceleration); await fireEvent.click(screen.getByRole('button', { name: 'Apply' })); await microtasks();
+  await fireEvent.click(screen.getByRole('tab', { name: 'Data & history' }));
   await fireEvent.click(screen.getByRole('checkbox', { name: 'Save Recordings' }));
   pending.reject(new Error('PRIVATE failure')); await flush();
   expect((screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement).checked).toBe(true);
@@ -137,18 +141,23 @@ it('phase2_settings_assets_update_and_demo_isolation', async () => {
   const view = render(Settings, { client: fixture.client }); await flush();
   expect(check).not.toHaveBeenCalled(); expect(download).not.toHaveBeenCalled(); expect(install).not.toHaveBeenCalled();
   expect(document.querySelector('form form')).toBeNull();
+  await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' }));
   await open(/Assets Path/i);
   expect(screen.getByRole('textbox', { name: 'Assets Path' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Extract' })).toBeTruthy();
+  await fireEvent.click(screen.getByRole('tab', { name: 'Data & history' }));
   expect(screen.getByRole('heading', { name: 'Recording quota' })).toBeTruthy();
   expect(screen.getByText('Limit: 1 GB')).toBeTruthy();
   expect(screen.getByText('Oldest recordings auto-delete at the limit.')).toBeTruthy();
   expect(screen.queryByText(/Installed version.*1\b/i)).toBeNull();
   view.unmount(); await microtasks();
-  render(Settings, { client: fixture.client, preview: true }); await flush(); await open(/Assets Path/i);
+  render(Settings, { client: fixture.client, preview: true }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' })); await open(/Assets Path/i);
+  await fireEvent.click(screen.getByRole('tab', { name: 'Data & history' }));
   expect(disabled(screen.getByRole('checkbox', { name: 'Save Recordings' }))).toBe(true);
   expect(disabled(screen.getByRole('button', { name: 'Apply' }))).toBe(true);
+  await fireEvent.click(screen.getByRole('tab', { name: 'General' }));
   expect(disabled(screen.getByRole('switch', { name: 'Demo Mode' }))).toBe(true);
+  await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' }));
   expect(disabled(screen.getByRole('textbox', { name: 'Assets Path' }))).toBe(true);
   expect(fixture.client.updateSettings).not.toHaveBeenCalled(); expect(fixture.client.setDemo).not.toHaveBeenCalled();
 });

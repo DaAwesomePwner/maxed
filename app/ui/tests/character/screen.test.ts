@@ -128,7 +128,7 @@ it('keeps observed slots/stats and a Settings link when assets are missing', asy
   const p = await mount({ catalog: false });
   const section = p.main.getByRole('region', { name: 'Weapon' });
   expect(within(section).getByText('Weapon calculations unavailable — extract game assets')).toBeTruthy();
-  expect(within(section).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('#/settings');
+  expect(within(section).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('#/settings?tab=assets');
   expect(p.main.getByText('Synthetic Knight')).toBeTruthy();
   expect(p.main.getByRole('region', { name: 'Stats' }).textContent).toContain('75');
 });

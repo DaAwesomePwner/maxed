@@ -1,12 +1,13 @@
 <script lang="ts">
   import '../lib/styles/controls.css';
+  import SettingsTabs from '../lib/settings/SettingsTabs.svelte';
   import StorageUsage from '../lib/settings/StorageUsage.svelte';
   import { debugMode, setDebugMode } from '../lib/debug/debug';
   import { readable } from 'svelte/store';
   import type { CaptureStatus } from '../lib/bindings/CaptureStatus';
   import type { LiveSnapshot } from '../lib/bindings/LiveSnapshot';
   import type { StoreStatus } from '../lib/bindings/StoreStatus';
-  import { productionFeatures, type Features } from '../lib/navigation/routes';
+  import { productionFeatures, type Features, type SettingsTab } from '../lib/navigation/routes';
   import AlertPreferences from '../lib/alerts/AlertPreferences.svelte';
   import ChatSettingsSection from '../lib/logs/ChatSettingsSection.svelte';
   import ClearHistoryDialog from '../lib/party/ClearHistoryDialog.svelte';
@@ -23,8 +24,8 @@
   import { createSetupSession } from '../lib/setup/session';
   import { historyRunning } from '../lib/settings/storage-state';
   import { titleCase } from '../lib/styles/format';
-  let { client, preview = false, features = productionFeatures, enabled = true, streamId = null, store = null }: {
-    client: Client; preview?: boolean; features?: Features; enabled?: boolean; streamId?: string | null; store?: StoreStatus | null;
+  let { client, tab, preview = false, features = productionFeatures, enabled = true, streamId = null, store = null }: {
+    client: Client; tab?: SettingsTab; preview?: boolean; features?: Features; enabled?: boolean; streamId?: string | null; store?: StoreStatus | null;
   } = $props();
   const connection = getContext<ShellConnection | undefined>(SHELL_CONNECTION);
   const capture = connection?.capture ?? readable<CaptureStatus | null>(null);
@@ -122,51 +123,76 @@
   {#if !draft}<p>Disconnected</p>{/if}
   {#if draft && draft.version !== 1}<p class="notice">Update Required</p>{/if}
   {#if $session.errors.settings || !draft}<button class="ctl" type="button" onclick={retrySettings}>Retry Settings</button>{/if}
-  <div class="settings-grid">
-    <div class="column">
-      <SettingsSection heading="Capture">
-        {#if draft}
-          <div oninput={changed} onchange={changed}>
-            <div class="adapter-row">
-              <AdapterControl adapters={$session.adapters} {preview} bind:value={adapter} disabled={readUnavailable} />
-              {#if !preview}<button class="ctl" type="button" disabled={$session.busy} onclick={() => session.refreshAdapters()}>Retry Adapters</button>{/if}
-              <p>Current adapter: {savedAdapter}</p>
+  <SettingsTabs requestedTab={tab} notificationsEnabled={features.logs}>
+    {#snippet general()}
+      <div class="settings-grid">
+        <SettingsSection heading="Capture">
+          {#if draft}
+            <div oninput={changed} onchange={changed}>
+              <div class="adapter-row">
+                <AdapterControl adapters={$session.adapters} {preview} bind:value={adapter} disabled={readUnavailable} />
+                {#if !preview}<button class="ctl" type="button" disabled={$session.busy} onclick={() => session.refreshAdapters()}>Retry Adapters</button>{/if}
+                <p>Current adapter: {savedAdapter}</p>
+              </div>
             </div>
-
-          </div>
-        {/if}
+          {/if}
+        </SettingsSection>
+        <SettingsSection heading="Appearance">
+          {#if draft}
+            <label class="check"><input type="checkbox" bind:checked={draft.hardware_acceleration} onchange={changed} disabled={readUnavailable} aria-describedby={`${id}-acceleration-note`} /> Hardware Acceleration</label>
+            <p>Current setting: {$session.settings?.hardware_acceleration ? 'On' : 'Off'}</p>
+          {/if}
+          <p id={`${id}-acceleration-note`}><span>Restart required</span>. In Maxed's tests (2026-10-04, one Intel Core Ultra 7 laptop, WebView2 154),
+            turning acceleration on added roughly 80–385 MB of memory. Results vary with hardware and how much history you view.</p>
+        </SettingsSection>
+        <SettingsSection heading="Updates">
+          {#if draft}
+            <div class="channel-row">
+              <label for={`${id}-channel`}>Update Channel</label>
+              <select class="ctl" id={`${id}-channel`} bind:value={draft.update_channel} onchange={changed} disabled={readUnavailable}><option value="stable">Stable</option><option value="beta">Beta</option></select>
+            </div>
+          {/if}
+          <UpdateControl {client} {preview} channel={$session.settings?.update_channel} capture={$session.capture} />
+        </SettingsSection>
+        <SettingsSection heading="Demo">
+          <div class="demo-row"><button class="ctl" type="button" role="switch" aria-checked={$session.setup?.demo ?? false} aria-disabled={demoUnavailable} onclick={toggleDemo}>Demo Mode</button><span>Mode: {$session.setup ? $session.setup.demo ? 'Demo' : 'Live' : 'Unavailable'}</span></div>
+        </SettingsSection>
+        <SettingsSection heading="Debug">
+          <label class="check"><input type="checkbox" checked={$debugMode} onchange={(event) => setDebugMode(event.currentTarget.checked)} /> Debug mode</label>
+        </SettingsSection>
+      </div>
+    {/snippet}
+    {#snippet notifications()}
+      <SettingsSection heading="Alerts">
+        <AlertPreferences {client} session={connection?.alerts} {preview} {enabled} {live} />
       </SettingsSection>
-      <SettingsSection heading="Storage">
-        <StorageUsage {client} {preview} />
-        {#if draft}
-          <div oninput={changed} onchange={changed}>
-            <RecordingControl session={recordingSession} bind:checked={draft.save_recordings} disabled={readUnavailable} demo={$session.setup?.demo ?? false} saved={$session.settings?.save_recordings ?? false} limit={draft.recording_limit_bytes} />
-          </div>
-        {/if}
-      </SettingsSection>
-      <SettingsSection heading="Chat">
-        {#if draft}
-          <ChatSettingsSection settings={draft.chat} update={(next) => client.updateChatSettings(next)} clear={() => client.clearChatHistory()} editable={!preview} />
-        {/if}
-      </SettingsSection>
-      <SettingsSection heading="Party history">
-        <p>Maxed links players you've seen across runs by name. This removes that history and other players' stored gear and stats from your runs.</p>
-        <button class="ctl" type="button" bind:this={partyClearButton} disabled={preview || !$session.setup || $session.setup.demo}
-          aria-describedby={partyClearHint ? `${id}-party-clear-hint` : undefined}
-          onclick={() => { partyClearMessage = ''; partyClearOpen = true; }}>Clear party history</button>
-        {#if partyClearHint}<p class="hint" id={`${id}-party-clear-hint`}>{partyClearHint}</p>{/if}
-        <p role="status" aria-live="polite">{partyClearMessage}</p>
-      </SettingsSection>
-      <SettingsSection heading="Appearance">
-        {#if draft}
-          <label class="check"><input type="checkbox" bind:checked={draft.hardware_acceleration} onchange={changed} disabled={readUnavailable} aria-describedby={`${id}-acceleration-note`} /> Hardware Acceleration</label>
-          <p>Current setting: {$session.settings?.hardware_acceleration ? 'On' : 'Off'}</p>
-        {/if}
-        <p id={`${id}-acceleration-note`}><span>Restart required</span>. In Maxed's tests (2026-10-04, one Intel Core Ultra 7 laptop, WebView2 154),
-          turning acceleration on added roughly 80–385 MB of memory. Results vary with hardware and how much history you view.</p>
-      </SettingsSection>
-    </div>
-    <div class="column">
+    {/snippet}
+    {#snippet data()}
+      <div class="settings-grid">
+        <SettingsSection heading="Storage">
+          <StorageUsage {client} {preview} />
+          {#if draft}
+            <div oninput={changed} onchange={changed}>
+              <RecordingControl session={recordingSession} bind:checked={draft.save_recordings} disabled={readUnavailable} demo={$session.setup?.demo ?? false} saved={$session.settings?.save_recordings ?? false} limit={draft.recording_limit_bytes} />
+            </div>
+          {/if}
+        </SettingsSection>
+        <SettingsSection heading="Chat">
+          {#if draft}
+            <ChatSettingsSection settings={draft.chat} update={(next) => client.updateChatSettings(next)} clear={() => client.clearChatHistory()} editable={!preview} />
+          {/if}
+        </SettingsSection>
+        <SettingsSection heading="Party history">
+          <p>Maxed links players you've seen across runs by name. This removes that history and other players' stored gear and stats from your runs.</p>
+          <button class="ctl" type="button" bind:this={partyClearButton} disabled={preview || !$session.setup || $session.setup.demo}
+            aria-describedby={partyClearHint ? `${id}-party-clear-hint` : undefined}
+            onclick={() => { partyClearMessage = ''; partyClearOpen = true; }}>Clear party history</button>
+          {#if partyClearHint}<p class="hint" id={`${id}-party-clear-hint`}>{partyClearHint}</p>{/if}
+          <p role="status" aria-live="polite">{partyClearMessage}</p>
+        </SettingsSection>
+      </div>
+    {/snippet}
+    {#snippet assets()}
       <SettingsSection heading="Game Assets">
         <p>Assets: <strong>{$session.setup?.assets ? titleCase($session.setup.assets) : 'Unavailable'}</strong></p>
         <details>
@@ -174,28 +200,8 @@
           <AssetsControl {session} {preview} />
         </details>
       </SettingsSection>
-      <SettingsSection heading="Updates">
-        {#if draft}
-          <div class="channel-row">
-            <label for={`${id}-channel`}>Update Channel</label>
-            <select class="ctl" id={`${id}-channel`} bind:value={draft.update_channel} onchange={changed} disabled={readUnavailable}><option value="stable">Stable</option><option value="beta">Beta</option></select>
-          </div>
-        {/if}
-        <UpdateControl {client} {preview} channel={$session.settings?.update_channel} capture={$session.capture} />
-      </SettingsSection>
-      <SettingsSection heading="Demo">
-        <div class="demo-row"><button class="ctl" type="button" role="switch" aria-checked={$session.setup?.demo ?? false} aria-disabled={demoUnavailable} onclick={toggleDemo}>Demo Mode</button><span>Mode: {$session.setup ? $session.setup.demo ? 'Demo' : 'Live' : 'Unavailable'}</span></div>
-      </SettingsSection>
-      <SettingsSection heading="Debug">
-        <label class="check"><input type="checkbox" checked={$debugMode} onchange={(event) => setDebugMode(event.currentTarget.checked)} /> Debug mode</label>
-      </SettingsSection>
-    </div>
-  </div>
-      {#if features.logs}
-        <SettingsSection heading="Alerts">
-          <AlertPreferences {client} session={connection?.alerts} {preview} {enabled} {live} />
-        </SettingsSection>
-      {/if}
+    {/snippet}
+  </SettingsTabs>
   <form class="save-bar" onsubmit={(event) => { event.preventDefault(); void apply(); }}>
     <div class="actions">
       <span role="status" aria-live="polite">{saved || (edited ? 'Unsaved Changes' : draft && !$session.errors.settings ? 'Saved' : 'Disconnected')}</span>
@@ -220,7 +226,6 @@
   .hint { color: var(--text-secondary); font-size: 12px; }
   .settings-page { display: grid; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; font-size: var(--text-label); line-height: var(--leading-label); container-type: inline-size; }
   .settings-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--space-3); align-items: start; }
-  .column { display: grid; gap: var(--space-3); min-width: 0; }
   p { color: var(--text-secondary); margin: var(--space-1) 0; line-height: var(--leading-label); }
   .notice { color: var(--warning); }
   .error-summary { color: var(--danger); margin: 0; }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { get } from 'svelte/store';
 import { createClient } from '../src/lib/bridge/client';
@@ -97,6 +97,7 @@ describe('P7 Settings lifecycle', () => {
     await screen.findByText('Saved', { selector: '[role="status"]' });
     expect((await f.client.querySettings()).recording_limit_bytes).toBe(65_575);
     expect(f.client.checkForUpdates).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole('tab', { name: 'Data & history' }));
     expect((screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement).checked).toBe(false);
   });

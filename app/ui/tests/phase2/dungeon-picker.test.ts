@@ -4,6 +4,7 @@ import DungeonPicker from '../../src/lib/alerts/DungeonPicker.svelte';
 import { createClient, type Commands } from '../../src/lib/bridge/client';
 import { createFixtureTransport } from '../../src/lib/bridge/fixture';
 import type { VisualPage } from '../../src/lib/bindings/VisualPage';
+import { dungeonDef } from '../fixtures/dungeon';
 import { deferred, flush, homeSnapshot, preferences } from './fixtures';
 
 const sprite = { key: 'synthetic', sheet: 'mapObjects.png', x: 0, y: 0, width: 8, height: 8 };
@@ -21,8 +22,8 @@ function clientWithNativeVisuals(fetch: (types: number[]) => Promise<VisualPage>
     return invoke(command, args);
   };
   const client = createClient(transport);
-  client.listCatalogDungeonOptions = vi.fn(async () => Array.from({ length: 166 }, (_, i) => ({
-    name: `Dungeon ${i + 1}`, aliases: [], kind: 'dungeon' as const, completion_index: null, portal_type: i + 1,
+  client.listCatalogDungeonOptions = vi.fn(async () => Array.from({ length: 166 }, (_, i) => dungeonDef({
+    name: `Dungeon ${i + 1}`, aliases: [], portal_type: i + 1,
   })));
   return client;
 }
@@ -189,8 +190,8 @@ it('uses the real cache to request and confirm 166 portal types with native size
     objects: types.map(object_type => ({ object_type, sprite, name: null, bag: null })) });
   const invoke = vi.spyOn(transport, 'invoke');
   const client = createClient(transport);
-  client.listCatalogDungeonOptions = vi.fn(async () => types.map(portal_type => ({
-    name: `Dungeon ${portal_type}`, aliases: [], kind: 'dungeon' as const, completion_index: null, portal_type,
+  client.listCatalogDungeonOptions = vi.fn(async () => types.map(portal_type => dungeonDef({
+    name: `Dungeon ${portal_type}`, aliases: [], portal_type,
   })));
   const view = render(DungeonPicker, { client, preferences: preferences({ key_pop_dungeons: [] }), disabled: false, onEdit: vi.fn() });
   await flush();
@@ -212,7 +213,8 @@ it('shows synthetic preview catalog dungeons as searchable options without porta
     { catalogDungeons: ['Preview dungeon'] });
   const client = createClient(transport);
   expect(await client.listCatalogDungeonOptions()).toEqual([
-    { name: 'Preview dungeon', aliases: [], kind: 'dungeon', completion_index: null, portal_type: null },
+    { name: 'Preview dungeon', aliases: [], kind: 'dungeon', completion_index: null, portal_type: null,
+      difficulty: null, exalt: false, exalt_gateway: false, category: null },
   ]);
   const view = render(DungeonPicker, { client, preferences: preferences({ key_pop_dungeons: [] }), disabled: false, onEdit: vi.fn() });
   await flush();
@@ -223,8 +225,8 @@ it('shows synthetic preview catalog dungeons as searchable options without porta
 it.each([166, 257])('resolves %i unique portals in sequential 128-type batches and publishes all sprites together', async count => {
   const client = createClient(createFixtureTransport(homeSnapshot()));
   const types = Array.from({ length: count }, (_, i) => i + 1);
-  client.listCatalogDungeonOptions = vi.fn(async () => types.map(portal_type => ({
-    name: `Dungeon ${portal_type}`, aliases: [], kind: 'dungeon' as const, completion_index: null, portal_type,
+  client.listCatalogDungeonOptions = vi.fn(async () => types.map(portal_type => dungeonDef({
+    name: `Dungeon ${portal_type}`, aliases: [], portal_type,
   })));
   client.getDungeonPortalType = vi.fn(async () => 1);
   const pending: ReturnType<typeof deferred<VisualPage>>[] = [];
@@ -260,8 +262,8 @@ it.each([166, 257])('resolves %i unique portals in sequential 128-type batches a
 it.each([0, 1])('discards an obsolete load during chunk %i without publishing or continuing it', async staleChunk => {
   const client = createClient(createFixtureTransport(homeSnapshot()));
   const types = Array.from({ length: 166 }, (_, i) => i + 1);
-  client.listCatalogDungeonOptions = vi.fn(async () => types.map(portal_type => ({
-    name: `Dungeon ${portal_type}`, aliases: [], kind: 'dungeon' as const, completion_index: null, portal_type,
+  client.listCatalogDungeonOptions = vi.fn(async () => types.map(portal_type => dungeonDef({
+    name: `Dungeon ${portal_type}`, aliases: [], portal_type,
   })));
   client.getDungeonPortalType = vi.fn(async () => 1);
   let changed = () => {};
@@ -293,8 +295,8 @@ it.each([0, 1])('discards an obsolete load during chunk %i without publishing or
 
 it('loads one unique-type visuals batch for 166 catalog rows and reuses sprites across search and chips', async () => {
   const client = createClient(createFixtureTransport(homeSnapshot()));
-  const rows = Array.from({ length: 166 }, (_, i) => ({ name: `Dungeon ${i}`, aliases: [],
-    kind: 'dungeon' as const, completion_index: null, portal_type: i % 2 + 1 }));
+  const rows = Array.from({ length: 166 }, (_, i) => dungeonDef({ name: `Dungeon ${i}`, aliases: [],
+    portal_type: i % 2 + 1 }));
   client.listCatalogDungeonOptions = vi.fn(async () => rows);
   client.getDungeonPortalType = vi.fn(async () => 1);
   client.getObjectVisuals = vi.fn(async (types: number[]) => ({ client_fingerprint: 'a'.repeat(64),
@@ -322,8 +324,8 @@ it('loads one unique-type visuals batch for 166 catalog rows and reuses sprites 
 it('uses one per-name fallback only for a selected name absent from the catalog', async () => {
   const client = createClient(createFixtureTransport(homeSnapshot()));
   client.listCatalogDungeonOptions = vi.fn(async () => [
-    { name: 'Known', aliases: [], kind: 'dungeon' as const, completion_index: null, portal_type: 1 },
-    { name: 'Known without art', aliases: [], kind: 'dungeon' as const, completion_index: null, portal_type: null },
+    dungeonDef({ name: 'Known', aliases: [], portal_type: 1 }),
+    dungeonDef({ name: 'Known without art', aliases: [], portal_type: null }),
   ]);
   client.getDungeonPortalType = vi.fn(async () => 2);
   client.getObjectVisuals = vi.fn(async (types: number[]) => ({ client_fingerprint: 'a'.repeat(64),

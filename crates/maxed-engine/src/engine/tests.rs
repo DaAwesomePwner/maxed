@@ -425,6 +425,10 @@ fn dungeon(name: &str, kind: AreaKind) -> DungeonDef {
         kind,
         completion_index: Some(65),
         portal_type: None,
+        difficulty: None,
+        exalt: false,
+        exalt_gateway: false,
+        category: None,
     }
 }
 
