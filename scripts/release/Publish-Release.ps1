@@ -9,7 +9,11 @@ function Invoke-ReleaseGh([string[]]$Arguments) {
         $result = & gh @Arguments 2> $err
         $code = $LASTEXITCODE
         $ErrorActionPreference = 'Stop'
-        if ($code) { throw "GitHub CLI failed (exit $code)." }
+        if ($code) {
+            $command = ($Arguments | Select-Object -First 2) -join ' '
+            $detail = [IO.File]::ReadAllText($err).Trim()
+            throw "gh $command failed (exit $code): $detail"
+        }
         return ($result -join "`n")
     } finally { Remove-Item -LiteralPath $err -Force }
 }
@@ -39,19 +43,23 @@ function Compare-ReleaseVersion([string]$Left, [string]$Right) {
     }
     return [Math]::Sign($aa.Count - $bb.Count)
 }
-function Get-Release([string]$Tag) {
+function Get-Release([string]$Tag, [switch]$DraftOnly) {
     # Successful listing distinguishes absence from authentication/network failure.
     $pages = Invoke-ReleaseGh @('api', "repos/$Repository/releases?per_page=100", '--paginate', '--slurp') | ConvertFrom-Json
-    foreach ($page in $pages) { foreach ($r in $page) { if ($r.tag_name -ceq $Tag) { return $r } } }
+    $found = @(foreach ($page in $pages) { foreach ($r in $page) { if ($r.tag_name -ceq $Tag) { $r } } })
+    if ($DraftOnly -and @($found | Where-Object { -not $_.draft }).Count) { throw 'Published version is immutable; use manual recovery.' }
+    if ($found.Count -gt 1) { throw "Multiple releases for tag $Tag; manual recovery required." }
+    if ($found.Count -eq 1) { return $found[0] }
     return $null
 }
 function Assert-ReleaseHash([string]$Path, [string]$Hash) {
     if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -ine $Hash) { throw "Hash mismatch: $([IO.Path]::GetFileName($Path))" }
 }
 function Confirm-PublicFile([string]$Url, [string]$Hash, [string]$Path) {
-    for ($attempt = 0; $attempt -lt 5; $attempt++) {
+    $delays = @(2, 4, 8, 16, 30, 30)
+    for ($attempt = 0; $attempt -le $delays.Count; $attempt++) {
         try { Receive-ReleasePublic $Url $Path; Assert-ReleaseHash $Path $Hash; return }
-        catch { if ($attempt -eq 4) { throw }; Start-Sleep -Seconds 2 }
+        catch { if ($attempt -eq $delays.Count) { throw }; Start-Sleep -Seconds $delays[$attempt] }
     }
 }
 function Publish-Release {
@@ -81,8 +89,7 @@ function Publish-Release {
     $platform = $latest.platforms.'windows-x86_64-nsis'
     $url = "https://github.com/$Repository/releases/download/v$Version/$name"
     if ($latest.version -cne $Version -or $platform.url -cne $url -or $platform.signature -cne ([IO.File]::ReadAllText((Join-Path $StageDir "$name.sig"))).Trim()) { throw 'Feed identity/signature mismatch.' }
-    $tag = "v$Version"; $release = Get-Release $tag
-    if ($release -and -not $release.draft) { throw 'Published version is immutable; use manual recovery.' }
+    $tag = "v$Version"; $release = Get-Release $tag -DraftOnly
     if (Test-Path -LiteralPath $BackupDir) { throw 'Backup directory must be new.' }
     $null = New-Item -ItemType Directory -Path $BackupDir
     $work = Join-Path $BackupDir 'verification'
@@ -112,8 +119,9 @@ function Publish-Release {
         $pointers += [pscustomobject]@{ Tag = $pointer; Old = $old; Backup = $backup; Hash = $hash }
     }
     if (-not $release) {
-        $null = Invoke-ReleaseGh @('release', 'create', $tag, '--repo', $Repository, '--verify-tag', '--draft', '--title', $tag, '--notes', "Maxed $Version")
+        $null = Invoke-ReleaseGh @('release', 'create', $tag, '--repo', $Repository, '--verify-tag', '--draft', '--title', "Maxed $Version", '--notes', "Maxed $Version")
     } else {
+        $null = Invoke-ReleaseGh @('release', 'edit', $tag, '--repo', $Repository, '--title', "Maxed $Version", '--notes', "Maxed $Version")
         foreach ($asset in $release.assets) { $null = Invoke-ReleaseGh @('api', '--method', 'DELETE', "repos/$Repository/releases/assets/$($asset.id)") }
     }
     $immutable = @($all | Where-Object { $_ -cne 'latest.json' })
@@ -132,7 +140,7 @@ function Publish-Release {
             if (-not $p.Old) {
                 $commit = Invoke-ReleaseGh @('api', "repos/$Repository/commits/$tag", '--jq', '.sha')
                 if ($commit -cnotmatch '\A[a-f0-9]{40}\z') { throw 'Invalid release target commit.' }
-                $null = Invoke-ReleaseGh @('release', 'create', $p.Tag, '--repo', $Repository, '--draft', '--prerelease', '--latest=false', '--target', $commit, '--title', $p.Tag, '--notes', 'Beta update pointer')
+                $null = Invoke-ReleaseGh @('release', 'create', $p.Tag, '--repo', $Repository, '--draft', '--prerelease', '--latest=false', '--target', $commit, '--title', 'Beta update channel', '--notes', 'Beta update pointer')
             }
             $null = Invoke-ReleaseGh @('release', 'upload', $p.Tag, (Join-Path $StageDir 'latest.json'), '--repo', $Repository, '--clobber')
             if (-not $p.Old) { $null = Invoke-ReleaseGh @('release', 'edit', $p.Tag, '--repo', $Repository, '--draft=false', '--prerelease=true', '--latest=false') }
@@ -147,10 +155,13 @@ function Publish-Release {
                     $null = Invoke-ReleaseGh @('release', 'upload', $p.Tag, $p.Backup, '--repo', $Repository, '--clobber')
                     Confirm-PublicFile "https://github.com/$Repository/releases/download/$($p.Tag)/latest.json" $p.Hash (Join-Path $work 'restored-feed')
                 } else {
-                    if (Get-Release $p.Tag) { $null = Invoke-ReleaseGh @('release', 'delete', $p.Tag, '--repo', $Repository, '--yes') }
+                    if (Get-Release $p.Tag) { $null = Invoke-ReleaseGh @('release', 'delete', $p.Tag, '--repo', $Repository, '--cleanup-tag', '--yes') }
                     if (Get-Release $p.Tag) { throw 'New pointer removal failed.' }
                 }
-            } catch { $restoreErrors += $p.Tag }
+            } catch {
+                Write-Warning "Restore failed for $($p.Tag): $($_.Exception.Message)"
+                $restoreErrors += $p.Tag
+            }
         }
         if ($restoreErrors.Count) { throw "Promotion failed; MANUAL RECOVERY REQUIRED for $($restoreErrors -join ', '). Backups: $BackupDir" }
         throw $failure

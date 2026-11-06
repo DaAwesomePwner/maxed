@@ -60,6 +60,10 @@ Staging copies the exact installer/signature, `LICENSE` and `NOTICE.md`, writes 
 
 ## Serialized promotion
 
+Staged artifacts expire after 14 days: approve publication early enough for the publish job to download them before expiry. Expiry is safe because no release or pointer changes occur before that download succeeds.
+
+With several tags pending, GitHub cancels an older pending publish in the same concurrency group; this is safe, and publication can proceed manually or with a newer tag.
+
 After reviewing the release gates, approve `release-publish`. Its `publish` job runs `scripts/release/Publish-Release.ps1` on the exact staged artifact. A shared job concurrency lock serializes promotions across version tags, in addition to the workflow's per-tag lock. The script checks the manifest allowlist, hashes, feed identity and SemVer precedence before publishing a draft, verifies downloaded immutable assets, then replaces the selected pointer last. Stable also advances an existing older beta pointer; a first beta publication creates its pointer. Public feed and installer verification uses unauthenticated downloads.
 
 Old pointer bytes, versions and hashes are retained in the `release-backup-<tag>-<attempt>` artifact for 30 days, including failed runs. On verification failure the script restores changed pointers and verifies their public bytes. A failed restoration requires manual recovery from that artifact. Published version releases are never modified by a retry; if publication succeeded but promotion failed, use the manual procedure below. Do not move or recreate immutable version tags. GitHub asset replacement is not transactional, and interruption or runner loss can require manual recovery.

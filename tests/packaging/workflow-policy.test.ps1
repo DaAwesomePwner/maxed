@@ -54,6 +54,13 @@ function StepSecretFailures($step, [bool]$allowSigning) {
 function Keys($value) { return (@($value.PSObject.Properties.Name | Sort-Object) -join ',') }
 function Failures($release, $manual, $codeql) {
     $publish = $release.jobs.publish
+    if ((Keys $publish) -cne 'concurrency,defaults,environment,if,needs,permissions,runs-on,steps,timeout-minutes') { 'publish_shape' }
+    $publishCommand = @'
+$v = $env:RELEASE_TAG.Substring(1)
+$c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }
+./scripts/release/Publish-Release.ps1 -Version $v -Channel $c -Repository 'daplabs/maxed' -StageDir release-stage -BackupDir release-backup
+'@
+    if ($publish.steps[2].run -cne $publishCommand) { 'publish_command' }
     if ($publish.environment -cne 'release-publish' -or $publish.concurrency.group -cne 'release-publish' -or
         $publish.concurrency.'cancel-in-progress' -cne $false -or (@($publish.needs) -join ',') -cne 'package' -or
         $publish.if -cne "github.repository == 'daplabs/maxed' && github.ref_type == 'tag'") { 'publish_gate' }
@@ -184,7 +191,7 @@ function Failures($release, $manual, $codeql) {
     $coordinates = @($release.jobs.package.steps | ForEach-Object { [regex]::Matches([string]$_.run, "-Repository '([^']*)'") } | ForEach-Object { $_.Groups[1].Value })
     if ($coordinates.Count -ne 2 -or @($coordinates | Where-Object { $_ -cne $script:updaterRepository }).Count) { 'distribution_repository' }
     $upload = @($release.jobs.package.steps | Where-Object { $_.uses -like 'actions/upload-artifact@*' })
-    if ($upload.Count -ne 1 -or $upload[0].with.path -cne 'release-stage/' -or $upload[0].with.'retention-days' -ne 3 -or $upload[0].with.'if-no-files-found' -cne 'error') { 'upload_allowlist' }
+    if ($upload.Count -ne 1 -or $upload[0].with.path -cne 'release-stage/' -or $upload[0].with.'retention-days' -ne 14 -or $upload[0].with.'if-no-files-found' -cne 'error') { 'upload_allowlist' }
     # Signed packages are always built from scratch: no build cache in the signing job.
     if (@($release.jobs.package.steps | Where-Object { $_.uses -like 'actions/cache*' }).Count) { 'signing_cache' }
 }
@@ -359,6 +366,11 @@ Assert ($perfStep.Count -eq 1 -and $perfStep[0].run.Contains('cargo clippy --off
 $stepNamed = { param($m, $name) @($m.jobs.tests.steps | Where-Object name -CEQ $name)[0] }
 foreach ($case in @(
     @{ want = 'permissions'; mutate = { param($r,$m) $r.permissions.contents = 'write' } },
+    @{ want = 'publish_shape'; mutate = { param($r,$m) $r.jobs.publish | Add-Member container 'image' } },
+    @{ want = 'publish_shape'; mutate = { param($r,$m) $r.jobs.publish | Add-Member services @{} } },
+    @{ want = 'publish_shape'; mutate = { param($r,$m) $r.jobs.publish | Add-Member outputs @{} } },
+    @{ want = 'publish_command'; mutate = { param($r,$m) $r.jobs.publish.steps[2].run += '; exit 0' } },
+    @{ want = 'upload_allowlist'; mutate = { param($r,$m) $r.jobs.package.steps[-1].with.'retention-days' = 3 } },
     @{ want = 'permissions'; mutate = { param($r,$m) $r.jobs.package | Add-Member permissions @{ contents = 'write' } } },
     @{ want = 'permissions'; mutate = { param($r,$m) $r.jobs.publish.permissions | Add-Member actions 'write' } },
     @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.PSObject.Properties.Remove('environment') } },
