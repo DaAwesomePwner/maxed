@@ -25,6 +25,10 @@ equipment/stat/condition changes, death, capture stop, reconnect, identity/accou
 missing-asset recovery, 100%/150% WebView2 scaling and keyboard behavior. The full Task 11 checklist
 below remains pending. This enablement does not claim live Npcap, game-client or WebView2 verification.
 
+On 2026-11-06 the owner accepted weapon/regen values versus the client, 100%/150% scaling and keyboard
+behavior from Windows use. That is in-use acceptance, not a recorded Task 11 pass; the checklist below
+stays unexecuted.
+
 Gate P (exalt placement) remains open: at-cap, pots-left and maxed stay null when exalt is nonzero
 or unknown. Exalt damage (stat 113) remains deferred. Gate U acceptance does not resolve either gate.
 
