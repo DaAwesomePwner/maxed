@@ -4,9 +4,9 @@
   import { alertHeading, alertAction, kindLabel, kindGlyph, shownAs } from './alerts-screen';
   import { formatDps } from '../styles/format';
   import { clockTime, dayLabel } from '../logs/logs-format';
-  let { rows, selectedId, onSelect, muted, onMute, canMute = false }: {
+  let { rows, selectedId, onSelect, muted, onMute, filtered = () => false, canMute = false }: {
     rows: AlertView[]; selectedId: string | null; onSelect: (id: string) => void;
-    muted: (dungeon: string) => boolean; onMute: (dungeon: string) => void; canMute?: boolean;
+    muted: (dungeon: string) => boolean; onMute: (dungeon: string) => void; canMute?: boolean; filtered?: (dungeon: string) => boolean;
   } = $props();
 </script>
 <div class="scroll"><table aria-label="Saved alerts">
@@ -22,7 +22,7 @@
       <td><span class="k" class:white={row.kind === 'white_bag'} class:key={row.kind === 'key_popped'} class:death={row.kind === 'death'} class:pbk={row.kind === 'personal_best'} class:chat={row.details?.type === 'chat'} class:flaw={row.kind === 'flawless_run'}><i class={`g ${kindGlyph[row.kind]}`} aria-hidden="true"></i><span>{kindLabel[row.kind]}</span></span></td>
       <td class="title" title={alertHeading(row)}><strong>{alertHeading(row)}</strong>{#if row.details?.type === 'chat'} <span title={row.details.excerpt}>{row.details.excerpt}</span>{/if}{#if row.details?.type === 'white_bag' && row.details.source_estimated} <span class="est">est.</span>{/if}{#if row.details?.type === 'white_bag' && row.details.ordinal !== null}<span>{row.details.ordinal} this week</span>{:else if row.details?.type === 'personal_best'}<span>previous: {formatDps(row.details.previous_dps)}</span>{/if}</td>
       <td><span class="delivery" class:banner={row.presentation === 'banner'}>{shownAs(row.presentation)}</span></td>
-      <td>{#if action?.href}<a href={action.href}>{action.label} ›</a>{:else if action?.mute}<button class="ctl ghost" aria-label={`${muted(action.mute) ? 'Unmute' : 'Mute'} ${action.mute}`} disabled={!canMute} onclick={() => onMute(action.mute!)}>{muted(action.mute) ? 'Unmute' : 'Mute'}</button>{/if}</td>
+      <td>{#if action?.href}<a href={action.href}>{action.label} ›</a>{:else if action?.mute}{#if filtered(action.mute)}<span>Filtered by rules</span>{:else}<button class="ctl ghost" aria-label={`${muted(action.mute) ? 'Unmute' : 'Mute'} ${action.mute}`} disabled={!canMute} onclick={() => onMute(action.mute!)}>{muted(action.mute) ? 'Unmute' : 'Mute'}</button>{/if}{/if}</td>
     </tr>
   {/each}</tbody>
 </table></div>

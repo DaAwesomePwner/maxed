@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { dungeonCatalog, dungeonMetadata, watchDungeonCatalog } from './dungeon-catalog';
+  import { keyPopAllows, filteredByRules } from './preferences';
+  $effect(() => { if (client) return watchDungeonCatalog(client); });
   import { settingsHref } from '../navigation/routes';
   import { createLogsSearch, validLogsQuery } from '../logs/search.svelte';
   import { createLogsList } from '../logs/list.svelte';
@@ -81,8 +84,15 @@
   const muteStatus = mute?.status ?? readable('loading');
   const muteFeedback = mute?.state ?? readable({ busy: false });
   let preferences = $derived($mutePreferences ?? prefs);
-  let mutedCount = $derived(!preferences ? -1 : preferences.key_pop_dungeons === null ? preferences.key_pop_excluded_dungeons.length : dungeons === null ? -1 : dungeons.filter(name => !preferences.key_pop_dungeons!.includes(name)).length);
-  const muted = (dungeon: string) => !!preferences && (preferences.key_pop_dungeons !== null ? !preferences.key_pop_dungeons.includes(dungeon) : preferences.key_pop_excluded_dungeons.includes(dungeon));
+  let mutedCount = $derived.by(() => {
+    if (!preferences) return -1;
+    if (preferences.key_pop_dungeons !== null && dungeons === null && !$dungeonCatalog) return -1;
+    const names = new Set([...(dungeons ?? []), ...($dungeonCatalog?.map(row => row.name) ?? []),
+      ...(preferences.key_pop_dungeons === null ? preferences.key_pop_excluded_dungeons : [])]);
+    return [...names].filter(name => !keyPopAllows(preferences!, name, dungeonMetadata(name, $dungeonCatalog))).length;
+  });
+  const muted = (dungeon: string) => !!preferences && !keyPopAllows(preferences, dungeon, dungeonMetadata(dungeon, $dungeonCatalog));
+  const filtered = (dungeon: string) => !!preferences && filteredByRules(preferences, dungeon, dungeonMetadata(dungeon, $dungeonCatalog));
   function toggleMute(dungeon: string) { if (muted(dungeon)) void mute?.unmute(dungeon); else void mute?.mute(dungeon); }
 
   let generation = 0, summaryRequested: string | null = null, allTimeRequested = false, prefsRequested = false;
@@ -195,7 +205,7 @@
       {#if page}
         {#if !page.rows.length}<div class="empty"><h2>{filter.range ? 'No alerts in this range' : filter.query || filter.kind || filter.kinds?.length || filter.exclude_kinds?.length ? 'No alerts match your filters' : 'No alerts'}</h2>
           {#if filter.range}<button class="ctl" onclick={() => apply({ ...filter, range: null, cursor: null })}>Show all time</button>{:else if filter.query || filter.kind || filter.kinds?.length || filter.exclude_kinds?.length}<button class="ctl" onclick={() => { tile = 'all'; apply(defaultAlertFilter()); }}>Clear filters</button>{:else}<p>Alerts appear when Maxed observes them in-game.</p><a class="ctl ghost" href={settingsHref('notifications')}>Alert settings</a>{/if}</div>
-        {:else}<AlertTable rows={page.rows} selectedId={selected?.id ?? null} onSelect={select} {muted} onMute={toggleMute} canMute={!!mute && $muteStatus === 'ready' && !$muteFeedback.busy && mute.available()} />{/if}
+        {:else}<AlertTable rows={page.rows} selectedId={selected?.id ?? null} onSelect={select} {muted} {filtered} onMute={toggleMute} canMute={!!mute && $muteStatus === 'ready' && !$muteFeedback.busy && mute.available()} />{/if}
       {:else if history.phase === 'loading'}<p>Loading alerts</p>{/if}
     {/if}
     <footer><span>Alerts are kept with your runs. Off and log-only alerts are listed too.</span><Pager atLatest={filter.cursor === null} hasOlder={!!page?.next} loading={list.paging} noun="alerts" onLatest={list.first} onNewer={list.back} onOlder={list.next} /></footer>

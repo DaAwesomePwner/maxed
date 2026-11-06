@@ -1,17 +1,32 @@
+import { dungeonMetadata } from './dungeon-catalog';
 import type { AlertView } from '../bindings/AlertView';
 import type { AlertPreferences } from '../bindings/AlertPreferences';
 import type { AlertLoudness } from '../bindings/AlertLoudness';
 import type { AlertSession } from './session';
 
-function includesKeyPopDungeon(preferences: AlertPreferences, dungeon: string): boolean {
+export function includesKeyPopDungeon(preferences: AlertPreferences, dungeon: string): boolean {
   return preferences.key_pop_dungeons == null
     ? !(preferences.key_pop_excluded_dungeons ?? []).includes(dungeon)
     : preferences.key_pop_dungeons.includes(dungeon);
 }
 
+export type KeyPopMetadata = { difficulty: number | null; exalt: boolean; exalt_gateway: boolean };
+/** Undefined catalog fails open: the store already filtered at record time. */
+export function keyPopAllows(preferences: AlertPreferences, dungeon: string, meta: KeyPopMetadata | null | undefined): boolean {
+  if (!includesKeyPopDungeon(preferences, dungeon)) return false;
+  if (preferences.key_pop_dungeons !== null || meta === undefined) return true;
+  return (!preferences.key_pop_exalt_only || !!meta && (meta.exalt || meta.exalt_gateway))
+    && (preferences.key_pop_min_difficulty == null || meta?.difficulty == null
+      || meta.difficulty >= preferences.key_pop_min_difficulty);
+}
+export function filteredByRules(preferences: AlertPreferences, dungeon: string, meta = dungeonMetadata(dungeon)): boolean {
+  return !keyPopAllows({ ...preferences, key_pop_excluded_dungeons: [] }, dungeon, meta)
+    && preferences.key_pop_dungeons === null;
+}
+
 export function allowsAlert(preferences: AlertPreferences, alert: AlertView): boolean {
   return alert.kind !== 'key_popped' || (alert.details?.type === 'key_popped'
-    && includesKeyPopDungeon(preferences, alert.details.dungeon));
+    && keyPopAllows(preferences, alert.details.dungeon, dungeonMetadata(alert.details.dungeon)));
 }
 
 export const keyPopFilterLimitMessage = 'Dungeon filters allow at most 256 combined entries. Clear a selection before adding another.';

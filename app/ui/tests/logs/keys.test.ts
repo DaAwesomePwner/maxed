@@ -221,3 +221,22 @@ it('keeps trailing spaces without repeated persistence, selection or paging rese
   await vi.advanceTimersByTimeAsync(500); await flush();
   expect(listInstanceEvents.mock.lastCall![0].query).toBe('Invented vault');
 });
+
+it('marks only ranked rule-filtered dungeons and summarizes them without catalog name lists', async () => {
+  const { dungeonDef } = await import('../fixtures/dungeon');
+  const client = setup(), settings = client.querySettings;
+  client.querySettings = vi.fn(async () => { const value = await settings(); return { ...value, alerts: { ...value.alerts, key_pop_exalt_only: true } }; });
+  client.listCatalogDungeonOptions = vi.fn(async () => [
+    dungeonDef({ name: 'Invented vault', exalt: false }), dungeonDef({ name: 'Muted vault', exalt: true }),
+    ...Array.from({ length: 70 }, (_, i) => dungeonDef({ name: `Unranked ${i}`, exalt: false })),
+  ]);
+  render(KeyPopsView, { client });
+  const rank = await screen.findByRole('button', { name: /Invented vault 8 Filtered by rules/ });
+  expect(rank.querySelector('.muted')).toBeNull();
+  expect(within(rank).getByText('Filtered by rules')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Muted vault 4' }).querySelector('.muted')).toBeTruthy();
+  expect(screen.getByText('1 shown dungeon filtered by rules.')).toBeTruthy();
+  expect(screen.queryByText(/Unranked/)).toBeNull();
+  expect(screen.getByText(/Marked “Filtered by rules”: excluded by notification rules/)).toBeTruthy();
+  expect(screen.getByText('72 muted or filtered for alerts')).toBeTruthy();
+});

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { loadDungeonCatalog, watchDungeonCatalog, dungeonMetadata } from './dungeon-catalog';
+  import { filteredByRules } from './preferences';
   import { untrack } from 'svelte';
   import type { Client } from '../bridge/client';
   import type { AlertPreferences } from '../bindings/AlertPreferences';
@@ -10,6 +12,7 @@
     client?: Client; preferences: AlertPreferences; disabled: boolean;
     onEdit: (patch: Partial<AlertPreferences>) => void;
   } = $props();
+  const id = $props.id();
   type Mode = 'all' | 'except' | 'selected';
   const modeOf = (p: AlertPreferences): Mode => p.key_pop_dungeons !== null ? 'selected'
     : p.key_pop_excluded_dungeons.length ? 'except' : 'all';
@@ -36,7 +39,7 @@
       const request = ++revision;
       catalogStatus = 'loading'; portals = new Map();
       try {
-        const rows = await owner!.listCatalogDungeonOptions();
+        const rows = await loadDungeonCatalog(owner!, restarts > 0);
         if (disposed || request !== revision) return;
         catalog = rows; catalogStatus = 'ready'; message = '';
         const types = [...new Set(rows.map(row => row.portal_type)
@@ -65,7 +68,7 @@
             }
             // One additional catalog read binds these sprites to the names/types we loaded.
             // Extraction may have committed after the initial list but before the first page.
-            const confirmed = await owner!.listCatalogDungeonOptions();
+            const confirmed = await loadDungeonCatalog(owner!, true);
             if (disposed || request !== revision) return;
             const catalogKey = (definitions: DungeonDef[]) => JSON.stringify(definitions.map(row => [row.name, row.aliases, row.portal_type]));
             if (catalogKey(confirmed) !== catalogKey(rows)) {
@@ -87,9 +90,9 @@
         if (!disposed && request === revision) { catalog = []; catalogStatus = 'failed'; message = 'Dungeon catalog unavailable. Check assets in Settings.'; }
       }
     }
+    const stopCatalog = watchDungeonCatalog(owner, () => { void load(); });
     void load();
-    const release = owner.onVisualsChanged(() => { void load(); });
-    return () => { disposed = true; release(); };
+    return () => { disposed = true; stopCatalog(); };
   });
   let selected = $derived([...new Set(mode === 'selected' ? preferences.key_pop_dungeons ?? [] : preferences.key_pop_excluded_dungeons)]);
   $effect(() => {
@@ -143,8 +146,13 @@
     <input id="dungeon-search" type="search" bind:value={query} />
     <div class="actions"><button type="button" onclick={() => select([...new Set([...selected, ...visible])])}>Select all</button><button type="button" onclick={() => select(selected.filter(name => !visible.includes(name)))}>Clear</button></div>
     <div class="results">
-      {#each visible as dungeon (dungeon)}
-        <label class="choice"><input type="checkbox" checked={selected.includes(dungeon)} onchange={event => { if (!select(event.currentTarget.checked ? [...selected, dungeon] : selected.filter(name => name !== dungeon))) event.currentTarget.checked = selected.includes(dungeon); }} /><DungeonPortal portal={portals.get(dungeon) ?? fallbackPortals.get(dungeon) ?? null} />{dungeon}</label>
+      {#each visible as dungeon, index (dungeon)}
+        {@const meta = dungeonMetadata(dungeon, catalog)}
+        <label class="choice"><input aria-label={dungeon} aria-describedby={`${id}-metadata-${index}`} type="checkbox" checked={selected.includes(dungeon)} onchange={event => { if (!select(event.currentTarget.checked ? [...selected, dungeon] : selected.filter(name => name !== dungeon))) event.currentTarget.checked = selected.includes(dungeon); }} /><DungeonPortal portal={portals.get(dungeon) ?? fallbackPortals.get(dungeon) ?? null} />{dungeon}
+          <span id={`${id}-metadata-${index}`}><small>{meta?.difficulty == null ? 'difficulty unknown' : `${meta.difficulty} / 10`}</small>
+          {#if meta?.exalt}<small>Exalt</small>{:else if meta?.exalt_gateway}<small>Exalt gateway</small>{/if}
+          {#if filteredByRules(preferences, dungeon, catalogStatus === 'ready' ? meta ?? null : undefined)}<small>Filtered by rules</small>{/if}</span>
+        </label>
       {/each}
       {#if !visible.length}<p>No matching dungeons.</p>{/if}
     </div>
@@ -154,7 +162,7 @@
 <style>
   fieldset { min-width: 0; padding: 12px; border-radius: 6px; border: 1px solid var(--border); margin: var(--space-2) 0; }
   .results { max-height: 14rem; overflow: auto; margin-top: var(--space-2); }
-  .choice, .chips button { display: flex; align-items: center; gap: var(--space-1); min-height: var(--target-min); }
+  .choice, .chips button { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); min-height: var(--target-min); }
   .chips, .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0; }
   .note { color: var(--text-secondary); font-size: 12px; }
   button, select, input[type="search"] { min-height: var(--target-min); max-width: 100%; box-sizing: border-box; color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-control); font: inherit; padding: var(--space-1) var(--space-2); }
