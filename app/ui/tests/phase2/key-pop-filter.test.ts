@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { dungeonDef } from '../fixtures/dungeon';
 import { alert, deferred, flush, follow, main, mountPhase2, preferences, primary, ready } from './fixtures';
 import { createAlertSession } from '../../src/lib/alerts/session';
 import { get } from 'svelte/store';
@@ -13,7 +14,7 @@ it.each([
   { only: true, undoBeforeSave: true }, { only: false, undoBeforeSave: true },
 ])('translates banner Mute and Undo into the dirty mode (initial Only=$only, Undo before Save=$undoBeforeSave)', async ({ only, undoBeforeSave }) => {
   const page = mountPhase2({ hash: '#/settings', configure: client => {
-    client.listCatalogDungeonOptions = vi.fn(async () => [{ name: 'Lost Halls', aliases: [], kind: 'dungeon' as const, completion_index: null, portal_type: null }]);
+    client.listCatalogDungeonOptions = vi.fn(async () => [dungeonDef({ name: 'Lost Halls', aliases: [], portal_type: null })]);
   } });
   page.setSettings({ alerts: preferences({ key_popped: 'banner', key_pop_dungeons: only ? ['Lost Halls'] : null }) });
   await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
@@ -41,7 +42,7 @@ it.each([
 it('blocks Save when translating a mute into the draft mode exceeds the combined cap', async () => {
   const names = Array.from({ length: 256 }, (_, i) => `Draft dungeon ${i}`);
   const page = mountPhase2({ hash: '#/settings', configure: client => {
-    client.listCatalogDungeonOptions = vi.fn(async () => names.map(name => ({ name, aliases: [], kind: 'dungeon' as const, completion_index: null, portal_type: null })));
+    client.listCatalogDungeonOptions = vi.fn(async () => names.map(name => dungeonDef({ name, aliases: [], portal_type: null })));
   } });
   page.setSettings({ alerts: preferences({ key_pop_dungeons: ['Lost Halls'] }) }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   await fireEvent.change(main().getByRole('combobox', { name: 'Key Popped dungeons' }), { target: { value: 'except' } });
@@ -60,8 +61,8 @@ it('blocks Save when translating a mute into the draft mode exceeds the combined
 
 it.each([false, true])('queues a dirty form save behind a pending mute and Undo reverses only the mute (Only=%s)', async only => {
   const page = mountPhase2({ hash: '#/settings',
-    configure: client => { client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void', 'Extra dungeon'].map(name => ({
-      name, aliases: [], kind: 'dungeon' as const, completion_index: null, portal_type: null,
+    configure: client => { client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void', 'Extra dungeon'].map(name => dungeonDef({
+      name, aliases: [], portal_type: null,
     }))); } });
   page.setSettings({ alerts: preferences({ key_pop_dungeons: only ? ['Lost Halls', 'The Void'] : null,
     key_pop_excluded_dungeons: only ? [] : ['The Void'] }) });
@@ -94,8 +95,8 @@ it.each([false, true])('queues a dirty form save behind a pending mute and Undo 
 it('searches names and aliases, edits chips and visible results, and retains mode choices', async () => {
   const page = mountPhase2({ hash: '#/settings', configure: client => {
     client.listCatalogDungeonOptions = vi.fn(async () => [
-      { name: 'Lost Halls', aliases: ['LH'], kind: 'dungeon' as const, completion_index: null },
-      { name: 'The Void', aliases: ['Void'], kind: 'dungeon' as const, completion_index: null },
+      dungeonDef({ name: 'Lost Halls', aliases: ['LH'] }),
+      dungeonDef({ name: 'The Void', aliases: ['Void'] }),
     ]);
   } }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   const mode = main().getByRole('combobox', { name: 'Key Popped dungeons' });
@@ -233,7 +234,7 @@ it.each([false, true])('rebases dirty settings onto a log mute (Only=%s)', async
   const page = mountPhase2({ hash: '#/alerts',
     // Legacy combined Alerts page; unreachable with the production logs flag on.
     features: { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false }, alerts: async () => ready({ rows: [pop()], next: null }),
-    configure: client => { client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void'].map(name => ({ name, aliases: [], kind: 'dungeon' as const, completion_index: null }))); } });
+    configure: client => { client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void'].map(name => dungeonDef({ name, aliases: [] }))); } });
   page.setSettings({ alerts: preferences({ key_pop_dungeons: only ? ['Lost Halls', 'The Void'] : null }) });
   await flush();
   await fireEvent.change(main().getByRole('combobox', { name: 'White Bag' }), { target: { value: 'off' } });
@@ -267,7 +268,7 @@ it.each([false, true])('merges dirty picker additions and removals with a log mu
   const page = mountPhase2({ hash: '#/alerts',
     // Legacy combined Alerts page; unreachable with the production logs flag on.
     features: { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false }, alerts: async () => ready({ rows: [pop()], next: null }),
-    configure: client => { client.listCatalogDungeonOptions = vi.fn(async () => names.map(name => ({ name, aliases: [], kind: 'dungeon' as const, completion_index: null }))); } });
+    configure: client => { client.listCatalogDungeonOptions = vi.fn(async () => names.map(name => dungeonDef({ name, aliases: [] }))); } });
   const initial = ['The Void', 'Old choice', 'The Void'];
   page.setSettings({ alerts: preferences({ key_pop_dungeons: only ? ['Lost Halls', ...initial] : null,
     key_pop_excluded_dungeons: only ? [] : initial }) });
@@ -288,7 +289,7 @@ it.each([false, true])('merges dirty picker additions and removals with a log mu
 it.each([false, true])('blocks saving an over-cap rebase until a selection is removed without losing the mute (queued=%s)', async queued => {
   const page = mountPhase2({ hash: '#/settings',
     configure: client => { client.listCatalogDungeonOptions = vi.fn(async () => [
-      { name: 'Extra dungeon', aliases: [], kind: 'dungeon' as const, completion_index: null },
+      dungeonDef({ name: 'Extra dungeon', aliases: [] }),
     ]); } });
   page.setSettings({ alerts: preferences({ key_pop_excluded_dungeons: Array.from({ length: 255 }, (_, i) => `Excluded ${i}`) }) });
   await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
@@ -339,7 +340,7 @@ it('retains mute retry after a failed pending write while the queued form save s
 it('rejects picker selections over the combined cap without creating an invalid draft', async () => {
   const page = mountPhase2({ hash: '#/settings', configure: client => {
     client.listCatalogDungeonOptions = vi.fn(async () => [
-      { name: 'Extra dungeon', aliases: [], kind: 'dungeon' as const, completion_index: null },
+      dungeonDef({ name: 'Extra dungeon', aliases: [] }),
     ]);
   } });
   page.setSettings({ alerts: preferences({ key_pop_dungeons: ['Lost Halls'],

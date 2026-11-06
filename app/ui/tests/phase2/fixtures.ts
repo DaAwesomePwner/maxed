@@ -22,7 +22,7 @@ export { homeSnapshot, saved };
 
 // Invented data only. No recordings, asset extraction, native delivery, or network.
 export const preferences = (patch: Partial<AlertPreferences> = {}): AlertPreferences => ({
-  whisper: 'toast', guild_message: 'quiet_log_only', party_message: 'quiet_log_only', white_bag: 'banner', personal_best: 'banner', key_popped: 'toast', key_pop_dungeons: null, key_pop_excluded_dungeons: [], death: 'banner', flawless_run: 'off',
+  whisper: 'toast', guild_message: 'quiet_log_only', party_message: 'quiet_log_only', white_bag: 'banner', personal_best: 'banner', key_popped: 'toast', key_pop_dungeons: null, key_pop_excluded_dungeons: [], key_pop_min_difficulty: null, key_pop_exalt_only: false, death: 'banner', flawless_run: 'off',
   muted: false, windows_notifications: false, volume_percent: 35, ...patch,
 });
 export const alert = (patch: Partial<AlertView> = {}): AlertView => ({
