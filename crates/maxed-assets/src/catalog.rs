@@ -992,11 +992,7 @@ pub(crate) fn build_cancellable(
     // Several portals can open one dungeon (event, test and art variants), so
     // the choice depends only on catalog data, never on file order.
     for d in &mut c.dungeons {
-        if let Some(meta) = maxed_types::dungeon_meta(&d.name).or_else(|| {
-            d.aliases
-                .iter()
-                .find_map(|alias| maxed_types::dungeon_meta(alias))
-        }) {
+        if let Some(meta) = maxed_types::dungeon_meta(&d.name) {
             d.difficulty = Some(meta.difficulty);
             d.exalt = meta.exalt;
             d.exalt_gateway = meta.exalt_gateway;
