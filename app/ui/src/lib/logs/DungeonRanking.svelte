@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { settingsHref } from '../navigation/routes';
   import type { DungeonPops } from '../bindings/DungeonPops';
   import type { TimeRange } from '../bindings/TimeRange';
   import { presetFor } from '../runs/runs-list';
@@ -22,7 +23,7 @@
       </button>
     {:else}<p>No dungeons in this range.</p>{/each}
   </div>
-  <footer><span>Struck through: muted for alerts</span><a href="#/settings">Alert settings ›</a></footer>
+  <footer><span>Struck through: muted for alerts</span><a href={settingsHref('notifications')}>Alert settings ›</a></footer>
 </section>
 <style>
   .card { padding: 12px; min-width: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); font-size: 12px; }

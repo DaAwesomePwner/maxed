@@ -21,7 +21,12 @@ it('phase2_alert_policy_disabled_os_and_history', async () => {
   expect(logRows()).toHaveLength(50);
   expect(new Set(logRows().map(row => row.dataset.rowId)).size).toBe(50);
   expect(page.listAlerts).toHaveBeenCalledTimes(1);
-  await follow('#/settings', primary()); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
+  localStorage.setItem('maxed.settings.tab', 'assets');
+  const settingsLink = main().getByRole('link', { name: 'Alert settings' });
+  expect(settingsLink.getAttribute('href')).toBe('#/settings?tab=notifications');
+  await fireEvent.click(settingsLink); await flush();
+  expect(page.browser.adapter.hash).toBe('#/settings?tab=notifications');
+  expect(main().getByRole('tabpanel', { name: 'Notifications' })).toBeTruthy();
   for (const name of [/white bag/i, /personal best/i]) {
     const select = main().getByRole('combobox', { name });
     expect([...select.querySelectorAll('option')].map(option => option.value)).toEqual(['off', 'quiet_log_only', 'toast', 'banner']);

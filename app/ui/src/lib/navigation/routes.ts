@@ -40,6 +40,10 @@ export function parseObjectId(value: string): number | null {
   return Number.isInteger(id) && id >= -2147483648 && id <= 2147483647 ? id : null;
 }
 
+export function settingsHref(tab: SettingsTab): string {
+  return `#/settings?tab=${tab}`;
+}
+
 export function routeHref(route: Route): string {
   const encode = encodeURIComponent;
   switch (route.kind) {
@@ -55,7 +59,7 @@ export function routeHref(route: Route): string {
     case 'stats':
       if (route.view === 'sessions' && route.sessionId) return `#/stats/sessions/${encode(route.sessionId)}`;
       return route.view === 'maps' ? '#/stats' : `#/stats/${route.view}`;
-    case 'settings': return route.tab ? `#/settings?tab=${route.tab}` : '#/settings';
+    case 'settings': return route.tab ? settingsHref(route.tab) : '#/settings';
     case 'home': return '#/';
     case 'party-live': return '#/party';
     case 'party-run': return `#/party/runs/${encode(route.runId)}`;

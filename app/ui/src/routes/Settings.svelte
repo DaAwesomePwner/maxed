@@ -7,7 +7,7 @@
   import type { CaptureStatus } from '../lib/bindings/CaptureStatus';
   import type { LiveSnapshot } from '../lib/bindings/LiveSnapshot';
   import type { StoreStatus } from '../lib/bindings/StoreStatus';
-  import { productionFeatures, type Features } from '../lib/navigation/routes';
+  import { productionFeatures, type Features, type SettingsTab } from '../lib/navigation/routes';
   import AlertPreferences from '../lib/alerts/AlertPreferences.svelte';
   import ChatSettingsSection from '../lib/logs/ChatSettingsSection.svelte';
   import ClearHistoryDialog from '../lib/party/ClearHistoryDialog.svelte';
@@ -24,8 +24,8 @@
   import { createSetupSession } from '../lib/setup/session';
   import { historyRunning } from '../lib/settings/storage-state';
   import { titleCase } from '../lib/styles/format';
-  let { client, preview = false, features = productionFeatures, enabled = true, streamId = null, store = null }: {
-    client: Client; preview?: boolean; features?: Features; enabled?: boolean; streamId?: string | null; store?: StoreStatus | null;
+  let { client, tab, preview = false, features = productionFeatures, enabled = true, streamId = null, store = null }: {
+    client: Client; tab?: SettingsTab; preview?: boolean; features?: Features; enabled?: boolean; streamId?: string | null; store?: StoreStatus | null;
   } = $props();
   const connection = getContext<ShellConnection | undefined>(SHELL_CONNECTION);
   const capture = connection?.capture ?? readable<CaptureStatus | null>(null);
@@ -123,7 +123,7 @@
   {#if !draft}<p>Disconnected</p>{/if}
   {#if draft && draft.version !== 1}<p class="notice">Update Required</p>{/if}
   {#if $session.errors.settings || !draft}<button class="ctl" type="button" onclick={retrySettings}>Retry Settings</button>{/if}
-  <SettingsTabs notificationsEnabled={features.logs}>
+  <SettingsTabs requestedTab={tab} notificationsEnabled={features.logs}>
     {#snippet general()}
       <div class="settings-grid">
         <SettingsSection heading="Capture">

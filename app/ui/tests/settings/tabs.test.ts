@@ -60,7 +60,7 @@ it('supports roving focus, arrow wrapping, Home and End', async () => {
 
 it('hides Notifications and falls back from a disabled deep link', async () => {
   window.history.replaceState(null, '', '#/settings?tab=notifications');
-  render(Settings, { client: setupFixture().client, features: { ...productionFeatures, logs: false } });
+  render(Settings, { client: setupFixture().client, tab: 'notifications', features: { ...productionFeatures, logs: false } });
   expect(screen.queryByRole('tab', { name: 'Notifications' })).toBeNull();
   expect(screen.getByRole('tabpanel', { name: 'General' })).toBeTruthy();
   await fireEvent.keyDown(screen.getByRole('tab', { name: 'General' }), { key: 'ArrowRight' });
@@ -71,7 +71,7 @@ it('preserves the Notifications deep link through router startup', () => {
   window.history.replaceState(null, '', '#/settings?tab=notifications');
   const router = createRouter(browserHistory(window));
   expect(routeHref(router.route)).toBe('#/settings?tab=notifications');
-  render(Settings, { client: setupFixture().client });
+  render(Settings, { client: setupFixture().client, tab: router.route.kind === 'settings' ? router.route.tab : undefined });
   expect(screen.getByRole('tabpanel', { name: 'Notifications' })).toBeTruthy();
   router.dispose();
 });

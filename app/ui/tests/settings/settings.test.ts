@@ -206,7 +206,7 @@ describe('local Settings', () => {
     expect(recordings.checked).toBe(false); expect(recordings.disabled).toBe(false);
     expect(screen.queryByText(/Recording files can contain/)).toBeNull();
     expect(screen.getByText('Limit: 1 GB')).toBeTruthy();
-    expect(screen.queryByRole('checkbox', { name: /account|sync/i })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /account|sync/i, hidden: true })).toBeNull();
     await switchTab('General');
     const user = userEvent.setup();
     await user.selectOptions(channel, 'beta');
@@ -413,7 +413,7 @@ it('shows Chat with either Logs flag state while gating alert preferences', asyn
   await fireEvent.input(screen.getByLabelText('Keep chat for (days)'), { target: { value: '60' } });
   await fireEvent.click(screen.getByRole('button', { name: 'Save chat settings' }));
   await waitFor(() => expect(unflaggedUpdate).toHaveBeenCalledWith(expect.objectContaining({ retention_days: 60 })));
-  expect(screen.queryByRole('heading', { name: 'Presentation' })).toBeNull();
+  expect(screen.queryByRole('heading', { name: 'Presentation', hidden: true })).toBeNull();
   expect(screen.getByRole('link', { name: 'Alerts' }).getAttribute('href')).toBe('#/alerts');
   await view.rerender({ client: f.client, features: { logs: true, stats: false, party: false, character: false, homeRedesign: false, lootBrowsing: true } });
   expect(await screen.findByRole('heading', { name: 'Chat' })).toBeTruthy();

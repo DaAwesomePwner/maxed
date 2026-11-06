@@ -1,16 +1,15 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { parseRoute } from '../navigation/routes';
+  import type { SettingsTab } from '../navigation/routes';
 
-  let { notificationsEnabled, general, notifications, data, assets }: {
-    notificationsEnabled: boolean;
+  let { requestedTab, notificationsEnabled, general, notifications, data, assets }: {
+    requestedTab?: SettingsTab; notificationsEnabled: boolean;
     general: Snippet; notifications: Snippet; data: Snippet; assets: Snippet;
   } = $props();
   const id = $props.id();
   const storageKey = 'maxed.settings.tab';
   function initialTab(): string {
-    const route = parseRoute(window.location.hash);
-    if (route.kind === 'settings' && route.tab) return route.tab;
+    if (requestedTab) return requestedTab;
     try { return localStorage.getItem(storageKey) ?? 'general'; }
     catch { return 'general'; }
   }
@@ -54,7 +53,7 @@
 {#each tabs as tab (tab.key)}
   <!-- Keep inactive panels mounted: alert/chat/assets controls own unsaved drafts. -->
   <div role="tabpanel" id={`${id}-${tab.key}-panel`} aria-labelledby={`${id}-${tab.key}-tab`}
-    tabindex="0" hidden={active !== tab.key}>
+    hidden={active !== tab.key}>
     {@render tab.content()}
   </div>
 {/each}

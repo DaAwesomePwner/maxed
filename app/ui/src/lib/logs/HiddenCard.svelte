@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { settingsHref } from '../navigation/routes';
   import type { ChatSettings } from '../bindings/ChatSettings';
   let { settings, hidden }: { settings: ChatSettings | null; hidden: number | null } = $props();
 </script>
-<section class="card"><header><h3>Hidden from chat</h3><a href="#/settings">Manage ›</a></header>
+<section class="card"><header><h3>Hidden from chat</h3><a href={settingsHref('data')}>Manage ›</a></header>
   <dl><dt>Senders</dt><dd>{settings?.hidden_senders.length ?? '—'}</dd><dt>Keywords</dt><dd>{settings?.hidden_keywords.length ?? '—'}</dd><dt>Lines hidden on this page</dt><dd>{hidden ?? '—'}</dd></dl>
   <p>Hidden lines stay stored. While <b>Hidden</b> is on they show dimmed; turn it off to remove them from the list.</p>
 </section>

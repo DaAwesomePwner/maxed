@@ -73,7 +73,6 @@ describe('document keyboard order', () => {
       for (const name of ['General', 'Data & history', 'Game assets', 'Notifications']) {
         const tab = screen.getByRole('tab', { name });
         await user.click(tab);
-        const panel = screen.getByRole('tabpanel', { name });
         const content = name === 'General' ? [
           screen.getByRole('combobox', { name: 'Capture Adapter' }), button('Retry Adapters'),
           screen.getByRole('checkbox', { name: 'Hardware Acceleration' }),
@@ -89,7 +88,7 @@ describe('document keyboard order', () => {
         ] : name === 'Game assets' ? [
           assets, ...(expanded ? [screen.getByRole('textbox', { name: 'Assets Path' }), button('Extract'), button('Retry Detection')] : []),
         ] : [delivery];
-        const order = [setupLink, tab, panel, ...content, button('Apply'),
+        const order = [setupLink, tab, ...content, button('Apply'),
           screen.getByRole('link', { name: 'Alert history' }), recovery,
           ...(expanded ? [button('Retry Settings'), button('Retry Checks')] : [])];
         order[0].focus();
