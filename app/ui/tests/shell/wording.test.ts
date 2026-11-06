@@ -63,7 +63,7 @@ it('shows cap unavailability with debug off and never guesses pots or maxed tone
         reasons: ['unverified_placement'] } }],
     conditions: [], breakdown_provisional: true,
   } });
-  expect(container.querySelector('[data-stat-id="20"] dd')?.textContent).toBe('81 (+6)');
+  expect(container.querySelector('[data-stat-id="20"] dd')?.textContent).toBe('81 (+6) Exalt +2');
   expect(container.querySelector('[data-tone="max"], .at-cap')).toBeNull();
   expect(screen.getByText(/Cap and pots unavailable: exalt placement unverified/)).toBeTruthy();
 });
