@@ -4,12 +4,14 @@ import { isDebugMode, setDebugMode } from '../../src/lib/debug/debug';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { tick } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RecordingStatus } from '../../src/lib/bindings/RecordingStatus';
 import Settings from '../../src/routes/Settings.svelte';
 import { deferred, setupFixture } from '../setup/fixture';
 import type { SetupStatus } from '../../src/lib/bindings/SetupStatus';
 
+beforeEach(() => { localStorage.removeItem('maxed.settings.tab'); window.history.replaceState(null, '', '#/settings'); });
+const switchTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name }));
 afterEach(() => { setDebugMode(false); vi.unstubAllGlobals(); });
 
 it('mounts storage without maintenance and disables Demo Mode during an upgrade', async () => {
@@ -41,6 +43,7 @@ it.each([false, true])('clears Party history with the tab hidden and marks_and_n
   const f = setupFixture();
   const clear = vi.spyOn(f.client, 'clearPartyHistory').mockResolvedValue(undefined);
   render(Settings, { client: f.client, features: { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false } });
+  await switchTab('Data & history');
   const trigger = screen.getByRole('button', { name: 'Clear party history' });
   expect(screen.getByText("Maxed links players you've seen across runs by name. This removes that history and other players' stored gear and stats from your runs.")).toBeTruthy();
   await fireEvent.click(trigger);
@@ -59,6 +62,7 @@ it('cancels Party clear and shows a safe error with retry and success feedback',
   const f = setupFixture();
   const clear = vi.spyOn(f.client, 'clearPartyHistory').mockRejectedValueOnce(new Error('PRIVATE')).mockResolvedValue(undefined);
   render(Settings, { client: f.client });
+  await switchTab('Data & history');
   const trigger = screen.getByRole('button', { name: 'Clear party history' });
   await fireEvent.click(trigger);
   await fireEvent.click(within(screen.getByRole('dialog', { name: 'Clear party history' })).getByRole('button', { name: 'Cancel' }));
@@ -76,6 +80,7 @@ it('cancels Party clear and shows a safe error with retry and success feedback',
 it('disables Party clearing in Settings preview', async () => {
   const f = setupFixture();
   render(Settings, { client: f.client, preview: true });
+  await switchTab('Data & history');
   expect((screen.getByRole('button', { name: 'Clear party history' }) as HTMLButtonElement).disabled).toBe(true);
   const hint = screen.getByText('Clearing is not available in preview.');
   expect(hint.hidden).toBe(false);
@@ -86,6 +91,7 @@ it.each(['success', 'failure'] as const)('keeps Settings Party clear disabled wh
   const f = setupFixture(), setup = await f.client.querySetup(), pending = deferred<SetupStatus>();
   vi.mocked(f.client.querySetup).mockReturnValue(pending.promise);
   render(Settings, { client: f.client });
+  await switchTab('Data & history');
   const button = screen.getByRole('button', { name: 'Clear party history' }) as HTMLButtonElement;
   expect(button.disabled).toBe(true);
   button.click(); expect(screen.queryByRole('dialog')).toBeNull();
@@ -104,6 +110,7 @@ it('disables Party clearing in Demo Mode until Demo Mode is turned off', async (
   const f = setupFixture({ demo: true });
   const clear = vi.spyOn(f.client, 'clearPartyHistory').mockResolvedValue(undefined);
   render(Settings, { client: f.client });
+  await switchTab('Data & history');
   const trigger = screen.getByRole('button', { name: 'Clear party history' }) as HTMLButtonElement;
   await waitFor(() => expect(trigger.disabled).toBe(true));
   const hint = screen.getByText('Turn off Demo Mode to clear your party history.');
@@ -113,12 +120,14 @@ it('disables Party clearing in Demo Mode until Demo Mode is turned off', async (
   await user.click(trigger);
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(clear).not.toHaveBeenCalled();
+  await switchTab('General');
   const demo = screen.getByRole('switch', { name: 'Demo Mode' });
   await waitFor(() => expect(demo.getAttribute('aria-disabled')).toBe('false'));
   await user.click(demo);
   await waitFor(() => expect(trigger.disabled).toBe(false));
   expect(screen.queryByText('Turn off Demo Mode to clear your party history.')).toBeNull();
   expect(trigger.hasAttribute('aria-describedby')).toBe(false);
+  await switchTab('Data & history');
   await user.click(trigger);
   expect(screen.getByRole('dialog', { name: 'Clear party history' })).toBeTruthy();
 });
@@ -127,6 +136,7 @@ it.each(['Cancel', 'Escape'])('clears a failed Party clear message when closed w
   const f = setupFixture();
   const clear = vi.spyOn(f.client, 'clearPartyHistory').mockRejectedValue(new Error('Synthetic failure'));
   render(Settings, { client: f.client });
+  await switchTab('Data & history');
   const trigger = screen.getByRole('button', { name: 'Clear party history' });
   await fireEvent.click(trigger);
   await fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
@@ -191,11 +201,13 @@ describe('local Settings', () => {
     const f = setupFixture(); render(Settings, { client: f.client });
     const channel = await screen.findByRole('combobox', { name: 'Update Channel' });
     expect((channel as HTMLSelectElement).value).toBe('stable');
+    await switchTab('Data & history');
     const recordings = screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement;
     expect(recordings.checked).toBe(false); expect(recordings.disabled).toBe(false);
     expect(screen.queryByText(/Recording files can contain/)).toBeNull();
     expect(screen.getByText('Limit: 1 GB')).toBeTruthy();
     expect(screen.queryByRole('checkbox', { name: /account|sync/i })).toBeNull();
+    await switchTab('General');
     const user = userEvent.setup();
     await user.selectOptions(channel, 'beta');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Capture Adapter' }), 'synthetic-ethernet');
@@ -227,6 +239,7 @@ describe('local Settings', () => {
   it('preserves independently changed asset paths when applying settings and can turn existing recordings off', async () => {
     const f = setupFixture(); f.setSettings({ save_recordings: true });
     render(Settings, { client: f.client });
+    await switchTab('Data & history');
     const recordings = await screen.findByRole('checkbox', { name: 'Save Recordings' });
     await userEvent.setup().click(recordings);
     f.setSettings({ assets_path: 'C:\\NewSynthetic\\resources.assets' });
@@ -274,6 +287,7 @@ describe('local Settings', () => {
     await screen.findByRole('combobox', { name: 'Update Channel' });
     expect(screen.getByRole('link', { name: 'Setup' }).getAttribute('href')).toBe('#/setup');
     expect(screen.getByRole('switch', { name: 'Demo Mode' }).getAttribute('aria-disabled')).toBe('true');
+    await switchTab('Game assets');
     await userEvent.setup().click(screen.getByText('Assets Path', { selector: 'summary' }));
     expect((screen.getByRole('textbox', { name: 'Assets Path' }) as HTMLInputElement).disabled).toBe(true);
     expect(f.client.updateSettings).not.toHaveBeenCalled();
@@ -283,6 +297,7 @@ describe('local Settings', () => {
     const f = setupFixture();
     f.client.setAssetsPath = vi.fn().mockRejectedValue(new Error('PRIVATE secret path'));
     render(Settings, { client: f.client });
+    await switchTab('Game assets');
     await userEvent.setup().click(screen.getByText('Assets Path', { selector: 'summary' }));
     const path = screen.getByRole('textbox', { name: 'Assets Path' });
     await fireEvent.input(path, { target: { value: 'C:\\Synthetic\\resources.assets' } });
@@ -302,6 +317,7 @@ describe('local Settings', () => {
     f.client.updateSettings = vi.fn().mockRejectedValue(new Error('PRIVATE settings'));
     render(Settings, { client: f.client });
     const channel = await screen.findByRole('combobox', { name: 'Update Channel' }) as HTMLSelectElement;
+    await switchTab('General');
     const user = userEvent.setup();
     await user.selectOptions(channel, 'beta');
     await user.click(screen.getByRole('button', { name: 'Apply' }));
@@ -353,6 +369,7 @@ it.each(['armed', 'disabled'] as const)('uses past wording after recording stops
     retained_bytes: 123, limit_bytes: 1_000_000_000, dropped_frames: 37 }));
   render(Settings, { client: f.client });
   expect(await screen.findByText('37 packets were skipped during traffic bursts or recording changes; the recording continues.')).toBeTruthy();
+  await switchTab('Data & history');
   state = stopped;
   await fireEvent.click(screen.getByRole('button', { name: 'Retry Recording' }));
   expect(await screen.findByText('37 packets were skipped in the last recording.')).toBeTruthy();
@@ -389,6 +406,7 @@ it('shows Chat with either Logs flag state while gating alert preferences', asyn
   const f = setupFixture();
   const view = render(Settings, { client: f.client, features: { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false } });
   await screen.findByRole('checkbox', { name: 'Hardware Acceleration' });
+  await switchTab('Data & history');
   expect(screen.getByRole('heading', { name: 'Chat' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Clear chat history' })).toBeTruthy();
   const unflaggedUpdate = vi.spyOn(f.client, 'updateChatSettings');
@@ -399,7 +417,9 @@ it('shows Chat with either Logs flag state while gating alert preferences', asyn
   expect(screen.getByRole('link', { name: 'Alerts' }).getAttribute('href')).toBe('#/alerts');
   await view.rerender({ client: f.client, features: { logs: true, stats: false, party: false, character: false, homeRedesign: false, lootBrowsing: true } });
   expect(await screen.findByRole('heading', { name: 'Chat' })).toBeTruthy();
+  await switchTab('Notifications');
   expect(screen.getByRole('heading', { name: 'Presentation' })).toBeTruthy();
+  await switchTab('Data & history');
   expect(screen.getByRole('link', { name: 'Alert history' }).getAttribute('href')).toBe('#/logs/alerts');
   const update = vi.spyOn(f.client, 'updateChatSettings');
   await fireEvent.input(screen.getByLabelText('Keep chat for (days)'), { target: { value: '30' } });

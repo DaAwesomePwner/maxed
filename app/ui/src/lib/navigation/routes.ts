@@ -2,9 +2,12 @@ export type StatsView = 'maps' | 'sessions' | 'dungeons';
 export type LogsView = 'chat' | 'keys' | 'events' | 'alerts';
 export type ChatTab = 'all' | 'guild' | 'party' | 'whisper';
 export type LootView = 'feed' | 'stats' | 'collection';
+export type SettingsTab = 'general' | 'notifications' | 'data' | 'assets';
+export const settingsTabs: SettingsTab[] = ['general', 'notifications', 'data', 'assets'];
 export type Route =
   | { kind: 'stats'; view: StatsView; sessionId?: string }
-  | { kind: 'character' | 'home' | 'runs' | 'alerts' | 'settings' | 'setup' | 'not-found' }
+  | { kind: 'character' | 'home' | 'runs' | 'alerts' | 'setup' | 'not-found' }
+  | { kind: 'settings'; tab?: SettingsTab }
   | { kind: 'logs'; view: LogsView; channel: ChatTab; runId?: string; partner?: string; seedSender?: string }
   | { kind: 'loot'; view: LootView; seed?: { place?: string; item?: number } }
   | { kind: 'run'; id: string; point?: 'death' }
@@ -52,6 +55,7 @@ export function routeHref(route: Route): string {
     case 'stats':
       if (route.view === 'sessions' && route.sessionId) return `#/stats/sessions/${encode(route.sessionId)}`;
       return route.view === 'maps' ? '#/stats' : `#/stats/${route.view}`;
+    case 'settings': return route.tab ? `#/settings?tab=${route.tab}` : '#/settings';
     case 'home': return '#/';
     case 'party-live': return '#/party';
     case 'party-run': return `#/party/runs/${encode(route.runId)}`;
@@ -75,6 +79,10 @@ export function parseRoute(hash: string, features: Features = productionFeatures
   try {
     if (hash === '' || hash === '#' || hash === '#/') return { kind: 'home' };
     if (!hash.startsWith('#/')) return { kind: 'not-found' };
+    if (hash.startsWith('#/settings?')) {
+      const tab = new URLSearchParams(hash.slice(hash.indexOf('?') + 1)).get('tab') as SettingsTab;
+      return settingsTabs.includes(tab) ? { kind: 'settings', tab } : { kind: 'settings' };
+    }
     const parts = hash.slice(2).split('/').map(decodeURIComponent);
     if (!parts.every(validId)) return { kind: 'not-found' };
     const [root, id] = parts;
