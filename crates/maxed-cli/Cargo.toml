@@ -20,8 +20,8 @@ maxed-protocol = { path = "../maxed-protocol" }
 maxed-recording = { path = "../maxed-recording" }
 maxed-capture = { path = "../maxed-capture" }
 maxed-stream = { path = "../maxed-stream" }
-maxed-engine = { version = "0.1.2", path = "../maxed-engine" }
-maxed-assets = { version = "0.1.2", path = "../maxed-assets" }
+maxed-engine = { version = "0.1.3", path = "../maxed-engine" }
+maxed-assets = { version = "0.1.3", path = "../maxed-assets" }
 [dev-dependencies]
 serde_json.workspace = true
 maxed-store = { path = "../maxed-store" }
