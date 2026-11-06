@@ -2,6 +2,7 @@
   import DebugNote from '../debug/DebugNote.svelte';
   import { debugMode } from '../debug/debug';
   import VitalBar from '../components/VitalBar.svelte';
+  import type { StatLine } from '../bindings/StatLine';
   import type { StatPanel as ObservedStatPanel } from '../bindings/StatPanel';
   import { statPotsLeft, statCapUnavailableReason, statTone, vitalText, statBoost, statExalt } from './vitals';
   let { panel = null, stale = false }: { panel?: ObservedStatPanel | null; stale?: boolean } = $props();
@@ -9,6 +10,10 @@
   const stats = [{ id: 20, label: 'ATT' }, { id: 21, label: 'DEF' }, { id: 22, label: 'SPD' },
     { id: 28, label: 'DEX' }, { id: 26, label: 'VIT' }, { id: 27, label: 'WIS' }];
   const known = (n: number | null | undefined): n is number => typeof n === 'number' && Number.isFinite(n);
+  const exaltDescription = (label: string, exalt: number, line: StatLine | undefined) =>
+    `${label} exaltation bonus +${exalt}${['verified_inside_base', 'verified_inside_boost'].includes(line?.split_evidence?.placement ?? '')
+      ? '' : ' (placement unverified; may be included in boost)'}`;
+  // Tones intentionally use the raw observed boost, even when verified exalt accounts for all of it.
   let capReasons = $derived([...new Set(panel?.lines.map(statCapUnavailableReason).filter(Boolean) ?? [])]);
   let provisional = $derived(panel?.breakdown_provisional || panel?.lines.some(line =>
     statExalt(line) !== null && !['verified_inside_base', 'verified_inside_boost'].includes(line.split_evidence?.placement ?? '')));
@@ -28,7 +33,7 @@
       <VitalBar kind={stat.kind} label={stat.label} {text} fill={filled ? line!.current! / line!.total! * 100 : 0}
         tone={statTone(statPotsLeft(line) !== null && line?.at_cap === true, line?.boost ?? null)} />
       {#if exalt !== null}
-        <span class="exalt vital-exalt" title={`${stat.label} exalt bonus +${exalt}`} aria-label={`${stat.label} exalt bonus +${exalt}`}>Exalt +{exalt}</span>
+        <span class="exalt vital-exalt" title={exaltDescription(stat.label, exalt, line)}><span aria-hidden="true">Exalt +{exalt}</span><span class="sr-only">{exaltDescription(stat.label, exalt, line)}</span></span>
       {/if}
     </div>
   {/each}
@@ -38,7 +43,7 @@
       {@const exalt = statExalt(line)}
       <div class="stat" data-stat-id={stat.id} data-tone={statTone(statPotsLeft(line) !== null && line?.at_cap === true, line?.boost ?? null)} class:at-cap={statPotsLeft(line) !== null && line?.at_cap === true}>
         <dt>{stat.label}</dt>
-        <dd>{vitalText(line?.total ?? null, null, statPotsLeft(line), statBoost(line))}{#if exalt !== null}{' '}<span class="exalt" title={`${stat.label} exalt bonus +${exalt}`} aria-label={`${stat.label} exalt bonus +${exalt}`}>Exalt +{exalt}</span>{/if}</dd>
+        <dd>{vitalText(line?.total ?? null, null, statPotsLeft(line), statBoost(line))}{#if exalt !== null}{' '}<span class="exalt" title={exaltDescription(stat.label, exalt, line)}><span aria-hidden="true">Exalt +{exalt}</span><span class="sr-only">{exaltDescription(stat.label, exalt, line)}</span></span>{/if}</dd>
       </div>
     {/each}
   </dl>
