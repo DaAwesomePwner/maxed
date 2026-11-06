@@ -58,23 +58,6 @@ Resolve the actual target directory with Cargo metadata when it differs. Version
 
 Staging copies the exact installer/signature, `LICENSE` and `NOTICE.md`, writes `latest.json`, `license-inventory.json` and `release-manifest.json`, and records hashes/byte counts. The static [distribution inventory](distribution-inventory.json) must cover actual shipped stable resources. Each static inventory input row has exactly `file`, `license` and `sha256`: a validated payload-relative path, its license identifier, and the lowercase SHA-256 of the exact shipped bytes. The only installer-private path form is `$PLUGINSDIR/` followed by one filename. Metadata generation cannot infer installer completeness. Run `tests/packaging/audit-bundle.ps1` against the real installer and staged `release-manifest.json`; the workflow invokes this audit before upload. Never bypass a failed audit. A partial failed stage is unusable. The separate staged download allowlist currently omits `THIRD-PARTY-NOTICES.md` even though it is included inside the installer. Adding it to standalone release assets requires coordinated metadata, manifest and test changes; do not claim the current script emits it.
 
-## One-time cutover export (temporary)
-
-Move development from the private build repository to `daplabs/maxed` by exporting
-it once into a clean public clone. Run the export with the owner's account name
-as a deny pattern and the destination clone explicitly supplied:
-
-```powershell
-./scripts/release/Export-PublicSnapshot.ps1 -Commit HEAD -OutputDir 'public-cutover' `
-  -DenyPattern '<owner account name>' -PublicClone '<path to clean public clone>'
-```
-
-Review the staged public clone before committing and publishing it. After the
-move, delete `scripts/release/Export-PublicSnapshot.ps1`,
-`scripts/release/public-allow.txt` and `scripts/release/public-exclude.txt`, and
-remove this temporary subsection. Subsequent development and releases use the
-public source repository directly; no recurring snapshot export is needed.
-
 ## Serialized promotion
 
 1. Verify downloaded staging hashes, signature, authenticated version, resource inventory and all [release gates](CHECKLIST.md). Preserve the exact verified bytes; do not rebuild afterward.

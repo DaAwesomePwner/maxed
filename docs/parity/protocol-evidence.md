@@ -38,7 +38,7 @@ The [sanitized live acceptance report](../development/character-live-acceptance.
 for Wizard L20 (second account): stats 105–112 are explicitly zero at initial materialization and both
 re-materializations (Nexus → Vault → Nexus). All 57 later local status updates omit those fields; sparse-update
 omission does not negate the observed zeros. The owner accepted this scoped Gate U pass on 2026-10-17 in
-[the acceptance comment on PR #176](https://github.com/daplabs/maxed-rotmg/pull/176#issuecomment-6241933324).
+the owner's acceptance comment on private-repo PR 176 (the archived build repository; not public).
 Absent initial levels remain unknown.
 
 **Gate P remains open:** the matching catalog, gear bonuses and caps are unavailable, and zero levels with

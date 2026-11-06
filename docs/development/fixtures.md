@@ -18,9 +18,9 @@ There are five scrubbed-real fixture groups: `maxed-nexus-key-pop`, `maxed-realm
 
 The owner's recorded basis is each fixture README's `maxed-cli scrub` certification, `verified=true provisional=false`: tokens, keys and account IDs filled; player, guild and pet names pseudonymized; chat filled; and network addresses replaced. A root `strings` scan found no emails, JWTs, long token-like strings or file paths. This records the owner's review evidence; it does not claim a new scrub or independent re-certification.
 
-The approval retains the README provenance, admitted literal coincidences and historical limitations, including the short opaque-interior coincidences in `maxed-realm-dungeon-return`. Capture bytes and `expected.json` files are unchanged. [public-allow.txt](../../scripts/release/public-allow.txt) pins each approved capture's exact git blob; changed bytes require renewed review.
+The approval retains the README provenance, admitted literal coincidences and historical limitations, including the short opaque-interior coincidences in `maxed-realm-dungeon-return`. Capture bytes and `expected.json` files are unchanged. The approval covers those exact bytes; changed captures require renewed review.
 
-A final deny-pattern check with the owner's account name must run at export time. Supply that pattern locally with `-DenyPattern`; do not commit the account name. The placeholder used in automated dry runs does not satisfy this final check. Scrub certification and publication approval do not establish live-game acceptance.
+The one-time export to this public repository (2026-11-05) ran with the owner's account name as a deny pattern and passed. Never commit the account name. Scrub certification and publication approval do not establish live-game acceptance.
 
 ## Admission and change review
 

@@ -62,7 +62,6 @@ Packaging changes also need each `tests/packaging/*.test.ps1` suite and the audi
 
 ```powershell
 pwsh -NoProfile -File tests/packaging/config.test.ps1
-pwsh -NoProfile -File tests/packaging/public-snapshot.test.ps1
 pwsh -NoProfile -File tests/packaging/release-build.test.ps1
 pwsh -NoProfile -File tests/packaging/release-metadata.test.ps1
 pwsh -NoProfile -File tests/packaging/workflow-policy.test.ps1
@@ -112,8 +111,8 @@ This job is not reusable and does not gate release signing. It has a 45-minute
 timeout, read-only contents permission, no secrets or environment scopes, and
 no persistent caches. Both workflows use `pull_request`, never privileged PR events.
 
-At cutover, enable GitHub's "require approval for outside contributors" repository
-setting. That setting gates fork PR runs; the workflows do not skip them.
+Fork PR runs are gated by the repository's Actions setting "Require approval for
+all external contributors" (enabled on 2026-11-05); the workflows do not skip them.
 
 The daily schedules are staggered by 30 minutes. Concurrency groups separate
 events and branches; only superseded PR runs are cancelled.

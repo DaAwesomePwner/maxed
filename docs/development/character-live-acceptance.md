@@ -10,7 +10,7 @@ replace the observed zeros with unknown values. Missing initial fields in other 
 **Gate P remains open.** Zero exalt levels cannot distinguish placement in base versus boost. No matching
 catalog, gear bonuses, class caps, controlled equipment transition or nonzero-exalt SPD counter-case was available.
 The owner accepted the scoped Gate U pass on 2026-10-17 in
-[PR #176](https://github.com/daplabs/maxed-rotmg/pull/176#issuecomment-6241933324). This acceptance does not establish stat 113
+private-repo PR 176 (archived, not public). This acceptance does not establish stat 113
 semantics, resolve Gate P or Gate X, or constitute Task 11 acceptance.
 
 See [Task 2 and the gate definitions](../superpowers/plans/2026-10-17-character-tab.md) and the

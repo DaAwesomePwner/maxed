@@ -149,14 +149,14 @@ reconciliation.
   and keyboard behavior. Synthetic preview and browser geometry checks do not
   verify live Npcap, game-client or WebView2 behavior.
 - Gate U was accepted PASS by the owner on 2026-10-17 in
-  [PR #176](https://github.com/daplabs/maxed-rotmg/pull/176#issuecomment-6241933324), with the evidence in
+  private-repo PR 176 (archived, not public), with the evidence in
   [Character live acceptance](development/character-live-acceptance.md).
   Gate P (exalt placement in base versus boost) is still open. The provisional
   split retains totals/raw boosts; nonzero or unknown exalt keeps at-cap,
   pots-left and maxed null without placement evidence. Negative Other remains
   inconsistent evidence, not a named effect. U does not unlock P.
-- [#170](https://github.com/daplabs/maxed-rotmg/issues/170) tracks expanded rail
-  exalt presentation. [#182](https://github.com/daplabs/maxed-rotmg/issues/182)
+- [#3](https://github.com/daplabs/maxed/issues/3) tracks expanded rail
+  exalt presentation. [#5](https://github.com/daplabs/maxed/issues/5)
   tracks legacy saved local profiles retaining ungated maxed counts; current
   Character split safety does not retroactively repair those records.
 - Normal-fire DPS and regen are baseline models, with source-derived
@@ -178,7 +178,7 @@ reconciliation.
 - Exalt damage (stat 113) remains deferred with no value. Crucible, Blood Ritual, weapon
   enchant damage/rate modifiers and enemy conditions are excluded. This work
   establishes no new multiplier evidence or combat-attribution behavior.
-- [#177](https://github.com/daplabs/maxed-rotmg/issues/177) tracks cross-account
+- [#4](https://github.com/daplabs/maxed/issues/4) tracks cross-account
   aggregation in saved history; Character uses only the current local observation
   and adds no account/history lookup. Object stat 114 remains out of scope in
-  [#168](https://github.com/daplabs/maxed-rotmg/issues/168).
+  [#2](https://github.com/daplabs/maxed/issues/2).
