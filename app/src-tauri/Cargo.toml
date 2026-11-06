@@ -65,7 +65,7 @@ maxed-store = { version = "0.1.2", path = "../../crates/maxed-store" }
 maxed-assets = { version = "0.1.2", path = "../../crates/maxed-assets" }
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider", "stream"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
-rustls-native-certs = "=0.8.4"
+rustls-native-certs = "=0.8.5"
 minisign-verify = "=0.2.5"
 base64 = "=0.22.1"
 semver = "=1.0.28"
@@ -73,8 +73,8 @@ bytes = "=1.12.1"
 thiserror.workspace = true
 tempfile = "=3.27.0"
 rodio = { version = "=0.22.2", default-features = false, features = ["playback", "wav"] }
-tauri-plugin-notification = { version = "=2.5.1", default-features = false }
-tauri-plugin-dialog = "=2.8.1"
+tauri-plugin-notification = { version = "=2.8.0", default-features = false }
+tauri-plugin-dialog = "=2.8.4"
 sha2.workspace = true
 
 [target.'cfg(windows)'.dependencies]
