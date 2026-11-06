@@ -93,3 +93,35 @@ it('remembers a selected tab and tolerates unavailable storage and unknown tabs'
   await select('Notifications');
   expect(screen.getByRole('tabpanel', { name: 'Notifications' })).toBeTruthy();
 });
+
+
+it('follows a changed route tab without remounting drafts or overriding manual selection', async () => {
+  const client = setupFixture().client;
+  const view = render(Settings, { client, tab: 'general' });
+  const channel = await screen.findByRole('combobox', { name: 'Update Channel' }) as HTMLSelectElement;
+  await fireEvent.change(channel, { target: { value: 'beta' } });
+  await view.rerender({ tab: 'data' });
+  expect(screen.getByRole('tabpanel', { name: 'Data & history' })).toBeTruthy();
+  expect(channel.isConnected).toBe(true);
+  expect(channel.value).toBe('beta');
+  expect(screen.getByRole('button', { name: 'Apply' }).getAttribute('aria-disabled')).toBe('false');
+  await select('General');
+  await view.rerender({ enabled: false, features: { ...productionFeatures } });
+  expect(screen.getByRole('tabpanel', { name: 'General' })).toBeTruthy();
+  expect(screen.getByRole('combobox', { name: 'Update Channel' })).toBe(channel);
+  expect(channel.value).toBe('beta');
+  expect(client.updateSettings).not.toHaveBeenCalled();
+});
+
+it('gates a changed Notifications request without reacting again to feature updates', async () => {
+  const view = render(Settings, { client: setupFixture().client, tab: 'data', features: { ...productionFeatures, logs: false } });
+  await view.rerender({ tab: 'notifications' });
+  expect(screen.queryByRole('tab', { name: 'Notifications' })).toBeNull();
+  expect(screen.getByRole('tabpanel', { name: 'General' })).toBeTruthy();
+  await select('Game assets');
+  await view.rerender({ features: { ...productionFeatures } });
+  expect(screen.getByRole('tabpanel', { name: 'Game assets' })).toBeTruthy();
+  await view.rerender({ tab: 'data' });
+  await view.rerender({ tab: 'notifications' });
+  expect(screen.getByRole('tabpanel', { name: 'Notifications' })).toBeTruthy();
+});

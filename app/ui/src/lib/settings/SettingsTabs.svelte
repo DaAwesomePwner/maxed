@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
-  import type { SettingsTab } from '../navigation/routes';
+  import { untrack, type Snippet } from 'svelte';
+  import { settingsTabs, type SettingsTab } from '../navigation/routes';
 
   let { requestedTab, notificationsEnabled, general, notifications, data, assets }: {
     requestedTab?: SettingsTab; notificationsEnabled: boolean;
@@ -14,6 +14,18 @@
     catch { return 'general'; }
   }
   let selected = $state(initialTab());
+  let previousRequestedTab = untrack(() => requestedTab);
+  $effect(() => {
+    const next = requestedTab;
+    if (next === previousRequestedTab) return;
+    previousRequestedTab = next;
+    // Only route requests drive this effect, never manual selection or panel updates.
+    untrack(() => {
+      if (next && settingsTabs.includes(next)) {
+        selected = next === 'notifications' && !notificationsEnabled ? 'general' : next;
+      }
+    });
+  });
   let tabs = $derived([
     { key: 'general', label: 'General', content: general },
     ...(notificationsEnabled ? [{ key: 'notifications', label: 'Notifications', content: notifications }] : []),
