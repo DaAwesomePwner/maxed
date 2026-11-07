@@ -15,6 +15,11 @@ pub struct PlayerProfileView {
     pub player_id: String,
     pub object_id: i32,
     pub is_local: bool,
+    /// Maxed count and highlights were computed under exalt-split gating. This records the computation policy, not completeness of observations.
+    #[serde(default)]
+    #[ts(optional)]
+    #[ts(as = "Option<bool>")]
+    pub maxed_gated: bool,
     #[serde(default)]
     #[ts(optional = nullable)]
     pub name: Option<String>,
@@ -46,6 +51,19 @@ pub struct PlayerProfileView {
     pub equipment: Vec<EquipmentView>,
     pub first_seen: Timestamp,
     pub last_seen: Timestamp,
+}
+
+impl PlayerProfileView {
+    pub fn claims_supported(&self) -> bool {
+        !self.is_local || self.maxed_gated
+    }
+
+    pub fn normalize_maxed(&mut self) {
+        if !self.claims_supported() {
+            self.maxed = None;
+            self.maxed_stats.clear();
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]

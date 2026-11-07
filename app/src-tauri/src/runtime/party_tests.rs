@@ -740,6 +740,7 @@ fn party_run_command_adds_parse_without_using_live_pick() {
 
 fn profile(id: i32, name: Option<&str>) -> PlayerProfileView {
     PlayerProfileView {
+        maxed_gated: false,
         scope_id: "scope-a".into(),
         run_id: Some("run-a".into()),
         player_id: format!("player-{id}"),
@@ -1003,6 +1004,7 @@ fn rejoin_merges_by_name_key() {
     latest.last_seen = Timestamp(60);
     latest.class_id = Some(101);
     latest.is_local = true;
+    latest.maxed_gated = true;
     // Insert the older profile last so selection must use last_seen.
     let mut roster = roster(&[latest.clone(), older.clone()]);
     roster.observe_presence(&presence(&latest, true, 50));
@@ -2038,5 +2040,48 @@ fn adapter_applies_roster_presence_and_profiles_without_events_or_receipts() {
         assert_eq!(stopped.members.len(), 1);
         assert_eq!(stopped.members[0].present, Some(false));
         adapter.discard();
+    }
+}
+
+#[test]
+fn live_and_saved_party_respect_selected_profile_provenance() {
+    let settings = settings();
+    let catalog = PartyCatalog::new(Arc::new(catalog()));
+    let mut ctx = context(&settings);
+    ctx.catalog = Some(&catalog);
+    for (gated, count, expected, reason) in [
+        (
+            false,
+            8,
+            ParseResult::Check,
+            Some(ParseReasonKind::StatsNotSeen),
+        ),
+        (true, 8, ParseResult::Pass, None),
+        (
+            true,
+            4,
+            ParseResult::Fail,
+            Some(ParseReasonKind::BelowMaxed),
+        ),
+    ] {
+        let mut older = profile(1, Some("SynthAlpha"));
+        older.is_local = true;
+        older.maxed_gated = true;
+        let mut latest = profile(2, Some("SynthAlpha"));
+        latest.last_seen.0 += 1;
+        latest.maxed_gated = gated;
+        latest.maxed = Some(count);
+        let mut view = roster(&[older, latest]).view(&ctx);
+        let member = &view.members[0];
+        assert!(member.is_local);
+        assert_eq!(member.maxed_gated, gated);
+        assert_eq!(member.maxed, if gated { Some(count) } else { None });
+        let parse = member.parse.as_ref().unwrap();
+        assert_eq!(parse.result, expected);
+        assert_eq!(parse.reasons.first().map(|r| r.kind.clone()), reason);
+        super::party::parse_saved_party(&mut view, &settings, Some(&catalog));
+        let parse = view.members[0].parse.as_ref().unwrap();
+        assert_eq!(parse.result, expected);
+        assert_eq!(parse.reasons.first().map(|r| r.kind.clone()), reason);
     }
 }

@@ -657,6 +657,7 @@ fn player_drilldown_contracts_round_trip_populated_values() {
     let character = snapshot.character.unwrap();
     let fight = &snapshot.fights[0];
     let profile = PlayerProfileView {
+        maxed_gated: true,
         scope_id: "synthetic-scope".into(),
         run_id: Some("demo-run".into()),
         player_id: "synthetic-player".into(),
@@ -676,6 +677,14 @@ fn player_drilldown_contracts_round_trip_populated_values() {
         first_seen: Timestamp(9_007_199_254_740_993),
         last_seen: Timestamp(u64::MAX),
     };
+    assert_eq!(round_trip(&profile)["maxed_gated"], true);
+    let mut old = round_trip(&profile);
+    old.as_object_mut().unwrap().remove("maxed_gated");
+    assert!(
+        !serde_json::from_value::<PlayerProfileView>(old)
+            .unwrap()
+            .maxed_gated
+    );
     assert_eq!(round_trip(&profile)["first_seen"], "9007199254740993");
     assert_eq!(
         round_trip(&profile)["maxed_stats"],
@@ -828,4 +837,20 @@ fn player_drilldown_legacy_fields_default_to_unknown() {
 fn item_detail_page_decl() {
     assert!(ItemDetail::decl().contains("slot_label: string | null"));
     assert!(EnchantInfo::decl().contains("description: string | null"));
+}
+
+#[test]
+fn party_member_provenance_defaults_and_round_trips() {
+    let mut value = json!({
+        "player_id": "synthetic", "equipment": [], "is_local": true,
+        "flags": [], "runs_together": 0
+    });
+    let legacy: PartyMember = serde_json::from_value(value.clone()).unwrap();
+    assert!(!legacy.maxed_gated);
+    value["maxed_gated"] = json!(true);
+    let marked: PartyMember = serde_json::from_value(value).unwrap();
+    assert!(marked.maxed_gated);
+    assert_eq!(round_trip(&marked)["maxed_gated"], true);
+    assert!(PartyMember::decl().contains("maxed_gated?: boolean"));
+    assert!(PlayerProfileView::decl().contains("maxed_gated?: boolean"));
 }
