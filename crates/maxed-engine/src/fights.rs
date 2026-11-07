@@ -98,6 +98,7 @@ impl Fight {
         // Clone the legacy fields without allocating/copying series that the
         // snapshot will omit. Event callers continue to use project().
         FightView {
+            owner_character_id: v.owner_character_id.clone(),
             scope_id: v.scope_id.clone(),
             dps_basis: v.dps_basis,
             is_current_quest: v.is_current_quest,
@@ -721,6 +722,7 @@ impl Engine {
                 key,
                 Fight {
                     base: FightView {
+                        owner_character_id: self.character.as_ref().map(|c| c.id.clone()),
                         scope_id: self.scope_id(),
                         dps_basis: DpsBasis::PlayerActiveWindowV1,
                         pending_local_reconciliation: false,

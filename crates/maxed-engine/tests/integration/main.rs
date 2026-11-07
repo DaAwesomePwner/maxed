@@ -86,3 +86,6 @@ mod sources;
 mod trust;
 #[path = "../world.rs"]
 mod world;
+
+#[path = "../account_scope.rs"]
+mod account_scope;

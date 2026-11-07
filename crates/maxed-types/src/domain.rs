@@ -99,6 +99,10 @@ pub struct StatView {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct CharacterView {
+    // Local account HMAC formatted as account-<64 lowercase hex>; never raw stat 38.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub account_id: Option<String>,
     // Presentation-only; engine snapshots and durable events leave this unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
@@ -268,6 +272,10 @@ pub struct FightView {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub scope_id: Option<String>,
+    // Character at creation, unchanged by revisions. Resolve provisional IDs via CharacterMerged aliases.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub owner_character_id: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct DropItem {
@@ -303,6 +311,10 @@ pub struct DropView {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub capture_scope: Option<CaptureScope>,
+    // Character at creation, unchanged by revisions. Resolve provisional IDs via CharacterMerged aliases.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub owner_character_id: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct HpSample {
@@ -417,6 +429,12 @@ pub enum EngineEvent {
     PlayerObserved(crate::PlayerProfileView),
     ScopeTimelineUpdated(crate::ScopeTimelineUpdate),
     CharacterUpdated(CharacterView),
+    /// Emitted after character materialization, merge and fame events; loss has no IDs.
+    LocalIdentityChanged {
+        at: Timestamp,
+        character_id: Option<String>,
+        account_id: Option<String>,
+    },
     CharacterMerged {
         provisional_id: String,
         verified_id: String,

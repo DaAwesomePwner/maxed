@@ -95,6 +95,16 @@ impl Engine {
             .collect()
     }
 
+    pub(crate) fn lose_identity(&mut self, events: &mut Vec<EngineEvent>) {
+        if self.character.take().is_some() {
+            events.push(EngineEvent::LocalIdentityChanged {
+                at: crate::clock::millis(self.now),
+                character_id: None,
+                account_id: None,
+            });
+        }
+    }
+
     pub(crate) fn refresh_character(&mut self, events: &mut Vec<EngineEvent>) {
         let Some(local) = self.local.as_ref() else {
             return;
@@ -126,6 +136,9 @@ impl Engine {
             issues.push(CoverageIssue::MissingStats);
         }
         let mut next = CharacterView {
+            account_id: entity
+                .and_then(|e| e.account.as_ref())
+                .map(identity::account_id),
             calculation_revision: None,
             stat_panel,
             id: id.clone(),
@@ -193,6 +206,16 @@ impl Engine {
                 character_event_index,
                 EngineEvent::CharacterUpdated(next.clone()),
             );
+            let context_changed = previous
+                .as_ref()
+                .is_none_or(|p| p.id != next.id || p.account_id != next.account_id);
+            if context_changed {
+                events.push(EngineEvent::LocalIdentityChanged {
+                    at: crate::clock::millis(self.now),
+                    character_id: Some(next.id.clone()),
+                    account_id: next.account_id.clone(),
+                });
+            }
             self.character = Some(next);
         }
         if self
