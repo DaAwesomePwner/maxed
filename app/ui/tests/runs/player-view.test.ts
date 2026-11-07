@@ -15,7 +15,7 @@ const strip: RunFightStripRow[] = ['fight-1', 'fight-2'].map((fight_id, index) =
   target_name: `DemoBoss ${index + 1}`, started: '0', ended: '1000000', killed: true, player_count: 3,
   damage: index ? null : 900, rank: index ? null : 1, share: index ? null : .5 }));
 function context(overrides: Partial<PlayerContextView> = {}): PlayerContextView {
-  return { profile: { scope_id: 'run-1', player_id: 'p1', object_id: 1, name: 'DemoPlayer 1', class_id: 100, is_local: true,
+  return { profile: { scope_id: 'run-1', player_id: 'p1', object_id: 1, name: 'DemoPlayer 1', class_id: 100, is_local: true, maxed_gated: true,
     level: 20, stars: 50, maxed: 1, maxed_stats: [20], fame: 1234, stats: [{ stat_id: 20, value: 75 }, { stat_id: 48, value: 5 }],
     equipment: [{ slot: 0, item_type: 1003, enchant: source().enchant }], first_seen: '3000000', last_seen: '7000000' },
     gear_log: [1001, 1002, 1003].map((item_type, i) => ({ at: String([1000000, 4000000, 8000000][i]),

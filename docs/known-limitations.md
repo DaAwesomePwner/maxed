@@ -171,8 +171,10 @@ is recorded.
   inconsistent evidence, not a named effect. U does not unlock P.
 - [#3](https://github.com/DaAwesomePwner/maxed/issues/3) tracks expanded rail
   exalt presentation. [#5](https://github.com/DaAwesomePwner/maxed/issues/5)
-  tracks legacy saved local profiles retaining ungated maxed counts; current
-  Character split safety does not retroactively repair those records.
+  adds provenance gating for saved local profiles and Party members. Legacy local
+  records without that provenance show maxed counts as unknown (`—`) and omit cap
+  highlights. Party maxed requirements return Check (stats not seen), not Fail.
+  Remote-player display is unchanged. Windows UI acceptance is still pending.
 - Normal-fire DPS and regen are baseline models, with source-derived
   [Gate X metadata](architecture/assets.md#character-metadata-gate-x-2026-10-17).
   Current-client rate/regen coefficients still need Windows verification.

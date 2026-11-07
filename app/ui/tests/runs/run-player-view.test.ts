@@ -20,7 +20,7 @@ function view(overrides: Partial<RunPlayerView> = {}): RunPlayerView {
       { fight_id: 'fight-2', dps_basis: 'whole_target_v0', object_id: null, target_name: 'Demo King', started: '8000000', ended: '10000000',
         killed: true, player_count: 2, damage: null, dps: null, rank: null, share: null, deaths: null },
     ],
-    profile: { scope_id: 'run-1', run_id: 'run-1', player_id: 'p1', object_id: 7, is_local: true,
+    profile: { scope_id: 'run-1', run_id: 'run-1', player_id: 'p1', object_id: 7, is_local: true, maxed_gated: true,
       name: 'Demo Archer', class_id: 100, level: 20, stars: 50, maxed: 1, maxed_stats: [20], fame: 1234,
       stats: [{ stat_id: 20, value: 75 }, { stat_id: 48, value: 5 }],
       equipment: [{ slot: 0, item_type: 1001, enchant: source().enchant }], first_seen: '1000000', last_seen: '11000000' },
