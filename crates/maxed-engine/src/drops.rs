@@ -79,6 +79,7 @@ impl Engine {
                     .filter(|r| *r < 255)
             };
             let view = DropView {
+                owner_character_id: self.character.as_ref().map(|c| c.id.clone()),
                 capture_scope: Some(CaptureScope::RealmShark),
                 id: format!(
                     "{}:bag:{}:{id}:{}",

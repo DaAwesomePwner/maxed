@@ -1,6 +1,6 @@
 WITH selected AS MATERIALIZED (
     SELECT drops.id,drops.at FROM json_each(?2) period CROSS JOIN drops INDEXED BY drops_session
-    WHERE drops.session_id=?1 AND drops.run_id IS NULL
+    WHERE (/*account:drop:drops*/ IS NULL OR /*account:drop:drops*/=?3) AND drops.session_id=?1 AND drops.run_id IS NULL
         AND drops.at>=json_extract(period.value,'$[0]')
         AND drops.at<json_extract(period.value,'$[1]')
     ORDER BY drops.at,drops.id LIMIT 2001

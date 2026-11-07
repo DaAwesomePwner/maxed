@@ -130,13 +130,13 @@ impl CaptureRuntime {
             HistoryKey::HomeDungeonStreak(request.clone()),
             move |job| {
                 let dungeon = request.dungeon.clone();
-                runtime.read_history(
+                runtime.read_account_history(
                     job,
                     || HomeDungeonStreak {
                         dungeon,
                         ..Default::default()
                     },
-                    |reader| reader.home_dungeon_streak(request),
+                    |reader, account| reader.home_dungeon_streak(request, account),
                 )
             },
         )
@@ -154,8 +154,8 @@ impl CaptureRuntime {
             HistoryCaller::MainWindow,
             HistoryKey::HomeHud(scope.clone(), tiers.clone(), potions.clone()),
             move |job| {
-                runtime.read_history(job, HomeHud::default, |reader| {
-                    reader.home_hud(scope, &tiers, &potions)
+                runtime.read_account_history(job, HomeHud::default, |reader, account| {
+                    reader.home_hud(scope, account, &tiers, &potions)
                 })
             },
         )
@@ -276,13 +276,13 @@ impl CaptureRuntime {
             HistoryCaller::MainWindow,
             HistoryKey::HomeBossBaselines(request.clone()),
             move |job| {
-                runtime.read_history(
+                runtime.read_account_history(
                     job,
                     || HomeBossBaselines {
                         rows: vec![],
                         truncated: false,
                     },
-                    |reader| reader.home_boss_baselines(request),
+                    |reader, account| reader.home_boss_baselines(request, account),
                 )
             },
         )
@@ -299,7 +299,7 @@ impl CaptureRuntime {
             HistoryKey::DungeonProfile(request.clone()),
             move |job| {
                 let dungeon = request.dungeon.clone();
-                runtime.read_history(
+                runtime.read_account_history(
                     job,
                     || DungeonProfile {
                         dungeon,
@@ -310,7 +310,7 @@ impl CaptureRuntime {
                         usual_clear_micros: None,
                         clear_samples: 0,
                     },
-                    |reader| reader.dungeon_profile(request),
+                    |reader, account| reader.dungeon_profile(request, account),
                 )
             },
         )

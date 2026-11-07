@@ -16,4 +16,4 @@ enchant: string | null, contents: Array<DropItem>, source_enemy: number | null, 
 /**
  * False distinguishes unseen contents from an observed empty bag.
  */
-contents_known: boolean, bag_rank: number | null, issues: Array<CoverageIssue>, capture_scope?: CaptureScope | null, };
+contents_known: boolean, bag_rank: number | null, issues: Array<CoverageIssue>, capture_scope?: CaptureScope | null, owner_character_id?: string | null, };

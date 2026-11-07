@@ -187,3 +187,7 @@ with `-Check`, and uploads only the notices file for maintainer review/commit. S
 The workflow-policy suite pins its commands, input paths, conditions and actions,
 with mutations for permissions, secrets, environments and missing verification.
 Local policy tests do not prove the Windows provisioning build works.
+
+Native `account_scope` tests require Windows; macOS cross-linking does not execute them.
+Store account-scope tests run with `cargo test --locked -p maxed-store --test integration account_scope`.
+The pure batch planner can also run on macOS using `rustc --test app/src-tauri/src/runtime/account_batches.rs`.

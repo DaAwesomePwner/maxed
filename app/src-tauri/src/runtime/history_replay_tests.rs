@@ -521,19 +521,28 @@ fn late_counter_revision_reopens_one_story() {
     let path = dir.path().join("live.sqlite3");
     let mut db = rusqlite::Connection::open(&path).unwrap();
     maxed_store::migrate(&mut db).unwrap();
+    let mut character = demo::demo_snapshot().character.unwrap();
+    character.identity_verified = true;
+    character.account_id = Some(format!("account-{}", "a".repeat(64)));
     let mut sequence = 0;
     write_events(
         &mut db,
         &mut sequence,
-        [EngineEvent::SessionUpdated(
-            demo::demo_snapshot().session.unwrap(),
-        )],
+        [
+            EngineEvent::SessionUpdated(demo::demo_snapshot().session.unwrap()),
+            EngineEvent::CharacterUpdated(character.clone()),
+            EngineEvent::LocalIdentityChanged {
+                at: Timestamp(1_000_000),
+                character_id: Some(character.id.clone()),
+                account_id: character.account_id.clone(),
+            },
+        ],
     );
     let mut earlier = vec![];
     for i in 0..4 {
         let mut run = demo::demo_run_story().run;
         run.id = format!("synthetic-comparison-{i}");
-        run.character_id = None;
+        run.character_id = Some(character.id.clone());
         run.started = Timestamp(20_000_000 + i * 20_000_000);
         run.completed_at = (i != 2).then_some(Timestamp(
             run.started.0 + if i == 3 { 8_000_000 } else { 10_000_000 },

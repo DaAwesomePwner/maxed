@@ -1,5 +1,6 @@
 //! Synthetic Runs list contracts; no captured identities or traffic.
 use crate::common;
+use crate::common::account_scope_fixture::ACCOUNT;
 use common::*;
 use maxed_store::*;
 use maxed_types::*;
@@ -49,7 +50,7 @@ fn run_identity_backfill_and_legacy_fallback_preserve_entry_observations() {
             }
             let mut events = story_events();
             events[1].event = EngineEvent::CharacterUpdated(entry.clone());
-            apply_batch(&mut db, &events).unwrap();
+            crate::common::account_scope_fixture::apply_batch(&mut db, &events).unwrap();
             let mut later = entry.clone();
             later.name = Some("Synthetic Mage".into());
             later.class_id = Some(777);
@@ -59,13 +60,13 @@ fn run_identity_backfill_and_legacy_fallback_preserve_entry_observations() {
             if mode == "merge" {
                 later.id = "synthetic-verified".into();
             }
-            apply_batch(
+            crate::common::account_scope_fixture::apply_batch(
                 &mut db,
                 &[envelope(8, EngineEvent::CharacterUpdated(later.clone()))],
             )
             .unwrap();
             if mode == "merge" {
-                apply_batch(
+                crate::common::account_scope_fixture::apply_batch(
                     &mut db,
                     &[envelope(
                         9,
@@ -87,7 +88,7 @@ fn run_identity_backfill_and_legacy_fallback_preserve_entry_observations() {
             }
             let expected_name = entry.name.clone().or(later.name);
             let expected_class = entry.class_id.or(later.class_id);
-            let reader = open_reader(&path).unwrap();
+            let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
             let details = reader
                 .list_runs(filter(RunSort::Newest, 100))
                 .unwrap()
@@ -139,7 +140,7 @@ fn database() -> (tempfile::TempDir, std::path::PathBuf, Connection) {
     let path = dir.path().join("history.db");
     let mut db = Connection::open(&path).unwrap();
     migrate(&mut db).unwrap();
-    apply_batch(&mut db, &story_events()).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut db, &story_events()).unwrap();
     let original = demo::demo_run_story().run;
     let mut events = Vec::new();
     for (id, start, duration, outcome) in [
@@ -175,7 +176,7 @@ fn database() -> (tempfile::TempDir, std::path::PathBuf, Connection) {
     other.character_id = Some("other-character".into());
     other.dungeon = "Other synthetic dungeon".into();
     events.push(EngineEvent::RunStarted(other));
-    apply_batch(
+    crate::common::account_scope_fixture::apply_batch(
         &mut db,
         &events
             .into_iter()
@@ -194,7 +195,7 @@ fn page(reader: &StoreReader, filter: RunFilter) -> Value {
 #[test]
 fn row_details_follow_page_order_and_preserve_observed_values() {
     let (_dir, path, _db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let result = page(&reader, filter(RunSort::Oldest, 100));
     let details = result["details"].as_array().expect("per-row details");
     assert_eq!(details.len(), result["rows"].as_array().unwrap().len());
@@ -222,7 +223,7 @@ fn row_details_follow_page_order_and_preserve_observed_values() {
 #[test]
 fn summary_counts_ignore_outcome_but_respect_other_filters() {
     let (_dir, path, _db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mut query = filter(RunSort::Newest, 100);
     query.dungeon = Some("Synthetic Sanctum".into());
     query.outcome = Some(Outcome::Cleared);
@@ -255,7 +256,7 @@ fn summary_counts_ignore_outcome_but_respect_other_filters() {
 #[test]
 fn character_filter_and_cursor_summary_are_independent() {
     let (_dir, path, _db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mut value = serde_json::to_value(filter(RunSort::Newest, 1)).unwrap();
     value["character_id"] = json!("demo-character");
     let query: RunFilter = serde_json::from_value(value.clone()).unwrap();
@@ -328,7 +329,7 @@ fn hundred_row_page_stays_under_one_mib_and_loot_is_ranked_then_newest() {
         drop.at = Timestamp(at);
         events.push(EngineEvent::BagDropped(drop));
     }
-    apply_batch(
+    crate::common::account_scope_fixture::apply_batch(
         &mut db,
         &events
             .into_iter()
@@ -337,7 +338,7 @@ fn hundred_row_page_stays_under_one_mib_and_loot_is_ranked_then_newest() {
             .collect::<Vec<_>>(),
     )
     .unwrap();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let page = reader.list_runs(filter(RunSort::Newest, 100)).unwrap();
     assert_eq!(page.rows.len(), 100);
     assert_eq!(page.details.as_ref().unwrap().len(), 100);
@@ -370,7 +371,7 @@ fn valid_share_unknown_identity_and_pb_ties_follow_home_rules() {
         UPDATE fights SET complete_capture=1,json=json_set(json,'$.issues',json('[]'),'$.total_damage',100.0);
         UPDATE fight_players SET damage=40.0,json=json_set(json,'$.is_local',json('true'),'$.share',0.4,'$.sources',json('[]'));
         UPDATE drops SET json=json_set(json,'$.issues',json('[]'));").unwrap();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let query = filter(RunSort::Oldest, 100);
     let detail = reader
         .list_runs(query.clone())
@@ -434,7 +435,7 @@ fn valid_share_unknown_identity_and_pb_ties_follow_home_rules() {
 #[test]
 fn oversized_details_and_summary_are_rejected_before_returning_the_page() {
     let (_dir, path, db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let oversized = "TestMage".repeat(1024 * 1024 / 8);
     db.execute(
         "UPDATE runs SET entry_character_json=json_object('name',?1) WHERE id='demo-run'",
@@ -469,8 +470,12 @@ fn unknown_segment_matches_filtered_rows_and_excludes_in_progress_runs() {
     open.died_at = None;
     open.outcome = None;
     open.evidence.clear();
-    apply_batch(&mut db, &[envelope(14, EngineEvent::RunStarted(open))]).unwrap();
-    let reader = open_reader(&path).unwrap();
+    crate::common::account_scope_fixture::apply_batch(
+        &mut db,
+        &[envelope(14, EngineEvent::RunStarted(open))],
+    )
+    .unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mut query = filter(RunSort::Newest, 100);
     query.dungeon = Some("Synthetic Sanctum".into());
     query.outcome = Some(Outcome::Unknown);
@@ -489,7 +494,7 @@ fn unknown_segment_matches_filtered_rows_and_excludes_in_progress_runs() {
 #[test]
 fn last_death_respects_dungeon_range_and_character_even_with_cleared_filter() {
     let (_dir, path, _db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mut query = filter(RunSort::Newest, 100);
     query.outcome = Some(Outcome::Cleared);
     assert_eq!(
@@ -545,7 +550,7 @@ fn fame_windows_preserve_boundaries_ties_overlaps_and_unknown_samples() {
             ('a',5,'other-character',6000000,30);",
     )
     .unwrap();
-    let page = open_reader(&path)
+    let page = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
         .list_runs(filter(RunSort::Oldest, 100))
         .unwrap();
@@ -662,8 +667,8 @@ fn previous_best_uses_earlier_qualifying_clears_and_started_id_order() {
             envelope(i as u64 + 14, EngineEvent::RunStarted(run))
         })
         .collect::<Vec<_>>();
-    apply_batch(&mut db, &events).unwrap();
-    let reader = open_reader(&path).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut db, &events).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let result = page(&reader, filter(RunSort::Newest, 100));
     let details = result["details"].as_array().unwrap();
     for (id, expected) in [
@@ -723,7 +728,7 @@ fn inferred_weapon_labels_do_not_make_saved_damage_partial() {
         let path = dir.path().join("inferred.db");
         let mut db = Connection::open(&path).unwrap();
         migrate(&mut db).unwrap();
-        apply_batch(&mut db, &story_events()[..4]).unwrap();
+        crate::common::account_scope_fixture::apply_batch(&mut db, &story_events()[..4]).unwrap();
         let mut fight = demo::demo_snapshot().fights.remove(0);
         fight.complete_capture = true;
         fight.issues.clear();
@@ -742,7 +747,7 @@ fn inferred_weapon_labels_do_not_make_saved_damage_partial() {
         let mut run = demo::demo_run_story().run;
         run.complete_capture = true;
         run.issues.clear();
-        apply_batch(
+        crate::common::account_scope_fixture::apply_batch(
             &mut db,
             &[
                 envelope(5, EngineEvent::RunUpdated(run)),
@@ -750,7 +755,7 @@ fn inferred_weapon_labels_do_not_make_saved_damage_partial() {
             ],
         )
         .unwrap();
-        let reader = open_reader(&path).unwrap();
+        let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
         assert_eq!(
             reader.get_run("demo-run").unwrap().unwrap().fights[0].estimated,
             uncertain,
@@ -771,9 +776,12 @@ fn inferred_weapon_labels_do_not_make_saved_damage_partial() {
         );
         assert_eq!(
             reader
-                .home_summary(HomeScope::Session {
-                    id: "demo-session".into()
-                })
+                .home_summary(
+                    HomeScope::Session {
+                        id: "demo-session".into()
+                    },
+                    Some(ACCOUNT)
+                )
                 .unwrap()
                 .recent_details[0]
                 .share_partial,

@@ -1,5 +1,5 @@
 //! Synthetic history: stable recap ownership and the existing PB evidence rule.
-use maxed_store::{open_reader, StoreError};
+use maxed_store::StoreError;
 use maxed_types::*;
 use rusqlite::{params, Connection};
 
@@ -99,7 +99,7 @@ impl Fixture {
     }
 
     fn recap(&self, id: &str, chase: &[u16]) -> RunRecap {
-        open_reader(&self.dir.path().join("recap.sqlite"))
+        crate::common::account_scope_fixture::open_reader(&self.dir.path().join("recap.sqlite"))
             .unwrap()
             .run_recap(&RunRecapRequest { run_id: id.into() }, chase)
             .unwrap()
@@ -430,6 +430,11 @@ fn new_items_first_appearance_only() {
     t.run("current", 30, Some("cleared"), 10);
     t.run("later", 50, Some("cleared"), 10);
     t.drop("realm", None, 1, 10, &[1]);
+    t.db.execute(
+        "INSERT INTO observation_characters VALUES('drop','realm','self')",
+        [],
+    )
+    .unwrap();
     t.drop("first-bag", Some("first"), 11, 10, &[2]);
     t.drop("a", Some("current"), 31, 255, &[12, 3, 1, 2]);
     t.drop("b", Some("current"), 31, 10, &[4, 5, 6, 7, 8, 9, 10, 11]);
@@ -522,7 +527,7 @@ fn repeat_ordinal_uses_visits_and_defaults_when_missing_or_capped() {
 fn unknown_run_is_none() {
     let t = Fixture::new();
     assert_eq!(
-        open_reader(&t.dir.path().join("recap.sqlite"))
+        crate::common::account_scope_fixture::open_reader(&t.dir.path().join("recap.sqlite"))
             .unwrap()
             .run_recap(
                 &RunRecapRequest {
@@ -540,7 +545,7 @@ fn run_recap_rejects_invalid_id() {
     let t = Fixture::new();
     for run_id in [String::new(), "x".repeat(257), "bad\0id".into()] {
         assert!(matches!(
-            open_reader(&t.dir.path().join("recap.sqlite"))
+            crate::common::account_scope_fixture::open_reader(&t.dir.path().join("recap.sqlite"))
                 .unwrap()
                 .run_recap(&RunRecapRequest { run_id }, &[]),
             Err(StoreError::InvalidEvent)
@@ -612,6 +617,7 @@ fn run_recap_plans_avoid_base_scans() {
                 "the ordered candidate statement must not carry full fight JSON"
             );
         }
+        let sql = crate::common::account_sql::with_accounts(&sql);
         let plan =
             t.db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
                 .unwrap()

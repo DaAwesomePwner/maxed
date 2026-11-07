@@ -1,3 +1,5 @@
+mod account_batches;
+mod account_history;
 #[cfg(test)]
 #[path = "../../../crates/maxed-store/tests/common/receipts.rs"]
 mod receipt_tests;
@@ -262,14 +264,25 @@ impl CaptureRuntime {
         if let Some(publisher) = publisher.as_ref() {
             return Ok(publisher.clone());
         }
-        let shared = self.shared.clone();
+        let shared = Arc::downgrade(&self.shared);
         let created = Publisher::native(
             app,
             Arc::new(move || {
-                shared.bridge_failed.store(true, Ordering::Release);
-                shared.failed.store(true, Ordering::Release);
+                if let Some(shared) = shared.upgrade() {
+                    shared.bridge_failed.store(true, Ordering::Release);
+                    shared.failed.store(true, Ordering::Release);
+                }
             }),
         )?;
+        let account_publisher = created.clone();
+        *self
+            .shared
+            .home
+            .account_notice
+            .lock()
+            .map_err(|_| WORKER_FAILED)? = Some(Arc::new(move |notice| {
+            account_publisher.publish(Publication::AccountHistoryChanged(notice))
+        }));
         *publisher = Some(created.clone());
         Ok(created)
     }
@@ -278,7 +291,11 @@ impl CaptureRuntime {
         let events = publisher.clone();
         let single = publisher.clone();
         let party = publisher.clone();
+        let account = publisher.clone();
         Bridge {
+            account_changed: Arc::new(move |notice| {
+                account.publish(Publication::AccountHistoryChanged(notice))
+            }),
             visibility: publisher.visibility(),
             party_changed: Arc::new(move |notice| party.publish(Publication::PartyChanged(notice))),
             event: Arc::new(move |event| single.publish(Publication::Events(vec![event]))),

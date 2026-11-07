@@ -199,6 +199,7 @@ impl Engine {
             )
         };
         let view = PlayerProfileView {
+            maxed_gated: row.is_local,
             scope_id: scope.id.clone(),
             run_id: scope.run_id.clone(),
             player_id: row.player_id.clone(),

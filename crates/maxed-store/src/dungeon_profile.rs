@@ -1,18 +1,17 @@
 //! A dungeon's learned boss order and character-specific run baselines.
 use crate::{
-    queries::{identifier, row_json, MAX_RUN_STORY_BYTES},
+    queries::identifier,
     stats::{bounds, count, median},
     StoreError, StoreReader,
 };
-use maxed_types::{
-    DungeonProfile, DungeonProfileRequest, ProfileBoss, RunView, StatsFilter, Timestamp,
-};
+use maxed_types::{DungeonProfile, DungeonProfileRequest, ProfileBoss, StatsFilter, Timestamp};
 use rusqlite::params;
 
 impl StoreReader {
     pub fn dungeon_profile(
         &self,
         request: DungeonProfileRequest,
+        account: Option<&str>,
     ) -> Result<DungeonProfile, StoreError> {
         identifier(&request.dungeon)?;
         let filter = StatsFilter {
@@ -21,14 +20,19 @@ impl StoreReader {
         };
         let (lo, hi, character) = bounds(&filter)?;
         // Boss order and both character baselines must see the same history.
-        let tx = self.conn.unchecked_transaction()?;
+        let transaction = self
+            .conn
+            .is_autocommit()
+            .then(|| self.conn.unchecked_transaction())
+            .transpose()?;
+        let tx = &self.conn;
         let (clears, durations): (i64, String) = tx.query_row(
-            "SELECT COUNT(*) FILTER (WHERE outcome='cleared'),
+            &crate::account_sql::with_accounts("SELECT COUNT(*) FILTER (WHERE outcome='cleared'),
                 json_group_array(completed_at-started) FILTER (
                   WHERE outcome='cleared' AND completed_at>=started
                     AND (?3 IS NULL OR character_id=?3))
-             FROM runs WHERE started>=?1 AND started<?2 AND dungeon=?4",
-            params![lo, hi, character, request.dungeon],
+             FROM runs WHERE /*account:character:runs.character_id*/=?5 AND started>=?1 AND started<?2 AND dungeon=?4"),
+            params![lo, hi, character, request.dungeon, account],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
         let mut durations: Vec<u64> = serde_json::from_str(&durations)?;
@@ -37,13 +41,13 @@ impl StoreReader {
             .then(|| median(&mut durations))
             .flatten();
 
-        let sql = include_str!("dungeon_profile.sql").replacen(
+        let sql = &crate::account_sql::with_accounts(include_str!("dungeon_profile.sql")).replacen(
             "/*fight_character*/",
             include_str!("fight_character.sql"),
             1,
         );
-        let mut statement = tx.prepare_cached(&sql)?;
-        let mut rows = statement.query(params![lo, hi, character, request.dungeon])?;
+        let mut statement = tx.prepare_cached(sql)?;
+        let mut rows = statement.query(params![lo, hi, character, request.dungeon, account])?;
         let mut bosses = Vec::new();
         while let Some(row) = rows.next()? {
             let mut offsets: Vec<u64> = serde_json::from_str(&row.get::<_, String>(3)?)?;
@@ -66,8 +70,10 @@ impl StoreReader {
         drop(rows);
         drop(statement);
 
-        let mut statement = tx.prepare_cached(include_str!("dungeon_profile_dps.sql"))?;
-        let mut rows = statement.query(params![lo, hi, character, request.dungeon])?;
+        let mut statement = tx.prepare_cached(&crate::account_sql::with_accounts(include_str!(
+            "dungeon_profile_dps.sql"
+        )))?;
+        let mut rows = statement.query(params![lo, hi, character, request.dungeon, account])?;
         let mut run_dps_samples = 0u32;
         let mut mean = 0.0;
         while let Some(row) = rows.next()? {
@@ -78,22 +84,9 @@ impl StoreReader {
                     .zip(first.zip(last))
                     .and_then(|(damage, (first, last))| maxed_engine::dps(damage, first, last))
             } else {
-                // Legacy history can lack the player cache. Keep the story's
-                // existing resolution path, inside this same read snapshot.
+                // Missing or mixed-account run caches must aggregate only owned fights.
                 let id: String = row.get(0)?;
-                let mut run_statement = tx.prepare_cached(
-                    "SELECT length(CAST(json AS BLOB)),json FROM runs WHERE id=?1",
-                )?;
-                let mut run_rows = run_statement.query([id])?;
-                let run: RunView = row_json(
-                    run_rows.next()?.ok_or(StoreError::InvalidEvent)?,
-                    0,
-                    &mut 0,
-                    MAX_RUN_STORY_BYTES,
-                )?;
-                crate::instance::totals(&tx, &run)?
-                    .and_then(|totals| totals.local)
-                    .and_then(|local| local.dps)
+                account_run_dps(tx, &id, account)?
             };
             if let Some(dps) = dps {
                 run_dps_samples = run_dps_samples
@@ -104,7 +97,9 @@ impl StoreReader {
         }
         drop(rows);
         drop(statement);
-        tx.commit()?;
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
         Ok(DungeonProfile {
             dungeon: request.dungeon,
             clears: count(clears)?,
@@ -115,6 +110,23 @@ impl StoreReader {
             clear_samples,
         })
     }
+}
+
+fn account_run_dps(
+    conn: &rusqlite::Connection,
+    run: &str,
+    account: Option<&str>,
+) -> Result<Option<f64>, StoreError> {
+    let sql = &crate::account_sql::with_accounts(include_str!("dungeon_profile_owned_dps.sql"));
+    let (first, last, damage): (Option<i64>, Option<i64>, Option<f64>) =
+        conn.query_row(sql, params![run, account], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })?;
+    Ok(damage
+        .zip(first.zip(last))
+        .and_then(|(damage, (first, last))| {
+            maxed_engine::dps(damage, Timestamp(first as u64), Timestamp(last as u64))
+        }))
 }
 
 #[cfg(test)]
@@ -142,7 +154,10 @@ mod tests {
             let path = dir.path().join("synthetic.sqlite");
             let mut db = rusqlite::Connection::open(&path).unwrap();
             crate::migrate(&mut db).unwrap();
-            let snapshot = demo::demo_snapshot();
+            let mut snapshot = demo::demo_snapshot();
+            snapshot.character.as_mut().unwrap().account_id = Some(
+                "account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+            );
             let mut events = vec![
                 EngineEvent::SessionUpdated(snapshot.session.unwrap()),
                 EngineEvent::CharacterUpdated(snapshot.character.unwrap()),
@@ -176,14 +191,19 @@ mod tests {
             );
             STATEMENTS.with(|statements| statements.borrow_mut().clear());
             let result = reader
-                .dungeon_profile(DungeonProfileRequest {
-                    dungeon: run.dungeon,
-                    character_id: run.character_id,
-                    range: TimeRange {
-                        start: Timestamp(0),
-                        end: Timestamp(1_000_000_000_000),
+                .dungeon_profile(
+                    DungeonProfileRequest {
+                        dungeon: run.dungeon,
+                        character_id: run.character_id,
+                        range: TimeRange {
+                            start: Timestamp(0),
+                            end: Timestamp(1_000_000_000_000),
+                        },
                     },
-                })
+                    Some(
+                        "account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    ),
+                )
                 .unwrap();
             assert_eq!(result.run_dps_samples, size);
             let statements = STATEMENTS.with(|statements| statements.take());

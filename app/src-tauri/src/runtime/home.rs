@@ -30,11 +30,22 @@ pub(super) struct HomeReadContext {
     pub generation: u64,
     pub stream_id: Option<String>,
     pub absent: bool,
+    pub account: Option<String>,
+    pub account_revision: u64,
+    pub identity_sequence: Option<maxed_types::Sequence>,
 }
+
+#[cfg(test)]
+type RecoveryBatchHook = Arc<dyn Fn(u16) + Send + Sync>;
+
+type AccountNotice = Arc<dyn Fn(maxed_types::AccountHistoryChanged) + Send + Sync>;
 
 pub(super) struct HomeReads {
     pub(super) context: Mutex<Option<HomeReadContext>>,
     pub(super) generation: AtomicU64,
+    pub(super) account_revision: AtomicU64,
+    pub(super) resolved_account: Mutex<Option<(Namespace, Option<String>)>>,
+    pub(super) account_notice: Mutex<Option<AccountNotice>>,
     live_database: Mutex<Option<PathBuf>>,
     pub(super) settings: Mutex<Option<Arc<crate::settings::SettingsStore>>>,
     pub(super) scheduler: Mutex<Scheduler>,
@@ -45,6 +56,12 @@ pub(super) struct HomeReads {
     pub(super) preparation: Mutex<Preparation>,
     prepared: Condvar,
     preparation_changed: tokio::sync::Notify,
+    #[cfg(test)]
+    pub(super) on_identity_wait: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    #[cfg(test)]
+    pub(super) on_recovery_batch: Mutex<Option<RecoveryBatchHook>>,
+    #[cfg(test)]
+    pub(super) on_recovery_attempt: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     #[cfg(test)]
     pub(super) on_prepare: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     #[cfg(test)]
@@ -85,6 +102,9 @@ impl Default for HomeReads {
         Self {
             context: Default::default(),
             generation: Default::default(),
+            account_revision: Default::default(),
+            resolved_account: Default::default(),
+            account_notice: Default::default(),
             live_database: Default::default(),
             settings: Default::default(),
             scheduler: Default::default(),
@@ -95,6 +115,12 @@ impl Default for HomeReads {
             prepared: Default::default(),
             preparation_changed: Default::default(),
             reader_idle: Mutex::new(READER_IDLE),
+            #[cfg(test)]
+            on_identity_wait: Default::default(),
+            #[cfg(test)]
+            on_recovery_batch: Default::default(),
+            #[cfg(test)]
+            on_recovery_attempt: Default::default(),
             #[cfg(test)]
             on_prepare: Default::default(),
             #[cfg(test)]
@@ -124,6 +150,7 @@ pub(super) struct Preparation {
 pub(super) struct HomeJob {
     pub(super) owner: Arc<HomeReads>,
     pub(super) context: HomeReadContext,
+    pub(super) account_scoped: bool,
 }
 
 impl HomeReads {
@@ -189,22 +216,53 @@ impl HomeReads {
         generation
     }
 
-    fn install(&self, context: HomeReadContext) -> Result<(), String> {
+    fn install(&self, mut context: HomeReadContext) -> Result<(), String> {
         let mut current = self.context.lock().map_err(|_| UNAVAILABLE)?;
         if self.generation.load(Ordering::Acquire) != context.generation {
             return Err(CHANGED.into());
         }
+        // A cancelled sweep can publish recovery between context construction and
+        // installation. Retain that revision even when the account is unchanged.
+        context.account_revision = self.account_revision.load(Ordering::Acquire);
+        // Lifecycle retirement closed the sole reader before installation.
+        // Startup preparation calls this only after migration has finished.
+        context.account = maxed_store::open_reader(&context.database)
+            .and_then(|reader| reader.current_account())
+            .ok()
+            .flatten();
+        let mut resolved = self.resolved_account.lock().map_err(|_| UNAVAILABLE)?;
+        let value = (context.namespace, context.account.clone());
+        let changed = resolved
+            .as_ref()
+            .map_or(context.account.is_some(), |old| old != &value);
+        *resolved = Some(value);
+        if changed {
+            context.account_revision = self.account_revision.fetch_add(1, Ordering::AcqRel) + 1;
+        }
+        let revision = context.account_revision;
         *current = Some(context);
+        drop(resolved);
+        drop(current);
+        if changed {
+            if let Some(notice) = self.account_notice.lock().ok().and_then(|n| n.clone()) {
+                notice(maxed_types::AccountHistoryChanged {
+                    revision,
+                    reason: maxed_types::AccountHistoryChangeReason::AccountSwitched,
+                });
+            }
+        }
         Ok(())
     }
 
-    fn check(&self, expected: &HomeReadContext) -> Result<(), String> {
+    fn check(&self, expected: &HomeReadContext, account_scoped: bool) -> Result<(), String> {
         let context = self.context.lock().map_err(|_| UNAVAILABLE)?;
         match context.as_ref() {
             Some(current)
                 if current.generation == expected.generation
                     && current.namespace == expected.namespace
-                    && current.stream_id == expected.stream_id =>
+                    && current.stream_id == expected.stream_id
+                    && (!account_scoped
+                        || current.account_revision == expected.account_revision) =>
             {
                 Ok(())
             }
@@ -212,7 +270,11 @@ impl HomeReads {
         }
     }
 
-    fn reader_context(&self, expected: &HomeReadContext) -> Result<HomeReadContext, String> {
+    pub(super) fn reader_context(
+        &self,
+        expected: &HomeReadContext,
+        account_scoped: bool,
+    ) -> Result<HomeReadContext, String> {
         let preparation = self.preparation.lock().map_err(|_| UNAVAILABLE)?;
         if expected.namespace == Namespace::Live && !preparation.ready {
             return Err(preparation.error.unwrap_or(SCHEMA_FAILED).into());
@@ -222,7 +284,9 @@ impl HomeReads {
             Some(current)
                 if current.generation == expected.generation
                     && current.namespace == expected.namespace
-                    && current.stream_id == expected.stream_id =>
+                    && current.stream_id == expected.stream_id
+                    && (!account_scoped
+                        || current.account_revision == expected.account_revision) =>
             {
                 Ok(current.clone())
             }
@@ -250,6 +314,9 @@ impl HomeReads {
                 generation,
                 stream_id: None,
                 absent,
+                account: None,
+                account_revision: self.account_revision.load(Ordering::Acquire),
+                identity_sequence: None,
             })?;
         }
         Ok(())
@@ -327,6 +394,9 @@ impl HomeReads {
                             generation,
                             stream_id: None,
                             absent,
+                            account: None,
+                            account_revision: owner.account_revision.load(Ordering::Acquire),
+                            identity_sequence: None,
                         });
                     }
                 }
@@ -516,6 +586,8 @@ impl Shared {
         // Playback cleanup inside open_catalog runs only after every Home reader
         // has closed. Failed playback opens leave history unavailable. Live opens
         // do not replace the database, so existing history remains readable.
+        *self.home.account_notice.lock().map_err(|_| UNAVAILABLE)? =
+            Some(bridge.account_changed.clone());
         let mut adapter = match options.open_catalog(cancel, self.views.clone(), bridge, catalog) {
             Ok(adapter) => adapter,
             Err(error) => {
@@ -544,6 +616,9 @@ impl Shared {
             generation,
             stream_id: Some(stream_id.clone()),
             absent: false,
+            account: None,
+            account_revision: self.home.account_revision.load(Ordering::Acquire),
+            identity_sequence: None,
         })?;
         let mut delivery = self
             .views
@@ -646,12 +721,12 @@ impl CaptureRuntime {
     ) -> Result<T, String> {
         // Pending work retains its source, but must see an appeared database's
         // updated readiness/absence state after the preceding read finishes.
-        let context = job.owner.reader_context(&job.context)?;
+        let context = job.owner.reader_context(&job.context, job.account_scoped)?;
         let result = self.read_history_context(&context, absent_live, read);
         // Keep the schema failure when an appeared-invalid database clears readiness.
         // Namespace retirement is classified by the scheduler after reader close.
         if !matches!(&result, Err(error) if error == SCHEMA_FAILED || error == SCHEMA_NEWER) {
-            job.owner.check(&job.context)?;
+            job.owner.check(&job.context, job.account_scoped)?;
         }
         result
     }
@@ -661,7 +736,7 @@ impl CaptureRuntime {
         job: HomeJob,
         estimate: bool,
     ) -> Result<Option<super::maintenance::StorageObservation>, String> {
-        let context = job.owner.reader_context(&job.context)?;
+        let context = job.owner.reader_context(&job.context, job.account_scoped)?;
         if context.namespace != Namespace::Live {
             return Ok(None);
         }
@@ -692,7 +767,7 @@ impl CaptureRuntime {
                 measured,
             )))
         });
-        job.owner.check(&job.context)?;
+        job.owner.check(&job.context, job.account_scoped)?;
         result
     }
 
@@ -817,6 +892,7 @@ pub(super) fn validate_scope(scope: &HomeScope) -> Result<(), String> {
 
 pub(super) fn empty_history() -> HomeSummary {
     HomeSummary {
+        unattributed_history: false,
         dungeon_stats: None,
         runs: 0,
         clears: 0,
@@ -885,5 +961,38 @@ mod maintenance_tests {
             tauri::async_runtime::block_on(read).unwrap(),
             HistoryReply::Ready { .. }
         ));
+    }
+}
+
+#[cfg(test)]
+mod account_scope_install_tests {
+    use super::*;
+
+    #[test]
+    fn account_scope_install_retains_recovery_notice_revision() {
+        let root = tempfile::tempdir().unwrap();
+        let home = HomeReads::default();
+        let context = HomeReadContext {
+            database: root.path().join("absent.sqlite3"),
+            namespace: Namespace::Live,
+            generation: 0,
+            stream_id: None,
+            absent: true,
+            account: None,
+            account_revision: 0,
+            identity_sequence: None,
+        };
+        // A recovery notice arrives after construction but before installation.
+        home.account_revision.store(1, Ordering::Release);
+        home.install(context).unwrap();
+        assert_eq!(
+            home.context
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .account_revision,
+            1
+        );
     }
 }

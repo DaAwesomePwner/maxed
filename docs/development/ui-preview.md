@@ -336,3 +336,12 @@ Record the exact tested commit, viewport and scenario with synthetic screenshots
 run needs an external kill timeout because Chrome may not exit after capture.
 Browser content/geometry does not establish native capture, WebView2 keyboard/DPI,
 current-client coefficients or installer acceptance; those remain Windows checks.
+
+## Account history preview
+
+Open `?preview=home-v4-nexus&variant=accounts`. The Home notice explains excluded
+older history. Click **Switch synthetic account** to publish an account revision
+and a new invented verified character; Home refetches and the rail switches.
+Dismiss the notice, navigate away and back, and verify it stays dismissed.
+This in-memory scenario uses no account credentials, native storage or network.
+Real Windows account-switch acceptance remains pending.

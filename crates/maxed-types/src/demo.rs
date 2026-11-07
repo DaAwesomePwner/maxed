@@ -15,6 +15,7 @@ fn missing_enchant() -> EnchantView {
 /// An observed completion with a still-open target window and partial identity.
 pub fn demo_snapshot() -> LiveSnapshot {
     let character = CharacterView {
+        account_id: None,
         calculation_revision: None,
         stat_panel: None,
         id: "demo-character".into(),
@@ -61,6 +62,7 @@ pub fn demo_snapshot() -> LiveSnapshot {
         issues: character.issues.clone(),
     };
     let fight = FightView {
+        owner_character_id: None,
         scope_id: None,
         dps_basis: DpsBasis::PlayerActiveWindowV1,
         pending_local_reconciliation: false,
@@ -133,6 +135,7 @@ pub fn demo_snapshot() -> LiveSnapshot {
         issues: character.issues.clone(),
     };
     let drop = DropView {
+        owner_character_id: None,
         capture_scope: None,
         id: "demo-drop".into(),
         session_id: run.session_id.clone(),
@@ -294,6 +297,7 @@ pub fn demo_run_page() -> RunPage {
 pub fn demo_home_summary() -> HomeSummary {
     let story = demo_run_story();
     HomeSummary {
+        unattributed_history: false,
         dungeon_stats: None,
         runs: 1,
         clears: 1,

@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::account_scope_fixture::ACCOUNT;
 
 fn observed_fight(id: &str, local_first: u64, local_last: u64, amount: u16) -> FightView {
     use crate::engine_common as engine;
@@ -53,10 +54,10 @@ fn home_top_dps_rejects_three_second_local_burst_in_sixty_second_fight() {
             EngineEvent::FightEnded(steady.clone()),
         ],
     );
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     for scope in [session(), today(0, 100_000_000)] {
         assert_eq!(
-            reader.home_summary(scope).unwrap().top_fight,
+            reader.home_summary(scope, Some(ACCOUNT)).unwrap().top_fight,
             Some(steady.clone())
         );
     }
@@ -65,7 +66,7 @@ fn home_top_dps_rejects_three_second_local_burst_in_sixty_second_fight() {
 #[test]
 fn home_top_dps_local_window_boundary_survives_projection_and_updates() {
     let (_dir, path, mut db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     for (micros, qualifies) in [(19_999_999, false), (20_000_000, true), (3_000_000, false)] {
         let mut fight = eligible_fight("boundary", 1_000_000);
         fight.last_hit = Some(Timestamp(61_000_000));
@@ -82,7 +83,7 @@ fn home_top_dps_local_window_boundary_survives_projection_and_updates() {
         assert_eq!(stored, micros as i64);
         for scope in [session(), today(0, 100_000_000)] {
             assert_eq!(
-                reader.home_summary(scope).unwrap().top_fight,
+                reader.home_summary(scope, Some(ACCOUNT)).unwrap().top_fight,
                 qualifies.then(|| fight.clone())
             );
         }
@@ -112,9 +113,9 @@ fn home_legacy_local_window_is_readable_but_empty_until_a_qualifying_fight() {
             .unwrap();
         let decoded: FightView = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.local_active_micros, None);
-        let reader = open_reader(&path).unwrap();
+        let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
         for scope in [session(), today(0, 100_000_000)] {
-            let home = reader.home_summary(scope).unwrap();
+            let home = reader.home_summary(scope, Some(ACCOUNT)).unwrap();
             // This is Home's existing empty-tile contract, not a query error.
             assert_eq!(home.top_fight, None);
             assert_eq!(home.runs, 1);
@@ -124,7 +125,7 @@ fn home_legacy_local_window_is_readable_but_empty_until_a_qualifying_fight() {
         add(&mut db, vec![EngineEvent::FightEnded(current.clone())]);
         for scope in [session(), today(0, 100_000_000)] {
             assert_eq!(
-                reader.home_summary(scope).unwrap().top_fight,
+                reader.home_summary(scope, Some(ACCOUNT)).unwrap().top_fight,
                 Some(current.clone())
             );
         }

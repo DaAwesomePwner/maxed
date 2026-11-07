@@ -74,6 +74,7 @@ impl Engine {
             .filter_map(|id| self.entities.remove(&id).map(|entity| (id, entity)))
             .collect();
         self.close_map(FightEnd::MapChanged, true, events);
+        self.lose_identity(events);
         self.clear_world();
         self.issues.clear();
         self.map_ordinal += 1;

@@ -492,6 +492,7 @@ impl Engine {
                 s.ended = Some(s.last_traffic);
                 events.push(EngineEvent::SessionUpdated(s.clone()));
             }
+            self.lose_identity(events);
             self.clear_world();
             self.map = None;
             self.area_kind = AreaKind::Unknown;
@@ -664,6 +665,7 @@ impl Engine {
                 events.push(EngineEvent::SessionUpdated(s.clone()));
             }
         }
+        self.lose_identity(&mut events);
         self.clear_world();
         self.map = None;
         self.area_kind = AreaKind::Unknown;
@@ -753,7 +755,7 @@ impl Engine {
                 self.shot_expiry.clear();
                 self.local = None;
                 self.clear_entities();
-                self.character = None;
+                self.lose_identity(&mut events);
             }
         }
         if self.capture.state == CaptureState::Recovering
@@ -769,7 +771,7 @@ impl Engine {
                 let replacing = self.local.is_some();
                 if replacing {
                     self.forget_entity(p.objectId, &mut events);
-                    self.character = None;
+                    self.lose_identity(&mut events);
                 }
                 self.create_number += 1;
                 self.death_seen = false;

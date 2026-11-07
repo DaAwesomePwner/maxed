@@ -21,6 +21,7 @@ fn database() -> (Connection, Stream, RunView) {
 
 fn profile(id: &str, object_id: i32, name: Option<&str>) -> PlayerProfileView {
     PlayerProfileView {
+        maxed_gated: false,
         scope_id: "party-run".into(),
         run_id: Some("party-run".into()),
         player_id: id.into(),

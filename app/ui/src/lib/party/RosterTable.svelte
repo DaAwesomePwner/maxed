@@ -7,6 +7,7 @@
   import SpriteImage from '../components/SpriteImage.svelte';
   import { itemHover } from '../components/item-hover';
   import { objectVisual } from '../bridge/visual-index';
+  import { effectiveMaxed, maxedClaimsSupported } from '../players/maxed-evidence';
   import { formatShare } from '../styles/format';
   import { equipSlots, flagLabel, presenceTime, reasonText } from './party-screen';
   let { view, members, saved, selected, visuals, resolveSpriteUrl, onSelect, onRun }: {
@@ -28,7 +29,8 @@
       {#each members as member (member.name_key ?? member.player_id)}
         {@const key = member.name_key ?? member.player_id}
         {@const named = !!member.name && !!member.name_key}
-        {@const reasons = parseVisible ? member.parse?.reasons ?? [] : []}
+        {@const maxed = effectiveMaxed(member)}
+        {@const reasons = parseVisible ? (member.parse?.reasons ?? []).filter(reason => reason.kind !== 'below_maxed' || maxedClaimsSupported(member)) : []}
         {@const classVisual = objectVisual(visuals.objects, member.class_id)}
         <tr data-row-id={key} class:selected={selected === key}
           class:out-of-view={!saved && member.present === false} tabindex={named ? 0 : undefined}
@@ -45,7 +47,7 @@
             {#if member.departed_at != null}<small>Left</small>
             {:else if !saved && member.present === false}<small>Out of view{member.out_of_view_since != null ? ` since ${presenceTime(member.out_of_view_since)}` : ''}</small>{/if}
           </td>
-          <td class="number" class:failing={reasons.some(reason => reason.kind === 'below_maxed')}>{member.maxed == null ? '—' : `${member.maxed}/8`}</td>
+          <td class="number" class:failing={reasons.some(reason => reason.kind === 'below_maxed')}>{maxed == null ? '—' : `${maxed}/8`}</td>
           {#each equipSlots as slot, index}
             {@const item = member.equipment.find(item => item.slot === index)}
             {@const visual = objectVisual(visuals.objects, item?.item_type)}
@@ -65,7 +67,7 @@
           <td class="notes">
             {#if reasons.length}<span class:warning={member.parse?.result === 'check'} class:failing={member.parse?.result === 'fail'}>{reasonText(reasons)}</span>{/if}
             {#if dungeon && member.flags.length}<span class="warning">{member.flags.map(flagLabel).join(' · ')}</span>{/if}
-            {#if !reasons.length && !(dungeon && member.flags.length) && view.gear_recorded && member.maxed == null && member.level == null}<span class="muted">Gear not observed yet</span>{/if}
+            {#if !reasons.length && !(dungeon && member.flags.length) && view.gear_recorded && maxed == null && member.level == null}<span class="muted">Gear not observed yet</span>{/if}
           </td>
         </tr>
       {/each}

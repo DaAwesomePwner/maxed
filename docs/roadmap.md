@@ -187,6 +187,7 @@ These appear in one or both tools but break Maxed's rules (passive capture, no u
 
 | Date | Decision |
 | --- | --- |
+| 2026-11-07 | #4: Home follows the current account, with no selector. Legacy attribution uses local recomputation; unmatched history stays stored and is excluded from totals, records and bests with a notice. Windows account-switch acceptance remains pending |
 | 2026-11-06 | Observed-only Daily Quests (Tinkerer) and Pets are in scope, built from passive capture with no token. Each needs its own spec before it is built; neither is scheduled yet |
 | 2026-11-06 | Opt-in account sync stays deferred until DECA has been asked about the exact design in [Later: opt-in account sync](#later-opt-in-account-sync) |
 | 2026-11-06 | No candidate features are scheduled for now |
@@ -252,7 +253,8 @@ answer is given.
   store reader in `maxed-store`. No second reader, no reads on the UI thread, bounded page sizes.
 - **Migrations are numbered in the plans.** Loot took 008, Logs 009, Stats 010,
   excluded-bag cleanup 011, event-name search 012, player observations 013
-  Party 014 and Home loot-statistics indexes 015. The next spec claims 016 so parallel workers never collide.
+  Party 014, Home loot-statistics indexes 015, maintenance receipts 016, accounts 017,
+  account read index 018 and attribution notice 019. The next spec claims 020 so parallel workers never collide.
   Never rewrite an installed migration.
 - **Home stays the Session/Today view; Stats owns lifetime views.** Don't duplicate Home's KPI strip or
   By-dungeon section; link from Home to the matching Stats view instead. The Home redesign phase 1,

@@ -9,16 +9,16 @@ scope AS (
         CASE WHEN json_valid(f.json) THEN CAST(json_extract(f.json,'$.first_hit') AS INTEGER) END AS first_hit,
         CASE WHEN json_valid(f.json) THEN CAST(json_extract(f.json,'$.last_hit') AS INTEGER) END AS last_hit,
         CASE WHEN json_valid(f.json) THEN json_extract(f.json,'$.issues') ELSE f.json END AS issues FROM fights f, scope s
-    WHERE (?1=0 AND f.session_id=s.session_id)
-       OR (?1=1 AND f.started>=s.lo AND f.started<s.hi)
+    WHERE ((?1=0 AND f.session_id=s.session_id)
+       OR (?1=1 AND f.started>=s.lo AND f.started<s.hi)) AND /*account:fight:f*/=?5
 ), scoped_drops AS MATERIALIZED (
     SELECT d.id,d.at,d.bag_rank,CASE WHEN json_valid(d.json) THEN json_extract(d.json,'$.issues') ELSE d.json END AS issues FROM drops d, scope s
-    WHERE (?1=0 AND d.session_id=s.session_id)
-       OR (?1=1 AND d.at>=s.lo AND d.at<s.hi)
+    WHERE ((?1=0 AND d.session_id=s.session_id)
+       OR (?1=1 AND d.at>=s.lo AND d.at<s.hi)) AND /*account:drop:d*/=?5
 ), scoped_fame AS MATERIALIZED (
     SELECT f.at,f.character_id,f.fame,f.stream_id,f.sequence FROM fame_samples f, scope s
-    WHERE (?1=0 AND f.session_id=s.session_id)
-       OR (?1=1 AND f.at>=s.lo AND f.at<s.hi)
+    WHERE ((?1=0 AND f.session_id=s.session_id)
+       OR (?1=1 AND f.at>=s.lo AND f.at<s.hi)) AND /*account:character:f.character_id*/=?5
 ), latest_fame AS (
     -- Fame earned while Maxed was not capturing is not credited to this scope.
     SELECT at,character_id,fame,stream_id,sequence, first_value(fame) OVER (

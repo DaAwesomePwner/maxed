@@ -8,4 +8,4 @@ import type { FightView } from "./FightView";
 import type { HomeRunDetail } from "./HomeRunDetail";
 import type { RunView } from "./RunView";
 
-export type HomeSummary = { runs: number, clears: number, deaths: number, fame_delta: number | null, fame: Array<FamePoint>, fame_characters: Array<CharacterFame>, best_drop: DropView | null, top_fight: FightView | null, recent_runs: Array<RunView>, issues: Array<CoverageIssue>, recent_details: Array<HomeRunDetail>, fame_missing_baselines: number, fame_sampled: boolean, unranked_drop_count: number, dungeon_stats?: Array<DungeonStatsRow> | null, };
+export type HomeSummary = { unattributed_history?: boolean, runs: number, clears: number, deaths: number, fame_delta: number | null, fame: Array<FamePoint>, fame_characters: Array<CharacterFame>, best_drop: DropView | null, top_fight: FightView | null, recent_runs: Array<RunView>, issues: Array<CoverageIssue>, recent_details: Array<HomeRunDetail>, fame_missing_baselines: number, fame_sampled: boolean, unranked_drop_count: number, dungeon_stats?: Array<DungeonStatsRow> | null, };

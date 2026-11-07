@@ -2156,6 +2156,10 @@ fn run_time_pb_is_live_only_and_uses_personal_best_delivery() {
             demo::demo_snapshot().session.unwrap(),
         )]);
         adapter.tick(Timestamp(200_000_000)).unwrap();
+        let mut character = demo::demo_snapshot().character.unwrap();
+        character.account_id = Some(format!("account-{}", "a".repeat(64)));
+        let character_id = character.id.clone();
+        adapter.events(vec![EngineEvent::CharacterUpdated(character)]);
         for (id, duration) in [
             ("prior", 87_000_000),
             ("faster", 86_000_000),
@@ -2163,7 +2167,7 @@ fn run_time_pb_is_live_only_and_uses_personal_best_delivery() {
         ] {
             let mut run = demo::demo_run_story().run;
             run.id = id.into();
-            run.character_id = None;
+            run.character_id = Some(character_id.clone());
             run.dungeon = "Lair of Shaitan".into();
             run.area_kind = AreaKind::Dungeon;
             run.started = Timestamp(1_000_000);

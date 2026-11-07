@@ -508,12 +508,13 @@ fn probes_cover_absent_legacy_and_compatible_schemas_without_requesting_work() {
         Some(14),
         Some(15),
         Some(16),
+        Some(maxed_store::SCHEMA_VERSION as usize),
     ] {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("live.sqlite3");
         if let Some(version) = version {
             let mut db = rusqlite::Connection::open(&path).unwrap();
-            if version == 16 {
+            if version == maxed_store::SCHEMA_VERSION as usize {
                 maxed_store::migrate(&mut db).unwrap();
             } else if version != 0 {
                 installed::install(&db, version);
@@ -1396,7 +1397,7 @@ fn confirmed_exact_legacy_upgrade_keeps_initial_and_later_conversion_uses_rollin
             .backup_and_upgrade_with(&Space(Some(u64::MAX)), &AtomicBool::new(false))
             .unwrap();
         let db = rusqlite::Connection::open(&path).unwrap();
-        assert_eq!(installed::user_version(&db), 16);
+        assert_eq!(installed::user_version(&db), maxed_store::SCHEMA_VERSION);
         assert_eq!(
             db.query_row("SELECT count(*) FROM drops", [], |r| r.get::<_, i64>(0))
                 .unwrap(),
@@ -1482,7 +1483,7 @@ fn native_compatible_versions_and_empty_zero_bypass_backup_at_both_entry_points(
                 tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
             }
             let db = rusqlite::Connection::open(&path).unwrap();
-            assert_eq!(installed::user_version(&db), 16);
+            assert_eq!(installed::user_version(&db), maxed_store::SCHEMA_VERSION);
             assert!(!root.path().join("backups").exists());
         }
     }

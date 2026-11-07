@@ -6,4 +6,4 @@ import type { StatPanel } from "./StatPanel";
 import type { StatView } from "./StatView";
 import type { Timestamp } from "./Timestamp";
 
-export type CharacterView = { calculation_revision?: CharacterInputRevision | null, id: string, name: string | null, class_id: number | null, level: number | null, maxed: number | null, fame: number | null, stats: Array<StatView>, equipment: Array<EquipmentView>, observed_at: Timestamp, identity_verified: boolean, died_at: Timestamp | null, issues: Array<CoverageIssue>, stat_panel?: StatPanel | null, };
+export type CharacterView = { account_id?: string | null, calculation_revision?: CharacterInputRevision | null, id: string, name: string | null, class_id: number | null, level: number | null, maxed: number | null, fame: number | null, stats: Array<StatView>, equipment: Array<EquipmentView>, observed_at: Timestamp, identity_verified: boolean, died_at: Timestamp | null, issues: Array<CoverageIssue>, stat_panel?: StatPanel | null, };
