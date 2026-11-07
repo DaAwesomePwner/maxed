@@ -105,6 +105,9 @@ Five parallel jobs run: `rust-lint` (fmt and both clippy checks), `rust-test`
 (workspace tests excluding maxed-store, then bindings freshness), `store-test`
 (maxed-store tests), `ui` (all five UI scripts), and `packaging` (offline memory
 tooling and packaging/collector checks). Each Rust job has its own cache key.
+The UI job also installs the pinned minimal Rust toolchain and fetches locked
+Cargo dependencies before its offline CLI smoke-replay test, using a separate
+`rust-ui-` cache with the same restore, prune and save conditions.
 Generated bindings and fixtures must remain current. Release tags reuse a
 completed successful main push, schedule or dispatch run for the exact SHA,
 with its URL in the job summary; otherwise all tests run before packaging.

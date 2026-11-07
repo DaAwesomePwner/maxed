@@ -131,8 +131,11 @@ $script:expectedJobs = @'
     "steps": [
       {"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": {"persist-credentials": false}},
       {"uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": {"node-version": "22.16.0"}},
-      {"name": "Restore locked tools", "run": "npm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }"},
-      {"name": "UI", "run": "foreach ($s in @('check', 'check:tests', 'test', 'test:ui', 'build')) { npm.cmd --prefix app/ui run $s; if ($LASTEXITCODE) { throw 'UI check failed.' } }"}
+      {"name": "Restore Rust cache", "if": "runner.environment == 'github-hosted'", "uses": "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-ui-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}},
+      {"name": "Restore locked tools", "run": "rustup toolchain install 1.99.0 --profile minimal\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }"},
+      {"name": "UI", "run": "foreach ($s in @('check', 'check:tests', 'test', 'test:ui', 'build')) { npm.cmd --prefix app/ui run $s; if ($LASTEXITCODE) { throw 'UI check failed.' } }"},
+      {"name": "Prune Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "run": "Remove-Item -LiteralPath target/debug/incremental -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem target/debug/deps, target/debug/.fingerprint, target/debug/build -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*maxed*' -or $_.Extension -in @('.exe', '.pdb') } | Remove-Item -Recurse -Force\nGet-ChildItem target/debug -File -ErrorAction SilentlyContinue | Remove-Item -Force"},
+      {"name": "Save Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "uses": "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-ui-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}}
     ],
     "permissions": {
       "contents": "read"
