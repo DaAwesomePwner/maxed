@@ -103,11 +103,16 @@ export function createHomeObservation({ pauseOnCaptureRecovery = false }: { paus
       if (!('local_identity_changed' in envelope.event)) return false;
       const identity = envelope.event.local_identity_changed;
       if (!identity.account_id || !identity.character_id) return false;
-      const switched = lastAccount !== null && lastAccount !== identity.account_id;
+      // The first verified event can already belong to B while the retained
+      // snapshot still belongs to A. Adopt it and pair its eventual notice too.
+      const adopted = lastAccount === null;
+      const switched = adopted
+        ? retained?.character != null && retained.character.id !== identity.character_id
+        : lastAccount !== identity.account_id;
       if (switched) {
         if (retained?.character?.id !== identity.character_id) this.accountSwitched();
-        awaitingNotice = !awaitingIdentity;
       }
+      if (switched || adopted) awaitingNotice = !awaitingIdentity;
       awaitingIdentity = false;
       lastAccount = identity.account_id;
       return switched;
