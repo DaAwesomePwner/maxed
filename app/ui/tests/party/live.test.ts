@@ -600,3 +600,25 @@ it.each(['auto', 'default'] as const)('describes an unpicked %s preset absent fr
   await fireEvent.change(select, { target: { value: 'synth-missing' } });
   expect(page.queries.setPartyPresetPick).toHaveBeenCalledWith('synth-missing');
 });
+
+it.each([
+  { is_local: true, expected: '—' },
+  { is_local: true, maxed_gated: false, expected: '—' },
+  { is_local: true, maxed_gated: true, expected: '8/8' },
+  { is_local: false, expected: '8/8' },
+])('gates the side panel last-profile count with provenance %j', async ({ expected, ...evidence }) => {
+  const detail: PartyPlayerView = {
+    row: { key: 'synthalpha', name: 'SynthAlpha', runs_together: 1, deaths: 0, left_early: 0, last_seen: '5000000' },
+    first_seen: '1000000', runs: [],
+    last_profile: { scope_id: 'synth-scope', player_id: 'SynthAlpha', object_id: 7, ...evidence,
+      maxed: 8, maxed_stats: [20], stats: [], equipment: [], first_seen: '1000000', last_seen: '5000000' },
+  };
+  await mount(view({ members: [member('SynthAlpha', 'pass', { is_local: evidence.is_local })] }), false,
+    { getPartyPlayer: async () => ready(detail) });
+  await fireEvent.click(roster().getByText('SynthAlpha'));
+  await flush();
+  const panel = within(screen.getByRole('complementary', { name: 'Player details' }));
+  const lastGear = panel.getByText('Last gear').nextElementSibling!;
+  expect(lastGear.textContent).toMatch(new RegExp(` · ${expected}$`));
+  if (expected === '—') expect(lastGear.textContent).not.toContain('8/8');
+});

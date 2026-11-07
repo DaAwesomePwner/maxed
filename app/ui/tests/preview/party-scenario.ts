@@ -34,7 +34,7 @@ export function createPartyPreview(variant: 'default' | 'stress') {
       equipment: unseen ? [] : [index === 1 ? 204 : 200, 201, 202, index === 2 ? 205 : 203].map((item_type, slot) => ({
         slot, item_type, enchant: { state: 'recorded_empty', slots: 0, applied: 0, ids: [] },
       })),
-      is_local: index === 11, present: index !== 4 && index !== 5,
+      is_local: index === 11, ...(index === 11 ? { maxed_gated: true } : {}), present: index !== 4 && index !== 5,
       out_of_view_since: index === 4 ? at(8) : null, departed_at: index === 5 ? at(9) : null,
       damage: index >= 64 ? null : index === 6 ? 0 : [1, 7].includes(index) ? 30000 : 10000 + index * 250,
       share: index >= 64 ? null : index === 6 ? 0 : .02, boss_share: index >= 64 ? null : [1, 6, 7].includes(index) ? 0 : .025,

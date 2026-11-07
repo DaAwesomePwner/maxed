@@ -4,6 +4,7 @@
   import { objectVisual } from '../bridge/visual-index';
   import { formatStat } from '../styles/format';
   import { statTone } from '../shell/vitals';
+  import { effectiveMaxed, maxedClaimsSupported } from './maxed-evidence';
   import './players.css';
   let { profile, visuals, missingText = 'Not recorded for this run' }: { missingText?: string; profile: PlayerProfileView | null; visuals: HomeVisuals } = $props();
   const stats = [{ id: 0, boost: 46, label: 'HP' }, { id: 3, boost: 47, label: 'MP' },
@@ -16,12 +17,12 @@
   }));
 </script>
 <section class="player-card" aria-label="Stats">
-  <h3>Stats {#if profile}<span class="player-card-sub">{profile.maxed ?? '—'}/8 · boosts shown</span>{/if}</h3>
+  <h3>Stats {#if profile}<span class="player-card-sub">{effectiveMaxed(profile) ?? '—'}/8 · boosts shown</span>{/if}</h3>
   {#if profile === null}<p class="player-muted">{missingText}</p>
   {:else}
     <dl class="player-stats">
       {#each observed as stat}
-        <div data-stat-id={stat.id} data-tone={statTone(profile.maxed_stats?.includes(stat.id) ?? false, stat.boost)}><dt>{stat.label}</dt><dd>{formatStat(stat.value)}{#if stat.boost === null}<small class="player-muted" title="Boost not seen">—</small>{:else if stat.boost !== 0}<small class:player-danger={stat.boost < 0}>{stat.boost > 0 ? '+' : '−'}{formatStat(Math.abs(stat.boost))}</small>{/if}</dd></div>
+        <div data-stat-id={stat.id} data-tone={statTone(maxedClaimsSupported(profile) && (profile.maxed_stats?.includes(stat.id) ?? false), stat.boost)}><dt>{stat.label}</dt><dd>{formatStat(stat.value)}{#if stat.boost === null}<small class="player-muted" title="Boost not seen">—</small>{:else if stat.boost !== 0}<small class:player-danger={stat.boost < 0}>{stat.boost > 0 ? '+' : '−'}{formatStat(Math.abs(stat.boost))}</small>{/if}</dd></div>
       {/each}
     </dl>
     {#if observed.length < stats.length}<p class="player-muted">Stats not observed</p>{/if}
