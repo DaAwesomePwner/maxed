@@ -10,5 +10,8 @@
   onDestroy(preview.dispose);
 </script>
 
+{#if new URLSearchParams(location.search).get('variant') === 'accounts'}
+  <button type="button" onclick={preview.switchAccount}>Switch synthetic account</button>
+{/if}
 <Shell client={preview.client} preview features={{ ...productionFeatures, homeRedesign: mode.startsWith('home-v4-') }}
   resolveSpriteUrl={() => '/tests/preview/character.svg'} />

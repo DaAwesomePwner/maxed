@@ -198,3 +198,14 @@ is recorded.
   aggregation in saved history; Character uses only the current local observation
   and adds no account/history lookup. Object stat 114 remains out of scope in
   [#2](https://github.com/DaAwesomePwner/maxed/issues/2).
+
+## Current-account Home history
+
+- Unattributed legacy history remains stored but is excluded from Home totals,
+  records and bests; Home shows a short notice when this history exists.
+- Local recovery searches character numbers 0..=65,535. Some older history may
+  remain unmatched; a single known account does not establish ownership.
+- Real Windows account-switch rail acceptance is pending. Synthetic UI tests do
+  not establish live game or WebView2 behavior.
+- The “Runs list newest” 50 ms release gate fails on the development Mac at the
+  task base too; this is a pre-existing performance limitation.

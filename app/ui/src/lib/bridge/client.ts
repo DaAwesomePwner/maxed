@@ -1,3 +1,4 @@
+import type { AccountHistoryChanged } from '../bindings/AccountHistoryChanged';
 import type { CharacterCalculation } from '../bindings/CharacterCalculation';
 import type { CharacterCalculationRequest } from '../bindings/CharacterCalculationRequest';
 import type { StorageCommandOutcome } from '../bindings/StorageCommandOutcome';
@@ -200,6 +201,7 @@ export interface Commands {
 export interface PartyChangedNotice { scope_id: string | null }
 
 export interface Events {
+  'account-history-changed': AccountHistoryChanged;
   'storage-maintenance-changed': StorageMaintenanceChanged;
   'capture-status': CaptureStatus;
   'presentation-visible': boolean;
@@ -309,6 +311,7 @@ export function createClient(transport: Transport) {
     getHomeDungeonStreak: (request: HomeDungeonStreakRequest) => transport.invoke('get_home_dungeon_streak', { request }),
     getRunRecap: (request: RunRecapRequest) => transport.invoke('get_run_recap', { request }),
     getVisitRecap: (request: VisitRecapRequest) => transport.invoke('get_visit_recap', { request }),
+    onAccountHistoryChanged: (receive: (notice: AccountHistoryChanged) => void) => transport.listen('account-history-changed', receive),
     onSnapshot: (receive: (snapshot: LiveSnapshotUpdate) => void) => transport.listen('live-snapshot', receive),
     onPartyChanged: (receive: (notice: PartyChangedNotice) => void) => transport.listen('party-changed', receive),
     onEngineEvent: (receive: (event: EventEnvelope) => void, batch: (batch: EventBatch) => void) => transport.listen('engine-event', value => {

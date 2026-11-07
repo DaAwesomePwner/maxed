@@ -366,3 +366,15 @@ enchants differ. Base VIT, base MP recovery, pets, consumables, ability costs,
 combat-state changes and suppression/healing effects are excluded. Exclusions
 remain visible without hover or debug. Exalt damage always reads unavailable,
 deferred pending verification, with no multiplier value.
+
+## Account changes
+
+Home follows the current account without a selector. The privacy-safe
+`account-history-changed` revision resets only account-dependent read owners:
+summary, scoped loot, dungeon bests/PB baseline, HUD, streak, dungeon profile and
+boss baselines. Disposal rejects late replies, including Superseded reads, before
+new owners refetch. Unrelated visual and navigation state stays mounted.
+Confirmed account switches clear the rail's retained character; map-change
+loss/provisional identities retain the existing recovery policy.
+`HomeSummary.unattributed_history` shows one short Home notice, dismissible for
+the shell session. False or absent values show nothing.

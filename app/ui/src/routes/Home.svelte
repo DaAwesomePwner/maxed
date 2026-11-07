@@ -28,6 +28,7 @@
   import { initialHomeMode, createHomeObservation } from '../lib/home/mode';
   import { homeScope, localDayRange, type ScopeChoice } from '../lib/home/scope';
   import type { HomeHistoryState } from '../lib/home/summary';
+  import AttributionNotice from '../lib/home/AttributionNotice.svelte';
   import NexusHome from '../lib/home/NexusHome.svelte';
   import { createNexusHistory, type LootHistoryState } from '../lib/home/v3/nexus-history';
   import type { ScopeLootPage } from '../lib/bindings/ScopeLootPage';
@@ -75,6 +76,22 @@
     const release = observePresentationVisibility(presentation.setActive);
     return () => { release(); presentation.setActive(false); };
   });
+  let accountRevision = $state(0);
+  $effect(() => {
+    const owner = client;
+    if (!owner) return;
+    let active = true;
+    const release = owner.onAccountHistoryChanged(() => {
+      if (!active) return;
+      // Dispose synchronously: an already queued A reply cannot publish into B.
+      controller?.dispose(); bestsController?.dispose(); homeReads?.dispose(); v4Reads?.dispose(); recapReads?.dispose();
+      history = { phase: 'loading', summary: null, message: '', retryAvailable: false };
+      scopeLoot = null; dungeonBests = null; v4State = null; baseline = null; recapLoad = null;
+      endedStreaks.reset();
+      accountRevision++;
+    });
+    return () => { active = false; void release.then(stop => stop()); };
+  });
   let mode = $state(initialHomeMode());
   const screen = $derived(redesign ? homeScreen(mode, recap, $recapPresentation.open) : mode.mode);
   let captureState = $derived((capture ?? snapshot?.capture)?.state);
@@ -96,6 +113,7 @@
     errors: { hud: false, streak: false, profile: false, usual: false } };
   let v4Reads = $state.raw<ReturnType<typeof createHomeV4Reads> | null>(null);
   let v4Owner: Client | undefined;
+  let v4Revision = -1;
   const v4Client = $derived(redesign ? client : undefined);
   let recapLoad = $state.raw<RecapLoad | null>(null);
   const savedRunRecap = $derived(recapLoad?.status === 'saved' && recapLoad.data.kind === 'run'
@@ -114,10 +132,12 @@
     && snapshot.character.id === savedVisitRecap.characterId ? snapshot.character : null);
   let recapReads = $state.raw<ReturnType<typeof createRecapReads> | null>(null);
   let recapOwner: Client | undefined;
+  let recapRevision = -1;
   $effect(() => {
-    const owner = v4Client;
+    const owner = v4Client, revision = accountRevision;
     untrack(() => {
-      if (owner === recapOwner) return;
+      if (owner === recapOwner && revision === recapRevision) return;
+      recapRevision = revision;
       recapReads?.dispose(); recapOwner = owner; recapLoad = null;
       recapReads = owner ? createRecapReads(owner, next => { recapLoad = next; }) : null;
     });
@@ -129,9 +149,10 @@
   });
   onDestroy(() => recapReads?.dispose());
   $effect(() => {
-    const owner = v4Client;
+    const owner = v4Client, revision = accountRevision;
     untrack(() => {
-      if (owner === v4Owner) return;
+      if (owner === v4Owner && revision === v4Revision) return;
+      v4Revision = revision;
       v4Reads?.dispose();
       v4Owner = owner;
       v4State = null;
@@ -326,10 +347,12 @@
   let bestsController = $state.raw<ReturnType<typeof createDungeonBests> | null>(null);
   let homeReads = $state.raw<ReturnType<typeof createHomeReads> | null>(null);
   let historyOwner: Client | undefined;
+  let historyRevision = -1;
   $effect(() => {
-    const owner = client;
+    const owner = client, revision = accountRevision;
     untrack(() => {
-      if (owner === historyOwner) return;
+      if (owner === historyOwner && revision === historyRevision) return;
+      historyRevision = revision;
       bestsController?.dispose(); homeReads?.dispose();
       historyOwner = owner;
       dungeonBests = null;
@@ -489,6 +512,7 @@
   });
 </script>
 <div class="home" class:home-v4={redesign} data-home={redesign ? 'v4' : 'v3'} bind:this={region} onfocusin={rememberFocus} onfocusout={releaseFocus}>
+  <AttributionNotice session={connection ?? client} visible={history.summary?.unattributed_history === true} />
 {#if redesign}
   <SessionHud hud={v4State?.errors.hud ? null : v4State?.hud ?? null} sessionStarted={snapshot?.session?.started ?? null} nowMs={hudNowMs}
     sessionEnded={snapshot?.session?.ended ?? null}
