@@ -5,7 +5,7 @@
   "concurrency": { "group": "release-${{ github.ref }}", "cancel-in-progress": false },
   "jobs": {
     "prior-tests": {
-      "if": "github.repository == 'daplabs/maxed' && github.ref_type == 'tag'",
+      "if": "github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag'",
       "runs-on": "ubuntu-latest",
       "permissions": {
         "actions": "read"
@@ -15,11 +15,11 @@
         "tested": "${{ steps.lookup.outputs.tested }}"
       },
       "steps": [
-        {"name": "Find prior tests", "id": "lookup", "shell": "pwsh", "env": {"GH_TOKEN": "${{ github.token }}"}, "run": "$tested = 'false'\ntry {\n  for ($page = 1; $page -le 10; $page++) {\n    $response = Invoke-RestMethod -Uri \"$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/workflows/tests.yml/runs?head_sha=$env:GITHUB_SHA&per_page=100&page=$page\" -Headers @{ Authorization = \"Bearer $env:GH_TOKEN\"; Accept = 'application/vnd.github+json' } -ErrorAction Stop\n    $match = @($response.workflow_runs | Where-Object { $_.path -ceq '.github/workflows/tests.yml' -and $_.head_repository.full_name -ceq 'daplabs/maxed' -and $_.head_sha -ceq $env:GITHUB_SHA -and $_.head_branch -ceq 'main' -and $_.event -cin @('push', 'schedule', 'workflow_dispatch') -and $_.status -ceq 'completed' -and $_.conclusion -ceq 'success' })\n    if ($match.Count) { \"Reused tests: $($match[0].html_url)\" >> $env:GITHUB_STEP_SUMMARY; $tested = 'true'; break }\n    if (@($response.workflow_runs).Count -lt 100) { break }\n  }\n} catch { Write-Warning 'Prior tests lookup failed; running tests.'; $tested = 'false' }\n\"tested=$tested\" >> $env:GITHUB_OUTPUT"}
+        {"name": "Find prior tests", "id": "lookup", "shell": "pwsh", "env": {"GH_TOKEN": "${{ github.token }}"}, "run": "$tested = 'false'\ntry {\n  for ($page = 1; $page -le 10; $page++) {\n    $response = Invoke-RestMethod -Uri \"$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/workflows/tests.yml/runs?head_sha=$env:GITHUB_SHA&per_page=100&page=$page\" -Headers @{ Authorization = \"Bearer $env:GH_TOKEN\"; Accept = 'application/vnd.github+json' } -ErrorAction Stop\n    $match = @($response.workflow_runs | Where-Object { $_.path -ceq '.github/workflows/tests.yml' -and $_.head_repository.full_name -ceq 'DaAwesomePwner/maxed' -and $_.head_sha -ceq $env:GITHUB_SHA -and $_.head_branch -ceq 'main' -and $_.event -cin @('push', 'schedule', 'workflow_dispatch') -and $_.status -ceq 'completed' -and $_.conclusion -ceq 'success' })\n    if ($match.Count) { \"Reused tests: $($match[0].html_url)\" >> $env:GITHUB_STEP_SUMMARY; $tested = 'true'; break }\n    if (@($response.workflow_runs).Count -lt 100) { break }\n  }\n} catch { Write-Warning 'Prior tests lookup failed; running tests.'; $tested = 'false' }\n\"tested=$tested\" >> $env:GITHUB_OUTPUT"}
       ]
     },
     "tests": {
-      "if": "github.repository == 'daplabs/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && needs.prior-tests.outputs.tested != 'true'",
+      "if": "github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && needs.prior-tests.outputs.tested != 'true'",
       "uses": "./.github/workflows/tests.yml",
       "with": {
         "release": true
@@ -30,7 +30,7 @@
     },
     "package": {
       "needs": ["prior-tests", "tests"],
-      "if": "!cancelled() && github.repository == 'daplabs/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && ((needs.prior-tests.outputs.tested == 'true' && needs.tests.result == 'skipped') || needs.tests.result == 'success')",
+      "if": "!cancelled() && github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && ((needs.prior-tests.outputs.tested == 'true' && needs.tests.result == 'skipped') || needs.tests.result == 'success')",
       "runs-on": "windows-2022",
       "environment": "release-signing",
       "timeout-minutes": 45,
@@ -39,15 +39,15 @@
         { "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": { "persist-credentials": false } },
         { "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": { "node-version": "22.16.0" } },
         { "name": "Restore locked tools", "run": "rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }" },
-        { "name": "Validate tag and signing configuration", "env": { "RELEASE_TAG": "${{ github.ref_name }}" }, "run": "$v = $env:RELEASE_TAG.Substring(1)\n$c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }\n./scripts/release/Validate-Release.ps1 -Version $v -Channel $c -Repository 'daplabs/maxed' -Tag $env:RELEASE_TAG\n$config = Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json\nif ($config.bundle.createUpdaterArtifacts -cne $true -or [string]::IsNullOrWhiteSpace($config.plugins.updater.pubkey)) { throw 'Signed production configuration is required.' }\nif (-not (Test-Path docs/release/distribution-inventory.json -PathType Leaf)) { throw 'B2 approved distribution inventory is required.' }\nif ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'Windows x64 required.' }" },
+        { "name": "Validate tag and signing configuration", "env": { "RELEASE_TAG": "${{ github.ref_name }}" }, "run": "$v = $env:RELEASE_TAG.Substring(1)\n$c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }\n./scripts/release/Validate-Release.ps1 -Version $v -Channel $c -Repository 'DaAwesomePwner/maxed' -Tag $env:RELEASE_TAG\n$config = Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json\nif ($config.bundle.createUpdaterArtifacts -cne $true -or [string]::IsNullOrWhiteSpace($config.plugins.updater.pubkey)) { throw 'Signed production configuration is required.' }\nif (-not (Test-Path docs/release/distribution-inventory.json -PathType Leaf)) { throw 'B2 approved distribution inventory is required.' }\nif ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'Windows x64 required.' }" },
         { "name": "Package and sign", "env": { "TAURI_SIGNING_PRIVATE_KEY": "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD": "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" }, "run": "if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw 'Signing key is required.' }\n./scripts/build-release.ps1 -Package -Offline" },
-        { "name": "Verify and stage allowlist", "env": { "RELEASE_TAG": "${{ github.ref_name }}" }, "run": "$v = $env:RELEASE_TAG.Substring(1)\n$c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }\n$m = cargo metadata --offline --no-deps --format-version 1 | ConvertFrom-Json\nif ($LASTEXITCODE) { throw 'Cargo metadata failed.' }\n$i = Join-Path $m.target_directory \"release/bundle/nsis/Maxed_${v}_x64-setup.exe\"\n./scripts/release/New-ReleaseMetadata.ps1 -Version $v -Channel $c -Repository 'daplabs/maxed' -Installer $i -Signature ($i + '.sig') -OutputDir release-stage -LicenseInventory docs/release/distribution-inventory.json\nif (-not (Test-Path tests/packaging/audit-bundle.ps1 -PathType Leaf)) { throw 'C3 resource audit is required before upload.' }\n./tests/packaging/audit-bundle.ps1 -Installer $i -ExpectedManifest release-stage/release-manifest.json -OutputDir release-audit" },
+        { "name": "Verify and stage allowlist", "env": { "RELEASE_TAG": "${{ github.ref_name }}" }, "run": "$v = $env:RELEASE_TAG.Substring(1)\n$c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }\n$m = cargo metadata --offline --no-deps --format-version 1 | ConvertFrom-Json\nif ($LASTEXITCODE) { throw 'Cargo metadata failed.' }\n$i = Join-Path $m.target_directory \"release/bundle/nsis/Maxed_${v}_x64-setup.exe\"\n./scripts/release/New-ReleaseMetadata.ps1 -Version $v -Channel $c -Repository 'DaAwesomePwner/maxed' -Installer $i -Signature ($i + '.sig') -OutputDir release-stage -LicenseInventory docs/release/distribution-inventory.json\nif (-not (Test-Path tests/packaging/audit-bundle.ps1 -PathType Leaf)) { throw 'C3 resource audit is required before upload.' }\n./tests/packaging/audit-bundle.ps1 -Installer $i -ExpectedManifest release-stage/release-manifest.json -OutputDir release-audit" },
         { "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9", "with": { "name": "maxed-${{ github.ref_name }}-windows-x64", "path": "release-stage/", "if-no-files-found": "error", "retention-days": 14, "include-hidden-files": false } }
       ]
     },
     "publish": {
       "needs": ["package"],
-      "if": "!cancelled() && needs.package.result == 'success' && github.repository == 'daplabs/maxed' && github.ref_type == 'tag'",
+      "if": "!cancelled() && needs.package.result == 'success' && github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag'",
       "runs-on": "windows-2022",
       "environment": "release-publish",
       "concurrency": { "group": "release-publish", "cancel-in-progress": false },
@@ -57,7 +57,7 @@
       "steps": [
         { "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": { "persist-credentials": false } },
         { "uses": "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333", "with": { "name": "maxed-${{ github.ref_name }}-windows-x64", "path": "release-stage/" } },
-        { "name": "Publish and promote", "env": { "GH_TOKEN": "${{ github.token }}", "RELEASE_TAG": "${{ github.ref_name }}" }, "run": "$v = $env:RELEASE_TAG.Substring(1)\n$c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }\n./scripts/release/Publish-Release.ps1 -Version $v -Channel $c -Repository 'daplabs/maxed' -StageDir release-stage -BackupDir release-backup" },
+        { "name": "Publish and promote", "env": { "GH_TOKEN": "${{ github.token }}", "RELEASE_TAG": "${{ github.ref_name }}" }, "run": "$v = $env:RELEASE_TAG.Substring(1)\n$c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }\n./scripts/release/Publish-Release.ps1 -Version $v -Channel $c -Repository 'DaAwesomePwner/maxed' -StageDir release-stage -BackupDir release-backup" },
         { "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9", "if": "always()", "with": { "name": "release-backup-${{ github.ref_name }}-${{ github.run_attempt }}", "path": "release-backup/", "if-no-files-found": "ignore", "retention-days": 30 } }
       ]
     }

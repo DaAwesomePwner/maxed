@@ -194,7 +194,7 @@ $script:expectedJobs = @'
 '@ | ConvertFrom-Json
 $script:expectedPrior = @'
 {
-  "if": "github.repository == 'daplabs/maxed' && github.ref_type == 'tag'",
+  "if": "github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag'",
   "runs-on": "ubuntu-latest",
   "permissions": {
     "actions": "read"
@@ -204,24 +204,24 @@ $script:expectedPrior = @'
     "tested": "${{ steps.lookup.outputs.tested }}"
   },
   "steps": [
-    {"name": "Find prior tests", "id": "lookup", "shell": "pwsh", "env": {"GH_TOKEN": "${{ github.token }}"}, "run": "$tested = 'false'\ntry {\n  for ($page = 1; $page -le 10; $page++) {\n    $response = Invoke-RestMethod -Uri \"$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/workflows/tests.yml/runs?head_sha=$env:GITHUB_SHA&per_page=100&page=$page\" -Headers @{ Authorization = \"Bearer $env:GH_TOKEN\"; Accept = 'application/vnd.github+json' } -ErrorAction Stop\n    $match = @($response.workflow_runs | Where-Object { $_.path -ceq '.github/workflows/tests.yml' -and $_.head_repository.full_name -ceq 'daplabs/maxed' -and $_.head_sha -ceq $env:GITHUB_SHA -and $_.head_branch -ceq 'main' -and $_.event -cin @('push', 'schedule', 'workflow_dispatch') -and $_.status -ceq 'completed' -and $_.conclusion -ceq 'success' })\n    if ($match.Count) { \"Reused tests: $($match[0].html_url)\" >> $env:GITHUB_STEP_SUMMARY; $tested = 'true'; break }\n    if (@($response.workflow_runs).Count -lt 100) { break }\n  }\n} catch { Write-Warning 'Prior tests lookup failed; running tests.'; $tested = 'false' }\n\"tested=$tested\" >> $env:GITHUB_OUTPUT"}
+    {"name": "Find prior tests", "id": "lookup", "shell": "pwsh", "env": {"GH_TOKEN": "${{ github.token }}"}, "run": "$tested = 'false'\ntry {\n  for ($page = 1; $page -le 10; $page++) {\n    $response = Invoke-RestMethod -Uri \"$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/workflows/tests.yml/runs?head_sha=$env:GITHUB_SHA&per_page=100&page=$page\" -Headers @{ Authorization = \"Bearer $env:GH_TOKEN\"; Accept = 'application/vnd.github+json' } -ErrorAction Stop\n    $match = @($response.workflow_runs | Where-Object { $_.path -ceq '.github/workflows/tests.yml' -and $_.head_repository.full_name -ceq 'DaAwesomePwner/maxed' -and $_.head_sha -ceq $env:GITHUB_SHA -and $_.head_branch -ceq 'main' -and $_.event -cin @('push', 'schedule', 'workflow_dispatch') -and $_.status -ceq 'completed' -and $_.conclusion -ceq 'success' })\n    if ($match.Count) { \"Reused tests: $($match[0].html_url)\" >> $env:GITHUB_STEP_SUMMARY; $tested = 'true'; break }\n    if (@($response.workflow_runs).Count -lt 100) { break }\n  }\n} catch { Write-Warning 'Prior tests lookup failed; running tests.'; $tested = 'false' }\n\"tested=$tested\" >> $env:GITHUB_OUTPUT"}
   ]
 }
 '@ | ConvertFrom-Json
-$script:testsGate = "github.repository == 'daplabs/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && needs.prior-tests.outputs.tested != 'true'"
-$script:packageGate = "!cancelled() && github.repository == 'daplabs/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && ((needs.prior-tests.outputs.tested == 'true' && needs.tests.result == 'skipped') || needs.tests.result == 'success')"
+$script:testsGate = "github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && needs.prior-tests.outputs.tested != 'true'"
+$script:packageGate = "!cancelled() && github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && ((needs.prior-tests.outputs.tested == 'true' && needs.tests.result == 'skipped') || needs.tests.result == 'success')"
 function Failures($release, $manual, $codeql) {
     $publish = $release.jobs.publish
     if ((Keys $publish) -cne 'concurrency,defaults,environment,if,needs,permissions,runs-on,steps,timeout-minutes') { 'publish_shape' }
     $publishCommand = @'
 $v = $env:RELEASE_TAG.Substring(1)
 $c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }
-./scripts/release/Publish-Release.ps1 -Version $v -Channel $c -Repository 'daplabs/maxed' -StageDir release-stage -BackupDir release-backup
+./scripts/release/Publish-Release.ps1 -Version $v -Channel $c -Repository 'DaAwesomePwner/maxed' -StageDir release-stage -BackupDir release-backup
 '@
     if ($publish.steps[2].run -cne $publishCommand) { 'publish_command' }
     if ($publish.environment -cne 'release-publish' -or $publish.concurrency.group -cne 'release-publish' -or
         $publish.concurrency.'cancel-in-progress' -cne $false -or (@($publish.needs) -join ',') -cne 'package' -or
-        $publish.if -cne "!cancelled() && needs.package.result == 'success' && github.repository == 'daplabs/maxed' && github.ref_type == 'tag'") { 'publish_gate' }
+        $publish.if -cne "!cancelled() && needs.package.result == 'success' && github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag'") { 'publish_gate' }
     foreach ($leaf in @(Leaves $publish 'publish')) {
         if (HasSecretExpression $leaf.Value) { 'secret_scope' }
         foreach ($expression in @(Expressions $leaf.Value)) {
@@ -472,7 +472,7 @@ if ($LASTEXITCODE) { throw 'GUI smoke cleanup failed.' }
 $pin = [regex]::Match((Get-Content "$root/app/src-tauri/src/updater/mod.rs" -Raw), 'pub const REPOSITORY: &str = "([^"]+)";')
 if (-not $pin.Success) { throw 'Updater repository constant not found.' }
 $script:updaterRepository = $pin.Groups[1].Value
-Assert ($script:updaterRepository -ceq 'daplabs/maxed') 'updater pins the public source repository'
+Assert ($script:updaterRepository -ceq 'DaAwesomePwner/maxed') 'updater pins the public source repository'
 $codeqlText = Get-Content "$root/.github/workflows/codeql.yml" -Raw
 $c = $codeqlText | ConvertFrom-Json
 $releaseText = Get-Content "$root/.github/workflows/release.yml" -Raw
@@ -569,8 +569,8 @@ foreach ($case in @(
     @{ want = 'release_tests'; mutate = { param($r,$m) $r.jobs.tests.with.release = $false } },
     @{ want = 'release_tests'; mutate = { param($r,$m) $r.jobs.tests | Add-Member secrets 'inherit' } },
     @{ want = 'release_tests'; mutate = { param($r,$m) $r.jobs.tests.uses = './.github/workflows/other.yml' } },
-    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'daplabs/maxed-rotmg' && github.ref_type == 'tag'" } },
-    @{ want = 'release_tests'; mutate = { param($r,$m) $r.jobs.tests.if = "github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag'" } },
+    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'DaAwesomePwner/maxed-rotmg' && github.ref_type == 'tag'" } },
+    @{ want = 'release_tests'; mutate = { param($r,$m) $r.jobs.tests.if = "github.repository == 'other-owner/maxed' && github.ref_type == 'tag'" } },
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = 'always()' } },
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = $r.jobs.package.if.Replace('!cancelled()', 'always()') } },
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = 'failure() && ' + $r.jobs.package.if } },
@@ -605,11 +605,11 @@ foreach ($case in @(
     @{ want = 'validation_order'; mutate = { param($r,$m) $s = $r.jobs.package.steps; $old = $s[3]; $s[3] = $s[4]; $s[4] = $old } },
     @{ want = 'validation_order'; mutate = { param($r,$m) $r.jobs.package.steps[3].name = 'Missing validation' } },
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.ref_type == 'tag'" } },
-    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag'" } },
-    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'daplabs/maxed'" } },
-    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'daplabs/maxed' || github.ref_type == 'tag'" } },
-    @{ want = 'distribution_repository'; mutate = { param($r,$m) $s = $r.jobs.package.steps | Where-Object name -EQ 'Verify and stage allowlist'; $s.run = $s.run.Replace("-Repository '$script:updaterRepository'", "-Repository 'DaAwesomePwner/maxed'") } },
-    @{ want = 'distribution_repository'; mutate = { param($r,$m) $s = $r.jobs.package.steps | Where-Object name -EQ 'Verify and stage allowlist'; $s.run = $s.run.Replace("-Repository '$script:updaterRepository'", "-Repository 'daplabs/maxed-rotmg'") } },
+    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'other-owner/maxed' && github.ref_type == 'tag'" } },
+    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'DaAwesomePwner/maxed'" } },
+    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'DaAwesomePwner/maxed' || github.ref_type == 'tag'" } },
+    @{ want = 'distribution_repository'; mutate = { param($r,$m) $s = $r.jobs.package.steps | Where-Object name -EQ 'Verify and stage allowlist'; $s.run = $s.run.Replace("-Repository '$script:updaterRepository'", "-Repository 'other-owner/maxed'") } },
+    @{ want = 'distribution_repository'; mutate = { param($r,$m) $s = $r.jobs.package.steps | Where-Object name -EQ 'Verify and stage allowlist'; $s.run = $s.run.Replace("-Repository '$script:updaterRepository'", "-Repository 'DaAwesomePwner/maxed-rotmg'") } },
     @{ want = 'distribution_repository'; mutate = { param($r,$m) $s = $r.jobs.package.steps | Where-Object name -EQ 'Validate tag and signing configuration'; $s.run = $s.run.Replace("-Repository '$script:updaterRepository'", '-Repository $env:GITHUB_REPOSITORY') } },
     @{ want = 'signing_step'; mutate = { param($r,$m) ($r.jobs.package.steps | Where-Object name -EQ 'Package and sign').env.TAURI_SIGNING_PRIVATE_KEY = '' } },
     @{ want = 'action_pin'; mutate = { param($r,$m) $r.jobs.package.steps[0].uses = 'actions/checkout@main' } },

@@ -26,7 +26,7 @@ The earlier research used three private captures decoded at `72475aa` on 2026-10
 
 ## Stat 114: owner object reference (2026-11-06)
 
-Reproduced for [issue #2](https://github.com/daplabs/maxed/issues/2) by running
+Reproduced for [issue #2](https://github.com/DaAwesomePwner/maxed/issues/2) by running
 `maxed-cli decode <fixture.pcap> --output recordings/<private.jsonl>` on the three
 committed scrubbed fixtures below. Count every stat 114 in UPDATE `newObjects`
 and NEWTICK `status`, including repeated observations. Canonical JSONL omits

@@ -11,7 +11,7 @@ including exact Windows prompt text, must be recorded in the [release checklist]
 
 ## Check the download
 
-Use a versioned installer from [Maxed releases](https://github.com/daplabs/maxed/releases). See the [update guide](UPDATES.md) for release and channel policy.
+Use a versioned installer from [Maxed releases](https://github.com/DaAwesomePwner/maxed/releases). See the [update guide](UPDATES.md) for release and channel policy.
 Public downloads are not ready until maintainers complete the public-release gates.
 Check the repository origin and release version, then compare the installer name,
 byte count and SHA-256 with that release's `release-manifest.json` before running it.

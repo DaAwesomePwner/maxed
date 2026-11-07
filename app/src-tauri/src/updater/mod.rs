@@ -12,7 +12,7 @@ use std::{collections::BTreeMap, path::Path, process::Child};
 use transport::{fetch, Https};
 
 // Build-time coordinate; runtime input cannot replace it.
-pub const REPOSITORY: &str = "daplabs/maxed";
+pub const REPOSITORY: &str = "DaAwesomePwner/maxed";
 pub const TARGET: &str = "windows-x86_64-nsis";
 pub const FEED_LIMIT: usize = 65_536;
 pub const ARTIFACT_LIMIT: usize = 20_000_000;
