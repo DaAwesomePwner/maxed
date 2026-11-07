@@ -502,9 +502,11 @@ fn repeat_ordinal_uses_visits_and_defaults_when_missing_or_capped() {
         ),
         (1, None)
     );
+    t.db.execute_batch("BEGIN").unwrap();
     for i in 0..2000 {
         t.visit(&format!("hub-{i}"), None, "nexus", 100 + i);
     }
+    t.db.execute_batch("COMMIT").unwrap();
     t.run("capped", 3000, Some("cleared"), 10);
     t.visit("capped", Some("capped"), "dungeon", 3000);
     assert_eq!(

@@ -105,6 +105,9 @@ const SCRIPTS: [(&str, &str); 16] = [
 pub fn install(db: &Connection, version: usize) {
     assert!((1..=SCRIPTS.len()).contains(&version));
     db.pragma_update(None, "foreign_keys", true).unwrap();
+    // Install in one transaction, as production migrations do. Autocommitting
+    // every statement syncs the disk once per statement, which is slow on CI.
+    db.execute_batch("BEGIN").unwrap();
     for (i, (script, checksum)) in SCRIPTS.iter().take(version).enumerate() {
         assert_eq!(hash(script), *checksum);
         db.execute_batch(script).unwrap();
@@ -116,6 +119,7 @@ pub fn install(db: &Connection, version: usize) {
     }
     db.pragma_update(None, "user_version", version as i64)
         .unwrap();
+    db.execute_batch("COMMIT").unwrap();
 }
 
 pub fn hash(text: &str) -> String {
