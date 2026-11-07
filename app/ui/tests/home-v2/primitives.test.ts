@@ -30,7 +30,7 @@ const buckets: DamageBucket[] = [
 const series: PlayerSeries = { player_id: 'self', object_id: 1, is_local: true, points: [10, 100, 25] };
 
 describe('bag_order_tier_null_and_revisions', () => {
-  it('orders supplied bag ranks, then tiers and IDs; a revision replaces rather than adds quantities', () => {
+  it('orders bag ranks, newest time and descending IDs; a revision replaces rather than adds quantities', () => {
     const original = bag('revision', 10, [15]);
     const revision = bag('revision', 255, [10, 10, 14]);
     revision.contents[0].quantity = 3;
@@ -39,11 +39,14 @@ describe('bag_order_tier_null_and_revisions', () => {
       bag('numeric-low', 255, [13]), bag('numeric-high', 255, [12]), bag('null-tier', 255, [14]), revision];
     const before = structuredClone(drops);
     const view = lootView(input(drops));
-    expect(view.drops.map(row => row.id)).toEqual(['revision', 'a', 'b', 'numeric-high', 'numeric-low', 'null-tier', 'unknown']);
+    expect(view.drops.map(row => row.id)).toEqual(['revision', 'numeric-low', 'numeric-high', 'null-tier', 'b', 'a', 'unknown']);
     expect(view).toMatchObject({ bagCount: 7, utCount: 5, stCount: 2, unclassifiedCount: 2,
-      bestUt: { drop: { id: 'revision' }, itemType: 10 }, bestSt: { drop: { id: 'a' }, itemType: 11 }, partial: true });
+      bestUt: { drop: { id: 'revision' }, itemType: 10 }, bestSt: { drop: { id: 'b' }, itemType: 11 }, partial: true });
     expect(lootItems(revision, visuals).map(row => [row.slot, row.quantity, row.takenAt])).toEqual([[0, 3, null], [1, 1, revision.at], [2, 1, null]]);
     expect(drops).toEqual(before);
+    const newer = drops.map(drop => drop.id === 'b' ? { ...drop, at: String(BigInt(revision.at) + 1n) } : drop);
+    expect(lootView(input(newer)).drops.map(row => row.id)).toEqual(
+      ['b', 'revision', 'numeric-low', 'numeric-high', 'null-tier', 'a', 'unknown']);
     const order = [10, 20, 30, 40, 50, 60, 70, 80, 90, 255];
     expect(lootView(input(order.map(rank => bag(String(rank), rank, [])))).drops.map(drop => drop.bag_rank)).toEqual(order.reverse());
   });
