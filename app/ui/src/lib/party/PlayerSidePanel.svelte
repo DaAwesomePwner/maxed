@@ -11,6 +11,7 @@
   import { routeHref } from '../navigation/routes';
   import { formatShare } from '../styles/format';
   import GearCard from '../players/GearCard.svelte';
+  import { effectiveMaxed } from '../players/maxed-evidence';
   import { timestampMs } from '../players/player-view';
   import { partyDate, whisperText } from './party-screen';
   let { member: suppliedMember, runId, client, visuals, resolveSpriteUrl, onChanged, onClose, fullRuns = false, refreshToken = 0 }: {
@@ -19,6 +20,7 @@
     fullRuns?: boolean; refreshToken?: number;
   } = $props();
   let detail = $state.raw<PartyPlayerView | null>(null);
+  let lastMaxed = $derived(effectiveMaxed(detail?.last_profile ?? null));
   let member = $derived<PartyMember>(fullRuns && detail ? { ...suppliedMember, name: detail.row.name,
     class_id: detail.last_profile?.class_id ?? detail.row.last_class_id, level: detail.last_profile?.level,
     stars: detail.last_profile?.stars, guild: detail.guild, maxed: detail.row.last_maxed, mark: detail.row.mark,
@@ -109,7 +111,7 @@
       <dt>Died in</dt><dd>{detail ? `${detail.row.deaths} of ${detail.row.runs_together}` : '—'}</dd>
       <dt>Left early in</dt><dd>{detail ? `${detail.row.left_early} of ${detail.row.runs_together}` : '—'}</dd>
       <dt>Avg damage share</dt><dd>{formatShare(detail?.row.avg_share ?? null)}</dd>
-      <dt>Last gear</dt><dd>{partyDate(detail?.last_profile?.last_seen)} · {detail?.last_profile?.maxed == null ? '—' : `${detail.last_profile.maxed}/8`}</dd>
+      <dt>Last gear</dt><dd>{partyDate(detail?.last_profile?.last_seen)} · {lastMaxed === null ? '—' : `${lastMaxed}/8`}</dd>
     </dl>
     {#if member.name && member.name_key}
       <div class="actions">
