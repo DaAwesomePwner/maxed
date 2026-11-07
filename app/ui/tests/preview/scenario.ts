@@ -604,9 +604,12 @@ export function createHomePreview(scene: PreviewMode) {
   let started = false, disposed = false, sequence = 0;
   // Recap scenes publish one final run-ended or realm-exit event after the live batch.
   const finalSequence = events.length + 1;
+  let accountRevision = 0;
+  if (variant === 'accounts') summary.unattributed_history = true;
   const transport: Transport = {
     ...fixture,
     async invoke(command, args) {
+      if (command === 'get_home_summary' && variant === 'accounts') return { status: 'ready', value: { ...summary, unattributed_history: true, runs: accountRevision ? 2 : summary.runs } };
       if (command === 'get_dungeon_bests') return { status: 'ready', value: [
         { dungeon: run.dungeon, best_clear_micros: 230_000_000 },
       ] };
@@ -667,7 +670,14 @@ export function createHomePreview(scene: PreviewMode) {
       return result;
     },
   };
-  return { client: createClient(transport), dispose() {
+  return { client: createClient(transport), switchAccount() {
+    const next = structuredClone(snapshot);
+    next.character = { ...character, id: 'synthetic-account-character-' + ++accountRevision, name: 'Synthetic Switch' };
+    fixture.publishAccountHistoryChanged({ revision: accountRevision, reason: 'account_switched' });
+    fixture.publishEngineEvent({ stream_id: stream, sequence: String(++sequence), at: snapshot.at,
+      event: { local_identity_changed: { at: snapshot.at, account_id: 'synthetic-account-' + accountRevision, character_id: next.character.id } } });
+    fixture.publishSnapshot({ ...next, sequence: String(sequence) });
+  }, dispose() {
     disposed = true; clearTimeout(timer); clearInterval(churnTimer); clearTimeout(recapTimer);
   } };
 }

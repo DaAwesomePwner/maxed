@@ -1,3 +1,4 @@
+import type { EventEnvelope } from '../bindings/EventEnvelope';
 import type { CaptureStatus } from '../bindings/CaptureStatus';
 import type { LiveSnapshot } from '../bindings/LiveSnapshot';
 import type { LiveState } from '../bridge/live';
@@ -45,9 +46,14 @@ export function createHomeObservation({ pauseOnCaptureRecovery = false }: { paus
   let retained: LiveSnapshot | null = null;
   let awaitingFresh: LiveSnapshot | null = null;
   let observed: LiveSnapshot | null = null;
-  return (next: LiveSnapshot | null, capture: CaptureStatus | null, state: LiveState | null, now: number) => {
+  let blockedCharacter: string | null = null;
+  let lastAccount: string | null = null;
+  let awaitingNotice = false;
+  let awaitingIdentity = false;
+  const observe = (next: LiveSnapshot | null, capture: CaptureStatus | null, state: LiveState | null, now: number) => {
     if (state?.phase === 'connecting' || (next && mode.streamId !== null && next.stream_id !== mode.streamId)) {
       mode = initialHomeMode(); retained = null; awaitingFresh = null; observed = null;
+      blockedCharacter = null; lastAccount = null; awaitingNotice = false; awaitingIdentity = false;
     }
     if (state?.phase === 'connecting') return { mode, retained, paused: false, delay: null };
     if (state?.phase === 'failed') {
@@ -55,6 +61,12 @@ export function createHomeObservation({ pauseOnCaptureRecovery = false }: { paus
         runId: next?.run?.id ?? null, uncertainSinceMs: null, stale: true };
       retained = null;
       return { mode, retained, paused: false, delay: null };
+    }
+    if (blockedCharacter !== null) {
+      if (!next?.character?.identity_verified || next.character.id === blockedCharacter) {
+        return { mode: initialHomeMode(), retained: null, paused: false, delay: null };
+      }
+      blockedCharacter = null;
     }
     const fresh = next !== null && next !== observed;
     const resyncing = state?.phase === 'resyncing';
@@ -78,4 +90,27 @@ export function createHomeObservation({ pauseOnCaptureRecovery = false }: { paus
     return { mode, retained, paused: paused && retained !== null, delay: mode.mode !== 'nexus' && mode.uncertainSinceMs !== null
       ? Math.max(1, RECOVERY_GRACE_MS - (now - mode.uncertainSinceMs)) : null };
   };
+  return Object.assign(observe, {
+    historyChanged() {
+      if (awaitingNotice) { awaitingNotice = false; return; }
+      this.accountSwitched(); awaitingIdentity = true;
+    },
+    accountSwitched() {
+      blockedCharacter = retained?.character?.id ?? observed?.character?.id ?? blockedCharacter;
+      retained = null; awaitingFresh = null;
+    },
+    onEvent(envelope: EventEnvelope) {
+      if (!('local_identity_changed' in envelope.event)) return false;
+      const identity = envelope.event.local_identity_changed;
+      if (!identity.account_id || !identity.character_id) return false;
+      const switched = lastAccount !== null && lastAccount !== identity.account_id;
+      if (switched) {
+        if (retained?.character?.id !== identity.character_id) this.accountSwitched();
+        awaitingNotice = !awaitingIdentity;
+      }
+      awaitingIdentity = false;
+      lastAccount = identity.account_id;
+      return switched;
+    },
+  });
 }

@@ -154,11 +154,26 @@
   let missingRow = $state(false);
   let observedStream: string | null = null;
   const observeRail = createHomeObservation({ pauseOnCaptureRecovery: true });
+  let accountRailRevision = $state(0);
+  $effect(() => {
+    const owner = client;
+    let active = true;
+    let revision: number | null = null;
+    const release = owner.onAccountHistoryChanged(notice => {
+      if (!active || revision === notice.revision) return;
+      revision = notice.revision;
+      if (notice.reason === 'account_switched') {
+        observeRail.historyChanged(); railSnapshot = null; accountRailRevision++;
+      }
+    });
+    return () => { active = false; void release.then(stop => stop()); };
+  });
   let railSnapshot = $state.raw<LiveSnapshot | null>(null);
   let railPaused = $state(false);
   let view = $derived(railView(railSnapshot, visuals, railPaused));
   $effect(() => {
     const next = snapshot, status = capture, state = liveState;
+    void accountRailRevision;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const update = () => untrack(() => {
       const observation = observeRail(next, status, state, performance.now());
@@ -391,6 +406,7 @@
       },
       store: (next) => { store = next; },
       event: (next) => {
+        if (observeRail.onEvent(next)) { railSnapshot = null; accountRailRevision++; }
         cache.observe(next);
         // Home applies ordered events within the same presentation transaction.
         // Consume every occurrence before Svelte batches the latest-event prop.

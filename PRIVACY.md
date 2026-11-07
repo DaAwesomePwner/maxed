@@ -194,3 +194,16 @@ observations. Installed-build acceptance remains in the release checklist.
 
 See [uninstall and manual data removal](docs/release/INSTALL.md#repair-reinstall-and-removal).
 Uninstall retention remains a release acceptance check, not a completed observation.
+
+## Current-account history
+
+Home groups history by a local pseudonymous account ID: an HMAC of the game's
+account value using the existing installation-local `identity.key`. The database
+keeps the last-confirmed current-account pointer across map changes and restarts.
+There is no account selector. Raw account strings and credentials are not stored
+by this grouping feature. The pseudonymous ID is never uploaded or logged.
+
+Legacy recovery recomputes candidate character IDs locally using the same key;
+it makes no network or account-service requests. Unmatched history stays stored,
+but is excluded from Home totals, records and bests with one short notice.
+The raw-traffic recording risks described above still apply.
