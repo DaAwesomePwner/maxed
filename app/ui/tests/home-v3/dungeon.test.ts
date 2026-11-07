@@ -251,7 +251,7 @@ it.each([false, true])('new ST bag row and its merged timeline marker animate on
   try {
     const snapshot = homeSnapshot(), seed = snapshot.drops[0];
     snapshot.at = '100000000'; snapshot.run!.started = '1000000';
-    snapshot.drops = [{ ...seed, id: 'old-ut', at: '50000000', contents_known: true,
+    snapshot.drops = [{ ...seed, id: 'old-ut', at: '50000000', bag_rank: 255, contents_known: true,
       items: [200], contents: [{ ...seed.contents[0], item_type: 200 }] }];
     const visuals = { ...emptyHomeVisuals(), objects: [
       { object_type: 200, name: 'UT item', sprite: null, bag: null, item_tier: 'UT' },
@@ -259,7 +259,7 @@ it.each([false, true])('new ST bag row and its merged timeline marker animate on
     ] };
     const page = render(DungeonHome, { snapshot, visuals, stale: false }); await tick(); await tick();
     const next = structuredClone(snapshot);
-    next.drops.push({ ...seed, id: 'new-st', at: '50000001', contents_known: true,
+    next.drops.push({ ...seed, id: 'new-st', at: '50000001', bag_rank: 90, contents_known: true,
       items: [201], contents: [{ ...seed.contents[0], item_type: 201 }] });
     await page.rerender({ snapshot: next, visuals, stale: false }); await tick(); await tick();
     if (reduced) expect(calls).toHaveLength(0);

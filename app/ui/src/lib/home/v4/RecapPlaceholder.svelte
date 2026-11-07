@@ -20,7 +20,7 @@
   const labels: Record<Outcome, string> = { cleared: 'Cleared', died: 'Died', left: 'Left early', unknown: 'Outcome not established' };
   const summary = $derived(recap.summary);
   const drop = $derived(summary.best?.drop);
-  const item = $derived(drop ? bestItem(drop, visuals) ?? summary.best?.item : null);
+  const item = $derived(drop ? bestItem(drop, visuals) : null);
   const bagVisual = $derived(objectVisual(visuals.objects, drop?.bag_type));
   const itemVisual = $derived(objectVisual(visuals.objects, item?.itemType));
 </script>

@@ -72,7 +72,7 @@ it('run_end_enters_recap', () => {
   const tracker = runRecap();
   expect(get(tracker)).toMatchObject({ source: { kind: 'run', streamId: live().stream_id, runId: live().run!.id },
     summary: { kind: 'run', title: 'Synthetic Sanctum', outcome: 'cleared', startedAt: '1000000', endedAt: '8000000',
-      localDps: 4321, rank: 2, players: 2, runId: live().run!.id, best: { drop: { id: live().drops[0].id } } } });
+      localDps: 4321, rank: 2, players: 2, runId: live().run!.id, best: { drop: { id: live().drops[0].id }, item: null } } });
 });
 
 it.each(['nexus', 'other_hub', 'unknown'] as const)('area_exit_to_%s_uses_the_last_live_window', area => {

@@ -1,3 +1,4 @@
+import { compareItems } from './ranking';
 import type { DropItem } from '../bindings/DropItem';
 import type { TimeRange } from '../bindings/TimeRange';
 import type { Timestamp } from '../bindings/Timestamp';
@@ -8,12 +9,8 @@ export function tierClass(tier: string | null | undefined): TierClass {
   return tier === 'UT' ? 'ut' : tier === 'ST' ? 'st' : '';
 }
 export function bestItem(items: DropItem[], tierOf: (type: number) => string | null): DropItem | null {
-  const rank = (item: DropItem) => {
-    const tier = tierOf(item.item_type);
-    return tier === 'UT' ? Infinity : tier === 'ST' ? Number.MAX_VALUE : tier && /^T\d+$/.test(tier) ? Number(tier.slice(1)) : -1;
-  };
-  return items.reduce<DropItem | null>((best, item) => !best || rank(item) > rank(best)
-    || (rank(item) === rank(best) && item.slot < best.slot) ? item : best, null);
+  const key = (item: DropItem) => ({ tier: tierOf(item.item_type), itemType: item.item_type, slot: item.slot });
+  return items.reduce<DropItem | null>((best, item) => !best || compareItems(key(item), key(best)) < 0 ? item : best, null);
 }
 const day = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 const key = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;

@@ -1,3 +1,4 @@
+import { rankedDrops } from './loot-rank-oracle';
 // Pre-Phase-2a implementation retained as a behavior oracle.
 import type { DropView } from '../../src/lib/bindings/DropView';
 import type { HomeVisuals } from '../../src/lib/home/visuals';
@@ -10,8 +11,6 @@ export interface LootItem extends ObservedLootItem {
   takenAt: string | null;
 }
 
-const compareId = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
-const rank = (drop: DropView) => drop.bag_rank ?? -1;
 function tierOrder(tier: string | null): [number, number] {
   if (tier === 'UT') return [3, 0];
   if (tier === 'ST') return [2, 0];
@@ -39,9 +38,7 @@ export function lootItems(drop: DropView, visuals: HomeVisuals): LootItem[] {
 export const lootView: LootViewProjector = input => {
   const unique = [...new Map(input.drops.map(drop => [drop.id, drop])).values()];
   const items = new Map(unique.map(drop => [drop.id, lootItems(drop, input.visuals)]));
-  const drops = unique.sort((a, b) => rank(b) - rank(a)
-    || compareTier(items.get(a.id)![0]?.tier ?? null, items.get(b.id)![0]?.tier ?? null)
-    || compareId(a.id, b.id));
+  const drops = rankedDrops(unique);
   const reasons = new Set(input.reasons);
   let partial = input.partial;
   const gap = (reason: string) => { partial = true; reasons.add(reason); };

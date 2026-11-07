@@ -248,3 +248,20 @@ it('placeholder_best_bag_names_are_read_once', () => {
   expect(labelled.filter(label => label !== '')).toHaveLength(labelled.length - 1);
   expect(labelled.at(-1)).toBe('');
 });
+
+it('defers the recap item with no visuals and uses the same pick as Home after loading', async () => {
+  const { bestItem } = await import('../../src/lib/home/v3/loot-rank');
+  const drop = { ...homeSnapshot().drops[0], contents_known: true, items: [101, 102], contents: [] };
+  const input = { ...props(), recap: { ...recap(), summary: { ...recap().summary, best: { drop, item: null } } } };
+  const page = render(RecapPlaceholder, input);
+  expect(bestItem(drop, input.visuals)).toBeNull();
+  expect(page.container.querySelectorAll('.recap-loot .bag img')).toHaveLength(0);
+  const visuals = { ...emptyHomeVisuals(), phase: 'ready' as const, objects: [
+    { object_type: 101, item_tier: null, name: 'Synthetic potion', sprite: null, bag: null },
+    { object_type: 102, item_tier: 'UT', name: 'Synthetic winner', sprite: null, bag: null },
+  ] };
+  await page.rerender({ visuals });
+  expect(bestItem(drop, visuals)?.itemType).toBe(102);
+  expect(page.container.querySelector('.recap-loot')?.textContent).toContain('Synthetic winner');
+  expect(page.container.querySelector('.recap-loot')?.textContent).not.toContain('Synthetic potion');
+});

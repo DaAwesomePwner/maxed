@@ -1,5 +1,6 @@
+import { compareItems, rankedDrops, tierOrder } from '../../loot/ranking';
 import { visualIndex } from '../../bridge/visual-index';
-import { freezeProjection, uniqueDrops } from '../drop-data';
+import { freezeProjection } from '../drop-data';
 import type { DropView } from '../../bindings/DropView';
 import type { HomeVisuals } from '../visuals';
 import { coverageLabels, reasonLabel } from '../evidence';
@@ -9,19 +10,6 @@ export interface LootItem extends ObservedLootItem {
   slot: number;
   quantity: number | null;
   takenAt: string | null;
-}
-
-const compareId = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
-const rank = (drop: DropView) => drop.bag_rank ?? -1;
-function tierOrder(tier: string | null): [number, number] {
-  if (tier === 'UT') return [3, 0];
-  if (tier === 'ST') return [2, 0];
-  const numeric = tier?.match(/^(?:T)?(\d+)$/);
-  return numeric && Number.isSafeInteger(Number(numeric[1])) ? [1, Number(numeric[1])] : [0, 0];
-}
-function compareTier(a: string | null, b: string | null): number {
-  const left = tierOrder(a), right = tierOrder(b);
-  return right[0] - left[0] || right[1] - left[1];
 }
 
 const itemCache = new WeakMap<DropView, WeakMap<HomeVisuals, LootItem[]>>();
@@ -38,11 +26,7 @@ export function lootItems(drop: DropView, visuals: HomeVisuals): LootItem[] {
   })) : drop.contents_known ? drop.items.map((itemType, slot) => ({
     drop, itemType, tier: tiers.get(itemType) ?? null, slot, quantity: null, takenAt: null, enchant: null,
   })) : [];
-  const keys = new Map(rows.map(row => [row, tierOrder(row.tier)]));
-  rows.sort((a, b) => {
-    const left = keys.get(a)!, right = keys.get(b)!;
-    return right[0] - left[0] || right[1] - left[1] || a.itemType - b.itemType || a.slot - b.slot;
-  });
+  rows.sort(compareItems);
   if (!cache) { cache = new WeakMap(); itemCache.set(drop, cache); }
   if (import.meta.env.DEV) for (const row of rows) freezeProjection(row);
   freezeProjection(rows);
@@ -67,11 +51,8 @@ export const lootView: LootViewProjector = input => {
   return { ...evidence, partial: input.partial || evidence.partial, reasons: [...reasons] };
 };
 const projectLoot: LootViewProjector = input => {
-  const unique = uniqueDrops(input.drops);
-  const items = new Map(unique.map(drop => [drop.id, lootItems(drop, input.visuals)]));
-  const drops = [...unique].sort((a, b) => rank(b) - rank(a)
-    || compareTier(items.get(a.id)![0]?.tier ?? null, items.get(b.id)![0]?.tier ?? null)
-    || compareId(a.id, b.id));
+  const drops = rankedDrops(input.drops);
+  const items = new Map(drops.map(drop => [drop.id, lootItems(drop, input.visuals)]));
   const reasons = new Set(input.reasons);
   let partial = input.partial;
   const gap = (reason: string) => { partial = true; reasons.add(reason); };

@@ -164,7 +164,7 @@ it('renders explicit zero tallies and labelled missing art without fabricated va
   expect(tally.container.querySelectorAll('dd')).toHaveLength(4);
   expect(tally.container.textContent).toContain('Items');
   const drop = retainedBag();
-  const page = render(BestBagCard, { best: bestDrop([drop], emptyHomeVisuals()), visuals: emptyHomeVisuals(), resolveSpriteUrl: () => null, meta: '—' });
+  const page = render(BestBagCard, { best: bestDrop([drop], { ...emptyHomeVisuals(), phase: 'ready' }), visuals: { ...emptyHomeVisuals(), phase: 'ready' }, resolveSpriteUrl: () => null, meta: '—' });
   expect(screen.getByRole('img', { name: 'Item 444' })).toBeTruthy();
   expect(page.container.innerHTML).not.toMatch(/NaN|undefined/);
 });
