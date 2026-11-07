@@ -101,11 +101,21 @@ and release JSON inputs still trigger checks.
 Contents permission is read-only and tests use no secrets.
 The hosted Rust cache restores on eligible runs, prunes workspace artifacts and
 saves only after a passing non-PR run on `refs/heads/main`. No persistent machine
-paths are used.
+paths are used. Pull requests whose `Cargo.lock` or toolchain differs from main
+fall back to the newest cache with the same job prefix; main, schedule and
+dispatch runs restore exact keys only, so the caches they save never carry stale
+artifacts from an older lockfile.
 Five parallel jobs run: `rust-lint` (fmt and both clippy checks), `rust-test`
 (workspace tests excluding maxed-store, then bindings freshness), `store-test`
 (maxed-store tests), `ui` (all five UI scripts), and `packaging` (offline memory
 tooling and packaging/collector checks). Each Rust job has its own cache key.
+`store-test` runs as three matrix shards using `cargo nextest run --partition
+count:N/3`, because its SQLite integration suite dominates wall time. The job
+downloads a pinned `cargo-nextest` release and checks its SHA-256 before use.
+Shard 1 also runs the crate's doctests, which nextest does not run, and is the
+only shard that saves the cache. The store and workspace test steps point
+`TMP`/`TEMP` at `runner.temp`, which is on the runner's work disk (`D:`), so
+temporary SQLite databases avoid the slower OS disk.
 The `tests` aggregator on `ubuntu-latest` is the single required check for this
 workflow (alongside the separate `gui-smoke` check). Keep its job ID `tests` and
 leave its name absent: GitHub uses the job name, falling back to its ID, as the
