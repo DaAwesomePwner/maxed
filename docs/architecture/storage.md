@@ -354,7 +354,8 @@ acquisition, and reopen. Character updates and legacy recovery do not change it.
 Conflicting character reassignment keeps the original membership. A conflicting
 verified acquisition opens an unknown span (both identity fields NULL), keeps the
 current pointer unchanged, and does not fail the writer. Cross-account merge still
-fails atomically. Stale character snapshots may fill NULL membership without
+fails atomically. A cross-account merge can only come from corrupt data and fails
+the batch into the writer's existing failed state. Stale character snapshots may fill NULL membership without
 replacing newer snapshot fields.
 
 `accounts::attach_legacy_characters` accepts batches of exact candidate IDs and
