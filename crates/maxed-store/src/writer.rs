@@ -75,6 +75,12 @@ struct Shared {
 }
 type Reply = Sender<Result<FlushReceipt, StoreError>>;
 enum Command {
+    AttachLegacy(
+        String,
+        Vec<String>,
+        Sender<Result<crate::accounts::AttachCounts, StoreError>>,
+    ),
+    RecoveryProgress(String, u16, Sender<Result<(), StoreError>>),
     Maintenance(Control, Sender<Result<ControlResult, StoreError>>),
     PartyMark(
         String,
@@ -432,6 +438,42 @@ impl StoreWriter {
         let (send, recv) = bounded(1);
         self.commands
             .send(Command::Chat(op, send))
+            .map_err(|_| self.worker_failed())?;
+        wait_response(recv, self.worker.as_ref().ok_or(StoreError::Closed)?)
+    }
+
+    /// Flush accepted events, then attach exact legacy IDs on the writer connection.
+    pub fn attach_legacy_characters(
+        &self,
+        account_id: &str,
+        candidate_ids: &[String],
+    ) -> Result<crate::accounts::AttachCounts, StoreError> {
+        self.flush()?;
+        let (send, recv) = bounded(1);
+        self.commands
+            .send(Command::AttachLegacy(
+                account_id.into(),
+                candidate_ids.to_vec(),
+                send,
+            ))
+            .map_err(|_| self.worker_failed())?;
+        wait_response(recv, self.worker.as_ref().ok_or(StoreError::Closed)?)
+    }
+
+    /// Call after the matching attach operation succeeds; retries are monotonic.
+    pub fn record_recovery_progress(
+        &self,
+        account_id: &str,
+        completed_through: u16,
+    ) -> Result<(), StoreError> {
+        self.flush()?;
+        let (send, recv) = bounded(1);
+        self.commands
+            .send(Command::RecoveryProgress(
+                account_id.into(),
+                completed_through,
+                send,
+            ))
             .map_err(|_| self.worker_failed())?;
         wait_response(recv, self.worker.as_ref().ok_or(StoreError::Closed)?)
     }
@@ -818,6 +860,8 @@ fn worker_loop(
                         let _ = reply.send(result);
                         continue;
                     }
+                    Command::AttachLegacy(account, ids, reply) => { let _ = reply.send(crate::accounts::attach_legacy_characters(conn, &account, &ids)); continue; }
+                    Command::RecoveryProgress(account, through, reply) => { let _ = reply.send(crate::accounts::record_recovery_progress(conn, &account, through)); continue; }
                     Command::PartyMark(key, name, mark, note, reply) => { let _ = reply.send(crate::party::set_mark(conn, &key, &name, mark, note.as_deref())); continue; }
                     Command::ClearParty(opts, reply) => { let _ = reply.send(crate::party::clear(conn, &opts)); continue; }
                     Command::Chat(op, reply) => { let _ = reply.send(crate::chat::maintain(conn, op)); continue; }
