@@ -385,6 +385,7 @@ impl SavedMember {
     fn new(player_id: String) -> Self {
         Self {
             member: PartyMember {
+                maxed_gated: false,
                 player_id,
                 name_key: None,
                 name: None,
@@ -421,8 +422,16 @@ impl SavedMember {
         self.member.stars = profile.stars;
         self.member.guild = profile.guild;
         self.member.maxed = profile.maxed;
+        self.member.maxed_gated = profile.maxed_gated;
         self.member.equipment = profile.equipment;
         self.member.is_local |= profile.is_local;
+        self.normalize_maxed();
+    }
+
+    fn normalize_maxed(&mut self) {
+        if self.member.is_local && !self.member.maxed_gated {
+            self.member.maxed = None;
+        }
     }
 
     fn merge(&mut self, mut other: Self) {
@@ -434,6 +443,7 @@ impl SavedMember {
         self.member.share = sum_known(self.member.share, other.member.share);
         self.member.boss_share = sum_known(self.member.boss_share, other.member.boss_share);
         self.member.is_local |= other.member.is_local;
+        self.normalize_maxed();
         self.member.departed_at = earliest(self.member.departed_at, other.member.departed_at);
         self.joined = earliest(self.joined, other.joined);
         self.departed |= other.departed;

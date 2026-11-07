@@ -203,6 +203,7 @@ impl PartyRoster {
                 // but do not infer a name, gear or a profile's first_seen.
                 Member::new(
                     PlayerProfileView {
+                        maxed_gated: false,
                         scope_id: presence.scope_id.clone(),
                         run_id: presence.run_id.clone(),
                         player_id: presence.player_id.clone(),
@@ -398,7 +399,10 @@ impl PartyRoster {
                 .iter()
                 .max_by_key(|member| member.profile.last_seen)
                 .expect("nonempty group");
-            let profile = &latest.profile;
+            let mut profile = latest.profile.clone();
+            profile.is_local = group.iter().any(|member| member.profile.is_local);
+            profile.normalize_maxed();
+            let profile = &profile;
             let key = profile_key(profile);
             let annotation = key.as_deref().and_then(|key| annotations.get(key));
             let mut damage = None;
@@ -453,6 +457,7 @@ impl PartyRoster {
                     .map(|catalog| evaluate(preset, profile, |id| catalog.tier(id)))
             });
             members.push(PartyMember {
+                maxed_gated: profile.maxed_gated,
                 player_id: profile.player_id.clone(),
                 name_key: key,
                 name: profile.name.clone(),
@@ -867,7 +872,7 @@ impl super::CaptureRuntime {
     }
 }
 
-fn parse_saved_party(
+pub(super) fn parse_saved_party(
     view: &mut PartyView,
     settings: &PartySettings,
     catalog: Option<&PartyCatalog>,
@@ -884,11 +889,15 @@ fn parse_saved_party(
     view.counts.check = 0;
     view.counts.not_seen = 0;
     for member in &mut view.members {
+        if member.is_local && !member.maxed_gated {
+            member.maxed = None;
+        }
         member.parse = resolved
             .as_ref()
             .filter(|_| view.gear_recorded && catalog.is_some())
             .map(|(preset, _)| {
                 let profile = PlayerProfileView {
+                    maxed_gated: member.maxed_gated,
                     scope_id: view.scope_id.clone().unwrap_or_default(),
                     run_id: view.run_id.clone(),
                     player_id: member.player_id.clone(),

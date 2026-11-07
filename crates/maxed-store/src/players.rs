@@ -314,9 +314,12 @@ fn player_context(
     until: Option<i64>,
     budget: &mut ReadBudget,
 ) -> Result<PlayerContextView, StoreError> {
-    let profile = budget.one(conn,
+    let mut profile: Option<PlayerProfileView> = budget.one(conn,
         "SELECT length(CAST(json AS BLOB)),json FROM player_profiles WHERE scope_id=?1 AND player_id=?2",
         params![scope_id, player_id])?;
+    if let Some(profile) = &mut profile {
+        profile.normalize_maxed();
+    }
     let scope: Option<StoredScopeTimeline> = budget.one(
         conn,
         "SELECT length(CAST(json AS BLOB)),json FROM scope_timelines WHERE scope_id=?1",

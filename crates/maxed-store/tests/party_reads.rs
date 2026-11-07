@@ -43,6 +43,7 @@ fn saved_run_flags_zero_damage_player_who_joined_between_boss_starts() {
 
 fn profile(run: &RunView, id: &str, name: Option<&str>) -> PlayerProfileView {
     PlayerProfileView {
+        maxed_gated: false,
         scope_id: run.id.clone(),
         run_id: Some(run.id.clone()),
         player_id: id.into(),
@@ -1424,4 +1425,39 @@ fn party_reads_enforce_one_mib_before_decoding_and_on_output() {
         reader.party_annotations(&[huge]),
         Err(StoreError::Limit)
     ));
+}
+
+#[test]
+fn rejoin_keeps_latest_provenance_and_merged_local_identity() {
+    for latest_local in [true, false] {
+        let (_dir, path, mut db) = database();
+        let (mut stream, run, mut older) = seed(&mut db);
+        older.is_local = true;
+        older.maxed_gated = true;
+        older.maxed = Some(8);
+        let mut latest = older.clone();
+        latest.player_id = "rejoin".into();
+        latest.last_seen.0 += 1;
+        latest.is_local = latest_local;
+        latest.maxed_gated = false;
+        latest.maxed = Some(6);
+        stream.apply(
+            &mut db,
+            vec![
+                EngineEvent::PlayerObserved(older),
+                EngineEvent::PlayerObserved(latest),
+            ],
+        );
+        let view = open_reader(&path)
+            .unwrap()
+            .get_party_run(&run.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(view.members.len(), 1);
+        let member = &view.members[0];
+        assert_eq!(member.player_id, "rejoin");
+        assert!(member.is_local);
+        assert!(!member.maxed_gated);
+        assert_eq!(member.maxed, None);
+    }
 }

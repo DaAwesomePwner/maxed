@@ -37,6 +37,7 @@ fn first_gear_row_uses_first_seen_and_swaps_use_last_seen() {
 
 fn profile(item: u16, at: u64) -> PlayerProfileView {
     PlayerProfileView {
+        maxed_gated: false,
         scope_id: "scope-a".into(),
         run_id: Some("demo-run".into()),
         player_id: "synthetic-player".into(),
@@ -1166,4 +1167,81 @@ fn player_context_map_scope_keeps_deaths_in_the_observed_map() {
             fight_id: Some("realm-boss".into())
         }]
     );
+}
+
+#[test]
+fn stored_provenance_normalizes_all_profile_reads_without_upgrading_replay() {
+    for local in [true, false] {
+        for gated in [true, false] {
+            for count in [Some(8), None] {
+                let (_dir, path, mut db) = reader_database();
+                let mut p = run_profile("synthetic-player", 1, 500);
+                p.is_local = local;
+                p.maxed_gated = gated;
+                p.maxed = count;
+                p.maxed_stats = vec![20];
+                apply_batch(
+                    &mut db,
+                    &[envelope(8, EngineEvent::PlayerObserved(p.clone()))],
+                )
+                .unwrap();
+                if !gated {
+                    db.execute(
+                        "UPDATE player_profiles SET json=json_remove(json,'$.maxed_gated')",
+                        [],
+                    )
+                    .unwrap();
+                }
+                let raw: String = db
+                    .query_row(
+                        "SELECT json FROM player_profiles WHERE player_id='synthetic-player'",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap();
+                let replay: PlayerProfileView = serde_json::from_str(&raw).unwrap();
+                assert_eq!(replay.maxed_gated, gated);
+                let reader = open_reader(&path).unwrap();
+                let context = reader
+                    .get_player_context("demo-run", "synthetic-player", None, None)
+                    .unwrap()
+                    .unwrap();
+                let run = reader
+                    .get_run_player("demo-run", "synthetic-player")
+                    .unwrap()
+                    .unwrap();
+                let supported = !local || gated;
+                for actual in [context.profile.unwrap(), run.profile.unwrap()] {
+                    let mut expected = p.clone();
+                    if !supported {
+                        expected.maxed = None;
+                        expected.maxed_stats.clear();
+                    }
+                    assert_eq!(actual, expected);
+                }
+                let party = reader.get_party_run("demo-run").unwrap().unwrap();
+                let member = party
+                    .members
+                    .iter()
+                    .find(|m| m.player_id == p.player_id)
+                    .unwrap();
+                assert_eq!(member.maxed, if supported { count } else { None });
+                assert_eq!(member.maxed_gated, gated);
+                apply_batch(&mut db, &[envelope(9, EngineEvent::PlayerObserved(replay))]).unwrap();
+                let raw: String = db
+                    .query_row(
+                        "SELECT json FROM player_profiles WHERE player_id='synthetic-player'",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap();
+                assert_eq!(
+                    serde_json::from_str::<PlayerProfileView>(&raw)
+                        .unwrap()
+                        .maxed_gated,
+                    gated
+                );
+            }
+        }
+    }
 }

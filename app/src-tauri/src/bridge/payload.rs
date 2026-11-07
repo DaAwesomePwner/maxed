@@ -158,6 +158,7 @@ mod tests {
     #[test]
     fn player_observation_presentation_is_unchanged() {
         let profile = maxed_types::PlayerProfileView {
+            maxed_gated: false,
             scope_id: "synthetic-scope".into(),
             run_id: Some("synthetic-run".into()),
             player_id: "synthetic-player".into(),

@@ -178,6 +178,11 @@ pub struct PartyMember {
     pub maxed: Option<u8>,
     pub equipment: Vec<EquipmentView>,
     pub is_local: bool,
+    /// Maxed count and highlights were computed under exalt-split gating. This records the computation policy, not completeness of observations.
+    #[serde(default)]
+    #[ts(optional)]
+    #[ts(as = "Option<bool>")]
+    pub maxed_gated: bool,
     #[serde(default)]
     #[ts(optional = nullable)]
     pub present: Option<bool>,
