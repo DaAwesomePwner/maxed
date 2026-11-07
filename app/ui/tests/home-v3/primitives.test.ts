@@ -180,9 +180,17 @@ it.each(['loading', 'unavailable'] as const)('does not claim known contents are 
 it.each(['loading', 'unavailable'] as const)('keeps unknown contents visible while the catalog is %s', phase => {
   setDebugMode(true);
   const catalog = { ...emptyHomeVisuals(), phase };
-  for (const drop of [retainedBag({ contents_known: false }), retainedBag({ contents: [], items: [] })]) {
+  for (const drop of [retainedBag({ contents_known: false, contents: [] }), retainedBag({ contents: [], items: [] })]) {
     const page = render(BestBagCard, { best: bestDrop([drop], catalog), visuals: catalog, resolveSpriteUrl, meta: '—' });
     expect(page.getByText('Contents unknown')).toBeTruthy();
     page.unmount();
   }
+});
+
+it('labels observed partial contents as partial, not unknown', () => {
+  setDebugMode(true);
+  const drop = retainedBag({ contents_known: false }), catalog = emptyHomeVisuals();
+  const page = render(BestBagCard, { best: bestDrop([drop], catalog), visuals: catalog, resolveSpriteUrl, meta: '—' });
+  expect(page.queryByText('Contents unknown')).toBeNull();
+  expect(page.getByText('Partially observed contents; other items may be missing.')).toBeTruthy();
 });
