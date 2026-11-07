@@ -80,3 +80,16 @@ Manual fallback and recovery (also used if automation fails):
 6. On failure, retain or restore the backed-up pointer and verify it. GitHub delete/upload replacement is not transactional, so a briefly unavailable feed must fail safely. Withdraw a bad version by stopping advertisement; installed clients never automatically downgrade.
 
 Record sanitized acceptance and recovery evidence. Signing alone does not prove Npcap, installation, network, memory, startup or gameplay behavior.
+
+## Dependency notice checks
+
+The Notices workflow checks real third-party notice generation in PR CI when
+dependencies or other notice inputs change. Require a passing result before
+merging those changes and review the main result before tagging. Maintainers can
+download `regenerated-notices` from a failed PR run when regeneration succeeds,
+then review and commit the artifact and refresh inventory hashes. The run remains
+failed until committed notices pass. Manual **Notices → Run workflow →
+regenerate=true** is also available once the workflow is on the default branch.
+See [regeneration and checks](LICENSE-INVENTORY.md#regeneration-and-checks)
+for pinned-association review and dispatch prerequisites. Release packaging still
+checks notices even when the main test run is reused.
