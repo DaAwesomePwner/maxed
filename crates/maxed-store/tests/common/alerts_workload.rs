@@ -133,7 +133,7 @@ pub fn build(alerts: usize) -> Fixture {
     d.bag_rank = None;
     let tx = db.transaction().unwrap();
     tx.execute_batch("CREATE TEMP TABLE n(i INTEGER PRIMARY KEY); WITH RECURSIVE s(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM s WHERE i<9999) INSERT INTO n SELECT i FROM s;").unwrap();
-    tx.execute("INSERT INTO characters SELECT printf('c%03d',i),?1,json_set(?2,'$.id',printf('c%03d',i),'$.observed_at',CAST(?1 AS TEXT)) FROM n WHERE i<100", params![BASE as i64,serde_json::to_string(&c).unwrap()]).unwrap();
+    tx.execute("INSERT INTO characters(id,observed_at,json) SELECT printf('c%03d',i),?1,json_set(?2,'$.id',printf('c%03d',i),'$.observed_at',CAST(?1 AS TEXT)) FROM n WHERE i<100", params![BASE as i64,serde_json::to_string(&c).unwrap()]).unwrap();
     tx.execute("INSERT INTO runs SELECT printf('r%05d',i),?1,printf('c%03d',i%100),?2,?3,?3+2000000,NULL,NULL,'left',1,NULL,json_set(?4,'$.id',printf('r%05d',i),'$.character_id',printf('c%03d',i%100)) FROM n",params![r.session_id,r.dungeon,BASE as i64,serde_json::to_string(&r).unwrap()]).unwrap();
     // 20 eligible bosses in every 400 fights; 100 characters x 100 bosses,
     // exactly 20 observations of every key. The remaining 3.8M are empty non-boss DTOs.

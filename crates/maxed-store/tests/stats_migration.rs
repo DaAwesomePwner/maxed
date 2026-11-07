@@ -39,7 +39,7 @@ fn v9_database_upgrades_to_current_schema_and_backfills_ended_runs() {
     let mut db = v9(&path);
     db.execute_batch(
         "INSERT INTO play_sessions VALUES('s1',100,900,900,'{}');
-         INSERT INTO characters VALUES('synth-character',100,'{}');
+         INSERT INTO characters(id,observed_at,json) VALUES('synth-character',100,'{}');
          INSERT INTO runs(id,session_id,character_id,dungeon,started,ended,completed_at,died_at,outcome,complete_capture,entry_character_json,json)
            VALUES('run-ended','s1','synth-character','Synthetic Halls',200,500,450,NULL,'cleared',1,NULL,'{}'),
                  ('run-clock','s1',NULL,'Synthetic Halls',600,550,NULL,NULL,'unknown',1,NULL,'{}'),

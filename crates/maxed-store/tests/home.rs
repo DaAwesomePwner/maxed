@@ -672,7 +672,7 @@ fn benchmark_database(
     let tx = db.transaction().unwrap();
     let character = story.character.as_ref().unwrap();
     tx.execute(
-        "INSERT INTO characters VALUES(?1,?2,?3)",
+        "INSERT INTO characters(id,observed_at,json) VALUES(?1,?2,?3)",
         params![
             character.id,
             character.observed_at.0 as i64,

@@ -14,7 +14,7 @@ fn seed(db: &mut rusqlite::Connection) {
     for c in 0..10 {
         let view = character_view(&format!("c{c}"), &format!("Synth{c}"), 0);
         tx.execute(
-            "INSERT INTO characters VALUES(?1,0,?2)",
+            "INSERT INTO characters(id,observed_at,json) VALUES(?1,0,?2)",
             params![view.id, serde_json::to_string(&view).unwrap()],
         )
         .unwrap();

@@ -43,6 +43,8 @@ pub fn copy_v4(source: &Path, db: &Connection) {
         }
         let columns = if table == "drops" {
             "id,session_id,run_id,at,bag_type,bag_rank,json"
+        } else if table == "characters" {
+            "id,observed_at,json"
         } else {
             "*"
         };

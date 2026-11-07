@@ -202,7 +202,7 @@ mod tests {
         character.id = "synthetic-self".into();
         character.identity_verified = true;
         conn.execute(
-            "INSERT INTO characters VALUES(?1,0,?2)",
+            "INSERT INTO characters(id,observed_at,json) VALUES(?1,0,?2)",
             params![character.id, serde_json::to_string(&character).unwrap()],
         )
         .unwrap();

@@ -25,7 +25,7 @@ impl Fixture {
             character.id = id.into();
             character.identity_verified = true;
             db.execute(
-                "INSERT INTO characters VALUES(?1,0,?2)",
+                "INSERT INTO characters(id,observed_at,json) VALUES(?1,0,?2)",
                 params![id, serde_json::to_string(&character).unwrap()],
             )
             .unwrap();

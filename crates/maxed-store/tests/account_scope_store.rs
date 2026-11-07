@@ -212,8 +212,11 @@ fn account_scope_migration_016_populated_remains_unknown() {
         .unwrap();
     }
     db.pragma_update(None, "user_version", 16).unwrap();
-    db.execute("INSERT INTO characters VALUES('legacy',0,'{}')", [])
-        .unwrap();
+    db.execute(
+        "INSERT INTO characters(id,observed_at,json) VALUES('legacy',0,'{}')",
+        [],
+    )
+    .unwrap();
     migrate(&mut db).unwrap();
     assert_eq!(owner(&db, "character_accounts", "legacy"), None);
     assert_eq!(current_account(&db).unwrap(), None);

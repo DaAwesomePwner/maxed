@@ -433,7 +433,7 @@ fn large_v2_backfill_is_measured_separately_from_home_reads() {
     let snapshot = demo::demo_snapshot();
     let tx = db.transaction().unwrap();
     tx.execute(
-        "INSERT INTO characters VALUES('demo-character',0,?1)",
+        "INSERT INTO characters(id,observed_at,json) VALUES('demo-character',0,?1)",
         [serde_json::to_string(&snapshot.character.unwrap()).unwrap()],
     )
     .unwrap();
@@ -536,7 +536,7 @@ fn cold_v2_preserves_run_deaths_and_open_session_tails() {
     let db = empty_v2(&path);
     let snapshot = demo::demo_snapshot();
     db.execute(
-        "INSERT INTO characters VALUES('demo-character',0,?1)",
+        "INSERT INTO characters(id,observed_at,json) VALUES('demo-character',0,?1)",
         [serde_json::to_string(&snapshot.character.unwrap()).unwrap()],
     )
     .unwrap();
