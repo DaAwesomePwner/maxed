@@ -23,7 +23,23 @@
         { "name": "Validate tag and signing configuration", "env": { "RELEASE_TAG": "${{ github.ref_name }}" }, "run": "$v = $env:RELEASE_TAG.Substring(1)\n$c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }\n./scripts/release/Validate-Release.ps1 -Version $v -Channel $c -Repository 'daplabs/maxed' -Tag $env:RELEASE_TAG\n$config = Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json\nif ($config.bundle.createUpdaterArtifacts -cne $true -or [string]::IsNullOrWhiteSpace($config.plugins.updater.pubkey)) { throw 'Signed production configuration is required.' }\nif (-not (Test-Path docs/release/distribution-inventory.json -PathType Leaf)) { throw 'B2 approved distribution inventory is required.' }\nif ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'Windows x64 required.' }" },
         { "name": "Package and sign", "env": { "TAURI_SIGNING_PRIVATE_KEY": "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD": "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" }, "run": "if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw 'Signing key is required.' }\n./scripts/build-release.ps1 -Package -Offline" },
         { "name": "Verify and stage allowlist", "env": { "RELEASE_TAG": "${{ github.ref_name }}" }, "run": "$v = $env:RELEASE_TAG.Substring(1)\n$c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }\n$m = cargo metadata --offline --no-deps --format-version 1 | ConvertFrom-Json\nif ($LASTEXITCODE) { throw 'Cargo metadata failed.' }\n$i = Join-Path $m.target_directory \"release/bundle/nsis/Maxed_${v}_x64-setup.exe\"\n./scripts/release/New-ReleaseMetadata.ps1 -Version $v -Channel $c -Repository 'daplabs/maxed' -Installer $i -Signature ($i + '.sig') -OutputDir release-stage -LicenseInventory docs/release/distribution-inventory.json\nif (-not (Test-Path tests/packaging/audit-bundle.ps1 -PathType Leaf)) { throw 'C3 resource audit is required before upload.' }\n./tests/packaging/audit-bundle.ps1 -Installer $i -ExpectedManifest release-stage/release-manifest.json -OutputDir release-audit" },
-        { "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9", "with": { "name": "maxed-${{ github.ref_name }}-windows-x64", "path": "release-stage/", "if-no-files-found": "error", "retention-days": 3, "include-hidden-files": false } }
+        { "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9", "with": { "name": "maxed-${{ github.ref_name }}-windows-x64", "path": "release-stage/", "if-no-files-found": "error", "retention-days": 14, "include-hidden-files": false } }
+      ]
+    },
+    "publish": {
+      "needs": ["package"],
+      "if": "github.repository == 'daplabs/maxed' && github.ref_type == 'tag'",
+      "runs-on": "windows-2022",
+      "environment": "release-publish",
+      "concurrency": { "group": "release-publish", "cancel-in-progress": false },
+      "permissions": { "contents": "write" },
+      "timeout-minutes": 45,
+      "defaults": { "run": { "shell": "pwsh" } },
+      "steps": [
+        { "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": { "persist-credentials": false } },
+        { "uses": "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333", "with": { "name": "maxed-${{ github.ref_name }}-windows-x64", "path": "release-stage/" } },
+        { "name": "Publish and promote", "env": { "GH_TOKEN": "${{ github.token }}", "RELEASE_TAG": "${{ github.ref_name }}" }, "run": "$v = $env:RELEASE_TAG.Substring(1)\n$c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }\n./scripts/release/Publish-Release.ps1 -Version $v -Channel $c -Repository 'daplabs/maxed' -StageDir release-stage -BackupDir release-backup" },
+        { "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9", "if": "always()", "with": { "name": "release-backup-${{ github.ref_name }}-${{ github.run_attempt }}", "path": "release-backup/", "if-no-files-found": "ignore", "retention-days": 30 } }
       ]
     }
   }

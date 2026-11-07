@@ -41,4 +41,5 @@ Record version, source revision, exact artifact hashes, environment, result and 
 ## Publish
 
 - [ ] Resolve blocking privacy, rights, integrity and acceptance findings. Record any explicit release decision and remaining limitations; never turn an exception into a passing measurement.
-- [ ] Follow [serialized promotion](UPDATES.md#serialized-promotion), publishing immutable assets before replacing the channel pointer. Verify remote bytes again and retain recovery evidence.
+- [ ] Confirm `release-publish` requires maintainer approval and accepts only `v*` tags. Review the staged artifact and approve its `publish` job; only this job receives `contents: write`, using the implicit GitHub token without signing secrets.
+- [ ] Follow [serialized promotion](UPDATES.md#serialized-promotion), publishing immutable assets before replacing the channel pointer. Verify remote bytes again and retain the pointer backup artifact and recovery evidence. Use the manual fallback if automation fails after publication.
