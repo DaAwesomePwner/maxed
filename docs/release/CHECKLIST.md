@@ -9,7 +9,7 @@ Record version, source revision, exact artifact hashes, environment, result and 
 - [ ] Check the Notices PR/main result when dependency or notice inputs change before tagging. Regenerate via the [Notices workflow](LICENSE-INVENTORY.md#regeneration-and-checks), review and commit its artifact, and refresh inventory hashes; changed pins require separate review. Release packaging retains its own check.
 - [ ] Match workspace, app, UI and lockfile versions to the intended release tag.
 - [ ] Review the public source and history for credentials, local paths, personal data, raw captures and game art. Scan results apply only to the reviewed bytes.
-- [ ] Confirm source, CI, release tags and update downloads all use `daplabs/maxed`; document manual reinstall for existing v0.1.1 installations.
+- [ ] Confirm source, CI, release tags and update downloads all use `DaAwesomePwner/maxed`; document the one-time manual reinstall for 0.1.2–0.1.4 installations and advise 0.1.1 users to reinstall if unsure.
 - [ ] Review all five scrubbed-real fixture groups under the [fixture policy](../development/fixtures.md). Record explicit publication approval separately from scrub certification.
 - [ ] Set the enforcement contact in [CODE_OF_CONDUCT.md](../../CODE_OF_CONDUCT.md) and enable GitHub private vulnerability reporting for [SECURITY.md](../../SECURITY.md).
 - [ ] Confirm rights and actual payloads against [LICENSE-INVENTORY.md](LICENSE-INVENTORY.md). Resolve its stale lock provenance and 13 missing package-text review entries; correct the obsolete notification statement in `NOTICE.md` through a reviewed legal-payload/hash update. Do not silently edit hashed inputs.

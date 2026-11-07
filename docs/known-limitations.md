@@ -4,6 +4,12 @@ Maxed is pre-release 0.1.4. These limits describe the available behavior and its
 evidence boundaries. Automated regressions cover several reported problems;
 Windows gameplay and installed-release acceptance remain incomplete.
 
+0.1.2–0.1.4 installations pin `daplabs/maxed` and reject the repository redirects
+created by the transfer. They need a one-time manual reinstall from
+[DaAwesomePwner/maxed releases](https://github.com/DaAwesomePwner/maxed/releases).
+0.1.1 update behavior is unverified; reinstall manually if unsure. See the
+[update guide](release/UPDATES.md).
+
 ## Active limitations
 
 | Area | Problem and impact | Workaround or interpretation |
@@ -163,8 +169,8 @@ is recorded.
   split retains totals/raw boosts; nonzero or unknown exalt keeps at-cap,
   pots-left and maxed null without placement evidence. Negative Other remains
   inconsistent evidence, not a named effect. U does not unlock P.
-- [#3](https://github.com/daplabs/maxed/issues/3) tracks expanded rail
-  exalt presentation. [#5](https://github.com/daplabs/maxed/issues/5)
+- [#3](https://github.com/DaAwesomePwner/maxed/issues/3) tracks expanded rail
+  exalt presentation. [#5](https://github.com/DaAwesomePwner/maxed/issues/5)
   tracks legacy saved local profiles retaining ungated maxed counts; current
   Character split safety does not retroactively repair those records.
 - Normal-fire DPS and regen are baseline models, with source-derived
@@ -186,7 +192,7 @@ is recorded.
 - Exalt damage (stat 113) remains deferred with no value. Crucible, Blood Ritual, weapon
   enchant damage/rate modifiers and enemy conditions are excluded. This work
   establishes no new multiplier evidence or combat-attribution behavior.
-- [#4](https://github.com/daplabs/maxed/issues/4) tracks cross-account
+- [#4](https://github.com/DaAwesomePwner/maxed/issues/4) tracks cross-account
   aggregation in saved history; Character uses only the current local observation
   and adds no account/history lookup. Object stat 114 remains out of scope in
-  [#2](https://github.com/daplabs/maxed/issues/2).
+  [#2](https://github.com/DaAwesomePwner/maxed/issues/2).
