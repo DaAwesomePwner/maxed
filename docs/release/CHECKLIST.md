@@ -5,6 +5,7 @@ Record version, source revision, exact artifact hashes, environment, result and 
 ## Source and public readiness
 
 - [ ] Run the [deterministic checks](../development/testing.md), including generated bindings, UI checks and all packaging suites. On macOS, also run `scripts/mac/check.sh full`; Windows-specific tests still require Windows.
+- [ ] Check the automatic main test run before tagging. Release reuses a passing main run only for the exact SHA; otherwise it runs all tests. Review the reused run URL in the lookup summary.
 - [ ] Match workspace, app, UI and lockfile versions to the intended release tag.
 - [ ] Review the public source and history for credentials, local paths, personal data, raw captures and game art. Scan results apply only to the reviewed bytes.
 - [ ] Confirm source, CI, release tags and update downloads all use `daplabs/maxed`; document manual reinstall for existing v0.1.1 installations.

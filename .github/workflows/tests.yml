@@ -1,38 +1,177 @@
 {
   "name": "Deterministic tests",
   "on": {
-    "pull_request": { "branches": ["main"] },
-    "schedule": [{ "cron": "17 9 * * *" }],
+    "pull_request": {
+      "branches": [
+        "main"
+      ]
+    },
+    "schedule": [
+      {
+        "cron": "17 9 * * *"
+      }
+    ],
     "workflow_dispatch": {},
     "workflow_call": {
       "inputs": {
-        "release": { "description": "Compatibility flag for release callers; all eligible events run tests.", "type": "boolean", "default": false }
+        "release": {
+          "description": "Compatibility flag for release callers; all eligible events run tests.",
+          "type": "boolean",
+          "default": false
+        }
       }
+    },
+    "push": {
+      "branches": [
+        "main"
+      ],
+      "paths-ignore": [
+        "docs/architecture/**/*.md",
+        "docs/development/**/*.md",
+        "docs/release/**/*.md",
+        "docs/README.md",
+        "docs/known-limitations.md"
+      ]
     }
   },
   "concurrency": {
     "group": "tests-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}",
     "cancel-in-progress": "${{ github.event_name == 'pull_request' }}"
   },
-  "permissions": { "contents": "read" },
+  "permissions": {
+    "contents": "read"
+  },
   "jobs": {
-    "tests": {
+    "rust-lint": {
       "runs-on": "windows-2022",
       "timeout-minutes": 90,
-      "defaults": { "run": { "shell": "pwsh" } },
+      "defaults": {
+        "run": {
+          "shell": "pwsh"
+        }
+      },
       "steps": [
-        { "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": { "persist-credentials": false } },
-        { "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": { "node-version": "22.16.0" } },
-        { "name": "Restore Rust cache", "if": "runner.environment == 'github-hosted'", "uses": "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": { "path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}" } },
-        { "name": "Restore locked tools", "run": "rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }" },
-        { "name": "Rust", "run": "cargo fmt --all -- --check\nif ($LASTEXITCODE) { throw 'fmt failed.' }\ncargo clippy --offline --locked --workspace --all-targets -- -D warnings\nif ($LASTEXITCODE) { throw 'clippy failed.' }\ncargo test --offline --locked --workspace\nif ($LASTEXITCODE) { throw 'Rust tests failed.' }" },
-        { "name": "Bindings freshness", "run": "git diff --exit-code HEAD -- app/ui/src/lib/bindings app/ui/tests/fixtures crates/maxed-types/tests/fixtures/p1-demo.json\nif ($LASTEXITCODE) { throw 'Generated bindings or fixtures changed; regenerate and commit them.' }\n$untracked = @(git ls-files --others -- app/ui/src/lib/bindings app/ui/tests/fixtures crates/maxed-types/tests/fixtures/p1-demo.json)\nif ($LASTEXITCODE) { throw 'Could not check untracked bindings or fixtures.' }\nif ($untracked.Count -gt 0) { throw ('Untracked generated bindings or fixtures: ' + ($untracked -join ', ')) }" },
-        { "name": "Perf feature compile", "run": "cargo clippy --offline --locked -p maxed-app --all-targets --features perf-live -- -D warnings\nif ($LASTEXITCODE) { throw 'Perf feature clippy failed.' }" },
-        { "name": "UI", "run": "foreach ($s in @('check', 'check:tests', 'test', 'test:ui', 'build')) { npm.cmd --prefix app/ui run $s; if ($LASTEXITCODE) { throw 'UI check failed.' } }" },
-        { "name": "Offline memory tooling", "run": "pwsh -NoProfile -File tests/performance/memory-tooling.test.ps1\nif ($LASTEXITCODE) { throw 'Memory tooling test failed.' }\npwsh -NoProfile -File tests/performance/p4-memory-profile.test.ps1\nif ($LASTEXITCODE) { throw 'P4 memory profile test failed.' }" },
-        { "name": "Packaging and collectors", "run": "foreach ($f in Get-ChildItem tests/packaging -Filter *.test.ps1 -File) { powershell -NoProfile -ExecutionPolicy Bypass -File $f.FullName; if ($LASTEXITCODE) { throw 'Packaging check failed.' } }\npowershell -NoProfile -ExecutionPolicy Bypass -File scripts/Measure-MaxedMemory.ps1 -SelfTest\nif ($LASTEXITCODE) { throw 'Memory collector self-test failed.' }\npowershell -NoProfile -ExecutionPolicy Bypass -File tests/performance/home-scenarios.ps1 -SelfTest\nif ($LASTEXITCODE) { throw 'Scenario collector self-test failed.' }" },
-        { "name": "Prune Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "run": "Remove-Item -LiteralPath target/debug/incremental -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem target/debug/deps, target/debug/.fingerprint, target/debug/build -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*maxed*' -or $_.Extension -in @('.exe', '.pdb') } | Remove-Item -Recurse -Force\nGet-ChildItem target/debug -File -ErrorAction SilentlyContinue | Remove-Item -Force" },
-        { "name": "Save Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "uses": "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": { "path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}" } }
+        {"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": {"persist-credentials": false}},
+        {"uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": {"node-version": "22.16.0"}},
+        {"name": "Restore Rust cache", "if": "runner.environment == 'github-hosted'", "uses": "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-rust-lint-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}},
+        {"name": "Restore locked tools", "run": "rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }"},
+        {"name": "Rust lint", "run": "cargo fmt --all -- --check\nif ($LASTEXITCODE) { throw 'fmt failed.' }\ncargo clippy --offline --locked --workspace --all-targets -- -D warnings\nif ($LASTEXITCODE) { throw 'clippy failed.' }"},
+        {"name": "Perf feature compile", "run": "cargo clippy --offline --locked -p maxed-app --all-targets --features perf-live -- -D warnings\nif ($LASTEXITCODE) { throw 'Perf feature clippy failed.' }"},
+        {"name": "Prune Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "run": "Remove-Item -LiteralPath target/debug/incremental -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem target/debug/deps, target/debug/.fingerprint, target/debug/build -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*maxed*' -or $_.Extension -in @('.exe', '.pdb') } | Remove-Item -Recurse -Force\nGet-ChildItem target/debug -File -ErrorAction SilentlyContinue | Remove-Item -Force"},
+        {"name": "Save Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "uses": "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-rust-lint-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}}
+      ],
+      "permissions": {
+        "contents": "read"
+      }
+    },
+    "rust-test": {
+      "runs-on": "windows-2022",
+      "timeout-minutes": 90,
+      "defaults": {
+        "run": {
+          "shell": "pwsh"
+        }
+      },
+      "steps": [
+        {"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": {"persist-credentials": false}},
+        {"uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": {"node-version": "22.16.0"}},
+        {"name": "Restore Rust cache", "if": "runner.environment == 'github-hosted'", "uses": "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-rust-test-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}},
+        {"name": "Restore locked tools", "run": "rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }"},
+        {"name": "Rust tests", "run": "cargo test --offline --locked --workspace --exclude maxed-store\nif ($LASTEXITCODE) { throw 'Rust tests failed.' }"},
+        {"name": "Bindings freshness", "run": "git diff --exit-code HEAD -- app/ui/src/lib/bindings app/ui/tests/fixtures crates/maxed-types/tests/fixtures/p1-demo.json\nif ($LASTEXITCODE) { throw 'Generated bindings or fixtures changed; regenerate and commit them.' }\n$untracked = @(git ls-files --others -- app/ui/src/lib/bindings app/ui/tests/fixtures crates/maxed-types/tests/fixtures/p1-demo.json)\nif ($LASTEXITCODE) { throw 'Could not check untracked bindings or fixtures.' }\nif ($untracked.Count -gt 0) { throw ('Untracked generated bindings or fixtures: ' + ($untracked -join ', ')) }"},
+        {"name": "Prune Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "run": "Remove-Item -LiteralPath target/debug/incremental -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem target/debug/deps, target/debug/.fingerprint, target/debug/build -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*maxed*' -or $_.Extension -in @('.exe', '.pdb') } | Remove-Item -Recurse -Force\nGet-ChildItem target/debug -File -ErrorAction SilentlyContinue | Remove-Item -Force"},
+        {"name": "Save Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "uses": "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-rust-test-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}}
+      ],
+      "permissions": {
+        "contents": "read"
+      }
+    },
+    "store-test": {
+      "runs-on": "windows-2022",
+      "timeout-minutes": 90,
+      "defaults": {
+        "run": {
+          "shell": "pwsh"
+        }
+      },
+      "steps": [
+        {"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": {"persist-credentials": false}},
+        {"name": "Restore Rust cache", "if": "runner.environment == 'github-hosted'", "uses": "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-store-test-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}},
+        {"name": "Restore locked tools", "run": "rustup toolchain install 1.99.0 --profile minimal\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }"},
+        {"name": "Store tests", "run": "cargo test --offline --locked -p maxed-store\nif ($LASTEXITCODE) { throw 'Rust tests failed.' }"},
+        {"name": "Prune Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "run": "Remove-Item -LiteralPath target/debug/incremental -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem target/debug/deps, target/debug/.fingerprint, target/debug/build -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*maxed*' -or $_.Extension -in @('.exe', '.pdb') } | Remove-Item -Recurse -Force\nGet-ChildItem target/debug -File -ErrorAction SilentlyContinue | Remove-Item -Force"},
+        {"name": "Save Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "uses": "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-store-test-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}}
+      ],
+      "permissions": {
+        "contents": "read"
+      }
+    },
+    "ui": {
+      "runs-on": "windows-2022",
+      "timeout-minutes": 90,
+      "defaults": {
+        "run": {
+          "shell": "pwsh"
+        }
+      },
+      "steps": [
+        {"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": {"persist-credentials": false}},
+        {"uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": {"node-version": "22.16.0"}},
+        {"name": "Restore Rust cache", "if": "runner.environment == 'github-hosted'", "uses": "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-ui-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}},
+        {"name": "Restore locked tools", "run": "rustup toolchain install 1.99.0 --profile minimal\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }"},
+        {"name": "UI", "run": "foreach ($s in @('check', 'check:tests', 'test', 'test:ui', 'build')) { npm.cmd --prefix app/ui run $s; if ($LASTEXITCODE) { throw 'UI check failed.' } }"},
+        {"name": "Prune Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "run": "Remove-Item -LiteralPath target/debug/incremental -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem target/debug/deps, target/debug/.fingerprint, target/debug/build -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*maxed*' -or $_.Extension -in @('.exe', '.pdb') } | Remove-Item -Recurse -Force\nGet-ChildItem target/debug -File -ErrorAction SilentlyContinue | Remove-Item -Force"},
+        {"name": "Save Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "uses": "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-ui-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}}
+      ],
+      "permissions": {
+        "contents": "read"
+      }
+    },
+    "packaging": {
+      "runs-on": "windows-2022",
+      "timeout-minutes": 90,
+      "defaults": {
+        "run": {
+          "shell": "pwsh"
+        }
+      },
+      "steps": [
+        {"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": {"persist-credentials": false}},
+        {"uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": {"node-version": "22.16.0"}},
+        {"name": "Restore locked tools", "run": "rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }"},
+        {"name": "Offline memory tooling", "run": "pwsh -NoProfile -File tests/performance/memory-tooling.test.ps1\nif ($LASTEXITCODE) { throw 'Memory tooling test failed.' }\npwsh -NoProfile -File tests/performance/p4-memory-profile.test.ps1\nif ($LASTEXITCODE) { throw 'P4 memory profile test failed.' }"},
+        {"name": "Packaging and collectors", "run": "foreach ($f in Get-ChildItem tests/packaging -Filter *.test.ps1 -File) { powershell -NoProfile -ExecutionPolicy Bypass -File $f.FullName; if ($LASTEXITCODE) { throw 'Packaging check failed.' } }\npowershell -NoProfile -ExecutionPolicy Bypass -File scripts/Measure-MaxedMemory.ps1 -SelfTest\nif ($LASTEXITCODE) { throw 'Memory collector self-test failed.' }\npowershell -NoProfile -ExecutionPolicy Bypass -File tests/performance/home-scenarios.ps1 -SelfTest\nif ($LASTEXITCODE) { throw 'Scenario collector self-test failed.' }"}
+      ],
+      "permissions": {
+        "contents": "read"
+      }
+    },
+    "tests": {
+      "needs": [
+        "rust-lint",
+        "rust-test",
+        "store-test",
+        "ui",
+        "packaging"
+      ],
+      "if": "${{ !cancelled() }}",
+      "runs-on": "ubuntu-latest",
+      "permissions": {
+        "contents": "read"
+      },
+      "steps": [
+        {
+          "name": "Require every test job to succeed",
+          "shell": "bash",
+          "env": {
+            "RUST_LINT_RESULT": "${{ needs.rust-lint.result }}",
+            "RUST_TEST_RESULT": "${{ needs.rust-test.result }}",
+            "STORE_TEST_RESULT": "${{ needs.store-test.result }}",
+            "UI_RESULT": "${{ needs.ui.result }}",
+            "PACKAGING_RESULT": "${{ needs.packaging.result }}"
+          },
+          "run": "failed=0\nprintf '%s: %s\\n' 'rust-lint' \"$RUST_LINT_RESULT\"\nif [[ \"$RUST_LINT_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'rust-test' \"$RUST_TEST_RESULT\"\nif [[ \"$RUST_TEST_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'store-test' \"$STORE_TEST_RESULT\"\nif [[ \"$STORE_TEST_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'ui' \"$UI_RESULT\"\nif [[ \"$UI_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'packaging' \"$PACKAGING_RESULT\"\nif [[ \"$PACKAGING_RESULT\" != success ]]; then failed=1; fi\nexit \"$failed\""
+        }
       ]
     }
   }
