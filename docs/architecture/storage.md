@@ -376,4 +376,4 @@ Migration 018 adds `runs_character(character_id,id)` for indexed account-owned a
 
 Migration 019 maintains a small `unresolved_observations` marker through insert/update/delete triggers for observations with missing owner references (including runless observations without an owner row); the Home notice combines this with indexed unknown-character seeks, so fully attributed history does not require a history scan.
 
-Selected visit stories retain their own period and unknown-owner observations, excluding only different known owners; account records and period/chain merging still require known matching ownership.
+Selected visit stories retain their own period and unknown-owner observations, excluding only different known owners; account records and period merging still require known matching ownership. Castle titles and chains retain unknown-owner context but never combine different known accounts.

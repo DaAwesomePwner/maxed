@@ -292,12 +292,17 @@ fn home_hud_reads_catalog_classifications_through_history_worker() {
     let mut bag = snapshot.drops[0].clone();
     let mut fight = snapshot.fights[0].clone();
     fight.ended = Some(Timestamp(5_000_000));
+    let mut missing_identity = fight.clone();
+    missing_identity.id = "synthetic-missing-identity".into();
+    missing_identity.owner_character_id = Some(snapshot.character.as_ref().unwrap().id.clone());
+    missing_identity.issues = vec![maxed_types::CoverageIssue::MissingIdentity];
     fight.issues.clear();
     bag.bag_rank = Some(255);
     let item = bag.contents[0].item_type;
     let events: Vec<_> = [
         EngineEvent::BagDropped(bag),
         EngineEvent::FightUpdated(fight),
+        EngineEvent::FightUpdated(missing_identity),
     ]
     .into_iter()
     .enumerate()
@@ -310,6 +315,33 @@ fn home_hud_reads_catalog_classifications_through_history_worker() {
     })
     .collect();
     maxed_store::apply_batch(&mut db, &events).unwrap();
+    // MissingIdentity removes combat eligibility, not ownership. The valid fight
+    // must still supply the HUD's one combat sample.
+    let reader = maxed_store::open_reader(&path).unwrap();
+    let owner: Option<String> = db
+        .query_row(
+            "SELECT account_id FROM fight_accounts WHERE id='synthetic-missing-identity'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(owner.is_some());
+    assert_eq!(owner, reader.current_account().unwrap());
+    assert!(reader
+        .get_fight("synthetic-missing-identity")
+        .unwrap()
+        .unwrap()
+        .issues
+        .contains(&maxed_types::CoverageIssue::MissingIdentity));
+    assert_eq!(
+        db.query_row(
+            "SELECT local_dps FROM fights WHERE id='synthetic-missing-identity'",
+            [],
+            |r| r.get::<_, Option<f64>>(0)
+        )
+        .unwrap(),
+        None
+    );
     let runtime = Arc::new(CaptureRuntime::default());
     runtime.initialize_home(root.path().into()).unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();

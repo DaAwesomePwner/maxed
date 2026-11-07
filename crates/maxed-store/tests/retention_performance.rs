@@ -193,7 +193,7 @@ fn history(db: &Connection) -> BTreeMap<String, (u64, [u8; 32])> {
         .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('schema_migrations','event_receipts','stream_heads','event_streams','event_receipts_v2','maintenance_jobs','backup_generations') ORDER BY name")
         .unwrap().query_map([], |r| r.get(0)).unwrap()
         .collect::<Result<_, _>>().unwrap();
-    tables
+    let mut snapshots: BTreeMap<_, _> = tables
         .into_iter()
         .map(|table| {
             let quoted = format!("\"{}\"", table.replace('"', "\"\""));
@@ -223,7 +223,14 @@ fn history(db: &Connection) -> BTreeMap<String, (u64, [u8; 32])> {
             );
             (table, proof)
         })
-        .collect()
+        .collect();
+    if db.prepare("SELECT account_id FROM characters").is_ok() {
+        snapshots.insert(
+            "characters.account_id".into(),
+            rows_hash(db, "SELECT id,account_id FROM characters ORDER BY id"),
+        );
+    }
+    snapshots
 }
 
 fn queries(path: &Path, last: u64) -> Vec<[u8; 32]> {
@@ -485,13 +492,7 @@ fn phase1_600mb() {
             "additive_016_ms={:.3}",
             ddl.elapsed().as_secs_f64() * 1000.0
         );
-        let upgraded_history = history(&db);
-        assert!(
-            before_ddl
-                .iter()
-                .all(|(table, rows)| upgraded_history.get(table) == Some(rows)),
-            "upgrade must preserve installed history rows"
-        );
+        assert_upgrade_history(&db, before_ddl);
         attribute_query_fixture(&db);
         assert_eq!(scalar(&db, "SELECT count(*) FROM maintenance_jobs"), 0);
         assert!(!dir.path().join("backups").exists());
@@ -712,4 +713,57 @@ fn account_scope_retention_query_comparisons_have_owned_data_and_elapsed_time() 
     let before = queries(&path, 1);
     drop(db);
     assert_eq!(queries(&path, 1), before);
+}
+
+fn assert_upgrade_history(db: &Connection, before: BTreeMap<String, (u64, [u8; 32])>) {
+    let mut after = history(db);
+    // Check the exact additions, then compare the complete pre-existing map.
+    // This catches deleted/added tables as well as changed, added or missing rows.
+    for table in [
+        "accounts",
+        "current_account",
+        "observation_characters",
+        "identity_spans",
+        "account_recovery",
+    ] {
+        assert_eq!(
+            after.remove(table),
+            Some(rows_hash(db, "SELECT NULL WHERE 0")),
+            "new {table} must be empty"
+        );
+    }
+    assert_eq!(
+        after.remove("characters.account_id"),
+        Some(rows_hash(db, "SELECT id,NULL FROM characters ORDER BY id")),
+        "legacy membership must remain unknown"
+    );
+    assert_eq!(after.remove("unresolved_observations"),Some(rows_hash(db,"SELECT 'fight',id FROM fights WHERE run_id IS NULL UNION ALL SELECT 'drop',id FROM drops WHERE run_id IS NULL ORDER BY 1,2")),"019 markers must exactly match legacy runless observations");
+    assert_eq!(
+        after, before,
+        "upgrade must preserve exactly all installed history rows"
+    );
+}
+
+#[test]
+fn account_scope_retention_upgrade_preserves_exact_history_and_additions() {
+    // phase1_600mb applies historical 013–015 before its exact DDL comparison.
+    let mut db = Connection::open_in_memory().unwrap();
+    installed_schema::install(&db, 15);
+    common::apply_legacy_story(&mut db, &common::story_events());
+    db.execute_batch("INSERT INTO fights(id,session_id,started,complete_capture,json) VALUES('legacy-realm','demo-session',100,1,'{}');
+            INSERT INTO drops(id,session_id,at,bag_type,json) VALUES('legacy-realm','demo-session',100,1,'{}');").unwrap();
+    let before = history(&db);
+    migrate(&mut db).unwrap();
+    assert_upgrade_history(&db, before);
+    assert_eq!(
+        scalar(&db, "SELECT count(*) FROM unresolved_observations"),
+        2
+    );
+    // Ongoing maintenance equality also includes the new membership column.
+    let before = history(&db);
+    db.execute_batch("INSERT INTO accounts VALUES('synthetic-account'); UPDATE characters SET account_id='synthetic-account';").unwrap();
+    assert_ne!(
+        history(&db)["characters.account_id"],
+        before["characters.account_id"]
+    );
 }

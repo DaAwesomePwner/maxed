@@ -109,7 +109,10 @@ impl StoreReader {
                 [&castle],
                 |row| row.get(0),
             )?;
-            if visit.account.is_none() || castle_account != visit.account {
+            if visit.account.is_some()
+                && castle_account.is_some()
+                && castle_account != visit.account
+            {
                 continue;
             }
             if let Some(name) = journey::castle_realm_name(&tx, Some(&castle))? {

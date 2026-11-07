@@ -59,17 +59,17 @@ fn step_kind(visit: &VisitRow) -> Option<ChainStepKind> {
 }
 
 pub(crate) fn chain_range(visits: &[VisitRow], index: usize) -> Option<Range<usize>> {
-    visits.get(index)?.account.as_ref()?;
+    visits.get(index)?;
     let mut start = 0;
     while start + 1 < visits.len() {
-        if visits[start].account.is_some()
-            && visits[start].account == visits[start + 1].account
-            && visits[start].kind == "realm"
+        let mut account = visits[start].account.as_deref();
+        if visits[start].kind == "realm"
+            && compatible_account(&mut account, visits[start + 1].account.as_deref())
             && step_kind(&visits[start + 1]) == Some(ChainStepKind::Castle)
         {
             let mut end = start + 2;
             while end < visits.len()
-                && visits[end].account == visits[start].account
+                && compatible_account(&mut account, visits[end].account.as_deref())
                 && matches!(
                     step_kind(&visits[end]),
                     Some(ChainStepKind::Chamber | ChainStepKind::Sanctuary)
@@ -86,6 +86,18 @@ pub(crate) fn chain_range(visits: &[VisitRow], index: usize) -> Option<Range<usi
         }
     }
     None
+}
+
+// Unknown ownership can retain story context, but must not join two known accounts.
+fn compatible_account<'a>(account: &mut Option<&'a str>, next: Option<&'a str>) -> bool {
+    match (*account, next) {
+        (Some(owner), Some(next)) => owner == next,
+        (None, Some(next)) => {
+            *account = Some(next);
+            true
+        }
+        _ => true,
+    }
 }
 
 /// Non-dungeon or unresolved visits have no repeat ordinal.

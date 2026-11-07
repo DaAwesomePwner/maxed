@@ -855,3 +855,38 @@ fn account_scope_visit_filters_foreign_fights_drops_fame_records_and_castle() {
     assert_eq!(recap.title, "Synthetic Realm");
     assert!(recap.chain.is_none());
 }
+
+#[test]
+fn account_scope_castle_title_and_chain_keep_unknown_ownership() {
+    for (visit_owner, castle_owner) in [
+        (None, None),
+        (Some("self"), None),
+        (None, Some("self")),
+        (Some("self"), Some("self")),
+    ] {
+        let t = Fixture::new();
+        t.visit("realm", 10, Some(100), Some("instance"));
+        t.castle(100, true);
+        t.db.execute(
+            "UPDATE map_visits SET character_id=?1 WHERE id='realm'",
+            [visit_owner],
+        )
+        .unwrap();
+        t.db.execute(
+            "UPDATE runs SET character_id=?1 WHERE id='castle'",
+            [castle_owner],
+        )
+        .unwrap();
+        let recap = t.recap("realm");
+        assert_eq!(
+            recap.title, "Synthetic Hydra",
+            "{visit_owner:?}/{castle_owner:?}"
+        );
+        let chain = recap.chain.unwrap();
+        assert_eq!(chain.steps.len(), 2);
+        assert_eq!(chain.steps[0].kind, ChainStepKind::Realm);
+        assert_eq!(chain.steps[0].name, "Synthetic Hydra");
+        assert_eq!(chain.steps[1].kind, ChainStepKind::Castle);
+        assert_eq!(chain.steps[1].run_id.as_deref(), Some("castle"));
+    }
+}

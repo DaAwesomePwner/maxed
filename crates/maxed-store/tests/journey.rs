@@ -649,3 +649,30 @@ fn account_scope_journey_keeps_foreign_visits_as_boundaries() {
         assert_eq!(in_a_row(&visits, 2), 1);
     }
 }
+
+#[test]
+fn account_scope_unknown_chain_steps_never_bridge_different_known_accounts() {
+    for owners in [
+        [Some("a"), None, Some("b")],
+        [None, Some("a"), Some("b")],
+        [Some("a"), Some("b"), None],
+    ] {
+        let (_, mut visits) = sequence(&[
+            ("realm", None),
+            ("dungeon", Some(CASTLE)),
+            ("dungeon", Some(CHAMBER)),
+        ]);
+        for (visit, owner) in visits.iter_mut().zip(owners) {
+            visit.account = owner.map(str::to_owned);
+        }
+        assert_eq!(chain_range(&visits, 2), None, "{owners:?}");
+        assert_eq!(
+            chain_range(&visits, 0),
+            if owners[1] == Some("b") {
+                None
+            } else {
+                Some(0..2)
+            }
+        );
+    }
+}

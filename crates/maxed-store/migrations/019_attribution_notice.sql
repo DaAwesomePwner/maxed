@@ -7,7 +7,7 @@ CREATE TRIGGER unresolved_fights_insert AFTER INSERT ON fights BEGIN
  DELETE FROM unresolved_observations WHERE kind='fight' AND observation_id=NEW.id;
  INSERT OR IGNORE INTO unresolved_observations SELECT 'fight',f.id FROM fights f LEFT JOIN observation_characters o ON o.kind='fight' AND o.observation_id=f.id WHERE ((o.character_id IS NULL AND f.run_id IS NULL) OR (o.character_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM characters WHERE id=o.character_id))) AND f.id=NEW.id;
 END;
-CREATE TRIGGER unresolved_fights_update AFTER UPDATE ON fights BEGIN
+CREATE TRIGGER unresolved_fights_update AFTER UPDATE ON fights WHEN OLD.run_id IS NOT NEW.run_id BEGIN
  DELETE FROM unresolved_observations WHERE kind='fight' AND observation_id IN (OLD.id,NEW.id);
  INSERT OR IGNORE INTO unresolved_observations SELECT 'fight',f.id FROM fights f LEFT JOIN observation_characters o ON o.kind='fight' AND o.observation_id=f.id WHERE ((o.character_id IS NULL AND f.run_id IS NULL) OR (o.character_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM characters WHERE id=o.character_id))) AND f.id=NEW.id;
 END;
@@ -44,7 +44,7 @@ CREATE TRIGGER unresolved_drops_insert AFTER INSERT ON drops BEGIN
  DELETE FROM unresolved_observations WHERE kind='drop' AND observation_id=NEW.id;
  INSERT OR IGNORE INTO unresolved_observations SELECT 'drop',f.id FROM drops f LEFT JOIN observation_characters o ON o.kind='drop' AND o.observation_id=f.id WHERE ((o.character_id IS NULL AND f.run_id IS NULL) OR (o.character_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM characters WHERE id=o.character_id))) AND f.id=NEW.id;
 END;
-CREATE TRIGGER unresolved_drops_update AFTER UPDATE ON drops BEGIN
+CREATE TRIGGER unresolved_drops_update AFTER UPDATE ON drops WHEN OLD.run_id IS NOT NEW.run_id BEGIN
  DELETE FROM unresolved_observations WHERE kind='drop' AND observation_id IN (OLD.id,NEW.id);
  INSERT OR IGNORE INTO unresolved_observations SELECT 'drop',f.id FROM drops f LEFT JOIN observation_characters o ON o.kind='drop' AND o.observation_id=f.id WHERE ((o.character_id IS NULL AND f.run_id IS NULL) OR (o.character_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM characters WHERE id=o.character_id))) AND f.id=NEW.id;
 END;
