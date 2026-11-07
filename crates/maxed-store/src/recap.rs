@@ -35,7 +35,9 @@ impl StoreReader {
         identifier(&request.visit_id)?;
         let tx = self.conn.unchecked_transaction()?;
         let visit = tx
-            .prepare_cached(include_str!("visit_recap.sql"))?
+            .prepare_cached(&crate::account_sql::with_accounts(include_str!(
+                "visit_recap.sql"
+            )))?
             .query_row([&request.visit_id], |row| {
                 Ok(VisitFacts {
                     session: row.get(0)?,
@@ -57,18 +59,20 @@ impl StoreReader {
         };
         // Period collection is independent of the bounded journey inference.
         let periods = if let Some(key) = &visit.instance {
-            tx.prepare_cached(include_str!("visit_periods.sql"))?
-                .query_map(
-                    params![visit.session, key, visit.account, request.visit_id],
-                    |row| {
-                        Ok(VisitPeriod {
-                            visit_id: row.get(0)?,
-                            started: timestamp(row.get(1)?)?,
-                            ended: row.get::<_, Option<i64>>(2)?.map(timestamp).transpose()?,
-                        })
-                    },
-                )?
-                .collect::<Result<Vec<_>, _>>()?
+            tx.prepare_cached(&crate::account_sql::with_accounts(include_str!(
+                "visit_periods.sql"
+            )))?
+            .query_map(
+                params![visit.session, key, visit.account, request.visit_id],
+                |row| {
+                    Ok(VisitPeriod {
+                        visit_id: row.get(0)?,
+                        started: timestamp(row.get(1)?)?,
+                        ended: row.get::<_, Option<i64>>(2)?.map(timestamp).transpose()?,
+                    })
+                },
+            )?
+            .collect::<Result<Vec<_>, _>>()?
         } else {
             vec![visit.period]
         };
@@ -101,7 +105,7 @@ impl StoreReader {
                 continue;
             };
             let castle_account: Option<String> = tx.query_row(
-                "SELECT (SELECT ac.account_id FROM runs owner_run JOIN characters ac ON ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=owner_run.character_id),owner_run.character_id) WHERE owner_run.id=?1)",
+                &crate::account_sql::with_accounts("SELECT /*account:run:?1*/"),
                 [&castle],
                 |row| row.get(0),
             )?;
@@ -149,24 +153,43 @@ impl StoreReader {
         bounded(&recap, MAX_RUN_STORY_BYTES)?;
         let mut bytes = serde_json::to_vec(&recap)?.len();
         let args = params![recap.session_id, scope, visit.account];
-        recap.fights = fight_summaries(&tx, include_str!("visit_fights.sql"), args, &mut bytes)?;
-        (recap.drops, recap.drops_limited) =
-            run_screen::load_details(&tx, include_str!("visit_drops.sql"), args, &mut bytes)?;
+        recap.fights = fight_summaries(
+            &tx,
+            &crate::account_sql::with_accounts(include_str!("visit_fights.sql")),
+            args,
+            &mut bytes,
+        )?;
+        (recap.drops, recap.drops_limited) = run_screen::load_details(
+            &tx,
+            &crate::account_sql::with_accounts(include_str!("visit_drops.sql")),
+            args,
+            &mut bytes,
+        )?;
         (recap.announcements, recap.announcements_limited) = run_screen::load_events(
             &tx,
             include_str!("visit_announcements.sql"),
             &args[..2],
             &mut bytes,
         )?;
-        (recap.boss_fights, recap.boss_fights_limited) =
-            run_screen::load_bosses(&tx, include_str!("visit_bosses.sql"), args, &mut bytes)?;
+        (recap.boss_fights, recap.boss_fights_limited) = run_screen::load_bosses(
+            &tx,
+            &crate::account_sql::with_accounts(include_str!("visit_bosses.sql")),
+            args,
+            &mut bytes,
+        )?;
         recap.fame_delta = tx
-            .prepare_cached(include_str!("visit_fame.sql"))?
+            .prepare_cached(&crate::account_sql::with_accounts(include_str!(
+                "visit_fame.sql"
+            )))?
             .query_row(
                 params![recap.session_id, scope, recap.character_id, visit.account],
                 |row| row.get(0),
             )?;
-        recap.best_dps = records::best_dps(&tx, include_str!("visit_account_records.sql"), args)?;
+        recap.best_dps = records::best_dps(
+            &tx,
+            &crate::account_sql::with_accounts(include_str!("visit_account_records.sql")),
+            args,
+        )?;
         let recap = bound_visit(recap)?;
         tx.commit()?;
         Ok(Some(recap))
@@ -181,7 +204,9 @@ impl StoreReader {
         // All statements share a snapshot even while the writer commits new runs.
         let tx = self.conn.unchecked_transaction()?;
         let run = tx
-            .prepare_cached(include_str!("run_recap.sql"))?
+            .prepare_cached(&crate::account_sql::with_accounts(include_str!(
+                "run_recap.sql"
+            )))?
             .query_row([&request.run_id], |row| {
                 Ok(records::RunFacts {
                     session: row.get(0)?,

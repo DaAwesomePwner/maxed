@@ -606,3 +606,25 @@ fn account_scope_regressed_session_boundaries_clamp_identity_span_ends() {
     assert_eq!(span_end(&db, "test-stream", 5), Some(200));
     assert_eq!(span_end(&db, "test-stream", 3), Some(100));
 }
+
+#[test]
+fn account_scope_regressed_identity_change_clamps_open_span() {
+    let mut db = Connection::open_in_memory().unwrap();
+    migrate(&mut db).unwrap();
+    seed(
+        &mut db,
+        vec![
+            character("self", Some(account('a'))),
+            identity(100, Some("self"), Some(account('a'))),
+            identity(50, None, None),
+        ],
+    );
+    let end: i64 = db
+        .query_row(
+            "SELECT ended FROM identity_spans WHERE started=100",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(end, 100);
+}

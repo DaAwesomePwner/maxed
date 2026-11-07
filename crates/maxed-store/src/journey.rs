@@ -22,12 +22,12 @@ pub(crate) fn session_visits(
     session_id: &str,
 ) -> Result<Vec<VisitRow>, StoreError> {
     let mut statement = conn.prepare_cached(
-        "SELECT map_visits.id,kind,map,run_id,r.dungeon,
-                map_visits.started,map_visits.ended,(SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=CASE WHEN map_visits.run_id IS NOT NULL THEN r.character_id ELSE map_visits.character_id END),CASE WHEN map_visits.run_id IS NOT NULL THEN r.character_id ELSE map_visits.character_id END))
+        &crate::account_sql::with_accounts("SELECT map_visits.id,kind,map,run_id,r.dungeon,
+                map_visits.started,map_visits.ended,/*account:character:CASE WHEN map_visits.run_id IS NOT NULL THEN r.character_id ELSE map_visits.character_id END*/
          FROM map_visits INDEXED BY map_visits_session
          LEFT JOIN runs r ON r.id=map_visits.run_id
          WHERE map_visits.session_id=?1
-         ORDER BY map_visits.started,map_visits.id LIMIT 2000",
+         ORDER BY map_visits.started,map_visits.id LIMIT 2000"),
     )?;
     let rows = statement.query_map([session_id], |row| {
         Ok(VisitRow {
@@ -172,7 +172,7 @@ fn step(
         visit.account
     ];
     let combat_sql = format!(
-        "WITH scoped_fights AS MATERIALIZED (SELECT * FROM fights INDEXED BY {fight_index} WHERE {fight_scope} AND (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))))=?5),
+        "WITH scoped_fights AS MATERIALIZED (SELECT * FROM fights INDEXED BY {fight_index} WHERE {fight_scope} AND /*account:fight:fights*/=?5),
          party_scope(fight_id) AS (SELECT id FROM scoped_fights),
          {},
          spans AS (
@@ -191,20 +191,20 @@ fn step(
         include_str!("party_average_scoped.sql"),
     );
     let (local_dps, party_dps): (Option<f64>, Option<f64>) = conn
-        .prepare_cached(&combat_sql)?
+        .prepare_cached(&crate::account_sql::with_accounts(&combat_sql))?
         .query_row(bindings, |row| Ok((row.get(0)?, row.get(1)?)))?;
     let local_dps = local_dps.filter(|value| value.is_finite());
     let party_dps = party_dps.filter(|value| value.is_finite());
     // Junk bags are excluded upstream by migration 011 and the writer.
     let drops_sql = format!(
-        "WITH scoped_drops AS MATERIALIZED (SELECT * FROM drops INDEXED BY {drop_index} WHERE {drop_scope} AND (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='drop' AND observation_id=drops.id),(SELECT character_id FROM runs WHERE id=drops.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='drop' AND observation_id=drops.id),(SELECT character_id FROM runs WHERE id=drops.run_id))))=?5)
+        "WITH scoped_drops AS MATERIALIZED (SELECT * FROM drops INDEXED BY {drop_index} WHERE {drop_scope} AND /*account:drop:drops*/=?5)
          SELECT count(*),count(*) FILTER (WHERE bag_rank=255) FROM scoped_drops"
     );
     let (bags, whites): (u32, u32) = conn
-        .prepare_cached(&drops_sql)?
+        .prepare_cached(&crate::account_sql::with_accounts(&drops_sql))?
         .query_row(bindings, |row| Ok((row.get(0)?, row.get(1)?)))?;
     let items_sql = format!(
-        "WITH scoped_drops AS (SELECT * FROM drops INDEXED BY {drop_index} WHERE {drop_scope} AND (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='drop' AND observation_id=drops.id),(SELECT character_id FROM runs WHERE id=drops.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='drop' AND observation_id=drops.id),(SELECT character_id FROM runs WHERE id=drops.run_id))))=?5),
+        "WITH scoped_drops AS (SELECT * FROM drops INDEXED BY {drop_index} WHERE {drop_scope} AND /*account:drop:drops*/=?5),
          appearances AS (
              SELECT i.item_type,d.bag_rank,d.at,i.slot,d.id,
                  row_number() OVER (PARTITION BY i.item_type ORDER BY d.bag_rank DESC,d.at,i.slot,d.id) AS n
@@ -215,7 +215,7 @@ fn step(
          ORDER BY bag_rank DESC,at,slot,id,item_type LIMIT 4"
     );
     let item_types = conn
-        .prepare_cached(&items_sql)?
+        .prepare_cached(&crate::account_sql::with_accounts(&items_sql))?
         .query_map(bindings, |row| row.get(0))?
         .collect::<Result<Vec<u16>, _>>()?;
     let timestamp = |value: i64| {

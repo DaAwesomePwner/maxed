@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+mod account_sql;
 pub mod accounts;
 mod alerts;
 pub mod backup;

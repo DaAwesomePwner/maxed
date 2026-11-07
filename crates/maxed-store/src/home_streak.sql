@@ -2,8 +2,8 @@
 WITH observed AS MATERIALIZED (
     SELECT r.started,r.ended,
         (SELECT max(d.at) FROM drops d INDEXED BY drops_white_runs
-         WHERE d.run_id=r.id AND d.bag_rank=255 AND (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='drop' AND observation_id=d.id),(SELECT character_id FROM runs WHERE id=d.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='drop' AND observation_id=d.id),(SELECT character_id FROM runs WHERE id=d.run_id))))=?2) AS white_at
-    FROM runs r INDEXED BY runs_loot_stats WHERE r.dungeon=?1 AND (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=r.character_id),r.character_id))=?2
+         WHERE d.run_id=r.id AND d.bag_rank=255 AND /*account:drop:d*/=?2) AS white_at
+    FROM runs r INDEXED BY runs_loot_stats WHERE r.dungeon=?1 AND /*account:character:r.character_id*/=?2
 ), totals AS (
     SELECT count(*) FILTER (WHERE ended IS NOT NULL) AS runs_ended,
         count(*) FILTER (WHERE ended IS NOT NULL AND white_at IS NOT NULL) AS white_runs,

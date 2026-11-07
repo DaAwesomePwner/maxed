@@ -430,6 +430,11 @@ fn new_items_first_appearance_only() {
     t.run("current", 30, Some("cleared"), 10);
     t.run("later", 50, Some("cleared"), 10);
     t.drop("realm", None, 1, 10, &[1]);
+    t.db.execute(
+        "INSERT INTO observation_characters VALUES('drop','realm','self')",
+        [],
+    )
+    .unwrap();
     t.drop("first-bag", Some("first"), 11, 10, &[2]);
     t.drop("a", Some("current"), 31, 255, &[12, 3, 1, 2]);
     t.drop("b", Some("current"), 31, 10, &[4, 5, 6, 7, 8, 9, 10, 11]);
@@ -612,6 +617,7 @@ fn run_recap_plans_avoid_base_scans() {
                 "the ordered candidate statement must not carry full fight JSON"
             );
         }
+        let sql = crate::common::account_sql::with_accounts(&sql);
         let plan =
             t.db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
                 .unwrap()

@@ -55,6 +55,7 @@ fn replay_home_fixture(name: &str) -> (Vec<LiveSnapshot>, HomeSummary) {
         )
         .expect("synthetic native replay");
     let final_snapshot = runtime.snapshot();
+    assert!(events.lock().unwrap().iter().any(|e| matches!(&e.event, EngineEvent::CharacterUpdated(character) if character.identity_verified && character.account_id.is_some())), "reviewed replay retains verified stat 38");
     let status = runtime.store_status();
     assert_eq!(
         status.stream_id.as_deref(),
@@ -371,9 +372,19 @@ fn typed_death_after_clear_and_consecutive_sessions_keep_separate_facts() {
     next_run.evidence.clear();
     let mut old_session = snapshot.session.clone().unwrap();
     old_session.ended = Some(Timestamp(6_000_000));
+    let mut character = story.character.clone().unwrap();
+    character.identity_verified = true;
+    character.account_id =
+        Some("account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into());
+    let identity = EngineEvent::LocalIdentityChanged {
+        at: snapshot.session.as_ref().unwrap().started,
+        character_id: Some(character.id.clone()),
+        account_id: character.account_id.clone(),
+    };
     let events: Vec<_> = [
         EngineEvent::SessionUpdated(old_session),
-        EngineEvent::CharacterUpdated(story.character.clone().unwrap()),
+        EngineEvent::CharacterUpdated(character),
+        identity,
         EngineEvent::RunStarted(story.run.clone()),
         EngineEvent::PlayerDied {
             at: Timestamp(6_000_000),

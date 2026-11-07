@@ -23,7 +23,7 @@ fn sql(lean: bool, bounded: bool, targeted: bool) -> &'static str {
     &SQL.get_or_init(|| {
         std::array::from_fn(|index| {
             let template = if index & 4 != 0 {
-                include_str!("home_boss_baselines.sql").to_owned()
+                crate::account_sql::with_accounts(include_str!("home_boss_baselines.sql"))
             } else {
                 with_scoped_party_average(include_str!("boss_history.sql"))
             };

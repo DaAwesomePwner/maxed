@@ -231,6 +231,11 @@ fn fight(
         params![id,run,session,started,local,span],
     ).unwrap();
     crate::common::account_scope_fixture::attribute(db);
+    db.execute(
+        "INSERT INTO observation_characters VALUES('fight',?1,'synthetic-fixture-owner')",
+        [id],
+    )
+    .unwrap();
     for (player, local, dps) in [
         ("local", true, Some(99999.0)),
         ("one", false, Some(1000.0)),
@@ -306,6 +311,11 @@ fn bag(db: &Connection, id: &str, run: Option<&str>, at: i64, rank: Option<i64>,
     db.execute("INSERT INTO drops(id,session_id,run_id,at,bag_type,bag_rank,json) VALUES(?1,'synthetic-session',?2,?3,5000,?4,'{}')",
         params![id,run,at,rank]).unwrap();
     crate::common::account_scope_fixture::attribute(db);
+    db.execute(
+        "INSERT INTO observation_characters VALUES('drop',?1,'synthetic-fixture-owner')",
+        [id],
+    )
+    .unwrap();
     for (slot, item) in items.iter().enumerate() {
         db.execute(
             "INSERT INTO drop_items(drop_id,slot,item_type,quantity,json) VALUES(?1,?2,?3,1,'{}')",
@@ -344,7 +354,7 @@ fn chain_step_whites_match_streak_predicate() {
     for step in &result.steps[1..] {
         let (last_white, average): (Option<i64>, Option<f64>) = db
             .query_row(
-                include_str!("../src/home_streak.sql"),
+                &crate::common::account_sql::with_accounts(include_str!("../src/home_streak.sql")),
                 params![step.name, crate::common::account_scope_fixture::ACCOUNT],
                 |row| Ok((row.get(1)?, row.get(3)?)),
             )

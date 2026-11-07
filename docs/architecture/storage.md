@@ -53,7 +53,7 @@ not delete history; active readers may keep committed pages in the WAL.
 
 ## Schema and recovery
 
-Migrations 001–018 are transactional, with their SHA-256 script checksums and `user_version`
+Migrations 001–019 are transactional, with their SHA-256 script checksums and `user_version`
 written together. Unknown existing databases, changed checksums, and future schema
 versions are rejected. Foreign keys are enabled on all connections. Readers open
 read-only and query-only, with the same bounded busy timeout, and cannot move across
@@ -372,4 +372,8 @@ known account is never evidence of ownership.
 
 HomeSummary.unattributed_history reports database-wide unknown run/fight/drop ownership; Home shows one notice for excluded totals, records and bests, while dungeon_bests retains its account-scoped vector response.
 
-Migration 018 adds only runs_character(character_id,id), so the database-wide attribution notice can seek unknown run owners without scanning run payloads; observation checks use existing primary/run indexes.
+Migration 018 adds `runs_character(character_id,id)` for indexed account-owned and unknown-run lookups.
+
+Migration 019 maintains a small `unresolved_observations` marker through insert/update/delete triggers for observations with missing owner references (including runless observations without an owner row); the Home notice combines this with indexed unknown-character seeks, so fully attributed history does not require a history scan.
+
+Selected visit stories retain their own period and unknown-owner observations, excluding only different known owners; account records and period/chain merging still require known matching ownership.

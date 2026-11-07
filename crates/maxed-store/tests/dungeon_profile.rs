@@ -407,6 +407,7 @@ fn dungeon_profile_best_dps_uses_character_resolution_and_fight_range() {
     let run = cleared(0, "beta", 600);
     let mut realm = kill(&run, 42, 150, 60);
     realm.run_id = None;
+    realm.owner_character_id = Some("alpha".into());
     realm.players[0].dps = Some(2000.0);
     let mut open = realm.clone();
     open.id = "synthetic-open".into();
@@ -660,7 +661,8 @@ fn dungeon_profile_run_dps_query_uses_run_indexes() {
     let runs: Vec<_> = (0..8).map(|i| cleared(i, "alpha", 600)).collect();
     let fights = runs.iter().map(|run| kill(run, 42, 100, 60)).collect();
     seed(&mut db, &runs, fights);
-    let sql = include_str!("../src/dungeon_profile_dps.sql");
+    let sql =
+        &crate::common::account_sql::with_accounts(include_str!("../src/dungeon_profile_dps.sql"));
     let plan = db
         .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
         .unwrap()
@@ -684,4 +686,22 @@ fn dungeon_profile_run_dps_query_uses_run_indexes() {
     for table in ["fight_summaries", "fight_players", "pd_run_players"] {
         assert!(!plan.contains(&format!("SCAN {table}")), "{plan}");
     }
+}
+
+#[test]
+fn account_scope_profile_without_dps_cache_matches_instance_totals() {
+    let (_dir, path, mut db) = database();
+    let runs: Vec<_> = (0..3).map(|i| cleared(i, "alpha", 600)).collect();
+    let fights = runs
+        .iter()
+        .flat_map(|run| [kill(run, 42, 100, 60), kill(run, 43, 200, 60)])
+        .collect();
+    seed(&mut db, &runs, fights);
+    db.execute("DELETE FROM pd_run_players", []).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    let expected = reference_run_dps(&db, &reader, &request());
+    assert_eq!(expected.0, 3);
+    assert!(expected.1.unwrap() > 0.);
+    let actual = reader.dungeon_profile(request(), Some(ACCOUNT)).unwrap();
+    assert_eq!((actual.run_dps_samples, actual.usual_run_dps), expected);
 }

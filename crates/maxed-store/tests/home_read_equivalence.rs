@@ -366,14 +366,14 @@ fn home_boss_baselines_validate_filters() {
 fn account_scope_large_history_home_hud_bests_streak_plans() {
     use rusqlite::types::Value;
     let f = home_workload::Fixture::build(90); // 12,600 fights across the existing distributed fixture.
-    let scope = include_str!("../src/home_scope.sql");
-    let home = include_str!("../src/home.sql")
+    let scope = &crate::common::account_sql::with_accounts(include_str!("../src/home_scope.sql"));
+    let home = &crate::common::account_sql::with_accounts(include_str!("../src/home.sql"))
         .replace("/*home_scope*/", scope)
         .replace(
             "/*dungeon_stats*/",
             include_str!("../src/dungeon_stats.sql"),
         );
-    let hud = include_str!("../src/home_hud.sql")
+    let hud = &crate::common::account_sql::with_accounts(include_str!("../src/home_hud.sql"))
         .replace("/*home_scope*/", scope)
         .replace(
             "/*party_average_scoped*/",
@@ -392,7 +392,7 @@ fn account_scope_large_history_home_hud_bests_streak_plans() {
         (
             "Home",
             home,
-            base,
+            base.clone(),
             vec![
                 "pd_home_today_runs",
                 "runs_character",
@@ -408,13 +408,50 @@ fn account_scope_large_history_home_hud_bests_streak_plans() {
         ),
         (
             "bests",
-            include_str!("../src/dungeon_bests.sql").into(),
+            &crate::common::account_sql::with_accounts(include_str!("../src/dungeon_bests.sql")),
             vec![Value::Text(ACCOUNT.into())],
             vec!["pd_run_evidence_kind"],
         ),
         (
+            "scope_loot",
+            &crate::common::account_sql::with_accounts(include_str!("../src/scope_loot.sql")),
+            vec![
+                Value::Integer(1),
+                Value::Null,
+                Value::Integer(f.range.start.0 as i64),
+                Value::Integer(f.range.end.0 as i64),
+                Value::Text("[]".into()),
+                Value::Null,
+                Value::Null,
+                Value::Integer(10),
+                Value::Text(ACCOUNT.into()),
+            ],
+            vec!["drops_session", "drops_at"],
+        ),
+        (
+            "owned_dps",
+            &crate::common::account_sql::with_accounts(include_str!(
+                "../src/dungeon_profile_owned_dps.sql"
+            )),
+            vec![
+                Value::Text("synthetic-run".into()),
+                Value::Text(ACCOUNT.into()),
+            ],
+            vec!["fights_run", "fight_id=?"],
+        ),
+        (
+            "comparison",
+            &crate::common::account_sql::with_accounts(include_str!("../src/run_comparison.sql")),
+            vec![
+                Value::Text(home_workload::DUNGEON.into()),
+                Value::Integer(f.range.end.0 as i64),
+                Value::Text("synthetic-run".into()),
+            ],
+            vec!["dungeon=?", "run_id=?"],
+        ),
+        (
             "streak",
-            include_str!("../src/home_streak.sql").into(),
+            &crate::common::account_sql::with_accounts(include_str!("../src/home_streak.sql")),
             vec![
                 Value::Text(home_workload::DUNGEON.into()),
                 Value::Text(ACCOUNT.into()),
@@ -442,6 +479,23 @@ fn account_scope_large_history_home_hud_bests_streak_plans() {
         ] {
             assert!(
                 !plan.contains(&format!("MATERIALIZE {view}")),
+                "{name}:\n{plan}"
+            );
+        }
+        for alias in [
+            "characters",
+            "observation_characters",
+            "character_aliases",
+            "account_source",
+            "account_target",
+            "unknown_character",
+            "unknown_alias",
+            "unknown_observation",
+            "alias_source",
+        ] {
+            assert!(
+                !plan.lines().any(|line| line == format!("SCAN {alias}")
+                    || line.starts_with(&format!("SCAN {alias} "))),
                 "{name}:\n{plan}"
             );
         }

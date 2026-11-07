@@ -839,8 +839,13 @@ fn benchmark_home(shape: &str, scoped_runs: i64, scoped_fame: i64, release_limit
         let mut explain = db
             .prepare(&format!(
                 "EXPLAIN QUERY PLAN {}",
-                include_str!("../src/home.sql")
-                    .replace("/*home_scope*/", include_str!("../src/home_scope.sql"))
+                crate::common::account_sql::with_accounts(include_str!("../src/home.sql"))
+                    .replace(
+                        "/*home_scope*/",
+                        &crate::common::account_sql::with_accounts(include_str!(
+                            "../src/home_scope.sql"
+                        ))
+                    )
                     .replace(
                         "/*dungeon_stats*/",
                         include_str!("../src/dungeon_stats.sql")

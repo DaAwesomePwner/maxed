@@ -98,6 +98,7 @@ fn plan_searches_only_dungeon_runs_and_white_membership() {
     let t = LootDb::new();
     let sql = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/home_streak.sql"))
         .unwrap();
+    let sql = crate::common::account_sql::with_accounts(&sql);
     let plan =
         t.db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
             .unwrap()

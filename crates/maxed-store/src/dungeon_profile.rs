@@ -22,11 +22,11 @@ impl StoreReader {
         // Boss order and both character baselines must see the same history.
         let tx = self.conn.unchecked_transaction()?;
         let (clears, durations): (i64, String) = tx.query_row(
-            "SELECT COUNT(*) FILTER (WHERE outcome='cleared'),
+            &crate::account_sql::with_accounts("SELECT COUNT(*) FILTER (WHERE outcome='cleared'),
                 json_group_array(completed_at-started) FILTER (
                   WHERE outcome='cleared' AND completed_at>=started
                     AND (?3 IS NULL OR character_id=?3))
-             FROM runs WHERE (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=runs.character_id),runs.character_id))=?5 AND started>=?1 AND started<?2 AND dungeon=?4",
+             FROM runs WHERE /*account:character:runs.character_id*/=?5 AND started>=?1 AND started<?2 AND dungeon=?4"),
             params![lo, hi, character, request.dungeon, account],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
@@ -36,12 +36,12 @@ impl StoreReader {
             .then(|| median(&mut durations))
             .flatten();
 
-        let sql = include_str!("dungeon_profile.sql").replacen(
+        let sql = &crate::account_sql::with_accounts(include_str!("dungeon_profile.sql")).replacen(
             "/*fight_character*/",
             include_str!("fight_character.sql"),
             1,
         );
-        let mut statement = tx.prepare_cached(&sql)?;
+        let mut statement = tx.prepare_cached(sql)?;
         let mut rows = statement.query(params![lo, hi, character, request.dungeon, account])?;
         let mut bosses = Vec::new();
         while let Some(row) = rows.next()? {
@@ -65,7 +65,9 @@ impl StoreReader {
         drop(rows);
         drop(statement);
 
-        let mut statement = tx.prepare_cached(include_str!("dungeon_profile_dps.sql"))?;
+        let mut statement = tx.prepare_cached(&crate::account_sql::with_accounts(include_str!(
+            "dungeon_profile_dps.sql"
+        )))?;
         let mut rows = statement.query(params![lo, hi, character, request.dungeon, account])?;
         let mut run_dps_samples = 0u32;
         let mut mean = 0.0;
@@ -108,7 +110,7 @@ fn account_run_dps(
     run: &str,
     account: Option<&str>,
 ) -> Result<Option<f64>, StoreError> {
-    let sql = include_str!("dungeon_profile_owned_dps.sql");
+    let sql = &crate::account_sql::with_accounts(include_str!("dungeon_profile_owned_dps.sql"));
     let (first, last, damage): (Option<i64>, Option<i64>, Option<f64>) =
         conn.query_row(sql, params![run, account], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?))

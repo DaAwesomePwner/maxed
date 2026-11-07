@@ -235,6 +235,29 @@ fn account_scope_home_observations_fame_hud_and_unknown_notice() {
             .fame_per_hour,
         Some(360.)
     );
+    f.run("unknown-in-scope", "legacy", 50, 1);
+    f.fight(
+        "unknown-in-scope",
+        Some("unknown-in-scope"),
+        "legacy",
+        51,
+        99999.,
+        44,
+    );
+    for scope in [session(), today()] {
+        let summary = reader.home_summary(scope.clone(), Some(A)).unwrap();
+        assert_eq!((summary.runs, summary.clears), (2, 2));
+        assert_eq!(summary.top_fight.unwrap().id, "ar");
+        assert_eq!(
+            reader
+                .home_hud(scope, Some(A), &[], &[])
+                .unwrap()
+                .combat
+                .unwrap()
+                .fights,
+            2
+        );
+    }
     f.run("unknown", "legacy", 2000, 1); // Outside both requested scopes, still a database-wide notice.
     assert!(
         reader
@@ -253,6 +276,16 @@ fn account_scope_home_observations_fame_hud_and_unknown_notice() {
 #[test]
 fn account_scope_bests_records_streak_and_learned_bosses() {
     let mut f = Fixture::new();
+    f.run("unknown-fast", "legacy", 2, 1);
+    f.fight(
+        "unknown-fast",
+        Some("unknown-fast"),
+        "legacy",
+        3,
+        99999.,
+        44,
+    );
+    f.drop("unknown-white", Some("unknown-fast"), "legacy", 4, 77);
     f.run("b-fast", "b-7", 1, 1);
     f.drop("b-white", Some("b-fast"), "b-7", 2, 77);
     for (id, owner, start, duration) in [

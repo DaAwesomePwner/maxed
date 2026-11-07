@@ -25,13 +25,15 @@ pub(crate) fn run_records(
     chase_types: &[u16],
 ) -> Result<RunRecap, StoreError> {
     let account: Option<String> = conn.query_row(
-        "SELECT (SELECT ac.account_id FROM runs owner_run JOIN characters ac ON ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=owner_run.character_id),owner_run.character_id) WHERE owner_run.id=?1)",
+        &crate::account_sql::with_accounts("SELECT /*account:run:?1*/"),
         [run_id],
         |row| row.get(0),
     )?;
     let known = account.is_some();
     let (clears, previous_best, dry_runs, had_previous_white): (i64, Option<i64>, i64, bool) = conn
-        .prepare_cached(include_str!("records_runs.sql"))?
+        .prepare_cached(&crate::account_sql::with_accounts(include_str!(
+            "records_runs.sql"
+        )))?
         .query_row(params![run_id, run.dungeon, run.started], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })?;
@@ -170,7 +172,9 @@ fn new_items(
     if chase_types.is_empty() {
         return Ok(None);
     }
-    let mut statement = conn.prepare_cached(include_str!("records_items.sql"))?;
+    let mut statement = conn.prepare_cached(&crate::account_sql::with_accounts(include_str!(
+        "records_items.sql"
+    )))?;
     let items = statement.query_map(
         params![run_id, serde_json::to_string(chase_types)?],
         |row| row.get(0),

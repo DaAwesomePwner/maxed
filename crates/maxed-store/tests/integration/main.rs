@@ -115,3 +115,7 @@ mod writer;
 
 #[path = "../account_scope_readers.rs"]
 mod account_scope_readers;
+
+use common::account_sql;
+#[path = "../account_scope_sql.rs"]
+mod account_scope_sql;

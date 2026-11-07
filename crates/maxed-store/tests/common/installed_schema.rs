@@ -366,6 +366,12 @@ pub fn assert_additive_upgrade(
                     pending, baseline,
                     "unexpected work attributed to migration 018"
                 );
+            } else if version == 19 {
+                assert_eq!(
+                    normalized(&pending.join("; ")),
+                    normalized(include_str!("../../migrations/019_attribution_notice.sql")),
+                    "unexpected work attributed to migration 019"
+                );
             } else if version >= 16 {
                 assert!(!pending.is_empty(), "missing additive DDL trace");
                 for statement in &pending {

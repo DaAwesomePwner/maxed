@@ -74,19 +74,22 @@ fn report_home_read<T: serde::Serialize>(label: &str, mut read: impl FnMut() -> 
 }
 
 fn report_profile_materialization(fixture: &home_workload::Fixture) {
-    let columns = include_str!("../src/dungeon_profile.sql").replace(
-        "/*fight_character*/",
-        include_str!("../src/fight_character.sql"),
-    );
+    let columns =
+        &crate::common::account_sql::with_accounts(include_str!("../src/dungeon_profile.sql"))
+            .replace(
+                "/*fight_character*/",
+                include_str!("../src/fight_character.sql"),
+            );
     let mut full_json = columns.clone();
     // Controlled alternative: materialize valid full fight JSON before extracting
     // the same scalar facts. Keep this benchmark tied to the production scopes.
     for (name, source) in [
-        ("learning", "FROM cleared_runs cleared CROSS JOIN fights ON fights.run_id=cleared.id\n  WHERE (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))))=?5 AND json_valid(fights.json)"),
-        ("performance", "FROM fights\n  WHERE (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))))=?5 AND fights.started>=?1 AND fights.started<?2\n    AND fights.ended IS NOT NULL AND fights.local_dps IS NOT NULL AND json_valid(fights.json)"),
+        ("learning", "FROM cleared_runs cleared CROSS JOIN fights ON fights.run_id=cleared.id\n  WHERE /*account:fight:fights*/=?5 AND json_valid(fights.json)"),
+        ("performance", "FROM fights\n  WHERE /*account:fight:fights*/=?5 AND fights.started>=?1 AND fights.started<?2\n    AND fights.ended IS NOT NULL AND fights.local_dps IS NOT NULL AND json_valid(fights.json)"),
     ] {
-        assert_eq!(full_json.matches(source).count(), 1, "review {name} materialization benchmark when the scope changes");
-        full_json = full_json.replace(source, &format!("FROM {name}_valid fights"))
+        let source=crate::common::account_sql::with_accounts(source);
+        assert_eq!(full_json.matches(source.as_str()).count(), 1, "review {name} materialization benchmark when the scope changes");
+        full_json = full_json.replace(source.as_str(), &format!("FROM {name}_valid fights"))
             .replace(&format!("{name}_facts AS MATERIALIZED ("), &format!("{name}_valid AS MATERIALIZED (SELECT fights.* {source}),\n{name}_facts AS MATERIALIZED ("));
     }
     let read = |sql: &str| {
@@ -124,8 +127,8 @@ fn report_profile_materialization(fixture: &home_workload::Fixture) {
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
     };
-    assert_eq!(read(&columns), read(&full_json));
-    report_home_read("profile_boss_sql/extracted_columns", || read(&columns));
+    assert_eq!(read(columns), read(&full_json));
+    report_home_read("profile_boss_sql/extracted_columns", || read(columns));
     report_home_read("profile_boss_sql/full_json", || read(&full_json));
 }
 
@@ -303,8 +306,13 @@ fn dungeon_stats_and_story_totals_thirty_warm_reads() {
             .db
             .prepare(&format!(
                 "EXPLAIN QUERY PLAN {}",
-                include_str!("../src/home.sql")
-                    .replace("/*home_scope*/", include_str!("../src/home_scope.sql"))
+                crate::common::account_sql::with_accounts(include_str!("../src/home.sql"))
+                    .replace(
+                        "/*home_scope*/",
+                        &crate::common::account_sql::with_accounts(include_str!(
+                            "../src/home_scope.sql"
+                        ))
+                    )
                     .replace(
                         "/*dungeon_stats*/",
                         include_str!("../src/dungeon_stats.sql")
@@ -1223,4 +1231,19 @@ fn report_scoped_fts_miss(fixture: &d_workload::Fixture) {
     assert!(page.rows.is_empty());
     assert!(page.next.is_none());
     assert!(page.entered_runs.is_empty());
+}
+
+#[test]
+#[ignore = "release story baseline report; run serially before the dungeon/Home gate"]
+fn account_scope_story_baselines_thirty_warm_reads() {
+    // Measure the exact two story shapes used by the gate independently of
+    // the unrelated Runs-list timing gates on the same workload.
+    for shape in [runs_workload::REALISTIC, runs_workload::WORST] {
+        let fixture = runs_workload::build(shape);
+        fixture.validate();
+        let reader = crate::common::account_scope_fixture::open_reader(&fixture.path).unwrap();
+        d_workload::warm(&format!("{} story baseline", shape.name), || {
+            reader.get_run(runs_workload::RUN).unwrap().unwrap()
+        });
+    }
 }

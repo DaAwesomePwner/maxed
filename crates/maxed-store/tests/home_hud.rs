@@ -50,8 +50,11 @@ fn home_hud_party_average_plan_searches_scoped_fights() {
             Some(1000.0),
         ))],
     );
-    let sql = include_str!("../src/home_hud.sql")
-        .replace("/*home_scope*/", include_str!("../src/home_scope.sql"))
+    let sql = &crate::common::account_sql::with_accounts(include_str!("../src/home_hud.sql"))
+        .replace(
+            "/*home_scope*/",
+            &crate::common::account_sql::with_accounts(include_str!("../src/home_scope.sql")),
+        )
         .replace(
             "/*party_average_scoped*/",
             include_str!("../src/party_average_scoped.sql"),
@@ -105,6 +108,7 @@ fn fight(id: &str, started: u64, seconds: u64, dps: Option<f64>) -> FightView {
     fight.id = id.into();
     fight.session_id = "synthetic-session".into();
     fight.run_id = None;
+    fight.owner_character_id = Some("synthetic-alpha".into());
     fight.started = Timestamp(started);
     fight.first_hit = Some(Timestamp(started + SECOND));
     fight.last_hit = Some(Timestamp(started + (seconds + 1) * SECOND));
@@ -146,6 +150,7 @@ fn bag(id: &str, at: u64, rank: Option<u8>, items: &[u16]) -> DropView {
     bag.id = id.into();
     bag.session_id = "synthetic-session".into();
     bag.run_id = None;
+    bag.owner_character_id = Some("synthetic-alpha".into());
     bag.at = Timestamp(at);
     bag.bag_rank = rank;
     bag.contents_known = true;
@@ -459,6 +464,15 @@ fn home_hud_combat_none_without_eligible_fights() {
         events.push(EngineEvent::FightUpdated(invalid));
     }
     Stream::new("synthetic-invalid").apply(&mut db, events);
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM fight_accounts WHERE account_id=?1",
+            [ACCOUNT],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        8
+    );
     assert_eq!(
         reader
             .home_hud(scope(), Some(ACCOUNT), &[], &[])

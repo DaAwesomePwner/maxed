@@ -58,7 +58,14 @@ impl Fixture {
     }
     pub fn runs(&mut self) {
         let mut run = demo::demo_run_story().run;
-        run.character_id = None;
+        self.db
+            .execute(
+                "INSERT INTO accounts VALUES(?1)",
+                [crate::common::account_scope_fixture::ACCOUNT],
+            )
+            .unwrap();
+        self.db.execute("INSERT INTO characters(id,observed_at,json,account_id) VALUES('synthetic-d-owner',0,'{}',?1)", [crate::common::account_scope_fixture::ACCOUNT]).unwrap();
+        run.character_id = Some("synthetic-d-owner".into());
         run.complete_capture = true;
         run.issues.clear();
         run.died_at = None;
@@ -78,7 +85,7 @@ impl Fixture {
             INSERT INTO numbers SELECT i FROM n;",
             )
             .unwrap();
-        self.db.execute("INSERT INTO runs SELECT printf('pd-run-%05d',i),session_id,NULL,printf('Dungeon-%02d',i%60),started,ended,completed_at,NULL,outcome,complete_capture,NULL,
+        self.db.execute("INSERT INTO runs SELECT printf('pd-run-%05d',i),session_id,character_id,printf('Dungeon-%02d',i%60),started,ended,completed_at,NULL,outcome,complete_capture,NULL,
             json_set(json,'$.id',printf('pd-run-%05d',i),'$.dungeon',printf('Dungeon-%02d',i%60))
             FROM numbers CROSS JOIN runs WHERE id='demo-run' AND i>0",[]).unwrap();
         self.db.execute("INSERT INTO run_evidence SELECT id,0,completed_at,'victory',json_extract(json,'$.evidence[0]') FROM runs WHERE id<>'demo-run'",[]).unwrap();

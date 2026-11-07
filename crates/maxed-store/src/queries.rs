@@ -159,11 +159,11 @@ pub(crate) fn rows<T: DeserializeOwned>(
 
 impl StoreReader {
     pub fn dungeon_bests(&self, account: Option<&str>) -> Result<Vec<DungeonBest>, StoreError> {
-        let json: Option<String> =
-            self.conn
-                .query_row(include_str!("dungeon_bests.sql"), [account], |row| {
-                    row.get(0)
-                })?;
+        let json: Option<String> = self.conn.query_row(
+            &crate::account_sql::with_accounts(include_str!("dungeon_bests.sql")),
+            [account],
+            |row| row.get(0),
+        )?;
         bounded(
             serde_json::from_str::<Vec<DungeonBest>>(&json.ok_or(StoreError::Limit)?)?,
             1024 * 1024,
@@ -413,7 +413,7 @@ fn comparison(conn: &Connection, run: &RunView) -> Result<Option<ClearComparison
     };
     // Aggregate in SQL instead of fetching every historical run. Counter-based
     // timestamps are fallback/estimated clear durations, even at zero delay.
-    let sql="SELECT count(*),avg(completed_at-started) FROM runs WHERE (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=runs.character_id),runs.character_id))=(SELECT ac.account_id FROM runs owner_run JOIN characters ac ON ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=owner_run.character_id),owner_run.character_id) WHERE owner_run.id=?3) AND dungeon=?1 AND outcome='cleared' AND started<?2 AND completed_at>started AND CASE WHEN json_valid(json) THEN json_extract(json,'$.area_kind') END='dungeon' AND EXISTS(SELECT 1 FROM run_evidence e WHERE e.run_id=runs.id AND e.kind IN ('victory','completion_dialogue'))";
+    let sql = &crate::account_sql::with_accounts(include_str!("run_comparison.sql"));
     let (count, mean): (i64, Option<f64>) = conn.query_row(
         sql,
         params![run.dungeon, micros(run.started)?, run.id],
@@ -525,7 +525,7 @@ impl StoreReader {
         let unique: std::collections::BTreeMap<_, _> = tiers.iter().cloned().collect();
         let tiers = serde_json::to_string(&unique.into_iter().collect::<Vec<_>>())?;
         let json: Option<String> = self.conn.query_row(
-            include_str!("scope_loot.sql"),
+            &crate::account_sql::with_accounts(include_str!("scope_loot.sql")),
             params![
                 kind,
                 id,

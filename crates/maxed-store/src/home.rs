@@ -3,14 +3,20 @@ use maxed_types::{HomeScope, HomeSummary};
 use rusqlite::params;
 
 static HOME_SQL: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
-    crate::stats::with_dungeon_stats(&with_home_scope(include_str!("home.sql")))
+    crate::stats::with_dungeon_stats(&with_home_scope(&crate::account_sql::with_accounts(
+        include_str!("home.sql"),
+    )))
 });
 
 /// Share Home's session/day boundaries, scoped observations and per-character fame delta.
 pub(crate) fn with_home_scope(sql: &str) -> String {
     const SLOT: &str = "/*home_scope*/";
     debug_assert_eq!(sql.matches(SLOT).count(), 1);
-    sql.replacen(SLOT, include_str!("home_scope.sql"), 1)
+    sql.replacen(
+        SLOT,
+        &crate::account_sql::with_accounts(include_str!("home_scope.sql")),
+        1,
+    )
 }
 
 impl StoreReader {

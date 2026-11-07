@@ -32,6 +32,7 @@ fn put(db: &mut Connection, id: &str, at: u64, items: &[(u16, u8)]) {
     let mut drop = demo::demo_snapshot().drops.remove(0);
     drop.id = id.into();
     drop.run_id = None;
+    drop.owner_character_id = Some("demo-character".into());
     drop.at = Timestamp(at);
     drop.contents_known = true;
     drop.contents = items

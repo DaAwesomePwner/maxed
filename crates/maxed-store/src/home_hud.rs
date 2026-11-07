@@ -8,7 +8,9 @@ use rusqlite::params;
 use std::collections::BTreeMap;
 
 static HOME_HUD_SQL: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
-    with_scoped_party_average(&with_home_scope(include_str!("home_hud.sql")))
+    with_scoped_party_average(&with_home_scope(&crate::account_sql::with_accounts(
+        include_str!("home_hud.sql"),
+    )))
 });
 
 impl StoreReader {

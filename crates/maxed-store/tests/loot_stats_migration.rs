@@ -57,8 +57,8 @@ fn fresh_and_v14_databases_get_indexes_without_rewriting_history() {
         if legacy {
             assert_eq!(
                 db.total_changes() - changes,
-                4,
-                "only the 015 through 018 checksum ledger rows change"
+                5,
+                "only the 015 through 019 checksum ledger rows change"
             );
             assert_eq!(
                 db.query_row("SELECT json FROM runs", [], |r| r.get::<_, String>(0))
