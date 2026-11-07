@@ -10,8 +10,49 @@ use std::{
     time::Duration,
 };
 
-#[test]
-fn phase1_process_exit_at_receipt_checkpoints_preserves_proofs_and_newer_capture() {
+// Each scenario gets a libtest slot and its own database. The exact filter also
+// ensures that a child runs only the scenario whose checkpoint it must reach.
+macro_rules! receipt_checkpoint_tests {
+    ($($name:ident: ($version:expr, $checkpoint:literal)),+ $(,)?) => {
+        $(
+            #[test]
+            fn $name() {
+                phase1_process_exit_at_receipt_checkpoints_preserves_proofs_and_newer_capture(
+                    $version,
+                    $checkpoint,
+                    concat!("maintenance_jobs::", stringify!($name)),
+                );
+            }
+        )+
+    };
+}
+
+receipt_checkpoint_tests! {
+    phase1_v12_exit_at_awaiting_backup: (12, "awaiting_backup"),
+    phase1_v12_exit_at_backed_up: (12, "backed_up"),
+    phase1_v12_exit_at_copying: (12, "copying"),
+    phase1_v12_exit_at_verifying: (12, "verifying"),
+    phase1_v12_exit_at_deleting: (12, "deleting"),
+    phase1_v12_exit_at_reclaimable: (12, "reclaimable"),
+    phase1_v14_exit_at_awaiting_backup: (14, "awaiting_backup"),
+    phase1_v14_exit_at_backed_up: (14, "backed_up"),
+    phase1_v14_exit_at_copying: (14, "copying"),
+    phase1_v14_exit_at_verifying: (14, "verifying"),
+    phase1_v14_exit_at_deleting: (14, "deleting"),
+    phase1_v14_exit_at_reclaimable: (14, "reclaimable"),
+    phase1_v15_exit_at_awaiting_backup: (15, "awaiting_backup"),
+    phase1_v15_exit_at_backed_up: (15, "backed_up"),
+    phase1_v15_exit_at_copying: (15, "copying"),
+    phase1_v15_exit_at_verifying: (15, "verifying"),
+    phase1_v15_exit_at_deleting: (15, "deleting"),
+    phase1_v15_exit_at_reclaimable: (15, "reclaimable"),
+}
+
+fn phase1_process_exit_at_receipt_checkpoints_preserves_proofs_and_newer_capture(
+    version: usize,
+    checkpoint: &str,
+    test_name: &str,
+) {
     use maxed_store::backup::{BackupEnvironment, BackupStore};
     use maxed_types::*;
     use std::time::Instant;
@@ -82,128 +123,127 @@ fn phase1_process_exit_at_receipt_checkpoints_preserves_proofs_and_newer_capture
         // Abrupt termination intentionally skips SQLite/owner destructors.
         std::process::exit(79);
     }
-    for version in [12, 14, 15] {
-        for checkpoint in [
-            "awaiting_backup",
-            "backed_up",
-            "copying",
-            "verifying",
-            "deleting",
-            "reclaimable",
-        ] {
-            let dir = tempfile::tempdir().unwrap();
-            let path = dir.path().join("live.sqlite3");
-            let mut db = Connection::open(&path).unwrap();
-            crate::common::installed_schema::install(&db, version);
-            let mut originals = events();
-            crate::common::apply_legacy_batch(&mut db, &originals);
-            crate::common::installed_schema::assert_installed(&db, version);
-            drop(db);
-            let child = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "maintenance_jobs::phase1_process_exit_at_receipt_checkpoints_preserves_proofs_and_newer_capture"])
-            .env(CHILD, checkpoint).env(DATABASE, &path)
-            .output().unwrap();
-            assert_eq!(
-                child.status.code(),
-                Some(79),
-                "child must reach its durable checkpoint"
-            );
-            let mut db = Connection::open(&path).unwrap();
-            let (phase, moved): (String, i64) = db
-                .query_row(
-                    "SELECT phase,processed_records FROM maintenance_jobs",
-                    [],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
-                )
-                .unwrap();
-            match checkpoint {
-                "awaiting_backup" | "backed_up" => {
-                    assert_eq!(phase, "awaiting_backup");
-                    assert_eq!(moved, 0);
-                }
-                "copying" => assert!(
-                    (1..14).contains(&moved),
-                    "the process must exit after a partial durable receipt copy"
-                ),
-                expected => {
-                    assert_eq!(phase, expected);
-                    assert_eq!(moved, 14);
-                }
-            }
-            assert_eq!(
-                BackupStore::read_inventory(&path)
-                    .unwrap()
-                    .0
-                    .iter()
-                    .filter(|b| b.ready)
-                    .count(),
-                usize::from(checkpoint != "awaiting_backup")
-            );
-            let changes = db.total_changes();
-            maxed_store::apply_batch(&mut db, &originals).unwrap();
-            assert_eq!(
-                db.total_changes(),
-                changes,
-                "all old retries must survive process exit"
-            );
-            let mut newer = originals[0].clone();
-            newer.sequence = Sequence(Timestamp(8));
-            maxed_store::apply_batch(&mut db, &[newer.clone()]).unwrap();
-            originals.push(newer);
-            let mut owner = StoppedMaintenance::receipt_conversion(&path).unwrap();
-            let request = owner.request_receipt_conversion(300).unwrap();
-            let id = request.status.id;
-            if request.status.phase != Phase::Reclaimable {
-                owner
-                    .backup_receipt_conversion(&Space, &AtomicBool::new(false), &mut || {})
-                    .unwrap();
-                // Inject at the five non-complete checkpoints; reclaimable has
-                // no next unit. Newer capture must survive the rejected transaction.
-                let before = owner.control(Control::Status(id)).unwrap().status;
-                let counts = || {
-                    ["event_receipts_v2", "event_receipts"].map(|table| {
-                        db.query_row(&format!("SELECT count(*) FROM {table}"), [], |r| {
-                            r.get::<_, i64>(0)
-                        })
-                        .unwrap()
-                    })
-                };
-                let before_counts = counts();
-                db.execute_batch("CREATE TRIGGER reject_phase1_unit BEFORE UPDATE ON maintenance_jobs BEGIN SELECT RAISE(ABORT,'synthetic transaction failure'); END;").unwrap();
-                assert!(owner.step().is_err());
-                assert_eq!(owner.control(Control::Status(id)).unwrap().status, before);
-                assert_eq!(counts(), before_counts);
-                db.execute_batch("DROP TRIGGER reject_phase1_unit").unwrap();
-                drop(owner);
-                owner = StoppedMaintenance::receipt_conversion(&path).unwrap();
-                owner
-                    .backup_receipt_conversion(&Space, &AtomicBool::new(false), &mut || {})
-                    .unwrap();
-                run_until(&mut owner, "reclaimable");
-            }
-            let complete = owner.control(Control::Status(id)).unwrap().status;
-            assert_eq!(complete.processed_records, 14);
-            drop(owner);
-            let changes = db.total_changes();
-            maxed_store::apply_batch(&mut db, &originals).unwrap();
-            assert_eq!(db.total_changes(), changes);
-            let mut changed = originals[0].clone();
-            changed.at.0 += 1;
-            assert!(matches!(
-                maxed_store::apply_batch(&mut db, &[changed]),
-                Err(StoreError::InvalidEvent)
-            ));
-            assert_eq!(
-                db.query_row("SELECT count(*) FROM event_receipts_v2", [], |r| r
-                    .get::<_, i64>(0))
-                    .unwrap(),
-                15
-            );
-            assert_eq!(db.query_row("SELECT count(*) FROM sqlite_schema WHERE name IN ('event_receipts','stream_heads')", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
-            assert_eq!(BackupStore::read_inventory(&path).unwrap().0.len(), 1);
-            crate::common::installed_schema::assert_integrity(&db);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("live.sqlite3");
+    let mut db = Connection::open(&path).unwrap();
+    crate::common::installed_schema::install(&db, version);
+    let mut originals = events();
+    crate::common::apply_legacy_batch(&mut db, &originals);
+    crate::common::installed_schema::assert_installed(&db, version);
+    drop(db);
+    let child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", test_name])
+        .env(CHILD, checkpoint)
+        .env(DATABASE, &path)
+        .output()
+        .unwrap();
+    assert_eq!(
+        child.status.code(),
+        Some(79),
+        "child must reach its durable checkpoint"
+    );
+    let mut db = Connection::open(&path).unwrap();
+    let (phase, moved): (String, i64) = db
+        .query_row(
+            "SELECT phase,processed_records FROM maintenance_jobs",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    match checkpoint {
+        "awaiting_backup" | "backed_up" => {
+            assert_eq!(phase, "awaiting_backup");
+            assert_eq!(moved, 0);
+        }
+        "copying" => assert!(
+            (1..14).contains(&moved),
+            "the process must exit after a partial durable receipt copy"
+        ),
+        expected => {
+            assert_eq!(phase, expected);
+            assert_eq!(moved, 14);
         }
     }
+    assert_eq!(
+        BackupStore::read_inventory(&path)
+            .unwrap()
+            .0
+            .iter()
+            .filter(|b| b.ready)
+            .count(),
+        usize::from(checkpoint != "awaiting_backup")
+    );
+    let changes = db.total_changes();
+    maxed_store::apply_batch(&mut db, &originals).unwrap();
+    assert_eq!(
+        db.total_changes(),
+        changes,
+        "all old retries must survive process exit"
+    );
+    let mut newer = originals[0].clone();
+    newer.sequence = Sequence(Timestamp(8));
+    maxed_store::apply_batch(&mut db, &[newer.clone()]).unwrap();
+    originals.push(newer);
+    let mut owner = StoppedMaintenance::receipt_conversion(&path).unwrap();
+    let request = owner.request_receipt_conversion(300).unwrap();
+    let id = request.status.id;
+    if request.status.phase != Phase::Reclaimable {
+        owner
+            .backup_receipt_conversion(&Space, &AtomicBool::new(false), &mut || {})
+            .unwrap();
+        // Inject at the five non-complete checkpoints; reclaimable has
+        // no next unit. Newer capture must survive the rejected transaction.
+        let before = owner.control(Control::Status(id)).unwrap().status;
+        let counts = || {
+            ["event_receipts_v2", "event_receipts"].map(|table| {
+                db.query_row(&format!("SELECT count(*) FROM {table}"), [], |r| {
+                    r.get::<_, i64>(0)
+                })
+                .unwrap()
+            })
+        };
+        let before_counts = counts();
+        db.execute_batch("CREATE TRIGGER reject_phase1_unit BEFORE UPDATE ON maintenance_jobs BEGIN SELECT RAISE(ABORT,'synthetic transaction failure'); END;").unwrap();
+        assert!(owner.step().is_err());
+        assert_eq!(owner.control(Control::Status(id)).unwrap().status, before);
+        assert_eq!(counts(), before_counts);
+        db.execute_batch("DROP TRIGGER reject_phase1_unit").unwrap();
+        drop(owner);
+        owner = StoppedMaintenance::receipt_conversion(&path).unwrap();
+        owner
+            .backup_receipt_conversion(&Space, &AtomicBool::new(false), &mut || {})
+            .unwrap();
+        run_until(&mut owner, "reclaimable");
+    }
+    let complete = owner.control(Control::Status(id)).unwrap().status;
+    assert_eq!(complete.processed_records, 14);
+    drop(owner);
+    let changes = db.total_changes();
+    maxed_store::apply_batch(&mut db, &originals).unwrap();
+    assert_eq!(db.total_changes(), changes);
+    let mut changed = originals[0].clone();
+    changed.at.0 += 1;
+    assert!(matches!(
+        maxed_store::apply_batch(&mut db, &[changed]),
+        Err(StoreError::InvalidEvent)
+    ));
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM event_receipts_v2", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        15
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM sqlite_schema WHERE name IN ('event_receipts','stream_heads')",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert_eq!(BackupStore::read_inventory(&path).unwrap().0.len(), 1);
+    crate::common::installed_schema::assert_integrity(&db);
 }
 
 #[derive(Clone, Default)]
