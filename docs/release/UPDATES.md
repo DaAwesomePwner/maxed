@@ -1,8 +1,8 @@
 # Release staging and updates
 
-Development, CI, release staging and public update downloads all use `daplabs/maxed`. The public repository is the source repository, with version tags identifying the source used to build each release. Public update acceptance requires unauthenticated access to reviewed release artifacts. No repository token ships in Maxed.
+Development, CI, release staging and public update downloads all use `DaAwesomePwner/maxed`. The public repository is the source repository, with version tags identifying the source used to build each release. Public update acceptance requires unauthenticated access to reviewed release artifacts. No repository token ships in Maxed.
 
-Existing v0.1.1 installations pin `DaAwesomePwner/maxed` and need a manual reinstall from [daplabs/maxed releases](https://github.com/daplabs/maxed/releases). Repository redirects are rejected; those installations cannot migrate through the updater.
+Existing 0.1.2–0.1.4 installations pin `daplabs/maxed`. After the repository transfer, GitHub redirects that path, but the updater rejects repository redirects by design. These installations need a one-time manual reinstall from [DaAwesomePwner/maxed releases](https://github.com/DaAwesomePwner/maxed/releases). Update behavior for 0.1.1 installations is unverified; they should also be reinstalled manually if unsure. There is no bridge release; 0.1.5 will be released from the new repository home.
 
 ## Native updater rationale
 
@@ -20,8 +20,8 @@ Stable is the default; beta requires opt-in. Checking, downloading and installin
 
 | Channel | Fixed feed |
 | --- | --- |
-| Stable | `https://github.com/daplabs/maxed/releases/download/update-stable/latest.json` |
-| Beta | `https://github.com/daplabs/maxed/releases/download/update-beta/latest.json` |
+| Stable | `https://github.com/DaAwesomePwner/maxed/releases/download/update-stable/latest.json` |
+| Beta | `https://github.com/DaAwesomePwner/maxed/releases/download/update-beta/latest.json` |
 
 Pointer releases must be published and publicly downloadable, never drafts. Stable is non-prerelease and beta is prerelease; neither pointer should be marked GitHub's latest release. Clients use explicit URLs, not `/releases/latest`. Immutable installers use the exact `v<version>/Maxed_<version>_x64-setup.exe` path.
 
@@ -46,7 +46,7 @@ $version = '0.1.4'
 $notes = [IO.File]::ReadAllText('reviewed-notes.txt')
 ./scripts/release/New-ReleaseMetadata.ps1 `
   -Version $version -Channel 'stable' `
-  -Repository 'daplabs/maxed' `
+  -Repository 'DaAwesomePwner/maxed' `
   -Installer "target/release/bundle/nsis/Maxed_${version}_x64-setup.exe" `
   -Signature "target/release/bundle/nsis/Maxed_${version}_x64-setup.exe.sig" `
   -OutputDir 'release-stage' `

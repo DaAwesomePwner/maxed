@@ -5,8 +5,8 @@ members = ["crates/maxed-types", "crates/maxed-engine", "crates/maxed-store", "c
 version = "0.1.4"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/daplabs/maxed"
-homepage = "https://github.com/daplabs/maxed"
+repository = "https://github.com/DaAwesomePwner/maxed"
+homepage = "https://github.com/DaAwesomePwner/maxed"
 rust-version = "1.99.0"
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -26,7 +26,7 @@ try {
     $env:GITHUB_API_URL = 'https://api.github.com'; $env:GH_TOKEN = 'synthetic'
     $env:GITHUB_OUTPUT = Join-Path $temp 'output'; $env:GITHUB_STEP_SUMMARY = Join-Path $temp 'summary'
     foreach ($case in @('success','path','missing-path','repository','missing-repository','missing-full-name','sha','pr','failed','cancelled','branch','running','error','empty','pagination','later-error','schedule','dispatch')) {
-        $run = @{ path = '.github/workflows/tests.yml'; head_repository = @{ full_name = 'daplabs/maxed' }; head_sha = 'abc'; head_branch = 'main'; event = 'push'; status = 'completed'; conclusion = 'success'; html_url = 'https://example.invalid/run/1' }
+        $run = @{ path = '.github/workflows/tests.yml'; head_repository = @{ full_name = 'DaAwesomePwner/maxed' }; head_sha = 'abc'; head_branch = 'main'; event = 'push'; status = 'completed'; conclusion = 'success'; html_url = 'https://example.invalid/run/1' }
         switch ($case) {
             path { $run.path = '.github/workflows/other.yml' }
             missing-path { $run.Remove('path') }

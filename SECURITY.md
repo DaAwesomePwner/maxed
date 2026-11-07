@@ -1,6 +1,6 @@
 # Security policy
 
-Report vulnerabilities privately through this repository's **Security** tab → **Report a vulnerability**. Use [GitHub private vulnerability reporting](https://github.com/daplabs/maxed/security/advisories/new); do not open a public issue with exploit details or sensitive data. Maintainers must enable this route before public release.
+Report vulnerabilities privately through this repository's **Security** tab → **Report a vulnerability**. Use [GitHub private vulnerability reporting](https://github.com/DaAwesomePwner/maxed/security/advisories/new); do not open a public issue with exploit details or sensitive data. Maintainers must enable this route before public release.
 
 Include the affected version or commit, impact, reproduction steps and a minimal synthetic example where possible. Never attach raw game captures, access tokens, account data, signing keys or other players' information. Describe sensitive evidence first so a safe reproduction can be arranged.
 
