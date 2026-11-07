@@ -801,7 +801,7 @@ fn conversion_default_writer_api_runs_backup_outside_capture_and_enqueues_nothin
     writer
         .backup_receipt_conversion(&BackupSpace, &AtomicBool::new(false), &mut || {
             if let Some(event) = during_backup.take() {
-                writer.try_submit(event).unwrap();
+                crate::common::submit(&writer, event);
             }
             writer.flush().unwrap();
         })
@@ -838,7 +838,7 @@ fn conversion_default_writer_api_runs_backup_outside_capture_and_enqueues_nothin
     // next sequence without preparing SQL against the absent legacy tables.
     let mut next = events[0].clone();
     next.sequence = Sequence(Timestamp(25));
-    writer.try_submit(next.clone()).unwrap();
+    crate::common::submit(&writer, next.clone());
     assert_eq!(writer.flush().unwrap().sequence.0 .0, 25);
     writer.shutdown().unwrap();
     let mut db = db;
