@@ -1,25 +1,15 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, expect, it, vi } from 'vitest';
-import { tierClass, bestItem, rangeLabel, shortWhen, clockWhen, whiteRate } from '../../src/lib/loot/loot-format';
+import { tierClass, rangeLabel, shortWhen, clockWhen, whiteRate } from '../../src/lib/loot/loot-format';
 import LootHeader from '../../src/lib/loot/LootHeader.svelte';
 import RangeSwitch from '../../src/lib/loot/RangeSwitch.svelte';
 import { dateRange } from '../../src/lib/runs/filters';
 import { presetRange } from '../../src/lib/runs/runs-list';
 import { injectChicagoDate } from '../runs/fixtures';
-import type { DropItem } from '../../src/lib/bindings/DropItem';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-it('maps tier classes and ranks items by tier then slot without mutating them', () => {
+it('maps tier classes', () => {
   expect(['UT', 'ST', 'T12', null, undefined].map(tierClass)).toEqual(['ut', 'st', '', '', '']);
-  const tiers = ['T5', 'T12', 'ST', 'UT', 'UT', null];
-  const items: DropItem[] = tiers.map((_, slot) => ({ slot, item_type: slot, quantity: 1, enchant: { state: 'missing', slots: null, applied: null, ids: [] }, taken_observed_at: null }));
-  const tier = (type: number) => tiers[type];
-  expect(bestItem(items, tier)?.slot).toBe(3);
-  expect(bestItem(items.slice(0, 3), tier)?.slot).toBe(2);
-  expect(bestItem(items.slice(0, 2), tier)?.slot).toBe(1);
-  expect(bestItem([items[5], items[0]], tier)?.slot).toBe(0);
-  expect(bestItem([items[4], items[3]], tier)?.slot).toBe(3);
-  expect(bestItem([], tier)).toBeNull();
 });
 it('formats uncapped white rates and unknown denominators', () => {
   expect(whiteRate(3, 41)).toBe('7.3%'); expect(whiteRate(0, 12)).toBe('0.0%');

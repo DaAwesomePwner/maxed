@@ -366,3 +366,27 @@ enchants differ. Base VIT, base MP recovery, pets, consumables, ability costs,
 combat-state changes and suppression/healing effects are excluded. Exclusions
 remain visible without hover or debug. Exalt damage always reads unavailable,
 deferred pending verification, with no multiplier value.
+
+## Loot ranking
+
+All Home, recap, run-story and Loot table highlights share the item order in
+`lib/loot/ranking.ts`: catalog `item_tier` UT, then ST, then numeric tier
+(higher first; both `T12` and `12` are accepted), then unknown or missing tiers.
+Equal tiers use lower item type, then lower slot. Names, quantities, enchantments
+and taken status do not affect ranking. Contents are authoritative when present;
+legacy items are used only when contents are known. Catalog-tierless consumables
+follow every known tier. Classification belongs to the catalog: deliberately
+allowlisted UT consumables rank as UT and may precede UT equipment by item type.
+
+Ranked bags follow the store's `BestBagRef` order: highest bag rank, newest
+exact timestamp, then descending ID. Unlike the store's Home query, which skips
+unranked bags, `homeLoot` retains them after ranked bags and features one when
+no ranked bag exists. Item tiers never
+override bag order, even for empty or unknown contents. Repeated IDs use the last
+accepted projection. Cached projections retain immutable input identity.
+
+Recap tracking retains the selected bag without guessing an item from empty
+visuals. Screens resolve the item using their current catalog. While visuals are
+loading or unavailable and empty, no best item is highlighted; a ready catalog
+with missing entries uses the documented unknown-tier tie-break. Catalog updates
+recompute the same shared selection in every view.

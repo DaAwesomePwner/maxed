@@ -34,7 +34,7 @@ it('shows the selected item enchant and taken observations and only other item t
 });
 it('keeps Feed columns, item tiles and row selection unchanged', async () => {
   const onSelect = vi.fn(); const data = rows();
-  const page = render(LootBagTable, { rows: data, visuals: emptyHomeVisuals(), now: new Date(), columns: 'feed', resolveSpriteUrl: () => null, onSelect });
+  const page = render(LootBagTable, { rows: data, visuals: { ...emptyHomeVisuals(), phase: 'ready' }, now: new Date(), columns: 'feed', resolveSpriteUrl: () => null, onSelect });
   expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Time', 'Bag', 'Contents', 'Source', 'Place', 'Run']);
   expect(screen.getAllByRole('link', { name: '#101' })).toHaveLength(4);
   const tile = screen.getAllByRole('link', { name: '#101' })[0];
@@ -47,4 +47,42 @@ it('keeps Feed columns, item tiles and row selection unchanged', async () => {
   expect(itemHoverParams(best)).toEqual({ type: 101, enchant: enchants[0], name: '#101', tier: undefined });
   await fireEvent.click(page.container.querySelector('[data-row-id]')!);
   expect(onSelect).toHaveBeenCalledExactlyOnceWith(data[0]);
+});
+
+it('uses the Home pick for tier, item-type and slot ties, missing tiers and catalog-only classification', async () => {
+  const { bestItem } = await import('../../src/lib/home/v3/loot-rank');
+  const catalog = { ...emptyHomeVisuals(), phase: 'ready' as const, objects: [
+    { object_type: 101, item_tier: null, name: 'Synthetic consumable' },
+    { object_type: 102, item_tier: '12', name: 'Synthetic numeric' },
+    { object_type: 103, item_tier: 'T12', name: 'Synthetic prefixed' },
+    { object_type: 104, item_tier: 'ST', name: 'Synthetic set' },
+    { object_type: 105, item_tier: 'UT', name: 'Synthetic untiered' },
+    { object_type: 106, item_tier: 'UT', name: 'Synthetic other' },
+  ].map(row => ({ ...row, sprite: null, bag: null })) };
+  const cases = [
+    { types: [101, 102, 104, 105], expected: 105 },
+    { types: [105, 106, 105], expected: 105 },
+    { types: [101, 102, 104], expected: 104 },
+    { types: [103, 102], expected: 102 },
+    { types: [101, 102], expected: 102 },
+    { types: [999, 101], expected: 101 },
+    { types: [999, 998], expected: 998 },
+  ];
+  for (const { types, expected } of cases) {
+    const drop = { ...rows()[0].drop, contents: types.map((item_type, slot) => ({
+      ...rows()[0].drop.contents[0], item_type, slot,
+    })) };
+    const pick = bestItem(drop, catalog);
+    expect(pick?.itemType).toBe(expected);
+    expect(pick?.slot).toBe(types.indexOf(expected));
+    const page = render(LootBagTable, { rows: [{ drop, dungeon: null }], visuals: catalog,
+      now: new Date(), columns: 'feed', resolveSpriteUrl: () => null });
+    expect(page.container.querySelector('.contents > span')?.getAttribute('data-item-hover')).toBe(String(expected));
+    page.unmount();
+  }
+  // Changing only the catalog tier changes classification; the name is irrelevant.
+  const drop = rows()[0].drop;
+  expect(bestItem(drop, catalog)?.itemType).toBe(102);
+  expect(bestItem(drop, { ...catalog, objects: catalog.objects.map(row => row.object_type === 101
+    ? { ...row, item_tier: 'UT' } : row) })?.itemType).toBe(101);
 });
