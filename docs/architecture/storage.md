@@ -345,16 +345,24 @@ range and the recorded session interval (ended, otherwise last_traffic). Clamp
 negative durations to zero; unknown spans contribute no account time. A loss closes
 the previous span and opens an unknown span. Provisional spans become attributable
 when their character merges; merges flatten aliases and rewrite span/observation
-owners. Session closure closes open spans. Never extend an old stream to wall time.
+owners. Session end closes that session's currently open spans. The engine then
+emits loss, opening an unknown span in the ended session; it stays open until the
+next session or identity event on that stream. Readers clip it to session bounds,
+and unknown spans contribute nothing. Never extend an old stream to wall time.
 `current_account` is the last verified acquisition, retained across loss, provisional
 acquisition, and reopen. Character updates and legacy recovery do not change it.
-Conflicting character reassignment keeps the original membership; conflicting
-verified acquisition or cross-account merge fails atomically.
+Conflicting character reassignment keeps the original membership. A conflicting
+verified acquisition opens an unknown span (both identity fields NULL), keeps the
+current pointer unchanged, and does not fail the writer. Cross-account merge still
+fails atomically. Stale character snapshots may fill NULL membership without
+replacing newer snapshot fields.
 
 `accounts::attach_legacy_characters` accepts batches of exact candidate IDs and
 returns unique attached/already-attached/conflicting/unmatched counts. It only fills
-NULL membership in one immediate transaction. Call on the single writer connection
-or while stopped. Recovery progress is an inclusive completed number prefix;
+NULL membership in one immediate transaction. Use `StoreWriter::attach_legacy_characters` and
+`StoreWriter::record_recovery_progress` during capture; both flush accepted events
+before executing on the writer connection. Direct connection APIs are for the
+single writer connection or stopped capture. Recovery progress is an inclusive completed number prefix;
 record it after attaching each batch, with 65535 marking completion. Retry after a
 crash is safe. Native recovery computes candidates for 0..=65535; storage never
 receives the identity key. Unattributed history remains stored, excluded from

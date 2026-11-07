@@ -278,6 +278,8 @@ fn project(
                 |row| row.get(0),
             )?;
             tx.execute("INSERT INTO characters(id,observed_at,json,account_id) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET observed_at=excluded.observed_at,json=excluded.json,account_id=coalesce(characters.account_id,excluded.account_id) WHERE excluded.observed_at>=characters.observed_at", params![character.id,micros(character.observed_at)?,json(&character)?,character.account_id])?;
+            // Membership is monotonic evidence independent of snapshot freshness.
+            tx.execute("UPDATE characters SET account_id=?2,json=json_set(json,'$.account_id',?2) WHERE id=?1 AND account_id IS NULL AND ?2 IS NOT NULL", params![character.id,character.account_id])?;
             if learned_identity {
                 backfill_run_identity(tx, &character.id)?;
             }

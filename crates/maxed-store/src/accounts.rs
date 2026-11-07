@@ -131,21 +131,26 @@ pub(crate) fn identity(
     character: Option<&str>,
     account: Option<&str>,
 ) -> Result<(), StoreError> {
-    let character = character.map(|id| project::resolve(tx, id)).transpose()?;
-    if let (Some(character), Some(account)) = (&character, account) {
-        register(tx, account)?;
+    let mut character = character.map(|id| project::resolve(tx, id)).transpose()?;
+    let mut account = account;
+    if let (Some(character_id), Some(account_id)) = (&character, account) {
         let old: Option<String> = tx
             .query_row(
                 "SELECT account_id FROM characters WHERE id=?1",
-                [character],
+                [character_id],
                 |r| r.get(0),
             )
             .optional()?
             .flatten();
-        if old.as_deref().is_some_and(|old| old != account) {
-            return Err(StoreError::InvalidEvent);
+        if old.as_deref().is_some_and(|old| old != account_id) {
+            // This period is contradictory evidence. Clear both fields so a
+            // later alias merge cannot accidentally attribute the unknown span.
+            character = None;
+            account = None;
+        } else {
+            register(tx, account_id)?;
+            tx.execute("INSERT INTO current_account VALUES(1,?1) ON CONFLICT(singleton) DO UPDATE SET account_id=excluded.account_id", [account_id])?;
         }
-        tx.execute("INSERT INTO current_account VALUES(1,?1) ON CONFLICT(singleton) DO UPDATE SET account_id=excluded.account_id", [account])?;
     }
     tx.execute(
         "UPDATE identity_spans SET ended=max(started,?2) WHERE stream_id=?1 AND ended IS NULL",
