@@ -89,3 +89,6 @@ mod world;
 
 #[path = "../account_scope.rs"]
 mod account_scope;
+
+#[path = "../account_scope_transitions.rs"]
+mod account_scope_transitions;

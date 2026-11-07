@@ -430,6 +430,11 @@ pub enum EngineEvent {
     ScopeTimelineUpdated(crate::ScopeTimelineUpdate),
     CharacterUpdated(CharacterView),
     /// Emitted after character materialization, merge and fame events; loss has no IDs.
+    /// Some(character_id) with no account_id is a provisional acquisition, NOT a loss.
+    /// A map change clears the prior identity: normal MAPINFO / CREATE_SUCCESS / local
+    /// account observation yields loss -> provisional -> verified. Initial maps have
+    /// no prior identity to lose; buffered pre-map identity can reacquire as verified
+    /// directly. A map without subsequent local evidence remains without identity.
     LocalIdentityChanged {
         at: Timestamp,
         character_id: Option<String>,
