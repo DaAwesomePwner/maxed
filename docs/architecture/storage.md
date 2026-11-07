@@ -53,7 +53,7 @@ not delete history; active readers may keep committed pages in the WAL.
 
 ## Schema and recovery
 
-Migrations 001–016 are transactional, with their SHA-256 script checksums and `user_version`
+Migrations 001–017 are transactional, with their SHA-256 script checksums and `user_version`
 written together. Unknown existing databases, changed checksums, and future schema
 versions are rejected. Foreign keys are enabled on all connections. Readers open
 read-only and query-only, with the same bounded busy timeout, and cannot move across
@@ -188,6 +188,7 @@ No owner recording, client asset, gameplay, or power-loss hardware test is invol
 | 014 | `014_party.sql` | Party history and run members, backfilled from saved runs |
 | 015 | `015_loot_stats_indexes.sql` | Index-only migration for loot statistics and dry-streak gaps |
 | 016 | `016_maintenance_receipts.sql` | Additive maintenance jobs, backup metadata, stream registry and binary receipts |
+| 017 | `017_accounts.sql` | Account membership, observation owners, identity spans and recovery progress |
 
 The coordinator measured the migration 014 backfill at 0.30 s on a copy of a
 412 MB real database with 89 runs, producing 1,383 players and 2,849 member rows.
@@ -320,3 +321,42 @@ notes** is ticked. When marks and notes are kept, each marked or noted player's
 profile, scope and map are removed from that row. It also deletes other players' `player_profiles`,
 `player_gear_log` and `player_timelines`. It never deletes local player data,
 runs, fights, chat or events.
+
+## Account ownership (017)
+
+Migration 017 adds nullable indexed `characters.account_id`, known `accounts`,
+a singleton `current_account`, first-event `observation_characters`, stream/session
+`identity_spans`, and per-account `account_recovery` progress. No legacy JSON is
+rewritten and existing characters remain unknown. Account IDs are HMAC pseudonyms;
+identity keys never enter the store. Home/records readers are not changed here.
+
+Reader contract: `character_accounts(id,canonical_id,account_id)` resolves flattened
+aliases; `run_accounts(id,account_id)` follows the run's character. `fame_accounts`
+and `death_accounts` key by `(stream_id,sequence)`. Fame follows its character;
+death uses its explicit character, otherwise its run; differing known accounts
+between explicit character and run yield NULL. An unknown explicit character
+never falls back to the run. `fight_accounts` and `drop_accounts` use the immutable
+first-event owner, otherwise the linked run; an unresolved owner stays unknown.
+Drop items inherit `drop_accounts` through `drop_id`. Never join ownership by name,
+character number, session, or the current-account pointer.
+
+Elapsed time uses half-open identity spans, intersected with the requested time
+range and the recorded session interval (ended, otherwise last_traffic). Clamp
+negative durations to zero; unknown spans contribute no account time. A loss closes
+the previous span and opens an unknown span. Provisional spans become attributable
+when their character merges; merges flatten aliases and rewrite span/observation
+owners. Session closure closes open spans. Never extend an old stream to wall time.
+`current_account` is the last verified acquisition, retained across loss, provisional
+acquisition, and reopen. Character updates and legacy recovery do not change it.
+Conflicting character reassignment keeps the original membership; conflicting
+verified acquisition or cross-account merge fails atomically.
+
+`accounts::attach_legacy_characters` accepts batches of exact candidate IDs and
+returns unique attached/already-attached/conflicting/unmatched counts. It only fills
+NULL membership in one immediate transaction. Call on the single writer connection
+or while stopped. Recovery progress is an inclusive completed number prefix;
+record it after attaching each batch, with 65535 marking completion. Retry after a
+crash is safe. Native recovery computes candidates for 0..=65535; storage never
+receives the identity key. Unattributed history remains stored, excluded from
+account totals, with an attribution notice supplied by later readers/UI. A sole
+known account is never evidence of ownership.

@@ -230,6 +230,7 @@ fn project(
         EngineEvent::InstanceEvent(event) => crate::instance::project(tx, event)?,
         EngineEvent::SessionUpdated(session) => {
             let mut session = session.clone();
+            tx.execute("UPDATE identity_spans SET ended=max(started,?3) WHERE stream_id=?1 AND session_id IS NOT ?2 AND ended IS NULL", params![envelope.stream_id,session.id,micros(session.started)?])?;
             let previous: Option<String> = tx
                 .query_row(
                     "SELECT json FROM play_sessions WHERE id=?1",
@@ -248,12 +249,27 @@ fn project(
             tx.execute("INSERT INTO play_sessions VALUES(?1,?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET started=excluded.started,last_traffic=excluded.last_traffic,ended=excluded.ended,json=excluded.json", params![session.id,micros(session.started)?,micros(session.last_traffic)?,optional(session.ended)?,json(&session)?])?;
             tx.execute("INSERT INTO stream_sessions VALUES(?1,?2) ON CONFLICT(stream_id) DO UPDATE SET session_id=excluded.session_id", params![envelope.stream_id,session.id])?;
             if let Some(ended) = session.ended {
+                tx.execute("UPDATE identity_spans SET ended=max(started,?2) WHERE session_id=?1 AND ended IS NULL", params![session.id,micros(ended)?])?;
                 crate::visits::close_session(tx, &session.id, ended)?;
             }
         }
         EngineEvent::CharacterUpdated(character) => {
             let mut character = character.clone();
             character.id = resolve(tx, &character.id)?;
+            let old_account: Option<String> = tx
+                .query_row(
+                    "SELECT account_id FROM characters WHERE id=?1",
+                    [&character.id],
+                    |r| r.get(0),
+                )
+                .optional()?
+                .flatten();
+            if let Some(old) = old_account {
+                character.account_id = Some(old);
+            }
+            if let Some(account) = &character.account_id {
+                crate::accounts::register(tx, account)?;
+            }
             let learned_identity: bool = tx.query_row(
                 "SELECT EXISTS(SELECT 1 FROM characters WHERE id=?1 AND
                     ((json_extract(json,'$.name') IS NULL AND ?2 IS NOT NULL)
@@ -261,7 +277,7 @@ fn project(
                 params![character.id, character.name, character.class_id],
                 |row| row.get(0),
             )?;
-            tx.execute("INSERT INTO characters VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET observed_at=excluded.observed_at,json=excluded.json WHERE excluded.observed_at>=characters.observed_at", params![character.id,micros(character.observed_at)?,json(&character)?])?;
+            tx.execute("INSERT INTO characters(id,observed_at,json,account_id) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET observed_at=excluded.observed_at,json=excluded.json,account_id=coalesce(characters.account_id,excluded.account_id) WHERE excluded.observed_at>=characters.observed_at", params![character.id,micros(character.observed_at)?,json(&character)?,character.account_id])?;
             if learned_identity {
                 backfill_run_identity(tx, &character.id)?;
             }
@@ -419,7 +435,22 @@ fn project(
             }
         }
         EngineEvent::ScopeTimelineUpdated(update) => crate::players::write_timeline(tx, update)?,
-        EngineEvent::CaptureStateChanged(_) | EngineEvent::LocalIdentityChanged { .. } => {}
+        EngineEvent::LocalIdentityChanged {
+            at,
+            character_id,
+            account_id,
+        } => {
+            crate::accounts::identity(
+                tx,
+                &envelope.stream_id,
+                micros(envelope.sequence.0)?,
+                stream_session(tx, &envelope.stream_id)?.as_deref(),
+                micros(*at)?,
+                character_id.as_deref(),
+                account_id.as_deref(),
+            )?;
+        }
+        EngineEvent::CaptureStateChanged(_) => {}
     }
     Ok(())
 }
@@ -633,6 +664,7 @@ pub(crate) fn write_fight_summary(
 }
 
 fn write_fight(tx: &Transaction<'_>, fight: &FightView) -> Result<(), StoreError> {
+    crate::accounts::owner(tx, "fight", &fight.id, fight.owner_character_id.as_deref())?;
     let player_ids: Vec<_> = fight.players.iter().map(|p| p.player_id.as_str()).collect();
     if player_ids
         .iter()
@@ -711,6 +743,7 @@ fn write_fight(tx: &Transaction<'_>, fight: &FightView) -> Result<(), StoreError
 }
 
 fn write_drop(tx: &Transaction<'_>, input: &DropView) -> Result<(), StoreError> {
+    crate::accounts::owner(tx, "drop", &input.id, input.owner_character_id.as_deref())?;
     let mut drop = input.clone();
     let mut keys = std::collections::BTreeSet::new();
     if drop
@@ -820,6 +853,26 @@ fn merge(tx: &Transaction<'_>, provisional: &str, verified: &str) -> Result<(), 
     if present != 2 {
         return Err(StoreError::InvalidEvent);
     }
+    let accounts: Vec<Option<String>> = [from.as_str(), to.as_str()]
+        .iter()
+        .map(|id| {
+            tx.query_row("SELECT account_id FROM characters WHERE id=?1", [id], |r| {
+                r.get(0)
+            })
+        })
+        .collect::<Result<_, _>>()?;
+    if accounts[0].is_some() && accounts[1].is_some() && accounts[0] != accounts[1] {
+        return Err(StoreError::InvalidEvent);
+    }
+    tx.execute(
+        "UPDATE characters SET account_id=coalesce(account_id,?2) WHERE id=?1",
+        params![to, accounts[0]],
+    )?;
+    tx.execute(
+        "UPDATE observation_characters SET character_id=?2 WHERE character_id=?1",
+        params![from, to],
+    )?;
+    tx.execute("UPDATE identity_spans SET character_id=?2,account_id=coalesce(account_id,(SELECT account_id FROM characters WHERE id=?2)) WHERE character_id=?1", params![from,to])?;
     // Preserve known historical names, gear, and stats; fill only missing identity.
     tx.execute("UPDATE runs SET character_id=?2,json=json_set(json,'$.character_id',?2),entry_character_json=CASE WHEN entry_character_json IS NULL THEN NULL ELSE json_set(entry_character_json,'$.id',?2) END WHERE character_id=?1", params![from,to])?;
     backfill_run_identity(tx, &to)?;

@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod accounts;
 mod alerts;
 pub mod backup;
 mod boss_history;

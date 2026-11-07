@@ -70,6 +70,8 @@ pub fn apply_legacy_batch(db: &mut rusqlite::Connection, events: &[EventEnvelope
         "../../migrations/016_maintenance_receipts.sql"
     ))
     .unwrap();
+    db.execute_batch(include_str!("../../migrations/017_accounts.sql"))
+        .unwrap();
     maxed_store::apply_batch(db, events).unwrap();
     downgrade::remove_maintenance_schema(db);
 }

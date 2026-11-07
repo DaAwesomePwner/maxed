@@ -4,6 +4,8 @@ mod common;
 #[path = "../../../maxed-engine/tests/common/mod.rs"]
 mod engine_common;
 
+#[path = "../account_scope_store.rs"]
+mod account_scope_store;
 #[path = "../alerts.rs"]
 mod alerts;
 #[path = "../boss_history.rs"]
