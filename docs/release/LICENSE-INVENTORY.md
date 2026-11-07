@@ -248,6 +248,11 @@ the maintainer; neither remains an unknown-provenance blocker.
 
 ## Regeneration and checks
 
+For release 0.1.4, `@tauri-apps/cli` is pinned exactly to `2.12.1` and excluded
+from Dependabot updates. CLI upgrades change the bundled NSIS toolset and the
+reviewed installer payload and notices, so upgrades require a deliberate
+NSIS/payload review.
+
 The **Notices** workflow (`.github/workflows/notices.yml`) runs the real generator
 with `-Check` on PRs to `main` and pushes to `main` when dependency, generator,
 vendor or inventory inputs change. A stale notice or pin fails this check.
