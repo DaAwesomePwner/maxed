@@ -720,28 +720,21 @@ $script:expectedNotices = @'
       "paths": [
         "Cargo.lock",
         "Cargo.toml",
-        "app/ui/package-lock.json",
-        "app/ui/package.json",
-        "rust-toolchain.toml",
-        "app/src-tauri/tauri.conf.json",
-        "app/src-tauri/Cargo.toml",
         "crates/*/Cargo.toml",
+        "app/src-tauri/Cargo.toml",
+        ".cargo/**",
+        "rust-toolchain.toml",
+        "app/ui/package.json",
+        "app/ui/package-lock.json",
+        ".gitattributes",
         "THIRD-PARTY-NOTICES.md",
         "scripts/release/New-ThirdPartyNotices.ps1",
         "scripts/release/ConvertFrom-RustNoticeHtml.ps1",
         "docs/release/vendor/**",
         "docs/release/distribution-inventory.json",
         "docs/release/LICENSE-INVENTORY.md",
-        ".github/workflows/notices.yml",
-        ".cargo/**",
-        ".gitattributes",
-        "LICENSE",
-        "NOTICE.md",
-        "app/src-tauri/**",
-        "app/ui/**",
-        "crates/**",
-        "tests/fixtures/scrubbed/maxed-demo/**",
-        "tests/packaging/workflow-policy.test.ps1"
+        "app/src-tauri/tauri.conf.json",
+        ".github/workflows/notices.yml"
       ]
     },
     "push": {
@@ -751,28 +744,21 @@ $script:expectedNotices = @'
       "paths": [
         "Cargo.lock",
         "Cargo.toml",
-        "app/ui/package-lock.json",
-        "app/ui/package.json",
-        "rust-toolchain.toml",
-        "app/src-tauri/tauri.conf.json",
-        "app/src-tauri/Cargo.toml",
         "crates/*/Cargo.toml",
+        "app/src-tauri/Cargo.toml",
+        ".cargo/**",
+        "rust-toolchain.toml",
+        "app/ui/package.json",
+        "app/ui/package-lock.json",
+        ".gitattributes",
         "THIRD-PARTY-NOTICES.md",
         "scripts/release/New-ThirdPartyNotices.ps1",
         "scripts/release/ConvertFrom-RustNoticeHtml.ps1",
         "docs/release/vendor/**",
         "docs/release/distribution-inventory.json",
         "docs/release/LICENSE-INVENTORY.md",
-        ".github/workflows/notices.yml",
-        ".cargo/**",
-        ".gitattributes",
-        "LICENSE",
-        "NOTICE.md",
-        "app/src-tauri/**",
-        "app/ui/**",
-        "crates/**",
-        "tests/fixtures/scrubbed/maxed-demo/**",
-        "tests/packaging/workflow-policy.test.ps1"
+        "app/src-tauri/tauri.conf.json",
+        ".github/workflows/notices.yml"
       ]
     },
     "workflow_dispatch": {
@@ -839,11 +825,13 @@ $script:expectedNotices = @'
         },
         {
           "name": "Check notices",
-          "run": "pwsh -NoProfile -File scripts/release/New-ThirdPartyNotices.ps1 -Check\nif ($LASTEXITCODE) {\n  Write-Host 'run the Notices workflow with regenerate=true on this branch, download the artifact, commit it, update pins/inventory per docs/release/LICENSE-INVENTORY.md'\n  throw 'Third-party notices check failed.'\n}"
+          "run": "pwsh -NoProfile -File scripts/release/New-ThirdPartyNotices.ps1 -Check\nif ($LASTEXITCODE) { throw 'Third-party notices check failed. See the generator error above; PR/push runs will attempt regeneration.' }",
+          "id": "check",
+          "continue-on-error": "${{ github.event_name == 'pull_request' || github.event_name == 'push' }}"
         },
         {
           "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
-          "if": "github.event_name == 'workflow_dispatch' && inputs.regenerate == true",
+          "if": "github.event_name == 'workflow_dispatch' && inputs.regenerate == true && steps.check.outcome == 'success'",
           "with": {
             "name": "third-party-notices-${{ github.run_id }}-${{ github.run_attempt }}",
             "path": "THIRD-PARTY-NOTICES.md",
@@ -853,13 +841,42 @@ $script:expectedNotices = @'
           }
         },
         {
+          "name": "Regenerate after failed check",
+          "id": "recover",
+          "if": "steps.check.outcome == 'failure' && (github.event_name == 'pull_request' || github.event_name == 'push')",
+          "run": "pwsh -NoProfile -File scripts/release/New-ThirdPartyNotices.ps1\nif ($LASTEXITCODE) { throw 'Notice regeneration failed; the generator error above must be resolved before an artifact can be produced. Update pins/inventory per docs/release/LICENSE-INVENTORY.md.' }\npwsh -NoProfile -File scripts/release/New-ThirdPartyNotices.ps1 -Check\nif ($LASTEXITCODE) { throw 'Regenerated notices failed verification; no artifact will be uploaded.' }"
+        },
+        {
+          "name": "Upload regenerated notices",
+          "id": "recovered_artifact",
+          "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+          "if": "steps.check.outcome == 'failure' && (github.event_name == 'pull_request' || github.event_name == 'push') && steps.recover.outcome == 'success'",
+          "with": {
+            "name": "regenerated-notices",
+            "path": "THIRD-PARTY-NOTICES.md",
+            "if-no-files-found": "error",
+            "retention-days": 14,
+            "include-hidden-files": false
+          }
+        },
+        {
+          "name": "Explain notice recovery",
+          "if": "steps.check.outcome == 'failure' && (github.event_name == 'pull_request' || github.event_name == 'push') && steps.recovered_artifact.outcome == 'success'",
+          "run": "Write-Host 'Download the regenerated-notices artifact from this failed run, review and commit THIRD-PARTY-NOTICES.md, and update pins/inventory per docs/release/LICENSE-INVENTORY.md. The original check remains failed until the committed notices are current.'"
+        },
+        {
           "name": "Save Rust cache",
-          "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'",
+          "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.check.outcome == 'success'",
           "uses": "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
           "with": {
             "path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db",
             "key": "rust-notices-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"
           }
+        },
+        {
+          "name": "Fail stale notices check",
+          "if": "!cancelled() && steps.check.outcome == 'failure'",
+          "run": "throw 'The committed third-party notices check failed. Review the check/regeneration errors and any regenerated-notices artifact; update pins/inventory per docs/release/LICENSE-INVENTORY.md.'"
         }
       ]
     }
@@ -885,7 +902,14 @@ foreach ($case in @(
     @{ name = 'action tag'; mutate = { param($n) $n.jobs.notices.steps[0].uses = 'actions/checkout@v4' } },
     @{ name = 'dispatch default'; mutate = { param($n) $n.on.workflow_dispatch.inputs.regenerate.default = $true } },
     @{ name = 'privileged trigger'; mutate = { param($n) $n.on | Add-Member pull_request_target @{} } },
-    @{ name = 'ignored failure'; mutate = { param($n) $n.jobs.notices.steps[6] | Add-Member 'continue-on-error' $true } }
+    @{ name = 'upload without final failure'; mutate = { param($n) $n.jobs.notices.steps = @($n.jobs.notices.steps | Where-Object name -CNE 'Fail stale notices check') } },
+    @{ name = 'final failure skipped after regeneration error'; mutate = { param($n) ($n.jobs.notices.steps | Where-Object name -CEQ 'Fail stale notices check').if = "steps.check.outcome == 'failure'" } },
+    @{ name = 'dispatch regeneration without Check'; mutate = { param($n) $n.jobs.notices.steps[6].run = $n.jobs.notices.steps[6].run.Replace(' -Check', '') } },
+    @{ name = 'dispatch check failure ignored'; mutate = { param($n) $n.jobs.notices.steps[6].'continue-on-error' = $true } },
+    @{ name = 'upload after generator error'; mutate = { param($n) ($n.jobs.notices.steps | Where-Object name -CEQ 'Upload regenerated notices').if = "!cancelled() && steps.check.outcome == 'failure'" } },
+    @{ name = 'regeneration error ignored'; mutate = { param($n) ($n.jobs.notices.steps | Where-Object name -CEQ 'Regenerate after failed check') | Add-Member 'continue-on-error' $true } },
+    @{ name = 'broad source paths'; mutate = { param($n) $n.on.pull_request.paths += 'crates/**' } },
+    @{ name = 'ignored failure'; mutate = { param($n) ($n.jobs.notices.steps | Where-Object name -CEQ 'Fail stale notices check') | Add-Member 'continue-on-error' $true } }
 )) {
     $n = $noticesText | ConvertFrom-Json
     & $case.mutate $n

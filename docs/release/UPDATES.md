@@ -86,8 +86,10 @@ Record sanitized acceptance and recovery evidence. Signing alone does not prove 
 The Notices workflow checks real third-party notice generation in PR CI when
 dependencies or other notice inputs change. Require a passing result before
 merging those changes and review the main result before tagging. Maintainers can
-regenerate on the PR branch without Windows via **Notices → Run workflow →
-regenerate=true**, then download, review and commit the artifact and refresh
-inventory hashes. See [regeneration and checks](LICENSE-INVENTORY.md#regeneration-and-checks)
+download `regenerated-notices` from a failed PR run when regeneration succeeds,
+then review and commit the artifact and refresh inventory hashes. The run remains
+failed until committed notices pass. Manual **Notices → Run workflow →
+regenerate=true** is also available once the workflow is on the default branch.
+See [regeneration and checks](LICENSE-INVENTORY.md#regeneration-and-checks)
 for pinned-association review and dispatch prerequisites. Release packaging still
 checks notices even when the main test run is reused.
