@@ -4,13 +4,6 @@
     "pull_request": {
       "branches": [
         "main"
-      ],
-      "paths-ignore": [
-        "docs/architecture/**/*.md",
-        "docs/development/**/*.md",
-        "docs/release/**/*.md",
-        "docs/README.md",
-        "docs/known-limitations.md"
       ]
     },
     "schedule": [
@@ -152,6 +145,34 @@
       "permissions": {
         "contents": "read"
       }
+    },
+    "tests": {
+      "needs": [
+        "rust-lint",
+        "rust-test",
+        "store-test",
+        "ui",
+        "packaging"
+      ],
+      "if": "${{ !cancelled() }}",
+      "runs-on": "ubuntu-latest",
+      "permissions": {
+        "contents": "read"
+      },
+      "steps": [
+        {
+          "name": "Require every test job to succeed",
+          "shell": "bash",
+          "env": {
+            "RUST_LINT_RESULT": "${{ needs.rust-lint.result }}",
+            "RUST_TEST_RESULT": "${{ needs.rust-test.result }}",
+            "STORE_TEST_RESULT": "${{ needs.store-test.result }}",
+            "UI_RESULT": "${{ needs.ui.result }}",
+            "PACKAGING_RESULT": "${{ needs.packaging.result }}"
+          },
+          "run": "failed=0\nprintf '%s: %s\\n' 'rust-lint' \"$RUST_LINT_RESULT\"\nif [[ \"$RUST_LINT_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'rust-test' \"$RUST_TEST_RESULT\"\nif [[ \"$RUST_TEST_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'store-test' \"$STORE_TEST_RESULT\"\nif [[ \"$STORE_TEST_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'ui' \"$UI_RESULT\"\nif [[ \"$UI_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'packaging' \"$PACKAGING_RESULT\"\nif [[ \"$PACKAGING_RESULT\" != success ]]; then failed=1; fi\nexit \"$failed\""
+        }
+      ]
     }
   }
 }

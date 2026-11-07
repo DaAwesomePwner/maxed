@@ -94,9 +94,10 @@ full 40-hex commit SHA; tags and abbreviated hashes do not satisfy the policy.
 
 `.github/workflows/tests.yml` runs on GitHub-hosted `windows-2022` for
 pull requests to `main`, including forks, daily at 09:17 UTC (`17 9 * * *`),
-pushes to `main`, manual dispatch and release workflow calls. PR and push events
-skip only the listed documentation paths; the executable parity ledger, legal
-files and release JSON inputs still trigger checks.
+pushes to `main`, manual dispatch and release workflow calls. Every PR runs tests,
+including docs-only changes, so required checks report. Only main push events
+skip the listed documentation paths; the executable parity ledger, legal files
+and release JSON inputs still trigger checks.
 Contents permission is read-only and tests use no secrets.
 The hosted Rust cache restores on eligible runs, prunes workspace artifacts and
 saves only after a passing non-PR run on `refs/heads/main`. No persistent machine
@@ -105,6 +106,13 @@ Five parallel jobs run: `rust-lint` (fmt and both clippy checks), `rust-test`
 (workspace tests excluding maxed-store, then bindings freshness), `store-test`
 (maxed-store tests), `ui` (all five UI scripts), and `packaging` (offline memory
 tooling and packaging/collector checks). Each Rust job has its own cache key.
+The `tests` aggregator on `ubuntu-latest` is the single required check for this
+workflow (alongside the separate `gui-smoke` check). Keep its job ID `tests` and
+leave its name absent: GitHub uses the job name, falling back to its ID, as the
+check name. It needs every test job and runs unless cancelled, failing unless
+all results are `success`. It checks results without checkout or tools.
+An aggregator failure also fails a reusable workflow call, so release packaging
+remains blocked by `needs.tests.result == 'success'` when tests run.
 The UI job also installs the pinned minimal Rust toolchain and fetches locked
 Cargo dependencies before its offline CLI smoke-replay test, using a separate
 `rust-ui-` cache with the same restore, prune and save conditions.
