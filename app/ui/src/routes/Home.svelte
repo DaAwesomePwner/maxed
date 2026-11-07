@@ -81,13 +81,17 @@
     const owner = client;
     if (!owner) return;
     let active = true;
-    const release = owner.onAccountHistoryChanged(() => {
-      if (!active) return;
+    let revision: number | null = null;
+    const release = owner.onAccountHistoryChanged(notice => {
+      if (!active || revision === notice.revision) return;
+      revision = notice.revision;
       // Dispose synchronously: an already queued A reply cannot publish into B.
       controller?.dispose(); bestsController?.dispose(); homeReads?.dispose(); v4Reads?.dispose(); recapReads?.dispose();
       history = { phase: 'loading', summary: null, message: '', retryAvailable: false };
       scopeLoot = null; dungeonBests = null; v4State = null; baseline = null; recapLoad = null;
       endedStreaks.reset();
+      endedStreaks = { ...endedStreaks };
+      if (notice.reason === 'account_switched') { observe.historyChanged(); observationRevision++; }
       accountRevision++;
     });
     return () => { active = false; void release.then(stop => stop()); };
@@ -97,6 +101,15 @@
   let captureState = $derived((capture ?? snapshot?.capture)?.state);
   let displayed = $state.raw<LiveSnapshot | null>(null);
   const observe = createHomeObservation();
+  let observationRevision = $state(0);
+  function observeIdentity(envelope: EventEnvelope) {
+    if (observe.onEvent(envelope)) observationRevision++;
+  }
+  $effect(() => connection?.onEvent?.(observeIdentity));
+  $effect(() => {
+    const next = connection?.onEvent ? null : event;
+    if (next) untrack(() => observeIdentity(next));
+  });
   let choice = $state<ScopeChoice>(untrack(() => savedScope ?? 'session'));
   const currentDay = (): TimeRange | null => { try { return localDayRange(new Date()); } catch { return null; } };
   let day = $state.raw<TimeRange | null>(currentDay());
@@ -500,6 +513,7 @@
 
   $effect(() => {
     const next = snapshot, status = capture, state = liveState;
+    void observationRevision;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const update = () => untrack(() => {
       const observation = observe(next, status, state, performance.now());
@@ -511,8 +525,8 @@
     return () => clearTimeout(timer);
   });
 </script>
-<div class="home" class:home-v4={redesign} data-home={redesign ? 'v4' : 'v3'} bind:this={region} onfocusin={rememberFocus} onfocusout={releaseFocus}>
-  <AttributionNotice session={connection ?? client} visible={history.summary?.unattributed_history === true} />
+<div class="home" class:home-v4={redesign} data-home={redesign ? 'v4' : 'v3'} bind:this={region} tabindex="-1" role="region" aria-label="Home content" onfocusin={rememberFocus} onfocusout={releaseFocus}>
+  <AttributionNotice onDismiss={() => region.focus({ preventScroll: true })} session={connection ?? client} visible={history.summary?.unattributed_history === true} />
 {#if redesign}
   <SessionHud hud={v4State?.errors.hud ? null : v4State?.hud ?? null} sessionStarted={snapshot?.session?.started ?? null} nowMs={hudNowMs}
     sessionEnded={snapshot?.session?.ended ?? null}

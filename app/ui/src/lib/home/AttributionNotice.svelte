@@ -2,9 +2,9 @@
   const dismissed = new WeakSet<object>();
 </script>
 <script lang="ts">
-  let { visible = false, session }: { visible?: boolean; session?: object } = $props();
+  let { visible = false, session, onDismiss }: { visible?: boolean; session?: object; onDismiss?: () => void } = $props();
   let hidden = $state(false);
-  function dismiss() { hidden = true; if (session) dismissed.add(session); }
+  function dismiss() { onDismiss?.(); hidden = true; if (session) dismissed.add(session); }
 </script>
 
 {#if visible && !hidden && (!session || !dismissed.has(session))}
