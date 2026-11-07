@@ -2,7 +2,7 @@
 
 Maxed is a Windows desktop companion for Realm of the Mad God. It shows live dungeon and realm statistics and keeps a local history of your runs.
 
-**Status: pre-release 0.1.4, Windows x64 only.** Live and release acceptance is incomplete, and memory use remains above the release limits. See [known limitations](docs/known-limitations.md).
+**Status: pre-release 0.1.5, Windows x64 only.** Live and release acceptance is incomplete, and memory use remains above the release limits. See [known limitations](docs/known-limitations.md).
 
 - Live damage, per-player DPS, kills, realm progress and dungeon totals.
 - Loot Feed, item history, observed per-run statistics and Collection with a chase list; source and capture uncertainty stay visible.

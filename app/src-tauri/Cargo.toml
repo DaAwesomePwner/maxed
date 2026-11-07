@@ -60,9 +60,9 @@ maxed-types = { path = "../../crates/maxed-types" }
 maxed-capture = { path = "../../crates/maxed-capture" }
 maxed-stream = { path = "../../crates/maxed-stream" }
 maxed-protocol = { path = "../../crates/maxed-protocol" }
-maxed-engine = { version = "0.1.4", path = "../../crates/maxed-engine" }
-maxed-store = { version = "0.1.4", path = "../../crates/maxed-store" }
-maxed-assets = { version = "0.1.4", path = "../../crates/maxed-assets" }
+maxed-engine = { version = "0.1.5", path = "../../crates/maxed-engine" }
+maxed-store = { version = "0.1.5", path = "../../crates/maxed-store" }
+maxed-assets = { version = "0.1.5", path = "../../crates/maxed-assets" }
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider", "stream"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 rustls-native-certs = "=0.8.5"
