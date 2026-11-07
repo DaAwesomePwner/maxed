@@ -1328,7 +1328,7 @@ mod tests {
         .unwrap();
         let envelope = event(1);
         let expected = validate_event(&envelope).unwrap().1;
-        writer.try_submit(envelope.clone()).unwrap();
+        submit(&writer, envelope.clone());
         writer.flush().unwrap();
         let mut conn = open_writer(&path).unwrap();
         let stored = crate::receipt_tests::lookup(&conn, "fault-test", 1).unwrap();
@@ -1457,18 +1457,17 @@ mod tests {
         bag.session_id = "session".into();
         bag.bag_rank = Some(255);
         source.event = EngineEvent::BagDropped(bag);
-        writer
-            .try_submit_with_alert_context(
-                source,
-                crate::AlertContext {
-                    chat: None,
-                    live: false,
-                    preferences: AlertPreferences::default(),
-                    key_pop_dungeon: None,
-                    bag_window: None,
-                },
-            )
-            .unwrap();
+        submit_with_context(
+            &writer,
+            source,
+            crate::AlertContext {
+                chat: None,
+                live: false,
+                preferences: AlertPreferences::default(),
+                key_pop_dungeon: None,
+                bag_window: None,
+            },
+        );
         committed.recv_timeout(Duration::from_secs(5)).unwrap();
         assert_eq!(writer.status().durable, Some(Sequence(Timestamp(2))));
         let db = Connection::open(&path).unwrap();
@@ -1525,18 +1524,17 @@ mod tests {
         bag.session_id = "session".into();
         bag.bag_rank = Some(255);
         source.event = EngineEvent::BagDropped(bag);
-        writer
-            .try_submit_with_alert_context(
-                source,
-                crate::AlertContext {
-                    chat: None,
-                    live: false,
-                    preferences: AlertPreferences::default(),
-                    key_pop_dungeon: None,
-                    bag_window: None,
-                },
-            )
-            .unwrap();
+        submit_with_context(
+            &writer,
+            source,
+            crate::AlertContext {
+                chat: None,
+                live: false,
+                preferences: AlertPreferences::default(),
+                key_pop_dungeon: None,
+                bag_window: None,
+            },
+        );
         assert!(writer.flush().is_err());
         assert_eq!(writer.status().durable, Some(Sequence(Timestamp(1))));
         assert!(committed.try_recv().is_err());
@@ -1629,14 +1627,26 @@ mod tests {
         }
     }
 
-    fn submit(writer: &StoreWriter, mut event: EventEnvelope) {
-        let deadline = Instant::now() + Duration::from_secs(5);
+    fn submit(writer: &StoreWriter, event: EventEnvelope) {
+        submit_with_context(writer, event, crate::AlertContext::default());
+    }
+
+    fn submit_with_context(
+        writer: &StoreWriter,
+        mut event: EventEnvelope,
+        context: crate::AlertContext,
+    ) {
+        let deadline = Instant::now() + Duration::from_secs(10);
         loop {
-            match writer.try_submit(event) {
-                Ok(()) => break,
-                Err(SubmitError::Full(returned)) if Instant::now() < deadline => {
+            match writer.try_submit_with_alert_context(event, context.clone()) {
+                Ok(()) => return,
+                Err(SubmitError::Full(returned)) => {
+                    assert!(
+                        Instant::now() < deadline,
+                        "submit timed out after 10s on Full: {returned:?}"
+                    );
                     event = returned;
-                    thread::yield_now();
+                    thread::sleep(Duration::from_millis(1));
                 }
                 Err(error) => panic!("submit failed: {error:?}"),
             }
@@ -1692,10 +1702,23 @@ mod tests {
                 assert!(status.message.contains("2..=3"));
                 let db = Connection::open(&path).unwrap();
                 assert_eq!(crate::receipt_tests::count(&db), 1);
-                assert!(matches!(
-                    writer.try_submit(event(4)),
-                    Err(SubmitError::Failed(_))
-                ));
+                // Contention can return Full before the worker failure is checked.
+                let deadline = Instant::now() + Duration::from_secs(10);
+                let mut pending = event(4);
+                let result = loop {
+                    match writer.try_submit(pending) {
+                        Err(SubmitError::Full(returned)) => {
+                            assert!(
+                                Instant::now() < deadline,
+                                "waiting for Failed timed out after 10s on Full: {returned:?}"
+                            );
+                            pending = returned;
+                            thread::sleep(Duration::from_millis(1));
+                        }
+                        result => break result,
+                    }
+                };
+                assert!(matches!(result, Err(SubmitError::Failed(_))));
                 writer.retry().unwrap();
                 assert_eq!(writer.flush().unwrap().sequence.0 .0, 3);
                 assert_eq!(crate::receipt_tests::count(&db), 3);
