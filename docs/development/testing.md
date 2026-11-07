@@ -94,13 +94,21 @@ full 40-hex commit SHA; tags and abbreviated hashes do not satisfy the policy.
 
 `.github/workflows/tests.yml` runs on GitHub-hosted `windows-2022` for
 pull requests to `main`, including forks, daily at 09:17 UTC (`17 9 * * *`),
-manual dispatch and release workflow calls. Pushes to `main` do not trigger it.
+pushes to `main`, manual dispatch and release workflow calls. PR and push events
+skip only the listed documentation paths; the executable parity ledger, legal
+files and release JSON inputs still trigger checks.
 Contents permission is read-only and tests use no secrets.
 The hosted Rust cache restores on eligible runs, prunes workspace artifacts and
 saves only after a passing non-PR run on `refs/heads/main`. No persistent machine
 paths are used.
-Generated bindings and fixtures must remain current. Release tags call this
-workflow before packaging; failure blocks signing. The signing job builds from
+Five parallel jobs run: `rust-lint` (fmt and both clippy checks), `rust-test`
+(workspace tests excluding maxed-store, then bindings freshness), `store-test`
+(maxed-store tests), `ui` (all five UI scripts), and `packaging` (offline memory
+tooling and packaging/collector checks). Each Rust job has its own cache key.
+Generated bindings and fixtures must remain current. Release tags reuse a
+completed successful main push, schedule or dispatch run for the exact SHA,
+with its URL in the job summary; otherwise all tests run before packaging.
+Lookup errors fall back to testing; failed tests or lookup jobs block signing. The signing job builds from
 scratch on `windows-2022` in the `release-signing` environment.
 The reusable `release` input remains for caller compatibility.
 
