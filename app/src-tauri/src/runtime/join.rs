@@ -100,6 +100,7 @@ pub(super) struct Adapter {
     recovery: Option<super::account_history::Recovery>,
     identity_key: [u8; 32],
     recovery_account: Option<String>,
+    identity_acquisition: super::account_history::IdentityAcquisition,
     path: PathBuf,
     writer_config: WriterConfig,
     pending: VecDeque<maxed_store::ContextualEvent>,
@@ -180,6 +181,7 @@ impl Adapter {
             recovery: None,
             identity_key,
             recovery_account: None,
+            identity_acquisition: Default::default(),
             path,
             writer_config,
             pending: VecDeque::new(),
@@ -312,15 +314,17 @@ impl Adapter {
         let mut envelopes = Vec::with_capacity(events.len());
         for mut event in events {
             self.partial(&mut event);
+            let acquired = self.identity_acquisition.observe(&event);
             let account = super::account_history::verified_account(&event);
             if let (Some(account), Some(home)) = (account, &self.home) {
-                if let Some(notice) =
-                    home.observe_account(Some(&self.stream_id), account, Some(identity_watermark))
-                {
+                if let Some(notice) = home.observe_account(
+                    Some(&self.stream_id),
+                    account,
+                    acquired.then_some(identity_watermark),
+                ) {
                     (self.bridge.account_changed)(notice);
                 }
                 if self.live && self.recovery_account.as_deref() != Some(account) {
-                    self.recovery_account = Some(account.to_owned());
                     if self.recovery.is_none() {
                         if let Some(writer) = &self.writer {
                             self.recovery = super::account_history::Recovery::start(
@@ -334,6 +338,10 @@ impl Adapter {
                     }
                     if let Some(recovery) = &mut self.recovery {
                         recovery.observe(account);
+                        self.recovery_account = Some(account.to_owned());
+                    } else {
+                        // A failed start must not suppress the next acquisition.
+                        self.recovery_account = None;
                     }
                 }
             }
@@ -926,6 +934,7 @@ impl Adapter {
     }
 
     fn reclaim_failed_writer(&mut self) {
+        self.recovery_account = None;
         if let Some(mut recovery) = self.recovery.take() {
             recovery.stop();
         }
@@ -954,6 +963,7 @@ impl Adapter {
     }
 
     pub fn close(&mut self) -> Result<(), String> {
+        self.recovery_account = None;
         if let Some(mut recovery) = self.recovery.take() {
             recovery.stop();
         }

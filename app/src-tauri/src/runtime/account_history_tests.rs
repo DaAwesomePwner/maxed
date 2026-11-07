@@ -198,3 +198,31 @@ fn account_scope_demo_never_starts_recovery() {
     .is_none());
     Arc::try_unwrap(writer).ok().unwrap().shutdown().unwrap();
 }
+
+#[test]
+fn account_scope_only_identity_acquisitions_advance_the_barrier() {
+    let mut tracker = IdentityAcquisition::default();
+    let mut character = demo::demo_snapshot().character.unwrap();
+    character.account_id = Some("account-a".into());
+    character.identity_verified = true;
+    assert!(tracker.observe(&EngineEvent::CharacterUpdated(character.clone())));
+    character.fame = Some(42);
+    assert!(!tracker.observe(&EngineEvent::CharacterUpdated(character.clone())));
+    let identity = |id: &str, account: &str| EngineEvent::LocalIdentityChanged {
+        at: Timestamp(1),
+        character_id: Some(id.into()),
+        account_id: Some(account.into()),
+    };
+    assert!(!tracker.observe(&identity(&character.id, "account-a")));
+    character.id = "different-character".into();
+    assert!(!tracker.observe(&EngineEvent::CharacterUpdated(character.clone())));
+    assert!(tracker.observe(&identity(&character.id, "account-a")));
+    assert!(!tracker.observe(&identity(&character.id, "account-a")));
+    assert!(!tracker.observe(&EngineEvent::LocalIdentityChanged {
+        at: Timestamp(2),
+        character_id: None,
+        account_id: None
+    }));
+    assert!(tracker.observe(&identity(&character.id, "account-a")));
+    assert!(tracker.observe(&identity(&character.id, "account-b")));
+}

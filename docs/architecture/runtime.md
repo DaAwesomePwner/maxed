@@ -234,9 +234,12 @@ and provisional map transitions. Opening or restoring a source resolves its own
 DB pointer; playback never runs live legacy recovery. Scoped queries use one
 store snapshot for pointer resolution and aggregates, and verified identity reads
 wait for the complete acquisition batch, including the identity transition after
-CharacterUpdated. A failed writer returns unavailable immediately rather than
-occupying the reader until the durability timeout. Account revisions participate
-in request deduplication, admission and final-response checks: a same-stream
+CharacterUpdated. Repeated same-account stat and fame updates do not advance
+that acquisition watermark. If the acquisition is not durable, a failed writer
+returns unavailable immediately rather than occupying the reader until the
+durability timeout. Once acquisition is durable, ordinary updates do not delay
+reads. Account revisions participate in request deduplication, admission and
+final-response checks: a same-stream
 switch retires an earlier account-dependent request as `HistoryReply::Superseded`.
 Account-independent queries, including storage status, retain their source lease
 without depending on the account revision.
@@ -249,8 +252,11 @@ writer for shutdown. Namespace retirement stops the sweep. Completed prefixes
 resume after restart; repeating an attached batch is safe. Unmatched rows remain
 stored and excluded from account totals. Recovery is submitted only on verified
 account changes; a failed attempt is not retried on repeated identity events.
+Reclaiming the writer clears that attempt state so its replacement can resume.
 A sweep that attached any character emits its notice even when cancelled before
-completion. Recovery emits no identity diagnostics.
+completion, provided the same live namespace generation remains current. Retired
+sweeps cannot invalidate playback or a newer live generation. Recovery emits no
+identity diagnostics.
 
 `account-history-changed` carries `AccountHistoryChanged { revision, reason }`,
 with `account_switched` or `legacy_recovered`, never an account ID. The UI should

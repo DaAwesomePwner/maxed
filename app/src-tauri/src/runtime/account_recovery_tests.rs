@@ -5,12 +5,12 @@ use std::time::Duration;
 
 #[test]
 fn account_scope_cancel_after_full_batch_notifies_and_resumes() {
-    for retired in [false, true] {
+    for retired in [None, Some(Namespace::Demo), Some(Namespace::Replay)] {
         cancel_and_resume(retired);
     }
 }
 
-fn cancel_and_resume(retired: bool) {
+fn cancel_and_resume(retired: Option<Namespace>) {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("live.sqlite3");
     let account = format!("account-{}", "a".repeat(64));
@@ -61,17 +61,32 @@ fn cancel_and_resume(retired: bool) {
     .unwrap();
     assert!(recovery.observe(&account));
     assert_eq!(reached.recv_timeout(Duration::from_secs(10)).unwrap(), 4095);
-    if retired {
+    if let Some(namespace) = retired {
         home.generation.fetch_add(1, Ordering::AcqRel);
-        *home.context.lock().unwrap() = None;
+        let mut playback = context(root.path().join("playback.sqlite3"), namespace);
+        playback.generation = 1;
+        *home.context.lock().unwrap() = Some(playback);
     }
     recovery.cancel.store(true, Ordering::Release);
     release.send(()).unwrap();
     recovery.stop();
-    assert!(matches!(
-        notices.recv_timeout(Duration::from_secs(5)).unwrap().reason,
-        AccountHistoryChangeReason::LegacyRecovered
-    ));
+    if retired.is_none() {
+        assert!(matches!(
+            notices.recv_timeout(Duration::from_secs(5)).unwrap().reason,
+            AccountHistoryChangeReason::LegacyRecovered
+        ));
+    } else {
+        assert_eq!(home.account_revision.load(Ordering::Acquire), 0);
+        assert_eq!(
+            home.context
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .account_revision,
+            0
+        );
+    }
     assert!(notices.try_recv().is_err());
     assert_eq!(
         maxed_store::open_reader(&path)
@@ -85,6 +100,12 @@ fn cancel_and_resume(retired: bool) {
     *home.on_recovery_batch.lock().unwrap() = Some(Arc::new(move |end| {
         batch.send(end).unwrap();
     }));
+    if retired.is_some() {
+        let mut restored = context(path.clone(), Namespace::Live);
+        restored.generation = home.generation.load(Ordering::Acquire);
+        restored.account_revision = home.account_revision.load(Ordering::Acquire);
+        *home.context.lock().unwrap() = Some(restored);
+    }
     let mut resumed =
         Recovery::start(home.clone(), writer.clone(), path.clone(), key, sink).unwrap();
     assert!(resumed.observe(&account));
@@ -173,4 +194,48 @@ fn account_scope_failed_recovery_retries_only_on_account_change() {
     recovery.stop();
     assert!(Arc::try_unwrap(writer).ok().unwrap().shutdown().is_err());
     home.shutdown_reads();
+}
+
+#[test]
+fn account_scope_retired_recovery_does_not_supersede_playback_or_new_live_reads() {
+    for (namespace, generation) in [
+        (Namespace::Demo, 0),
+        (Namespace::Replay, 0),
+        (Namespace::Live, 1),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("current.sqlite3");
+        maxed_store::migrate(&mut rusqlite::Connection::open(&path).unwrap()).unwrap();
+        let runtime = Arc::new(CaptureRuntime::default());
+        let home = runtime.shared.home.clone();
+        home.preparation.lock().unwrap().ready = true;
+        home.generation.store(generation, Ordering::Release);
+        let mut current = context(path, namespace);
+        current.generation = generation;
+        *home.context.lock().unwrap() = Some(current);
+        let (entered, waiting) = crossbeam_channel::bounded(1);
+        let (release, held) = crossbeam_channel::bounded(1);
+        *home.on_reader.lock().unwrap() = Some(Arc::new(move || {
+            entered.send(()).unwrap();
+            held.recv_timeout(Duration::from_secs(10)).unwrap();
+        }));
+        let reading = runtime.clone();
+        let reader = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(reading.home_summary(HomeScope::Today {
+                range: TimeRange {
+                    start: Timestamp(0),
+                    end: Timestamp(100),
+                },
+            }))
+        });
+        waiting.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(home.recovered(0).is_none());
+        assert_eq!(home.account_revision.load(Ordering::Acquire), 0);
+        release.send(()).unwrap();
+        assert!(matches!(
+            reader.join().unwrap().unwrap(),
+            HistoryReply::Ready { .. }
+        ));
+        home.shutdown_reads();
+    }
 }

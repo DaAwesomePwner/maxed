@@ -23,12 +23,62 @@ pub(super) fn verified_account(event: &maxed_types::EngineEvent) -> Option<&str>
     }
 }
 
+/// Volatile local acquisition evidence, separate from the retained Home account.
+/// Ordinary CharacterUpdated observations are not identity transitions.
+#[derive(Default)]
+pub(super) struct IdentityAcquisition {
+    verified: Option<(String, String)>,
+}
+impl IdentityAcquisition {
+    pub(super) fn observe(&mut self, event: &maxed_types::EngineEvent) -> bool {
+        use maxed_types::EngineEvent;
+        let (character, account) = match event {
+            EngineEvent::LocalIdentityChanged {
+                character_id: Some(character),
+                account_id: Some(account),
+                ..
+            } => (character, account),
+            EngineEvent::LocalIdentityChanged { .. } => {
+                self.verified = None;
+                return false;
+            }
+            EngineEvent::CharacterUpdated(character) if character.identity_verified => {
+                let Some(account) = character.account_id.as_ref() else {
+                    return false;
+                };
+                // Same-account stat/fame updates cannot advance the barrier. A new
+                // character within that account is acquired by LocalIdentityChanged.
+                if self
+                    .verified
+                    .as_ref()
+                    .is_some_and(|(_, previous)| previous == account)
+                {
+                    return false;
+                }
+                (&character.id, account)
+            }
+            _ => return false,
+        };
+        if self
+            .verified
+            .as_ref()
+            .is_some_and(|(old_character, old_account)| {
+                old_character == character && old_account == account
+            })
+        {
+            return false;
+        }
+        self.verified = Some((character.clone(), account.clone()));
+        true
+    }
+}
+
 impl HomeReads {
     pub(super) fn observe_account(
         &self,
         stream: Option<&str>,
         account: &str,
-        sequence: Option<Sequence>,
+        acquisition_sequence: Option<Sequence>,
     ) -> Option<AccountHistoryChanged> {
         let mut context = self.context.lock().ok()?;
         let context = context.as_mut()?;
@@ -36,12 +86,12 @@ impl HomeReads {
             return None;
         }
         if context.account.as_deref() == Some(account) {
-            if sequence.is_some_and(|next| {
+            if acquisition_sequence.is_some_and(|next| {
                 context
                     .identity_sequence
                     .is_none_or(|old| next.0 .0 > old.0 .0)
             }) {
-                context.identity_sequence = sequence;
+                context.identity_sequence = acquisition_sequence;
             }
             return None;
         }
@@ -50,21 +100,23 @@ impl HomeReads {
         queue.retire_accounts();
         context.account = Some(account.to_owned());
         *self.resolved_account.lock().ok()? = Some((context.namespace, context.account.clone()));
-        context.identity_sequence = sequence;
+        context.identity_sequence = acquisition_sequence;
         context.account_revision = self.account_revision.fetch_add(1, Ordering::AcqRel) + 1;
         Some(AccountHistoryChanged {
             revision: context.account_revision,
             reason: AccountHistoryChangeReason::AccountSwitched,
         })
     }
-    fn recovered(&self) -> Option<AccountHistoryChanged> {
+    fn recovered(&self, generation: u64) -> Option<AccountHistoryChanged> {
         let mut context = self.context.lock().ok()?;
+        let context = context.as_mut()?;
+        if context.namespace != Namespace::Live || context.generation != generation {
+            return None;
+        }
         let mut queue = self.scheduler.lock().ok()?;
         queue.retire_accounts();
         let revision = self.account_revision.fetch_add(1, Ordering::AcqRel) + 1;
-        if let Some(context) = context.as_mut() {
-            context.account_revision = revision;
-        }
+        context.account_revision = revision;
         Some(AccountHistoryChanged {
             revision,
             reason: AccountHistoryChangeReason::LegacyRecovered,
@@ -221,7 +273,7 @@ impl Recovery {
                     }
                 }
                 if attached > 0 {
-                    if let Some(changed) = home.recovered() {
+                    if let Some(changed) = home.recovered(generation) {
                         notice(changed);
                     }
                 }
