@@ -1,0 +1,172 @@
+{
+  "name": "Notices",
+  "on": {
+    "pull_request": {
+      "branches": [
+        "main"
+      ],
+      "paths": [
+        "Cargo.lock",
+        "Cargo.toml",
+        "crates/*/Cargo.toml",
+        "app/src-tauri/Cargo.toml",
+        ".cargo/**",
+        "rust-toolchain.toml",
+        "app/ui/package.json",
+        "app/ui/package-lock.json",
+        ".gitattributes",
+        "THIRD-PARTY-NOTICES.md",
+        "scripts/release/New-ThirdPartyNotices.ps1",
+        "scripts/release/ConvertFrom-RustNoticeHtml.ps1",
+        "docs/release/vendor/**",
+        "docs/release/distribution-inventory.json",
+        "docs/release/LICENSE-INVENTORY.md",
+        "app/src-tauri/tauri.conf.json",
+        ".github/workflows/notices.yml"
+      ]
+    },
+    "push": {
+      "branches": [
+        "main"
+      ],
+      "paths": [
+        "Cargo.lock",
+        "Cargo.toml",
+        "crates/*/Cargo.toml",
+        "app/src-tauri/Cargo.toml",
+        ".cargo/**",
+        "rust-toolchain.toml",
+        "app/ui/package.json",
+        "app/ui/package-lock.json",
+        ".gitattributes",
+        "THIRD-PARTY-NOTICES.md",
+        "scripts/release/New-ThirdPartyNotices.ps1",
+        "scripts/release/ConvertFrom-RustNoticeHtml.ps1",
+        "docs/release/vendor/**",
+        "docs/release/distribution-inventory.json",
+        "docs/release/LICENSE-INVENTORY.md",
+        "app/src-tauri/tauri.conf.json",
+        ".github/workflows/notices.yml"
+      ]
+    },
+    "workflow_dispatch": {
+      "inputs": {
+        "regenerate": {
+          "description": "Regenerate notices and upload the verified file for review",
+          "type": "boolean",
+          "required": false,
+          "default": false
+        }
+      }
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "notices-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}",
+    "cancel-in-progress": "${{ github.event_name == 'pull_request' }}"
+  },
+  "jobs": {
+    "notices": {
+      "runs-on": "windows-2022",
+      "timeout-minutes": 90,
+      "defaults": {
+        "run": {
+          "shell": "pwsh"
+        }
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version": "22.16.0"
+          }
+        },
+        {
+          "name": "Restore Rust cache",
+          "if": "runner.environment == 'github-hosted'",
+          "uses": "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "with": {
+            "path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db",
+            "key": "rust-notices-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"
+          }
+        },
+        {
+          "name": "Restore locked tools",
+          "run": "$channel = [regex]::Match((Get-Content rust-toolchain.toml -Raw), '(?m)^channel\\s*=\\s*\"([^\"]+)\"\\s*$')\nif (-not $channel.Success) { throw 'Rust toolchain channel missing.' }\nrustup toolchain install $channel.Groups[1].Value --profile minimal\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }"
+        },
+        {
+          "name": "Provision NSIS with locked Tauri",
+          "run": "# Use the locked release bundler to provision its own verified NSIS toolset.\n$override = Join-Path $env:RUNNER_TEMP 'notices-tauri.conf.json'\n[IO.File]::WriteAllText($override, '{\"bundle\":{\"createUpdaterArtifacts\":false}}')\n$cli = Join-Path $PWD 'app/ui/node_modules/@tauri-apps/cli/tauri.js'\n$env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER = 'link.exe'\nPush-Location app/src-tauri\ntry {\n  & node $cli build --ci --no-sign --bundles nsis --features maxed-app/custom-protocol --config $override -- --locked --offline\n  if ($LASTEXITCODE) { throw 'Unsigned NSIS provisioning build failed.' }\n} finally { Pop-Location }\n$nsis = Join-Path $env:LOCALAPPDATA 'tauri/NSIS'\nforeach ($file in @('COPYING', 'Docs/NSISdl/License.txt', 'Docs/Modern UI 2/License.txt', 'Plugins/x86-unicode/additional/nsis_tauri_utils.dll')) {\n  if (-not (Test-Path -LiteralPath (Join-Path $nsis $file) -PathType Leaf)) { throw \"NSIS input missing: $file\" }\n}"
+        },
+        {
+          "name": "Regenerate notices",
+          "if": "github.event_name == 'workflow_dispatch' && inputs.regenerate == true",
+          "run": "pwsh -NoProfile -File scripts/release/New-ThirdPartyNotices.ps1\nif ($LASTEXITCODE) { throw 'Notice regeneration failed; update pins/inventory per docs/release/LICENSE-INVENTORY.md.' }"
+        },
+        {
+          "name": "Check notices",
+          "run": "pwsh -NoProfile -File scripts/release/New-ThirdPartyNotices.ps1 -Check\nif ($LASTEXITCODE) { throw 'Third-party notices check failed. See the generator error above; PR/push runs will attempt regeneration.' }",
+          "id": "check",
+          "continue-on-error": "${{ github.event_name == 'pull_request' || github.event_name == 'push' }}"
+        },
+        {
+          "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+          "if": "github.event_name == 'workflow_dispatch' && inputs.regenerate == true && steps.check.outcome == 'success'",
+          "with": {
+            "name": "third-party-notices-${{ github.run_id }}-${{ github.run_attempt }}",
+            "path": "THIRD-PARTY-NOTICES.md",
+            "if-no-files-found": "error",
+            "retention-days": 14,
+            "include-hidden-files": false
+          }
+        },
+        {
+          "name": "Regenerate after failed check",
+          "id": "recover",
+          "if": "steps.check.outcome == 'failure' && (github.event_name == 'pull_request' || github.event_name == 'push')",
+          "run": "pwsh -NoProfile -File scripts/release/New-ThirdPartyNotices.ps1\nif ($LASTEXITCODE) { throw 'Notice regeneration failed; the generator error above must be resolved before an artifact can be produced. Update pins/inventory per docs/release/LICENSE-INVENTORY.md.' }\npwsh -NoProfile -File scripts/release/New-ThirdPartyNotices.ps1 -Check\nif ($LASTEXITCODE) { throw 'Regenerated notices failed verification; no artifact will be uploaded.' }"
+        },
+        {
+          "name": "Upload regenerated notices",
+          "id": "recovered_artifact",
+          "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+          "if": "steps.check.outcome == 'failure' && (github.event_name == 'pull_request' || github.event_name == 'push') && steps.recover.outcome == 'success'",
+          "with": {
+            "name": "regenerated-notices",
+            "path": "THIRD-PARTY-NOTICES.md",
+            "if-no-files-found": "error",
+            "retention-days": 14,
+            "include-hidden-files": false
+          }
+        },
+        {
+          "name": "Explain notice recovery",
+          "if": "steps.check.outcome == 'failure' && (github.event_name == 'pull_request' || github.event_name == 'push') && steps.recovered_artifact.outcome == 'success'",
+          "run": "Write-Host 'Download the regenerated-notices artifact from this failed run, review and commit THIRD-PARTY-NOTICES.md, and update pins/inventory per docs/release/LICENSE-INVENTORY.md. The original check remains failed until the committed notices are current.'"
+        },
+        {
+          "name": "Save Rust cache",
+          "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.check.outcome == 'success'",
+          "uses": "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "with": {
+            "path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db",
+            "key": "rust-notices-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"
+          }
+        },
+        {
+          "name": "Fail stale notices check",
+          "if": "!cancelled() && steps.check.outcome == 'failure'",
+          "run": "throw 'The committed third-party notices check failed. Review the check/regeneration errors and any regenerated-notices artifact; update pins/inventory per docs/release/LICENSE-INVENTORY.md.'"
+        }
+      ]
+    }
+  }
+}
