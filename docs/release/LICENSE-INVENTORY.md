@@ -248,6 +248,40 @@ the maintainer; neither remains an unknown-provenance blocker.
 
 ## Regeneration and checks
 
+The **Notices** workflow (`.github/workflows/notices.yml`) runs the real generator
+with `-Check` on PRs to `main` and pushes to `main` when dependency, generator,
+vendor, build or inventory inputs change. A stale notice or pin fails this check.
+Review that result before merging dependency changes and before tagging; the
+release build retains its own unconditional check.
+
+Maintainers without Windows can regenerate in Actions:
+
+1. Once the workflow exists on the default branch, select **Notices → Run workflow**,
+   choose the PR branch, and set the boolean **regenerate** input to **true**.
+   Fork contributors need a maintainer branch in this repository or the workflow
+   enabled in their fork; dispatch does not run against an arbitrary fork PR ref.
+2. Download the `third-party-notices-<run-id>-<attempt>` artifact from the successful
+   run. It contains only `THIRD-PARTY-NOTICES.md`, the generator's only output.
+   Generation is followed by `-Check` before upload to verify identical bytes.
+3. Review and commit that file on the PR branch, then refresh its hash in both
+   inventories using the existing instructions below and run the packaging suites.
+   The workflow never commits or pushes.
+
+Regeneration does not bypass approved version/hash guards. If a dependency bump
+changes a pinned association, review and update the generator pins and inventory
+provenance first, then dispatch again. The existing Tauri CLI 2.12.1 guard must be
+reviewed separately for the current lockfile; merely dispatching cannot repair it.
+
+Provisioning uses `npm ci`, `cargo fetch --locked`, and the locally installed Tauri
+CLI's unsigned NSIS build, with `createUpdaterArtifacts: false`, `--no-sign`, and
+locked offline Cargo arguments. This follows the release bundler's own verified
+NSIS downloads and layout at `$env:LOCALAPPDATA/tauri/NSIS`, without duplicating
+upstream download pins or requiring signing credentials. The temporary config
+leaves the tracked production config intact. It costs a full Windows build;
+only Cargo registry/index archives and git sources are cached, with saves limited
+to successful main runs. NSIS and compiled outputs are provisioned fresh.
+The unsigned installer is only a provisioning byproduct and is never uploaded.
+
 From the repository root, with the locked Cargo source cache, installed locked
 npm packages and cached NSIS toolset available:
 

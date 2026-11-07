@@ -688,8 +688,211 @@ for ($i = 0; $i -lt 7; $i++) {
         Assert ('gui_step_policy' -in @(GuiFailures $g)) "reject GUI step $i $field"
     }
 }
+# Independent literal policy: changes to any command, condition, field or pin
+# require an explicit policy review. Compare leaves and shapes recursively so
+# extra empty objects/arrays cannot smuggle environment or permission scopes.
+function SamePolicy($actual, $expected) {
+    if ($null -eq $expected) { return $null -eq $actual }
+    if ($expected -is [pscustomobject]) {
+        if ($actual -isnot [pscustomobject] -or (Keys $actual) -cne (Keys $expected)) { return $false }
+        foreach ($key in $expected.PSObject.Properties.Name) {
+            if (-not (SamePolicy $actual.$key $expected.$key)) { return $false }
+        }
+        return $true
+    }
+    if ($expected -is [array]) {
+        if ($actual -isnot [array] -or $actual.Count -ne $expected.Count) { return $false }
+        for ($i = 0; $i -lt $expected.Count; $i++) {
+            if (-not (SamePolicy $actual[$i] $expected[$i])) { return $false }
+        }
+        return $true
+    }
+    return $actual.GetType() -eq $expected.GetType() -and $actual -ceq $expected
+}
+$script:expectedNotices = @'
+{
+  "name": "Notices",
+  "on": {
+    "pull_request": {
+      "branches": [
+        "main"
+      ],
+      "paths": [
+        "Cargo.lock",
+        "Cargo.toml",
+        "app/ui/package-lock.json",
+        "app/ui/package.json",
+        "rust-toolchain.toml",
+        "app/src-tauri/tauri.conf.json",
+        "app/src-tauri/Cargo.toml",
+        "crates/*/Cargo.toml",
+        "THIRD-PARTY-NOTICES.md",
+        "scripts/release/New-ThirdPartyNotices.ps1",
+        "scripts/release/ConvertFrom-RustNoticeHtml.ps1",
+        "docs/release/vendor/**",
+        "docs/release/distribution-inventory.json",
+        "docs/release/LICENSE-INVENTORY.md",
+        ".github/workflows/notices.yml",
+        ".cargo/**",
+        ".gitattributes",
+        "LICENSE",
+        "NOTICE.md",
+        "app/src-tauri/**",
+        "app/ui/**",
+        "crates/**",
+        "tests/fixtures/scrubbed/maxed-demo/**",
+        "tests/packaging/workflow-policy.test.ps1"
+      ]
+    },
+    "push": {
+      "branches": [
+        "main"
+      ],
+      "paths": [
+        "Cargo.lock",
+        "Cargo.toml",
+        "app/ui/package-lock.json",
+        "app/ui/package.json",
+        "rust-toolchain.toml",
+        "app/src-tauri/tauri.conf.json",
+        "app/src-tauri/Cargo.toml",
+        "crates/*/Cargo.toml",
+        "THIRD-PARTY-NOTICES.md",
+        "scripts/release/New-ThirdPartyNotices.ps1",
+        "scripts/release/ConvertFrom-RustNoticeHtml.ps1",
+        "docs/release/vendor/**",
+        "docs/release/distribution-inventory.json",
+        "docs/release/LICENSE-INVENTORY.md",
+        ".github/workflows/notices.yml",
+        ".cargo/**",
+        ".gitattributes",
+        "LICENSE",
+        "NOTICE.md",
+        "app/src-tauri/**",
+        "app/ui/**",
+        "crates/**",
+        "tests/fixtures/scrubbed/maxed-demo/**",
+        "tests/packaging/workflow-policy.test.ps1"
+      ]
+    },
+    "workflow_dispatch": {
+      "inputs": {
+        "regenerate": {
+          "description": "Regenerate notices and upload the verified file for review",
+          "type": "boolean",
+          "required": false,
+          "default": false
+        }
+      }
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "notices-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}",
+    "cancel-in-progress": "${{ github.event_name == 'pull_request' }}"
+  },
+  "jobs": {
+    "notices": {
+      "runs-on": "windows-2022",
+      "timeout-minutes": 90,
+      "defaults": {
+        "run": {
+          "shell": "pwsh"
+        }
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version": "22.16.0"
+          }
+        },
+        {
+          "name": "Restore Rust cache",
+          "if": "runner.environment == 'github-hosted'",
+          "uses": "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "with": {
+            "path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db",
+            "key": "rust-notices-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"
+          }
+        },
+        {
+          "name": "Restore locked tools",
+          "run": "$channel = [regex]::Match((Get-Content rust-toolchain.toml -Raw), '(?m)^channel\\s*=\\s*\"([^\"]+)\"\\s*$')\nif (-not $channel.Success) { throw 'Rust toolchain channel missing.' }\nrustup toolchain install $channel.Groups[1].Value --profile minimal\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }"
+        },
+        {
+          "name": "Provision NSIS with locked Tauri",
+          "run": "# Use the locked release bundler to provision its own verified NSIS toolset.\n$override = Join-Path $env:RUNNER_TEMP 'notices-tauri.conf.json'\n[IO.File]::WriteAllText($override, '{\"bundle\":{\"createUpdaterArtifacts\":false}}')\n$cli = Join-Path $PWD 'app/ui/node_modules/@tauri-apps/cli/tauri.js'\n$env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER = 'link.exe'\nPush-Location app/src-tauri\ntry {\n  & node $cli build --ci --no-sign --bundles nsis --features maxed-app/custom-protocol --config $override -- --locked --offline\n  if ($LASTEXITCODE) { throw 'Unsigned NSIS provisioning build failed.' }\n} finally { Pop-Location }\n$nsis = Join-Path $env:LOCALAPPDATA 'tauri/NSIS'\nforeach ($file in @('COPYING', 'Docs/NSISdl/License.txt', 'Docs/Modern UI 2/License.txt', 'Plugins/x86-unicode/additional/nsis_tauri_utils.dll')) {\n  if (-not (Test-Path -LiteralPath (Join-Path $nsis $file) -PathType Leaf)) { throw \"NSIS input missing: $file\" }\n}"
+        },
+        {
+          "name": "Regenerate notices",
+          "if": "github.event_name == 'workflow_dispatch' && inputs.regenerate == true",
+          "run": "pwsh -NoProfile -File scripts/release/New-ThirdPartyNotices.ps1\nif ($LASTEXITCODE) { throw 'Notice regeneration failed; update pins/inventory per docs/release/LICENSE-INVENTORY.md.' }"
+        },
+        {
+          "name": "Check notices",
+          "run": "pwsh -NoProfile -File scripts/release/New-ThirdPartyNotices.ps1 -Check\nif ($LASTEXITCODE) {\n  Write-Host 'run the Notices workflow with regenerate=true on this branch, download the artifact, commit it, update pins/inventory per docs/release/LICENSE-INVENTORY.md'\n  throw 'Third-party notices check failed.'\n}"
+        },
+        {
+          "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+          "if": "github.event_name == 'workflow_dispatch' && inputs.regenerate == true",
+          "with": {
+            "name": "third-party-notices-${{ github.run_id }}-${{ github.run_attempt }}",
+            "path": "THIRD-PARTY-NOTICES.md",
+            "if-no-files-found": "error",
+            "retention-days": 14,
+            "include-hidden-files": false
+          }
+        },
+        {
+          "name": "Save Rust cache",
+          "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'",
+          "uses": "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+          "with": {
+            "path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db",
+            "key": "rust-notices-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"
+          }
+        }
+      ]
+    }
+  }
+}
+'@ | ConvertFrom-Json
+function NoticesFailures($workflow) {
+    if (-not (SamePolicy $workflow $script:expectedNotices)) { 'notices_policy' }
+}
+$noticesText = Get-Content "$root/.github/workflows/notices.yml" -Raw
+Assert (@(NoticesFailures ($noticesText | ConvertFrom-Json)).Count -eq 0) 'notices strict policy positive control'
+foreach ($case in @(
+    @{ name = 'write permission'; mutate = { param($n) $n.permissions.contents = 'write' } },
+    @{ name = 'job permission'; mutate = { param($n) $n.jobs.notices | Add-Member permissions @{ contents = 'write' } } },
+    @{ name = 'secret reference'; mutate = { param($n) $n.jobs.notices.steps[0].with | Add-Member token '${{ secrets.OTHER }}' } },
+    @{ name = 'environment'; mutate = { param($n) $n.jobs.notices | Add-Member environment 'release-signing' } },
+    @{ name = 'Cargo.lock path'; mutate = { param($n) $n.on.pull_request.paths = @($n.on.pull_request.paths | Where-Object { $_ -cne 'Cargo.lock' }) } },
+    @{ name = 'package-lock path'; mutate = { param($n) $n.on.push.paths = @($n.on.push.paths | Where-Object { $_ -cne 'app/ui/package-lock.json' }) } },
+    @{ name = 'regenerate without verification'; mutate = { param($n) $n.jobs.notices.steps = @($n.jobs.notices.steps | Where-Object name -CNE 'Check notices') } },
+    @{ name = 'check skipped on regeneration'; mutate = { param($n) $n.jobs.notices.steps[6] | Add-Member if 'inputs.regenerate != true' } },
+    @{ name = 'unconditional artifact'; mutate = { param($n) $n.jobs.notices.steps[7].PSObject.Properties.Remove('if') } },
+    @{ name = 'artifact before verification'; mutate = { param($n) $s = $n.jobs.notices.steps; $old = $s[6]; $s[6] = $s[7]; $s[7] = $old } },
+    @{ name = 'action tag'; mutate = { param($n) $n.jobs.notices.steps[0].uses = 'actions/checkout@v4' } },
+    @{ name = 'dispatch default'; mutate = { param($n) $n.on.workflow_dispatch.inputs.regenerate.default = $true } },
+    @{ name = 'privileged trigger'; mutate = { param($n) $n.on | Add-Member pull_request_target @{} } },
+    @{ name = 'ignored failure'; mutate = { param($n) $n.jobs.notices.steps[6] | Add-Member 'continue-on-error' $true } }
+)) {
+    $n = $noticesText | ConvertFrom-Json
+    & $case.mutate $n
+    Assert ('notices_policy' -in @(NoticesFailures $n)) "reject notices mutation $($case.name)"
+}
 foreach ($file in Get-ChildItem "$root/.github/workflows" -File) {
-    Assert ($file.Name -cin @('release.yml', 'tests.yml', 'codeql.yml', 'gui-smoke.yml')) 'every workflow has an explicit policy'
+    Assert ($file.Name -cin @('release.yml', 'tests.yml', 'codeql.yml', 'gui-smoke.yml', 'notices.yml')) 'every workflow has an explicit policy'
     $w = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
     if ($file.Name -cne 'release.yml') {
         $forbidden = @(Leaves $w '' | Where-Object {

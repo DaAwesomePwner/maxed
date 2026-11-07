@@ -144,3 +144,16 @@ commands, source evidence, isolation trade-offs and Windows validation limits.
 
 `tests/packaging/workflow-policy.test.ps1` enforces these rules; update it in the
 same pull request as any workflow change.
+
+`.github/workflows/notices.yml` runs the real third-party notices generator on
+`windows-2022` for PRs/pushes to `main` filtered to notice inputs and build inputs.
+It restores locked npm/Cargo sources and provisions NSIS through an unsigned build
+using the locked Tauri CLI, then runs `New-ThirdPartyNotices.ps1 -Check`.
+It has read-only contents permission, no secrets or environment, and cancels only
+superseded PR runs. Cargo source caches save only on successful main runs; no
+compiled outputs or NSIS caches are reused. Manual dispatch defaults to check-only;
+`regenerate=true` generates, verifies with `-Check`, and uploads only the notices
+file for maintainer review/commit. See the [regeneration instructions](../release/LICENSE-INVENTORY.md#regeneration-and-checks).
+The workflow-policy suite pins its commands, input paths, conditions and actions,
+with mutations for permissions, secrets, environments and missing verification.
+Local policy tests do not prove the Windows provisioning build works.
