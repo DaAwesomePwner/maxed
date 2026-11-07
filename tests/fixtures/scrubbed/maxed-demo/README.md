@@ -128,17 +128,20 @@ Each records `provisional_inside_boost`, `cap_eligible: false` and the reasons `
 `unverified_placement`, `missing_operands`: this story does not observe exalt levels. All 37 events, existing
 values, ordering, sequence numbers, pcap bytes, catalog and prior provenance are unchanged.
 
-Account-context contract regeneration (2026-11-07, engine revision `40d8aac`)
-used `maxed_cli::demo::replay_engine` with the configuration above, writing a
-new local output before comparison and replacement. `expected.json` now has
-43 events instead of 37: six `local_identity_changed` events plus three
-`account_id` fields on character revisions and ten `owner_character_id` fields
-on fight/drop revisions. Sequence numbers shift accordingly. Removing those
-additions and sequence numbers yields exactly the prior ordered event values.
+Account-context and local-profile gate regeneration (2026-11-07, merged engine
+revision `ace2748`) used `maxed_cli::demo::replay_engine` with the configuration
+above, writing a new local output before comparison and replacement.
+`expected.json` now has 43 events instead of 37: six `local_identity_changed`
+events plus three `account_id` fields on character revisions, ten
+`owner_character_id` fields on fight/drop revisions, and four `maxed_gated`
+fields from issue #5 (true on three local profiles, false on the remote profile).
+Sequence numbers shift accordingly. Removing those additions and sequence
+numbers yields exactly the prior ordered event values (golden at `40d8aac`).
 The only account pseudonym is the HMAC of synthetic `DemoAccount` under `[7; 32]`
 and domain `maxed/account/v1`; the remote `DemoAllyAccount` hash is absent.
-Neither raw account literal nor any new real identity material is emitted.
-Capture bytes, catalog, existing synthetic display names and provenance are unchanged.
-The capture SHA-256 above was rechecked. Derived-output SHA-256 changed from
+All owners reference pre-existing synthetic character IDs. Neither raw account
+literal nor any new real identity material is emitted. Capture bytes, catalog,
+existing synthetic display names and provenance are unchanged. The capture
+SHA-256 above was rechecked. Derived-output SHA-256 changed from
 `88ba6bd618c9f2ab03089da327eed2151ce82091c503e49bf6e91110b793d273` to
-`13c91601324cc5f7648bbee3bec7db4ad2fe114a0b99093599b5307403ce7497`.
+`debf60d4ed900ac43e67a41359160613505fb8ce34a25ca00c6e85371bd43939`.
