@@ -31,6 +31,8 @@ Every request begins at GitHub over HTTPS. Redirects are limited to `release-ass
 
 Merges to `main` automatically run tests and save each Rust job’s cache after it passes. Before tagging, check that run. Release reuses a completed successful `main` push, schedule or manual run for the exact tagged SHA and records its URL; otherwise it runs all tests, including when lookup fails or a docs-only push was skipped. PR and tag runs never save caches. Signing always builds from scratch.
 
+Quick successive merges can cancel an earlier queued main run; tagging that commit simply runs tests in the release as a safe fallback.
+
 The release workflow builds version tags and stages artifacts under `release-signing`, then waits for maintainer approval of the `publish` job in `release-publish`. Only that job has `contents: write`; the lookup job has only `actions: read`, and the remaining release jobs inherit read-only contents permission. Verify the actual workflow, immutable action pins, tag restrictions and environment approvals for each release. Node 22.16.0 and Rust 1.99.0 are pinned; use `npm ci` and locked Cargo dependencies.
 
 Run `scripts/build-release.ps1 -Package -Offline` with cached dependencies, the locked Tauri CLI, 7-Zip on PATH and the [signing environment](signing.md). The frontend uses `custom-protocol`. The build checks generated notices, verifies the signature and authenticated version, then extracts the installer to validate the explicit payload allowlist. No post-build signing fallback is provided.

@@ -162,7 +162,7 @@ $script:expectedJobs = @'
 $script:expectedPrior = @'
 {
   "if": "github.repository == 'daplabs/maxed' && github.ref_type == 'tag'",
-  "runs-on": "windows-2022",
+  "runs-on": "ubuntu-latest",
   "permissions": {
     "actions": "read"
   },
@@ -171,12 +171,12 @@ $script:expectedPrior = @'
     "tested": "${{ steps.lookup.outputs.tested }}"
   },
   "steps": [
-    {"name": "Find prior tests", "id": "lookup", "shell": "pwsh", "env": {"GH_TOKEN": "${{ github.token }}"}, "run": "$tested = 'false'\ntry {\n  for ($page = 1; $page -le 10; $page++) {\n    $response = Invoke-RestMethod -Uri \"$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/workflows/tests.yml/runs?head_sha=$env:GITHUB_SHA&per_page=100&page=$page\" -Headers @{ Authorization = \"Bearer $env:GH_TOKEN\"; Accept = 'application/vnd.github+json' } -ErrorAction Stop\n    $match = @($response.workflow_runs | Where-Object { $_.head_sha -ceq $env:GITHUB_SHA -and $_.head_branch -ceq 'main' -and $_.event -cin @('push', 'schedule', 'workflow_dispatch') -and $_.status -ceq 'completed' -and $_.conclusion -ceq 'success' })\n    if ($match.Count) { \"Reused tests: $($match[0].html_url)\" >> $env:GITHUB_STEP_SUMMARY; $tested = 'true'; break }\n    if (@($response.workflow_runs).Count -lt 100) { break }\n  }\n} catch { Write-Warning 'Prior tests lookup failed; running tests.'; $tested = 'false' }\n\"tested=$tested\" >> $env:GITHUB_OUTPUT"}
+    {"name": "Find prior tests", "id": "lookup", "shell": "pwsh", "env": {"GH_TOKEN": "${{ github.token }}"}, "run": "$tested = 'false'\ntry {\n  for ($page = 1; $page -le 10; $page++) {\n    $response = Invoke-RestMethod -Uri \"$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/workflows/tests.yml/runs?head_sha=$env:GITHUB_SHA&per_page=100&page=$page\" -Headers @{ Authorization = \"Bearer $env:GH_TOKEN\"; Accept = 'application/vnd.github+json' } -ErrorAction Stop\n    $match = @($response.workflow_runs | Where-Object { $_.path -ceq '.github/workflows/tests.yml' -and $_.head_repository.full_name -ceq 'daplabs/maxed' -and $_.head_sha -ceq $env:GITHUB_SHA -and $_.head_branch -ceq 'main' -and $_.event -cin @('push', 'schedule', 'workflow_dispatch') -and $_.status -ceq 'completed' -and $_.conclusion -ceq 'success' })\n    if ($match.Count) { \"Reused tests: $($match[0].html_url)\" >> $env:GITHUB_STEP_SUMMARY; $tested = 'true'; break }\n    if (@($response.workflow_runs).Count -lt 100) { break }\n  }\n} catch { Write-Warning 'Prior tests lookup failed; running tests.'; $tested = 'false' }\n\"tested=$tested\" >> $env:GITHUB_OUTPUT"}
   ]
 }
 '@ | ConvertFrom-Json
 $script:testsGate = "github.repository == 'daplabs/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && needs.prior-tests.outputs.tested != 'true'"
-$script:packageGate = "always() && github.repository == 'daplabs/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && ((needs.prior-tests.outputs.tested == 'true' && needs.tests.result == 'skipped') || needs.tests.result == 'success')"
+$script:packageGate = "!cancelled() && github.repository == 'daplabs/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && ((needs.prior-tests.outputs.tested == 'true' && needs.tests.result == 'skipped') || needs.tests.result == 'success')"
 function Failures($release, $manual, $codeql) {
     $publish = $release.jobs.publish
     if ((Keys $publish) -cne 'concurrency,defaults,environment,if,needs,permissions,runs-on,steps,timeout-minutes') { 'publish_shape' }
@@ -188,7 +188,7 @@ $c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }
     if ($publish.steps[2].run -cne $publishCommand) { 'publish_command' }
     if ($publish.environment -cne 'release-publish' -or $publish.concurrency.group -cne 'release-publish' -or
         $publish.concurrency.'cancel-in-progress' -cne $false -or (@($publish.needs) -join ',') -cne 'package' -or
-        $publish.if -cne "github.repository == 'daplabs/maxed' && github.ref_type == 'tag'") { 'publish_gate' }
+        $publish.if -cne "!cancelled() && needs.package.result == 'success' && github.repository == 'daplabs/maxed' && github.ref_type == 'tag'") { 'publish_gate' }
     foreach ($leaf in @(Leaves $publish 'publish')) {
         if (HasSecretExpression $leaf.Value) { 'secret_scope' }
         foreach ($expression in @(Expressions $leaf.Value)) {
@@ -268,7 +268,7 @@ $c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }
             $isManual = [object]::ReferenceEquals($w, $manual)
             $isPublish = [object]::ReferenceEquals($w, $release) -and [object]::ReferenceEquals($job, $release.jobs.publish)
             $isCodeql = [object]::ReferenceEquals($w, $codeql) -and [object]::ReferenceEquals($job, $codeql.jobs.analyze)
-            $runner = if ($isCodeql) { 'ubuntu-24.04' } else { 'windows-2022' }
+            $runner = if ($isCodeql) { 'ubuntu-24.04' } elseif ($isPrior) { 'ubuntu-latest' } else { 'windows-2022' }
             if ($job.'runs-on' -isnot [string] -or $job.'runs-on' -cne $runner) { 'job_policy' }
             # Hosted runners need longer for the full test job; every other job keeps 45 minutes.
             $timeout = if ($isManual) { 90 } elseif ($isPrior) { 5 } else { 45 }
@@ -455,6 +455,8 @@ foreach ($case in @(
     @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.environment = 'release-signing' } },
     @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.needs = @('tests') } },
     @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.if = 'always()' } },
+    @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.if = $r.jobs.publish.if.Replace("needs.package.result == 'success' && ", '') } },
+    @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.if = $r.jobs.publish.if.Replace('!cancelled()', 'always()') } },
     @{ want = 'publish_gate'; mutate = { param($r,$m) $r.jobs.publish.concurrency.group = 'per-tag' } },
     @{ want = 'publish_artifact'; mutate = { param($r,$m) $r.jobs.publish.steps[1].with.name = 'other-artifact' } },
     @{ want = 'secret_scope'; mutate = { param($r,$m) $r.jobs.publish.steps[2].env.GH_TOKEN = '${{ secrets.OTHER }}' } },
@@ -515,7 +517,7 @@ foreach ($case in @(
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = "github.repository == 'daplabs/maxed-rotmg' && github.ref_type == 'tag'" } },
     @{ want = 'release_tests'; mutate = { param($r,$m) $r.jobs.tests.if = "github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag'" } },
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = 'always()' } },
-    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = 'always() && ' + $r.jobs.package.if } },
+    @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = $r.jobs.package.if.Replace('!cancelled()', 'always()') } },
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = 'failure() && ' + $r.jobs.package.if } },
     @{ want = 'release_guard'; mutate = { param($r,$m) $r.jobs.package.if = '!cancelled() && ' + $r.jobs.package.if } },
     @{ want = 'bindings_freshness'; mutate = { param($r,$m) ($m.jobs.'rust-test'.steps | Where-Object name -CEQ 'Bindings freshness').run = 'git diff --exit-code' } },
@@ -572,7 +574,8 @@ foreach ($name in @('rust-lint','rust-test','store-test','ui','packaging')) {
             secret { $m.jobs.$name | Add-Member secrets 'inherit' }
             drop { $m.jobs.$name.steps = @($m.jobs.$name.steps | Where-Object { $_.name -notin @('Rust lint','Rust tests','Store tests','UI','Packaging and collectors') }) }
         }
-        Assert (@(Failures $r $m $c).Count -gt 0) "reject $name $change"
+        $want = switch ($change) { permission { 'permissions' }; secret { 'secret_scope' }; drop { 'tests_step_order' } }
+        Assert ($want -in @(Failures $r $m $c)) "reject $name $change"
     }
 }
 foreach ($change in @('write','extra','failed')) {
@@ -582,7 +585,8 @@ foreach ($change in @('write','extra','failed')) {
         extra { $r.jobs.'prior-tests'.permissions | Add-Member contents 'read' }
         failed { $r.jobs.package.if = $r.jobs.package.if.Replace("needs.tests.result == 'success'", "needs.tests.result == 'failure'") }
     }
-    Assert (@(Failures $r $m $c).Count -gt 0) "reject prior tests $change"
+    $want = if ($change -eq 'failed') { 'release_guard' } else { 'permissions' }
+    Assert ($want -in @(Failures $r $m $c)) "reject prior tests $change"
 }
 # Exercise the generic rule on every job, including the reusable release caller.
 foreach ($target in @('release.tests', 'release.prior-tests', 'release.package', 'release.publish', 'tests.rust-lint', 'tests.rust-test', 'tests.store-test', 'tests.ui', 'tests.packaging', 'codeql.analyze')) {

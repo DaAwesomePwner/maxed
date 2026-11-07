@@ -110,6 +110,7 @@ completed successful main push, schedule or dispatch run for the exact SHA,
 with its URL in the job summary; otherwise all tests run before packaging.
 Lookup errors fall back to testing; failed tests or lookup jobs block signing. The signing job builds from
 scratch on `windows-2022` in the `release-signing` environment.
+Quick successive merges can cancel an earlier queued main run; tagging that commit simply runs tests in the release as a safe fallback.
 The reusable `release` input remains for caller compatibility.
 
 `.github/workflows/gui-smoke.yml` independently uses GitHub-hosted `windows-2022`
