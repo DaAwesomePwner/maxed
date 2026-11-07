@@ -33,6 +33,23 @@ test.each(['live-snapshot', 'party-changed'] as const)('native %s subscriptions 
   expect(receive).toHaveBeenCalledTimes(1);
 });
 
+test('account-history-changed listens directly without a live-payload channel subscription', async () => {
+  mocks.invoke.mockReset();
+  let callback!: (message: { payload: unknown }) => void;
+  const release = vi.fn();
+  mocks.listen.mockImplementationOnce((_event, receive) => { callback = receive; return Promise.resolve(release); });
+  const receive = vi.fn();
+  const stop = await nativeTransport.listen('account-history-changed', receive);
+  expect(mocks.invoke).not.toHaveBeenCalledWith('subscribe_live_payload', expect.anything());
+  const payload = { revision: 2, reason: 'account_switched' };
+  callback({ payload });
+  expect(receive).toHaveBeenCalledExactlyOnceWith(payload);
+  stop();
+  expect(release).toHaveBeenCalledOnce();
+  callback({ payload });
+  expect(receive).toHaveBeenCalledOnce();
+});
+
 test('the production App uses the JSON-decoding native transport', async () => {
   const initial: LiveSnapshot = structuredClone(fixture);
   initial.capture.state = 'Live'; initial.character!.name = 'Initial local';
