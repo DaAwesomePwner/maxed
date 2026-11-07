@@ -47,7 +47,7 @@ that upstream notices have been relicensed under Maxed's MIT licence.
 | Embedded item | Source/version or hash | Licence and notice |
 | --- | --- | --- |
 | Maxed application, local workspace crates and UI | 0.1.0; per-build `maxed.exe` hash in `bundle-manifest.json` | MIT; `LICENSE`, with derived RealmShark/UnityPy notices in `NOTICE.md` |
-| Rust runtime dependency closure | 275 crates; individual names/versions and full cached texts in [generated notices](../../THIRD-PARTY-NOTICES.md#rust) | Per-crate licences summarised below |
+| Rust runtime dependency closure | 271 crates; individual names/versions and full cached texts in [generated notices](../../THIRD-PARTY-NOTICES.md#rust) | Per-crate licences summarised below |
 | Rust standard library (`std`, `core`, `alloc` and vendored components) | rustc 1.99.0, pinned by `rust-toolchain.toml`; supplied by the toolchain, outside Cargo.lock | MIT OR Apache-2.0 with in-tree exceptions and individual dependency terms; complete pinned toolchain attribution embedded in [generated notices](../../THIRD-PARTY-NOTICES.md#rust-standard-library) |
 | Microsoft WebView2 SDK loader (`WebView2LoaderStatic.lib`) | 1.0.3800.47, Microsoft Corporation; statically linked by webview2-com-sys 0.39.1 on MSVC; maintainer verified the companion DLL version resource | Separate Microsoft WebView2 SDK BSD-3-Clause-style terms, not the binding crate's MIT; pinned SDK LICENSE.txt and NOTICE.txt reproduced in generated notices |
 | Vite frontend's npm runtime dependency closure | 20 packages, including Svelte 5.57.3 and `@tauri-apps/api` 2.12.4; [complete list](../../THIRD-PARTY-NOTICES.md#npm) | MIT, Apache-2.0 or their stated alternatives; generated notices |
@@ -147,14 +147,13 @@ can omit packages or portions of packages from the final binary.
 | `Apache-2.0 AND MIT` | 1 |
 | `Apache-2.0 OR ISC OR MIT` | 3 |
 | `Apache-2.0 OR MIT` | 24 |
-| `BSD-2-Clause OR Apache-2.0 OR MIT` | 1 |
 | `BSD-3-Clause` | 3 |
 | `BSD-3-Clause AND MIT` | 1 |
 | `BSD-3-Clause/MIT` | 1 |
 | `CC0-1.0 OR MIT-0 OR Apache-2.0` | 1 |
 | `ISC` | 3 |
 | `MIT` | 46 |
-| `MIT OR Apache-2.0` | 137 |
+| `MIT OR Apache-2.0` | 134 |
 | `MIT OR Apache-2.0 OR Zlib` | 1 |
 | `MIT OR Zlib OR Apache-2.0` | 2 |
 | `MIT/Apache-2.0` | 6 |
@@ -164,7 +163,7 @@ can omit packages or portions of packages from the final binary.
 | `Unlicense/MIT` | 2 |
 | `Zlib` | 2 |
 | `Zlib OR Apache-2.0 OR MIT` | 2 |
-| **Total** | **275** |
+| **Total** | **271** |
 
 | npm licence metadata | Packages |
 | --- | ---: |
