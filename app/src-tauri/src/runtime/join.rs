@@ -1123,7 +1123,14 @@ mod session_coverage_tests {
         adapter.close().unwrap();
         let home = maxed_store::open_reader(&path)
             .unwrap()
-            .home_summary(HomeScope::Session { id: session.id })
+            .home_summary(
+                HomeScope::Session { id: session.id },
+                maxed_store::open_reader(&path)
+                    .unwrap()
+                    .current_account()
+                    .unwrap()
+                    .as_deref(),
+            )
             .unwrap();
         assert_eq!((home.runs, home.clears), (0, 0));
         assert_eq!(home.issues, vec![CoverageIssue::MissingCatalog]);

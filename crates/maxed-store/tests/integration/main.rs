@@ -112,3 +112,12 @@ mod summary_migration;
 mod visit_recap;
 #[path = "../writer.rs"]
 mod writer;
+
+#[path = "../account_scope_readers.rs"]
+mod account_scope_readers;
+
+use common::account_sql;
+#[path = "../account_scope_sql.rs"]
+mod account_scope_sql;
+#[path = "../account_scope_triggers.rs"]
+mod account_scope_triggers;

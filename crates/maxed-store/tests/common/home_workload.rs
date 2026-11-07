@@ -28,6 +28,7 @@ impl Fixture {
         for i in 0..3 {
             let mut character = snapshot.character.clone().unwrap();
             character.id = format!("synthetic-character-{i}");
+            character.account_id = Some(crate::common::account_scope_fixture::ACCOUNT.into());
             character.name = Some(format!("Synthetic {i}"));
             initial.push(EngineEvent::CharacterUpdated(character));
         }
@@ -77,6 +78,7 @@ impl Fixture {
                     let index = group * 7 + boss;
                     let mut fight = snapshot.fights[0].clone();
                     fight.id = format!("synthetic-fight-{index:05}");
+                    fight.owner_character_id = Some(character.clone());
                     fight.run_id = (!realm).then(|| run.id.clone());
                     let target = if boss < 4 {
                         group % 4 * 8 + boss

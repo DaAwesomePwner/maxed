@@ -136,7 +136,12 @@ impl CaptureRuntime {
                         dungeon,
                         ..Default::default()
                     },
-                    |reader| reader.home_dungeon_streak(request),
+                    |reader| {
+                        reader.home_dungeon_streak(
+                            request, // TODO(#4 T4C): native account lifecycle
+                            reader.current_account()?.as_deref(),
+                        )
+                    },
                 )
             },
         )
@@ -155,7 +160,13 @@ impl CaptureRuntime {
             HistoryKey::HomeHud(scope.clone(), tiers.clone(), potions.clone()),
             move |job| {
                 runtime.read_history(job, HomeHud::default, |reader| {
-                    reader.home_hud(scope, &tiers, &potions)
+                    reader.home_hud(
+                        scope,
+                        // TODO(#4 T4C): native account lifecycle
+                        reader.current_account()?.as_deref(),
+                        &tiers,
+                        &potions,
+                    )
                 })
             },
         )
@@ -282,7 +293,12 @@ impl CaptureRuntime {
                         rows: vec![],
                         truncated: false,
                     },
-                    |reader| reader.home_boss_baselines(request),
+                    |reader| {
+                        reader.home_boss_baselines(
+                            request, // TODO(#4 T4C): native account lifecycle
+                            reader.current_account()?.as_deref(),
+                        )
+                    },
                 )
             },
         )
@@ -310,7 +326,12 @@ impl CaptureRuntime {
                         usual_clear_micros: None,
                         clear_samples: 0,
                     },
-                    |reader| reader.dungeon_profile(request),
+                    |reader| {
+                        reader.dungeon_profile(
+                            request, // TODO(#4 T4C): native account lifecycle
+                            reader.current_account()?.as_deref(),
+                        )
+                    },
                 )
             },
         )

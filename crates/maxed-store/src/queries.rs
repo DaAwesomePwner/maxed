@@ -158,10 +158,12 @@ pub(crate) fn rows<T: DeserializeOwned>(
 }
 
 impl StoreReader {
-    pub fn dungeon_bests(&self) -> Result<Vec<DungeonBest>, StoreError> {
-        let json: Option<String> =
-            self.conn
-                .query_row(include_str!("dungeon_bests.sql"), [], |row| row.get(0))?;
+    pub fn dungeon_bests(&self, account: Option<&str>) -> Result<Vec<DungeonBest>, StoreError> {
+        let json: Option<String> = self.conn.query_row(
+            &crate::account_sql::with_accounts(include_str!("dungeon_bests.sql")),
+            [account],
+            |row| row.get(0),
+        )?;
         bounded(
             serde_json::from_str::<Vec<DungeonBest>>(&json.ok_or(StoreError::Limit)?)?,
             1024 * 1024,
@@ -411,11 +413,12 @@ fn comparison(conn: &Connection, run: &RunView) -> Result<Option<ClearComparison
     };
     // Aggregate in SQL instead of fetching every historical run. Counter-based
     // timestamps are fallback/estimated clear durations, even at zero delay.
-    let sql="SELECT count(*),avg(completed_at-started) FROM runs WHERE dungeon=?1 AND outcome='cleared' AND started<?2 AND completed_at>started AND CASE WHEN json_valid(json) THEN json_extract(json,'$.area_kind') END='dungeon' AND EXISTS(SELECT 1 FROM run_evidence e WHERE e.run_id=runs.id AND e.kind IN ('victory','completion_dialogue'))";
-    let (count, mean): (i64, Option<f64>) =
-        conn.query_row(sql, params![run.dungeon, micros(run.started)?], |r| {
-            Ok((r.get(0)?, r.get(1)?))
-        })?;
+    let sql = &crate::account_sql::with_accounts(include_str!("run_comparison.sql"));
+    let (count, mean): (i64, Option<f64>) = conn.query_row(
+        sql,
+        params![run.dungeon, micros(run.started)?, run.id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
     let Some(mean) = mean.filter(|n| n.is_finite() && *n > 0.0) else {
         return Ok(None);
     };
@@ -503,6 +506,7 @@ impl StoreReader {
     pub fn scope_loot(
         &self,
         scope: HomeScope,
+        account: Option<&str>,
         cursor: Option<String>,
         limit: u16,
         tiers: &[(u16, Option<String>)],
@@ -521,7 +525,7 @@ impl StoreReader {
         let unique: std::collections::BTreeMap<_, _> = tiers.iter().cloned().collect();
         let tiers = serde_json::to_string(&unique.into_iter().collect::<Vec<_>>())?;
         let json: Option<String> = self.conn.query_row(
-            include_str!("scope_loot.sql"),
+            &crate::account_sql::with_accounts(include_str!("scope_loot.sql")),
             params![
                 kind,
                 id,
@@ -531,6 +535,7 @@ impl StoreReader {
                 cursor.as_ref().map(|c| c.priority),
                 cursor.as_ref().map(|c| c.item_type),
                 i64::from(limit) + 1,
+                account,
             ],
             |row| row.get(0),
         )?;

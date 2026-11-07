@@ -1,12 +1,13 @@
 //! Synthetic, opt-in Phase 1 evidence. Never opens installed history.
 mod common;
 
+use crate::common::account_scope_fixture::ACCOUNT;
 use common::installed_schema;
 use maxed_store::{
     apply_batch,
     backup::{BackupEnvironment, BackupStore},
     maintenance::{Control, Phase, Step, StoppedMaintenance},
-    migrate, open_reader, start_writer, WriterConfig,
+    migrate, start_writer, WriterConfig,
 };
 use maxed_types::*;
 use rusqlite::{params, types::ValueRef, Connection};
@@ -95,6 +96,9 @@ fn seed(db: &mut Connection, version: usize) -> u64 {
     apply_batch(db, &[begin]).unwrap();
     let mut template = demo::demo_snapshot().fights.remove(0);
     template.run_id = None;
+    template.issues.clear();
+    template.complete_capture = true;
+    template.local_active_micros = Some(1_800_000_000);
     template.scope_id = None;
     template.ended = Some(Timestamp(template.started.0 + 1_800_000_000));
     template.first_hit = Some(template.started);
@@ -189,7 +193,7 @@ fn history(db: &Connection) -> BTreeMap<String, (u64, [u8; 32])> {
         .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('schema_migrations','event_receipts','stream_heads','event_streams','event_receipts_v2','maintenance_jobs','backup_generations') ORDER BY name")
         .unwrap().query_map([], |r| r.get(0)).unwrap()
         .collect::<Result<_, _>>().unwrap();
-    tables
+    let mut snapshots: BTreeMap<_, _> = tables
         .into_iter()
         .map(|table| {
             let quoted = format!("\"{}\"", table.replace('"', "\"\""));
@@ -208,17 +212,32 @@ fn history(db: &Connection) -> BTreeMap<String, (u64, [u8; 32])> {
                     .collect::<Vec<_>>()
                     .join(",")
             };
-            let proof = rows_hash(db, &format!("SELECT * FROM {quoted} ORDER BY {order}"));
+            let columns = if table == "characters" {
+                "id,observed_at,json"
+            } else {
+                "*"
+            };
+            let proof = rows_hash(
+                db,
+                &format!("SELECT {columns} FROM {quoted} ORDER BY {order}"),
+            );
             (table, proof)
         })
-        .collect()
+        .collect();
+    if db.prepare("SELECT account_id FROM characters").is_ok() {
+        snapshots.insert(
+            "characters.account_id".into(),
+            rows_hash(db, "SELECT id,account_id FROM characters ORDER BY id"),
+        );
+    }
+    snapshots
 }
 
 fn queries(path: &Path, last: u64) -> Vec<[u8; 32]> {
     fn hash(value: impl serde::Serialize) -> [u8; 32] {
         Sha256::digest(serde_json::to_vec(&value).unwrap()).into()
     }
-    let reader = open_reader(path).unwrap();
+    let reader = maxed_store::open_reader(path).unwrap();
     let story = reader.get_run("demo-run").unwrap().unwrap();
     let fight = reader.get_fight(&story.fights[0].id).unwrap().unwrap();
     let session = story.run.session_id.clone();
@@ -233,7 +252,7 @@ fn queries(path: &Path, last: u64) -> Vec<[u8; 32]> {
                 .list_runs(common::filter(RunSort::Newest, 100))
                 .unwrap(),
         ),
-        hash(reader.dungeon_bests().unwrap()),
+        hash(reader.dungeon_bests(Some(ACCOUNT)).unwrap()),
         hash(&fight),
         hash(reader.get_fight("scale-fight-000001").unwrap().unwrap()),
         hash(
@@ -274,14 +293,17 @@ fn queries(path: &Path, last: u64) -> Vec<[u8; 32]> {
         ),
         hash(
             reader
-                .dungeon_profile(DungeonProfileRequest {
-                    dungeon: story.run.dungeon.clone(),
-                    character_id: None,
-                    range: TimeRange {
-                        start: Timestamp(0),
-                        end: Timestamp(86_400_000_000),
+                .dungeon_profile(
+                    DungeonProfileRequest {
+                        dungeon: story.run.dungeon.clone(),
+                        character_id: None,
+                        range: TimeRange {
+                            start: Timestamp(0),
+                            end: Timestamp(86_400_000_000),
+                        },
                     },
-                })
+                    Some(ACCOUNT),
+                )
                 .unwrap(),
         ),
     ];
@@ -298,9 +320,21 @@ fn queries(path: &Path, last: u64) -> Vec<[u8; 32]> {
             },
         },
     ] {
-        result.push(hash(reader.home_summary(scope.clone()).unwrap()));
-        result.push(hash(reader.home_hud(scope.clone(), &[], &[]).unwrap()));
-        result.push(hash(reader.scope_loot(scope, None, 100, &[]).unwrap()));
+        let summary = reader.home_summary(scope.clone(), Some(ACCOUNT)).unwrap();
+        assert!(summary.runs > 0 && summary.top_fight.is_some());
+        assert!(summary.fame_delta.is_some());
+        result.push(hash(summary));
+        let hud = reader
+            .home_hud(scope.clone(), Some(ACCOUNT), &[], &[])
+            .unwrap();
+        assert!(hud.combat.is_some());
+        assert!(hud.fame_per_hour.is_some());
+        result.push(hash(hud));
+        result.push(hash(
+            reader
+                .scope_loot(scope, Some(ACCOUNT), None, 100, &[])
+                .unwrap(),
+        ));
     }
     result
 }
@@ -458,11 +492,8 @@ fn phase1_600mb() {
             "additive_016_ms={:.3}",
             ddl.elapsed().as_secs_f64() * 1000.0
         );
-        assert_eq!(
-            history(&db),
-            before_ddl,
-            "016 must preserve every history row"
-        );
+        assert_upgrade_history(&db, before_ddl);
+        attribute_query_fixture(&db);
         assert_eq!(scalar(&db, "SELECT count(*) FROM maintenance_jobs"), 0);
         assert!(!dir.path().join("backups").exists());
 
@@ -642,4 +673,97 @@ fn phase1_600mb() {
         dir.close().unwrap();
         println!("v{version}: private_fixture_removed=true");
     }
+}
+
+fn attribute_query_fixture(db: &Connection) {
+    // Explicit synthetic attribution after verifying legacy preservation.
+    common::account_scope_fixture::attribute(db);
+    db.execute("INSERT INTO observation_characters SELECT 'fight',id,'demo-character' FROM fights WHERE run_id IS NULL ON CONFLICT(kind,observation_id) DO UPDATE SET character_id=excluded.character_id",[]).unwrap();
+    db.execute("INSERT INTO identity_spans VALUES('synthetic-query-span',1,'demo-session',0,600000000,'demo-character',?1)",[ACCOUNT]).unwrap();
+    db.execute("UPDATE play_sessions SET last_traffic=max(last_traffic,600000000),ended=600000000 WHERE id='demo-session'",[]).unwrap();
+}
+
+#[test]
+fn account_scope_retention_query_comparisons_have_owned_data_and_elapsed_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("history");
+    let mut db = Connection::open(&path).unwrap();
+    migrate(&mut db).unwrap();
+    apply_batch(&mut db, &common::story_events()).unwrap();
+    let mut fight = demo::demo_snapshot().fights.remove(0);
+    fight.id = "scale-fight-000001".into();
+    fight.run_id = None;
+    fight.issues.clear();
+    fight.complete_capture = true;
+    fight.local_active_micros = Some(30_000_000);
+    fight.first_hit = Some(fight.started);
+    fight.last_hit = Some(Timestamp(fight.started.0 + 30_000_000));
+    fight.ended = fight.last_hit;
+    fight
+        .players
+        .iter_mut()
+        .filter(|p| p.is_local)
+        .for_each(|p| p.dps = Some(100.));
+    apply_batch(
+        &mut db,
+        &[common::envelope(8, EngineEvent::FightEnded(fight))],
+    )
+    .unwrap();
+    attribute_query_fixture(&db);
+    let before = queries(&path, 1);
+    drop(db);
+    assert_eq!(queries(&path, 1), before);
+}
+
+fn assert_upgrade_history(db: &Connection, before: BTreeMap<String, (u64, [u8; 32])>) {
+    let mut after = history(db);
+    // Check the exact additions, then compare the complete pre-existing map.
+    // This catches deleted/added tables as well as changed, added or missing rows.
+    for table in [
+        "accounts",
+        "current_account",
+        "observation_characters",
+        "identity_spans",
+        "account_recovery",
+    ] {
+        assert_eq!(
+            after.remove(table),
+            Some(rows_hash(db, "SELECT NULL WHERE 0")),
+            "new {table} must be empty"
+        );
+    }
+    assert_eq!(
+        after.remove("characters.account_id"),
+        Some(rows_hash(db, "SELECT id,NULL FROM characters ORDER BY id")),
+        "legacy membership must remain unknown"
+    );
+    assert_eq!(after.remove("unresolved_observations"),Some(rows_hash(db,"SELECT 'fight',id FROM fights WHERE run_id IS NULL UNION ALL SELECT 'drop',id FROM drops WHERE run_id IS NULL ORDER BY 1,2")),"019 markers must exactly match legacy runless observations");
+    assert_eq!(
+        after, before,
+        "upgrade must preserve exactly all installed history rows"
+    );
+}
+
+#[test]
+fn account_scope_retention_upgrade_preserves_exact_history_and_additions() {
+    // phase1_600mb applies historical 013–015 before its exact DDL comparison.
+    let mut db = Connection::open_in_memory().unwrap();
+    installed_schema::install(&db, 15);
+    common::apply_legacy_story(&mut db, &common::story_events());
+    db.execute_batch("INSERT INTO fights(id,session_id,started,complete_capture,json) VALUES('legacy-realm','demo-session',100,1,'{}');
+            INSERT INTO drops(id,session_id,at,bag_type,json) VALUES('legacy-realm','demo-session',100,1,'{}');").unwrap();
+    let before = history(&db);
+    migrate(&mut db).unwrap();
+    assert_upgrade_history(&db, before);
+    assert_eq!(
+        scalar(&db, "SELECT count(*) FROM unresolved_observations"),
+        2
+    );
+    // Ongoing maintenance equality also includes the new membership column.
+    let before = history(&db);
+    db.execute_batch("INSERT INTO accounts VALUES('synthetic-account'); UPDATE characters SET account_id='synthetic-account';").unwrap();
+    assert_ne!(
+        history(&db)["characters.account_id"],
+        before["characters.account_id"]
+    );
 }

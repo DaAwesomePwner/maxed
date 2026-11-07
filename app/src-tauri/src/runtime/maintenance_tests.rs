@@ -1396,7 +1396,7 @@ fn confirmed_exact_legacy_upgrade_keeps_initial_and_later_conversion_uses_rollin
             .backup_and_upgrade_with(&Space(Some(u64::MAX)), &AtomicBool::new(false))
             .unwrap();
         let db = rusqlite::Connection::open(&path).unwrap();
-        assert_eq!(installed::user_version(&db), 16);
+        assert_eq!(installed::user_version(&db), maxed_store::SCHEMA_VERSION);
         assert_eq!(
             db.query_row("SELECT count(*) FROM drops", [], |r| r.get::<_, i64>(0))
                 .unwrap(),
@@ -1482,7 +1482,7 @@ fn native_compatible_versions_and_empty_zero_bypass_backup_at_both_entry_points(
                 tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
             }
             let db = rusqlite::Connection::open(&path).unwrap();
-            assert_eq!(installed::user_version(&db), 16);
+            assert_eq!(installed::user_version(&db), maxed_store::SCHEMA_VERSION);
             assert!(!root.path().join("backups").exists());
         }
     }

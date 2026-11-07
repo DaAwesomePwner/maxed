@@ -1,5 +1,5 @@
 //! Synthetic realm visits: interval ownership, bounded detail and historical records.
-use maxed_store::{open_reader, StoreError};
+use maxed_store::StoreError;
 use maxed_types::*;
 use rusqlite::{params, Connection};
 
@@ -20,12 +20,14 @@ impl Fixture {
             )
             .unwrap();
         }
+        db.execute("INSERT INTO accounts VALUES('synthetic-account-a')", [])
+            .unwrap();
         for id in ["self", "other"] {
             let mut character = demo::demo_run_story().character.unwrap();
             character.id = id.into();
             character.identity_verified = true;
             db.execute(
-                "INSERT INTO characters(id,observed_at,json) VALUES(?1,0,?2)",
+                "INSERT INTO characters(id,observed_at,json,account_id) VALUES(?1,0,?2,'synthetic-account-a')",
                 params![id, serde_json::to_string(&character).unwrap()],
             )
             .unwrap();
@@ -72,6 +74,12 @@ impl Fixture {
                     dps,
                     serde_json::to_string(&fight).unwrap()
                 ],
+            )
+            .unwrap();
+        self.db
+            .execute(
+                "INSERT INTO observation_characters VALUES('fight',?1,'self')",
+                [id],
             )
             .unwrap();
         for player in &fight.players {
@@ -134,7 +142,7 @@ impl Fixture {
     }
 
     fn castle(&self, start: i64, entered: bool) {
-        self.db.execute("INSERT INTO runs(id,session_id,dungeon,started,ended,complete_capture,json) VALUES('castle','session',?1,?2,?2+10,1,?3)", params!["Oryx's Castle",start,serde_json::json!({"context":{"entered_from_realm":entered,"realm_name":"Synthetic Hydra"}}).to_string()]).unwrap();
+        self.db.execute("INSERT INTO runs(id,session_id,character_id,dungeon,started,ended,complete_capture,json) VALUES('castle','session','self',?1,?2,?2+10,1,?3)", params!["Oryx's Castle",start,serde_json::json!({"context":{"entered_from_realm":entered,"realm_name":"Synthetic Hydra"}}).to_string()]).unwrap();
         self.visit("castle-visit", start, Some(start + 10), None);
         self.db
             .execute(
@@ -145,7 +153,7 @@ impl Fixture {
     }
 
     fn read(&self, id: &str) -> Result<Option<VisitRecap>, StoreError> {
-        open_reader(&self.dir.path().join("visit.sqlite"))
+        maxed_store::open_reader(&self.dir.path().join("visit.sqlite"))
             .unwrap()
             .visit_recap(&VisitRecapRequest {
                 visit_id: id.into(),
@@ -621,7 +629,7 @@ fn live_visit_id_format() {
             event,
         })
         .collect::<Vec<_>>();
-    maxed_store::apply_batch(&mut t.db, &envelopes).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut t.db, &envelopes).unwrap();
     assert_eq!(
         t.recap("synthetic-live:visit:42").periods[0].visit_id,
         "synthetic-live:visit:42"
@@ -633,19 +641,53 @@ fn visit_recap_plans_avoid_base_scans() {
     let t = Fixture::new();
     for (file, args) in [
         ("visit_recap.sql", vec!["visit"]),
-        ("visit_periods.sql", vec!["session", "instance"]),
+        (
+            "visit_periods.sql",
+            vec![
+                "session",
+                "instance",
+                crate::common::account_scope_fixture::ACCOUNT,
+                "visit",
+            ],
+        ),
         ("visit_castle.sql", vec!["session", "10", "visit"]),
-        ("visit_fights.sql", vec!["session", "[[10,20],[30,40]]"]),
-        ("visit_bosses.sql", vec!["session", "[[10,20],[30,40]]"]),
+        (
+            "visit_fights.sql",
+            vec![
+                "session",
+                "[[10,20],[30,40]]",
+                crate::common::account_scope_fixture::ACCOUNT,
+            ],
+        ),
+        (
+            "visit_bosses.sql",
+            vec![
+                "session",
+                "[[10,20],[30,40]]",
+                crate::common::account_scope_fixture::ACCOUNT,
+            ],
+        ),
         ("visit_records.sql", vec!["session", "[[10,20],[30,40]]"]),
-        ("visit_drops.sql", vec!["session", "[[10,20],[30,40]]"]),
+        (
+            "visit_drops.sql",
+            vec![
+                "session",
+                "[[10,20],[30,40]]",
+                crate::common::account_scope_fixture::ACCOUNT,
+            ],
+        ),
         (
             "visit_announcements.sql",
             vec!["session", "[[10,20],[30,40]]"],
         ),
         (
             "visit_fame.sql",
-            vec!["session", "[[10,20],[30,40]]", "self"],
+            vec![
+                "session",
+                "[[10,20],[30,40]]",
+                "self",
+                crate::common::account_scope_fixture::ACCOUNT,
+            ],
         ),
     ] {
         let sql = std::fs::read_to_string(
@@ -654,6 +696,7 @@ fn visit_recap_plans_avoid_base_scans() {
                 .join(file),
         )
         .unwrap();
+        let sql = crate::common::account_sql::with_accounts(&sql);
         let plan =
             t.db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
                 .unwrap()
@@ -702,5 +745,148 @@ fn visit_recap_plans_avoid_base_scans() {
                 "{file}: {plan:?}"
             );
         }
+    }
+}
+
+#[test]
+fn account_scope_visit_unknown_story_retains_own_period_and_legacy_observations() {
+    let t = Fixture::new();
+    t.visit("legacy", 10, Some(30), Some("instance"));
+    t.visit("foreign", 40, Some(50), Some("instance"));
+    t.visit("legacy-later", 60, Some(70), Some("instance"));
+    t.contents("old", 15);
+    t.contents("foreign", 20);
+    t.fame(1, 11, 100, "self", "session");
+    t.fame(2, 29, 130, "self", "session");
+    t.fame(3, 12, 1000, "other", "session");
+    t.fame(4, 28, 9000, "other", "session");
+    t.db.execute_batch(
+        "INSERT INTO accounts VALUES('synthetic-b');
+        UPDATE characters SET account_id=NULL WHERE id='self';
+        UPDATE characters SET account_id='synthetic-b' WHERE id='other';
+        UPDATE map_visits SET character_id='other' WHERE id='foreign';
+        DELETE FROM observation_characters WHERE observation_id='old';
+        UPDATE observation_characters SET character_id='other' WHERE observation_id='foreign';
+        INSERT INTO observation_characters VALUES('drop','foreign','other');",
+    )
+    .unwrap();
+    let recap = t.recap("legacy");
+    assert_eq!(recap.periods.len(), 1);
+    assert_eq!(recap.periods[0].visit_id, "legacy");
+    assert_eq!(
+        recap
+            .fights
+            .iter()
+            .map(|f| f.id.as_str())
+            .collect::<Vec<_>>(),
+        ["old"]
+    );
+    assert_eq!(
+        recap
+            .boss_fights
+            .iter()
+            .map(|f| f.id.as_str())
+            .collect::<Vec<_>>(),
+        ["old"]
+    );
+    assert_eq!(
+        recap
+            .drops
+            .iter()
+            .map(|d| d.id.as_str())
+            .collect::<Vec<_>>(),
+        ["old"]
+    );
+    assert!(recap.announcements.iter().any(|a| a.id == "old"));
+    assert_eq!(recap.fame_delta, Some(30));
+    assert!(recap.best_dps.is_empty());
+    t.db.execute(
+        "UPDATE map_visits SET character_id=NULL WHERE id='legacy'",
+        [],
+    )
+    .unwrap();
+    let anonymous = t.recap("legacy");
+    assert_eq!(anonymous.periods.len(), 1);
+    assert_eq!(anonymous.fights.len(), 1);
+    assert_eq!(anonymous.fame_delta, None);
+}
+
+#[test]
+fn account_scope_visit_filters_foreign_fights_drops_fame_records_and_castle() {
+    let t = Fixture::new();
+    t.visit("a", 10, Some(100), Some("instance"));
+    t.contents("owned", 20);
+    t.contents("foreign", 30);
+    t.fight("prior", 1, 50.);
+    let mut foreign = t.fight("foreign-prior", 2, 9999.);
+    foreign.players[0].player_id = "other".into();
+    t.db.execute(
+        "UPDATE fights SET json=?1 WHERE id='foreign-prior'",
+        [serde_json::to_string(&foreign).unwrap()],
+    )
+    .unwrap();
+    t.db.execute(
+        "DELETE FROM fight_players WHERE fight_id='foreign-prior' AND player_id='self'",
+        [],
+    )
+    .unwrap();
+    t.fame(1, 11, 100, "self", "session");
+    t.fame(2, 99, 130, "self", "session");
+    t.fame(3, 12, 1000, "other", "session");
+    t.fame(4, 98, 9000, "other", "session");
+    t.castle(100, true);
+    t.db.execute_batch("INSERT INTO accounts VALUES('synthetic-b');
+        UPDATE characters SET account_id='synthetic-b' WHERE id='other';
+        UPDATE observation_characters SET character_id='other' WHERE observation_id IN ('foreign','foreign-prior');
+        INSERT INTO observation_characters VALUES('drop','foreign','other');
+        UPDATE runs SET character_id='other' WHERE id='castle';
+        UPDATE map_visits SET character_id='other' WHERE id='castle-visit';").unwrap();
+    let recap = t.recap("a");
+    assert_eq!(recap.fights.len(), 1);
+    assert_eq!(recap.fights[0].id, "owned");
+    assert_eq!(recap.boss_fights.len(), 1);
+    assert_eq!(recap.boss_fights[0].id, "owned");
+    assert_eq!(recap.drops.len(), 1);
+    assert_eq!(recap.drops[0].id, "owned");
+    assert_eq!(recap.fame_delta, Some(30));
+    assert_eq!(recap.best_dps.len(), 1);
+    assert_eq!(recap.best_dps[0].fight_id, "owned");
+    assert_eq!(recap.best_dps[0].previous_best_dps, 50.);
+    assert_eq!(recap.title, "Synthetic Realm");
+    assert!(recap.chain.is_none());
+}
+
+#[test]
+fn account_scope_castle_title_and_chain_keep_unknown_ownership() {
+    for (visit_owner, castle_owner) in [
+        (None, None),
+        (Some("self"), None),
+        (None, Some("self")),
+        (Some("self"), Some("self")),
+    ] {
+        let t = Fixture::new();
+        t.visit("realm", 10, Some(100), Some("instance"));
+        t.castle(100, true);
+        t.db.execute(
+            "UPDATE map_visits SET character_id=?1 WHERE id='realm'",
+            [visit_owner],
+        )
+        .unwrap();
+        t.db.execute(
+            "UPDATE runs SET character_id=?1 WHERE id='castle'",
+            [castle_owner],
+        )
+        .unwrap();
+        let recap = t.recap("realm");
+        assert_eq!(
+            recap.title, "Synthetic Hydra",
+            "{visit_owner:?}/{castle_owner:?}"
+        );
+        let chain = recap.chain.unwrap();
+        assert_eq!(chain.steps.len(), 2);
+        assert_eq!(chain.steps[0].kind, ChainStepKind::Realm);
+        assert_eq!(chain.steps[0].name, "Synthetic Hydra");
+        assert_eq!(chain.steps[1].kind, ChainStepKind::Castle);
+        assert_eq!(chain.steps[1].run_id.as_deref(), Some("castle"));
     }
 }

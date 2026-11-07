@@ -176,7 +176,7 @@ fn home_streak_reads_through_the_history_worker() {
         &[EventEnvelope {
             fight_chart_omitted: false,
             stream_id: "invented-home-test".into(),
-            sequence: Sequence(Timestamp(4)),
+            sequence: Sequence(Timestamp(5)),
             at: bag.at,
             event: EngineEvent::BagDropped(bag.clone()),
         }],
@@ -185,7 +185,12 @@ fn home_streak_reads_through_the_history_worker() {
     let reader = maxed_store::open_reader(&path).unwrap();
     let dungeon = snapshot.run.unwrap().dungeon;
     let request = HomeDungeonStreakRequest { dungeon };
-    let expected = reader.home_dungeon_streak(request.clone()).unwrap();
+    let expected = reader
+        .home_dungeon_streak(
+            request.clone(),
+            reader.current_account().unwrap().as_deref(),
+        )
+        .unwrap();
     assert_eq!(expected.last_white_at, Some(bag.at));
     let runtime = Arc::new(CaptureRuntime::default());
     runtime.initialize_home(root.path().into()).unwrap();
@@ -298,7 +303,7 @@ fn home_hud_reads_catalog_classifications_through_history_worker() {
     .map(|(i, event)| EventEnvelope {
         fight_chart_omitted: false,
         stream_id: "invented-home-test".into(),
-        sequence: Sequence(Timestamp(4 + i as u64)),
+        sequence: Sequence(Timestamp(5 + i as u64)),
         at: Timestamp(6_000_000),
         event,
     })
@@ -349,9 +354,19 @@ fn seed(path: &std::path::Path) {
     let mut db = rusqlite::Connection::open(path).unwrap();
     maxed_store::migrate(&mut db).unwrap();
     let snapshot = demo::demo_snapshot();
+    let mut character = snapshot.character.unwrap();
+    character.identity_verified = true;
+    character.account_id =
+        Some("account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into());
+    let identity = EngineEvent::LocalIdentityChanged {
+        at: Timestamp(1_000_000),
+        character_id: Some(character.id.clone()),
+        account_id: character.account_id.clone(),
+    };
     let events: Vec<_> = [
         EngineEvent::SessionUpdated(snapshot.session.unwrap()),
-        EngineEvent::CharacterUpdated(snapshot.character.unwrap()),
+        EngineEvent::CharacterUpdated(character),
+        identity,
         EngineEvent::RunStarted(snapshot.run.unwrap()),
     ]
     .into_iter()
@@ -470,10 +485,11 @@ fn playback_replacement_waits_for_reader_and_rejects_same_namespace_generation()
     let replace = thread::spawn(move || open(&switching, &app_data, Namespace::Replay).close());
     wait_for_invalidation(&runtime);
     assert!(!replace.is_finished());
+    let stored = maxed_store::open_reader(&database).unwrap();
     assert_eq!(
-        maxed_store::open_reader(&database)
-            .unwrap()
-            .home_summary(today())
+        stored
+            // TODO(#4 T4C): native account lifecycle
+            .home_summary(today(), stored.current_account().unwrap().as_deref())
             .unwrap()
             .runs,
         1
@@ -818,7 +834,7 @@ fn seed_legacy(path: &std::path::Path, version: i64) {
         &[maxed_types::EventEnvelope {
             fight_chart_omitted: false,
             stream_id: "invented-home-test".into(),
-            sequence: maxed_types::Sequence(Timestamp(4)),
+            sequence: maxed_types::Sequence(Timestamp(5)),
             at: Timestamp(2_000_000),
             event: maxed_types::EngineEvent::FightStarted(
                 maxed_types::demo::demo_snapshot().fights.remove(0),
@@ -829,7 +845,7 @@ fn seed_legacy(path: &std::path::Path, version: i64) {
     super::receipt_tests::copy_to_legacy(&source);
     assert_eq!(
         super::receipt_tests::count_stream(&source, "invented-home-test"),
-        4
+        5
     );
     drop(source);
     let db = rusqlite::Connection::open(path).unwrap();
@@ -883,8 +899,15 @@ fn seed_legacy(path: &std::path::Path, version: i64) {
         "damage_sources",
         "timeline",
     ] {
-        db.execute_batch(&format!("INSERT INTO {table} SELECT * FROM source.{table}"))
-            .unwrap();
+        let columns = if table == "characters" {
+            "id,observed_at,json"
+        } else {
+            "*"
+        };
+        db.execute_batch(&format!(
+            "INSERT INTO {table} SELECT {columns} FROM source.{table}"
+        ))
+        .unwrap();
     }
     if version >= 2 {
         db.execute_batch("INSERT INTO fight_summaries SELECT * FROM source.fight_summaries")
@@ -955,6 +978,7 @@ fn cold_legacy_upgrades_after_confirmation_without_capture(version: i64) {
         .unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
     assert_eq!(schema_version(&path), maxed_store::SCHEMA_VERSION);
+    verify_legacy_seed_identity(&path);
     assert_eq!(home(&runtime, today()).unwrap().runs, 1);
     let reader = maxed_store::open_reader(&path).unwrap();
     assert_eq!(
@@ -1165,6 +1189,7 @@ fn capture_start_failure_preserves_upgraded_cold_history() {
         )
         .unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    verify_legacy_seed_identity(&root.path().join("live.sqlite3"));
     // Hold the lease so capture's writer cannot open; upgraded history remains readable.
     let lease = super::storage::namespace_lease(root.path(), Namespace::Live).unwrap();
     assert!(runtime
@@ -1418,4 +1443,31 @@ fn namespace_switch_supersedes_scope_loot_read() {
     assert_eq!(read.join().unwrap().unwrap(), HistoryReply::Superseded);
     reset.join().unwrap().unwrap();
     *runtime.shared.home.on_reader.lock().unwrap() = None;
+}
+
+// Historical migrations deliberately retain unknown ownership. These lifecycle
+// tests explicitly observe their synthetic character again after upgrading.
+fn verify_legacy_seed_identity(path: &std::path::Path) {
+    use maxed_types::{demo, EngineEvent, EventEnvelope, Sequence};
+    let mut character = demo::demo_snapshot().character.unwrap();
+    character.identity_verified = true;
+    character.account_id =
+        Some("account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into());
+    let identity = EngineEvent::LocalIdentityChanged {
+        at: Timestamp(1_000_000),
+        character_id: Some(character.id.clone()),
+        account_id: character.account_id.clone(),
+    };
+    let events: Vec<_> = [EngineEvent::CharacterUpdated(character), identity]
+        .into_iter()
+        .enumerate()
+        .map(|(i, event)| EventEnvelope {
+            fight_chart_omitted: false,
+            stream_id: "synthetic-upgrade-identity".into(),
+            sequence: Sequence(Timestamp(i as u64 + 1)),
+            at: Timestamp(1_000_000),
+            event,
+        })
+        .collect();
+    maxed_store::apply_batch(&mut rusqlite::Connection::open(path).unwrap(), &events).unwrap();
 }

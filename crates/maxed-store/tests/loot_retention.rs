@@ -1,6 +1,6 @@
 use crate::engine_common;
 use engine_common::*;
-use maxed_store::{apply_batch, migrate, open_reader};
+use maxed_store::migrate;
 use maxed_types::*;
 use rusqlite::Connection;
 
@@ -26,8 +26,9 @@ fn loot_retention_preserves_taken_and_reappearing_items() {
                 }
             })
             .collect();
-        apply_batch(&mut db, &events).unwrap();
-        apply_batch(&mut db, &events).unwrap(); // Exact delivery retry must not count twice.
+        maxed_store::apply_batch(&mut db, &events).unwrap();
+        maxed_store::apply_batch(&mut db, &events).unwrap();
+        // Exact delivery retry must not count twice.
     };
     save(apply(&mut e, 0, map("The Void")));
     save(apply(&mut e, 1000, create(1, 1)));
@@ -78,17 +79,18 @@ fn loot_retention_preserves_taken_and_reappearing_items() {
         expected.contents[2].taken_observed_at,
         Some(Timestamp(6000))
     );
+    let account = snapshot.character.unwrap().account_id.unwrap();
     let run = snapshot.run.unwrap().id;
     let scope = HomeScope::Session {
         id: snapshot.session.unwrap().id,
     };
     drop(db);
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     assert_eq!(
         reader.get_run(&run).unwrap().unwrap().drops,
         vec![expected.clone()]
     );
-    let home = reader.home_summary(scope).unwrap();
+    let home = reader.home_summary(scope, Some(&account)).unwrap();
     assert_eq!(home.best_drop, Some(expected.clone()));
     assert_eq!(home.recent_details[0].loot, vec![expected.clone()]);
     drop(reader);
@@ -102,7 +104,7 @@ fn loot_retention_preserves_taken_and_reappearing_items() {
     stale.contents.truncate(1);
     stale.contents[0].taken_observed_at = None;
     sequence += 1;
-    apply_batch(
+    maxed_store::apply_batch(
         &mut db,
         &[EventEnvelope {
             fight_chart_omitted: false,
@@ -114,7 +116,7 @@ fn loot_retention_preserves_taken_and_reappearing_items() {
     )
     .unwrap();
     assert_eq!(
-        open_reader(&path)
+        crate::common::account_scope_fixture::open_reader(&path)
             .unwrap()
             .get_run(&run)
             .unwrap()

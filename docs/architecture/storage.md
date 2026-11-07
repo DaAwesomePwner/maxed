@@ -53,7 +53,7 @@ not delete history; active readers may keep committed pages in the WAL.
 
 ## Schema and recovery
 
-Migrations 001–017 are transactional, with their SHA-256 script checksums and `user_version`
+Migrations 001–019 are transactional, with their SHA-256 script checksums and `user_version`
 written together. Unknown existing databases, changed checksums, and future schema
 versions are rejected. Foreign keys are enabled on all connections. Readers open
 read-only and query-only, with the same bounded busy timeout, and cannot move across
@@ -328,7 +328,7 @@ Migration 017 adds nullable indexed `characters.account_id`, known `accounts`,
 a singleton `current_account`, first-event `observation_characters`, stream/session
 `identity_spans`, and per-account `account_recovery` progress. No legacy JSON is
 rewritten and existing characters remain unknown. Account IDs are HMAC pseudonyms;
-identity keys never enter the store. Home/records readers are not changed here.
+identity keys never enter the store. Account readers require explicit ownership.
 
 Reader contract: `character_accounts(id,canonical_id,account_id)` resolves flattened
 aliases; `run_accounts(id,account_id)` follows the run's character. `fame_accounts`
@@ -354,7 +354,8 @@ acquisition, and reopen. Character updates and legacy recovery do not change it.
 Conflicting character reassignment keeps the original membership. A conflicting
 verified acquisition opens an unknown span (both identity fields NULL), keeps the
 current pointer unchanged, and does not fail the writer. Cross-account merge still
-fails atomically. Stale character snapshots may fill NULL membership without
+fails atomically. A cross-account merge can only come from corrupt data and fails
+the batch into the writer's existing failed state. Stale character snapshots may fill NULL membership without
 replacing newer snapshot fields.
 
 `accounts::attach_legacy_characters` accepts batches of exact candidate IDs and
@@ -368,3 +369,11 @@ crash is safe. Native recovery computes candidates for 0..=65535; storage never
 receives the identity key. Unattributed history remains stored, excluded from
 account totals, with an attribution notice supplied by later readers/UI. A sole
 known account is never evidence of ownership.
+
+HomeSummary.unattributed_history reports database-wide unknown run/fight/drop ownership; Home shows one notice for excluded totals, records and bests, while dungeon_bests retains its account-scoped vector response.
+
+Migration 018 adds `runs_character(character_id,id)` for indexed account-owned and unknown-run lookups.
+
+Migration 019 maintains a small `unresolved_observations` marker through insert/update/delete triggers for observations with missing owner references (including runless observations without an owner row); the Home notice combines this with indexed unknown-character seeks, so fully attributed history does not require a history scan.
+
+Selected visit stories retain their own period and unknown-owner observations, excluding only different known owners; account records and period merging still require known matching ownership. Castle titles and chains retain unknown-owner context but never combine different known accounts.

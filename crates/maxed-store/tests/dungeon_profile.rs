@@ -1,5 +1,6 @@
+use crate::common::account_scope_fixture::ACCOUNT;
 use crate::common::stats::{character, database, run, session, Stream};
-use maxed_store::open_reader;
+
 use maxed_types::*;
 use rusqlite::Connection;
 
@@ -96,9 +97,9 @@ fn dungeon_profile_orders_bosses_by_median_kill_offset() {
         [],
     )
     .unwrap();
-    let result = open_reader(&path)
+    let result = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .dungeon_profile(request())
+        .dungeon_profile(request(), Some(ACCOUNT))
         .unwrap();
     assert_eq!(result.clears, 3);
     assert_eq!(
@@ -135,9 +136,9 @@ fn dungeon_profile_drops_bosses_seen_in_under_half_of_clears() {
         kill(&runs[1], 43, 100, 30),
     ];
     seed(&mut db, &runs, fights);
-    let result = open_reader(&path)
+    let result = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .dungeon_profile(request())
+        .dungeon_profile(request(), Some(ACCOUNT))
         .unwrap();
     assert_eq!(result.clears, 4);
     assert_eq!(result.bosses.len(), 1);
@@ -159,8 +160,8 @@ fn dungeon_profile_kill_median_needs_three_samples() {
         &runs,
         vec![kill(&runs[0], 42, 100, 60), kill(&runs[1], 42, 100, 80)],
     );
-    let reader = open_reader(&path).unwrap();
-    let before = reader.dungeon_profile(request()).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    let before = reader.dungeon_profile(request(), Some(ACCOUNT)).unwrap();
     assert_eq!(
         (
             before.bosses[0].kill_samples,
@@ -172,7 +173,7 @@ fn dungeon_profile_kill_median_needs_three_samples() {
         &mut db,
         vec![EngineEvent::FightEnded(kill(&runs[2], 42, 120, 100))],
     );
-    let after = reader.dungeon_profile(request()).unwrap();
+    let after = reader.dungeon_profile(request(), Some(ACCOUNT)).unwrap();
     assert_eq!(
         (
             after.bosses[0].kill_samples,
@@ -205,11 +206,11 @@ fn dungeon_profile_usual_run_dps_needs_three_runs_on_character() {
     }
     // The fifth ended run has no established DPS and contributes no sample.
     let mut stream = seed(&mut db, &runs, fights);
-    let reader = open_reader(&path).unwrap();
-    let before = reader.dungeon_profile(request()).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    let before = reader.dungeon_profile(request(), Some(ACCOUNT)).unwrap();
     assert_eq!((before.run_dps_samples, before.usual_run_dps), (2, None));
     stream.apply(&mut db, vec![EngineEvent::RunEnded(third)]);
-    let after = reader.dungeon_profile(request()).unwrap();
+    let after = reader.dungeon_profile(request(), Some(ACCOUNT)).unwrap();
     assert_eq!(
         (after.run_dps_samples, after.usual_run_dps),
         (3, Some(400.0))
@@ -232,10 +233,13 @@ fn dungeon_profile_usual_run_dps_needs_three_runs_on_character() {
         / 3.0;
     assert_eq!(after.usual_run_dps, Some(story_mean));
     let all = reader
-        .dungeon_profile(DungeonProfileRequest {
-            character_id: None,
-            ..request()
-        })
+        .dungeon_profile(
+            DungeonProfileRequest {
+                character_id: None,
+                ..request()
+            },
+            Some(ACCOUNT),
+        )
         .unwrap();
     assert_eq!((all.run_dps_samples, all.usual_run_dps), (4, Some(500.0)));
 }
@@ -249,24 +253,27 @@ fn dungeon_profile_usual_clear_is_median_of_cleared_runs() {
     other.completed_at = None;
     runs.extend([other, cleared(4, "beta", 100)]);
     let mut stream = seed(&mut db, &runs, vec![]);
-    let reader = open_reader(&path).unwrap();
-    let before = reader.dungeon_profile(request()).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    let before = reader.dungeon_profile(request(), Some(ACCOUNT)).unwrap();
     assert_eq!((before.clear_samples, before.usual_clear_micros), (2, None));
     stream.apply(
         &mut db,
         vec![EngineEvent::RunStarted(cleared(2, "alpha", 660))],
     );
-    let result = reader.dungeon_profile(request()).unwrap();
+    let result = reader.dungeon_profile(request(), Some(ACCOUNT)).unwrap();
     assert_eq!(result.clears, 4);
     assert_eq!(
         (result.clear_samples, result.usual_clear_micros),
         (3, Some(600_000_000))
     );
     let all = reader
-        .dungeon_profile(DungeonProfileRequest {
-            character_id: None,
-            ..request()
-        })
+        .dungeon_profile(
+            DungeonProfileRequest {
+                character_id: None,
+                ..request()
+            },
+            Some(ACCOUNT),
+        )
         .unwrap();
     assert_eq!(
         (all.clear_samples, all.usual_clear_micros),
@@ -278,12 +285,15 @@ fn dungeon_profile_usual_clear_is_median_of_cleared_runs() {
 fn dungeon_profile_empty_for_unknown_dungeon() {
     let (_dir, path, mut db) = database();
     seed(&mut db, &[cleared(0, "alpha", 600)], vec![]);
-    let result = open_reader(&path)
+    let result = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .dungeon_profile(DungeonProfileRequest {
-            dungeon: "Unknown Synthetic Dungeon".into(),
-            ..request()
-        })
+        .dungeon_profile(
+            DungeonProfileRequest {
+                dungeon: "Unknown Synthetic Dungeon".into(),
+                ..request()
+            },
+            Some(ACCOUNT),
+        )
         .unwrap();
     assert_eq!(result.dungeon, "Unknown Synthetic Dungeon");
     assert_eq!(result.clears, 0);
@@ -332,9 +342,9 @@ fn dungeon_profile_skips_non_boss_provisional_unknown_and_inconsistent_kills() {
     seed(&mut db, &[run], fights);
     db.execute("UPDATE fights SET json='broken' WHERE id=?1", [&broken_id])
         .unwrap();
-    let result = open_reader(&path)
+    let result = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .dungeon_profile(request())
+        .dungeon_profile(request(), Some(ACCOUNT))
         .unwrap();
     assert_eq!(result.bosses.len(), 1);
     assert_eq!(result.bosses[0].target_type, 42);
@@ -355,32 +365,38 @@ fn dungeon_profile_scopes_clears_by_dungeon_and_half_open_run_start() {
     runs[3].outcome = Some(Outcome::Left);
     let fights = runs.iter().map(|run| kill(run, 42, 100, 60)).collect();
     seed(&mut db, &runs, fights);
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let result = reader
-        .dungeon_profile(DungeonProfileRequest {
-            range: TimeRange {
-                start: runs[0].started,
-                end: runs[1].started,
+        .dungeon_profile(
+            DungeonProfileRequest {
+                range: TimeRange {
+                    start: runs[0].started,
+                    end: runs[1].started,
+                },
+                ..request()
             },
-            ..request()
-        })
+            Some(ACCOUNT),
+        )
         .unwrap();
     assert_eq!(result.clears, 1);
     assert_eq!(result.bosses[0].kill_samples, 1);
     let result = reader
-        .dungeon_profile(DungeonProfileRequest {
-            range: TimeRange {
-                start: Timestamp(runs[0].started.0 + 1),
-                end: Timestamp(runs[1].started.0 + 1),
+        .dungeon_profile(
+            DungeonProfileRequest {
+                range: TimeRange {
+                    start: Timestamp(runs[0].started.0 + 1),
+                    end: Timestamp(runs[1].started.0 + 1),
+                },
+                ..request()
             },
-            ..request()
-        })
+            Some(ACCOUNT),
+        )
         .unwrap();
     // The run starts in range, even though its kill occurs after range.end.
     assert_eq!(result.clears, 1);
     assert_eq!(result.bosses[0].seen_in, 1);
     assert_eq!((result.clear_samples, result.run_dps_samples), (0, 0));
-    let all = reader.dungeon_profile(request()).unwrap();
+    let all = reader.dungeon_profile(request(), Some(ACCOUNT)).unwrap();
     assert_eq!(all.clears, 2);
     assert_eq!(all.bosses[0].kill_samples, 2);
 }
@@ -391,6 +407,7 @@ fn dungeon_profile_best_dps_uses_character_resolution_and_fight_range() {
     let run = cleared(0, "beta", 600);
     let mut realm = kill(&run, 42, 150, 60);
     realm.run_id = None;
+    realm.owner_character_id = Some("alpha".into());
     realm.players[0].dps = Some(2000.0);
     let mut open = realm.clone();
     open.id = "synthetic-open".into();
@@ -409,17 +426,20 @@ fn dungeon_profile_best_dps_uses_character_resolution_and_fight_range() {
     seed(&mut db, &[run], vec![other, realm, open, before, at_end]);
     db.execute("INSERT INTO map_visits(id,stream_id,session_id,character_id,map,kind,started,ended,source,json)
         VALUES('synthetic-visit','synthetic-dungeon-profile','synthetic-session','alpha','Synthetic Realm','realm',0,NULL,'live','{}')", []).unwrap();
-    let result = open_reader(&path)
+    let result = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .dungeon_profile(request())
+        .dungeon_profile(request(), Some(ACCOUNT))
         .unwrap();
     assert_eq!(result.bosses[0].best_dps, Some(2000.0));
-    let all = open_reader(&path)
+    let all = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .dungeon_profile(DungeonProfileRequest {
-            character_id: None,
-            ..request()
-        })
+        .dungeon_profile(
+            DungeonProfileRequest {
+                character_id: None,
+                ..request()
+            },
+            Some(ACCOUNT),
+        )
         .unwrap();
     assert_eq!(all.bosses[0].best_dps, Some(8000.0));
 }
@@ -437,9 +457,9 @@ fn dungeon_profile_floors_even_medians_and_ignores_negative_clear_times() {
     }
     runs[4].completed_at = Some(Timestamp(runs[4].started.0 - 1));
     seed(&mut db, &runs, fights);
-    let result = open_reader(&path)
+    let result = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .dungeon_profile(request())
+        .dungeon_profile(request(), Some(ACCOUNT))
         .unwrap();
     assert_eq!(
         (result.clear_samples, result.usual_clear_micros),
@@ -452,7 +472,7 @@ fn dungeon_profile_floors_even_medians_and_ignores_negative_clear_times() {
 #[test]
 fn dungeon_profile_rejects_invalid_filters_and_unknown_request_fields() {
     let (_dir, path, _db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     for dungeon in [
         String::new(),
         "x".repeat(257),
@@ -460,36 +480,48 @@ fn dungeon_profile_rejects_invalid_filters_and_unknown_request_fields() {
         "Synthetic\nDungeon".into(),
     ] {
         assert!(reader
-            .dungeon_profile(DungeonProfileRequest {
-                dungeon,
-                ..request()
-            })
+            .dungeon_profile(
+                DungeonProfileRequest {
+                    dungeon,
+                    ..request()
+                },
+                Some(ACCOUNT)
+            )
             .is_err());
     }
     for character_id in [String::new(), "x".repeat(257), "synthetic\u{7}".into()] {
         assert!(reader
-            .dungeon_profile(DungeonProfileRequest {
-                character_id: Some(character_id),
-                ..request()
-            })
+            .dungeon_profile(
+                DungeonProfileRequest {
+                    character_id: Some(character_id),
+                    ..request()
+                },
+                Some(ACCOUNT)
+            )
             .is_err());
     }
     for (start, end) in [(2, 1), (1, 1), (0, i64::MAX as u64 + 1)] {
         assert!(reader
-            .dungeon_profile(DungeonProfileRequest {
-                range: TimeRange {
-                    start: Timestamp(start),
-                    end: Timestamp(end)
+            .dungeon_profile(
+                DungeonProfileRequest {
+                    range: TimeRange {
+                        start: Timestamp(start),
+                        end: Timestamp(end)
+                    },
+                    ..request()
                 },
-                ..request()
-            })
+                Some(ACCOUNT)
+            )
             .is_err());
     }
     assert!(reader
-        .dungeon_profile(DungeonProfileRequest {
-            dungeon: "é".repeat(128),
-            ..request()
-        })
+        .dungeon_profile(
+            DungeonProfileRequest {
+                dungeon: "é".repeat(128),
+                ..request()
+            },
+            Some(ACCOUNT)
+        )
         .is_ok());
     let mut json = serde_json::to_value(request()).unwrap();
     json["extra"] = true.into();
@@ -596,7 +628,7 @@ fn dungeon_profile_run_dps_matches_run_stories_on_mixed_history() {
         [&runs[9].id],
     )
     .unwrap();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     for character_id in [Some("alpha".into()), None, Some("beta".into())] {
         let request = DungeonProfileRequest {
             character_id,
@@ -611,12 +643,12 @@ fn dungeon_profile_run_dps_matches_run_stories_on_mixed_history() {
                 _ => 4,
             }
         );
-        let actual = reader.dungeon_profile(request).unwrap();
+        let actual = reader.dungeon_profile(request, Some(ACCOUNT)).unwrap();
         assert_eq!((actual.run_dps_samples, actual.usual_run_dps), expected);
     }
     // Equal local damage still agrees with totals()'s player-id tie-break.
     db.execute("UPDATE pd_run_players SET damage_correction=80000 WHERE run_id=?1 AND player_id='SyntheticLocal'", [&runs[1].id]).unwrap();
-    let actual = reader.dungeon_profile(request()).unwrap();
+    let actual = reader.dungeon_profile(request(), Some(ACCOUNT)).unwrap();
     assert_eq!(
         (actual.run_dps_samples, actual.usual_run_dps),
         reference_run_dps(&db, &reader, &request())
@@ -629,7 +661,8 @@ fn dungeon_profile_run_dps_query_uses_run_indexes() {
     let runs: Vec<_> = (0..8).map(|i| cleared(i, "alpha", 600)).collect();
     let fights = runs.iter().map(|run| kill(run, 42, 100, 60)).collect();
     seed(&mut db, &runs, fights);
-    let sql = include_str!("../src/dungeon_profile_dps.sql");
+    let sql =
+        &crate::common::account_sql::with_accounts(include_str!("../src/dungeon_profile_dps.sql"));
     let plan = db
         .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
         .unwrap()
@@ -638,7 +671,8 @@ fn dungeon_profile_run_dps_query_uses_run_indexes() {
                 (100 * SECOND) as i64,
                 (100_000 * SECOND) as i64,
                 "alpha",
-                DUNGEON
+                DUNGEON,
+                ACCOUNT
             ],
             |row| row.get::<_, String>(3),
         )
@@ -652,4 +686,22 @@ fn dungeon_profile_run_dps_query_uses_run_indexes() {
     for table in ["fight_summaries", "fight_players", "pd_run_players"] {
         assert!(!plan.contains(&format!("SCAN {table}")), "{plan}");
     }
+}
+
+#[test]
+fn account_scope_profile_without_dps_cache_matches_instance_totals() {
+    let (_dir, path, mut db) = database();
+    let runs: Vec<_> = (0..3).map(|i| cleared(i, "alpha", 600)).collect();
+    let fights = runs
+        .iter()
+        .flat_map(|run| [kill(run, 42, 100, 60), kill(run, 43, 200, 60)])
+        .collect();
+    seed(&mut db, &runs, fights);
+    db.execute("DELETE FROM pd_run_players", []).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    let expected = reference_run_dps(&db, &reader, &request());
+    assert_eq!(expected.0, 3);
+    assert!(expected.1.unwrap() > 0.);
+    let actual = reader.dungeon_profile(request(), Some(ACCOUNT)).unwrap();
+    assert_eq!((actual.run_dps_samples, actual.usual_run_dps), expected);
 }

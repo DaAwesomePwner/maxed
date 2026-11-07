@@ -297,6 +297,7 @@ pub fn demo_run_page() -> RunPage {
 pub fn demo_home_summary() -> HomeSummary {
     let story = demo_run_story();
     HomeSummary {
+        unattributed_history: false,
         dungeon_stats: None,
         runs: 1,
         clears: 1,

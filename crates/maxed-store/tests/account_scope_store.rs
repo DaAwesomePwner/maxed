@@ -577,3 +577,54 @@ fn account_scope_chained_merges_flatten_owners_spans_and_accounts() {
         1
     );
 }
+
+#[test]
+fn account_scope_regressed_session_boundaries_clamp_identity_span_ends() {
+    let mut db = Connection::open_in_memory().unwrap();
+    migrate(&mut db).unwrap();
+    seed(
+        &mut db,
+        vec![
+            session("s1", 0, None),
+            character("a", Some(account('a'))),
+            identity(100, Some("a"), Some(account('a'))),
+        ],
+    );
+    // A regressed session end must not produce a negative identity interval.
+    apply_batch(&mut db, &[envelope(4, session("s1", 0, Some(50)))]).unwrap();
+    assert_eq!(span_end(&db, "test-stream", 3), Some(100));
+    // Loss can arrive after session end. Switching sessions closes that span,
+    // even when the next session's start regresses behind the loss timestamp.
+    apply_batch(
+        &mut db,
+        &[
+            envelope(5, identity(200, None, None)),
+            envelope(6, session("s2", 150, None)),
+        ],
+    )
+    .unwrap();
+    assert_eq!(span_end(&db, "test-stream", 5), Some(200));
+    assert_eq!(span_end(&db, "test-stream", 3), Some(100));
+}
+
+#[test]
+fn account_scope_regressed_identity_change_clamps_open_span() {
+    let mut db = Connection::open_in_memory().unwrap();
+    migrate(&mut db).unwrap();
+    seed(
+        &mut db,
+        vec![
+            character("self", Some(account('a'))),
+            identity(100, Some("self"), Some(account('a'))),
+            identity(50, None, None),
+        ],
+    );
+    let end: i64 = db
+        .query_row(
+            "SELECT ended FROM identity_spans WHERE started=100",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(end, 100);
+}

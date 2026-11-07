@@ -1,3 +1,4 @@
+use crate::common::account_scope_fixture::ACCOUNT;
 use crate::common::loot::LootDb;
 use maxed_store::StoreError;
 use maxed_types::*;
@@ -40,7 +41,9 @@ fn matches_all_time_loot_rows_on_mixed_history() {
     let stats = reader.loot_stats(LootStatsFilter { range: None }).unwrap();
     assert_eq!(stats.dungeons.len(), 4);
     for row in stats.dungeons {
-        let streak = reader.home_dungeon_streak(request(&row.dungeon)).unwrap();
+        let streak = reader
+            .home_dungeon_streak(request(&row.dungeon), Some(ACCOUNT))
+            .unwrap();
         assert_eq!(streak.dungeon, row.dungeon);
         assert_eq!(streak.runs_ended, row.runs_ended);
         assert_eq!(streak.runs_since_last_white, row.runs_since_last_white);
@@ -69,7 +72,7 @@ fn unknown_dungeon_is_empty() {
     let t = LootDb::new();
     assert_eq!(
         t.reader()
-            .home_dungeon_streak(request("Synthetic Unknown"))
+            .home_dungeon_streak(request("Synthetic Unknown"), Some(ACCOUNT))
             .unwrap(),
         HomeDungeonStreak {
             dungeon: "Synthetic Unknown".into(),
@@ -83,7 +86,8 @@ fn rejects_invalid_dungeon_identifiers() {
     let t = LootDb::new();
     for dungeon in [String::new(), "x".repeat(257), "bad\0dungeon".into()] {
         assert!(matches!(
-            t.reader().home_dungeon_streak(request(&dungeon)),
+            t.reader()
+                .home_dungeon_streak(request(&dungeon), Some(ACCOUNT)),
             Err(StoreError::InvalidEvent)
         ));
     }
@@ -94,21 +98,24 @@ fn plan_searches_only_dungeon_runs_and_white_membership() {
     let t = LootDb::new();
     let sql = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/home_streak.sql"))
         .unwrap();
+    let sql = crate::common::account_sql::with_accounts(&sql);
     let plan =
         t.db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
             .unwrap()
-            .query_map(["Synthetic Dry"], |row| row.get::<_, String>(3))
+            .query_map(rusqlite::params!["Synthetic Dry", ACCOUNT], |row| {
+                row.get::<_, String>(3)
+            })
             .unwrap()
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
     assert!(
         plan.iter()
-            .any(|s| s.contains("SEARCH r USING COVERING INDEX runs_loot_stats (dungeon=?)")),
+            .any(|s| s.contains("SEARCH r USING INDEX runs_loot_stats (dungeon=?)")),
         "{plan:?}"
     );
     assert!(
         plan.iter()
-            .any(|s| s.contains("SEARCH d USING COVERING INDEX drops_white_runs (run_id=?)")),
+            .any(|s| s.contains("SEARCH d USING INDEX drops_white_runs (run_id=?)")),
         "{plan:?}"
     );
     assert!(

@@ -70,8 +70,8 @@ fn exact_v12_v14_and_v15_upgrade_preserves_history_and_adds_empty_maintenance_sc
         let (result, trace) = trace_sql(&mut db, migrate);
         result.unwrap();
         assert_eq!(user_version(&db), maxed_store::SCHEMA_VERSION);
-        assert_eq!(maxed_store::SCHEMA_VERSION, 17);
-        let attributed = assert_additive_upgrade(&trace, version, 17, &objects);
+        assert_eq!(maxed_store::SCHEMA_VERSION, 19);
+        let attributed = assert_additive_upgrade(&trace, version, 19, &objects);
         if version == 12 {
             assert!(attributed[&13].iter().all(|sql| sql.starts_with("CREATE ")));
             assert!(attributed[&14]
@@ -199,7 +199,7 @@ fn late_ddl_fault_rolls_back_all_upgrade_work() {
 fn installed_registry_rejects_unknown_future_and_tampered_versions() {
     for version in [12, 14, 15] {
         for mutation in [
-            "PRAGMA user_version=18",
+            "PRAGMA user_version=20",
             "PRAGMA user_version=0",
             "PRAGMA user_version=-1",
             "DELETE FROM schema_migrations WHERE version=12",
@@ -216,7 +216,7 @@ fn installed_registry_rejects_unknown_future_and_tampered_versions() {
             let sums = checksums(&db);
             let before_version = user_version(&db);
             let result = migrate(&mut db);
-            if before_version == 18 {
+            if before_version == 20 {
                 assert!(matches!(result, Err(StoreError::NewerSchema)));
             } else {
                 assert!(matches!(result, Err(StoreError::Migration)));

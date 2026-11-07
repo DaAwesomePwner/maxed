@@ -1,8 +1,8 @@
--- Parameters: ?1 lo, ?2 hi, ?3 character (NULL is all), ?4 dungeon.
+-- Parameters: ?1 lo, ?2 hi, ?3 character (NULL is all), ?4 dungeon, ?5 account (NULL excludes history).
 WITH /*fight_character*/,
 cleared_runs AS MATERIALIZED (
   SELECT id, started FROM runs INDEXED BY runs_dungeon_outcome
-  WHERE dungeon=?4 AND outcome='cleared' AND started>=?1 AND started<?2),
+  WHERE /*account:character:runs.character_id*/=?5 AND dungeon=?4 AND outcome='cleared' AND started>=?1 AND started<?2),
 -- Validate once before extraction; materialize scalar facts, not chart/player JSON.
 -- Run-start learning deliberately retains kills after the end of the time range.
 learning_facts AS MATERIALIZED (
@@ -12,7 +12,7 @@ learning_facts AS MATERIALIZED (
     CAST(json_extract(fights.json,'$.kill.at') AS INTEGER) AS kill_at,
     json_extract(fights.json,'$.kill.provisional') AS provisional
   FROM cleared_runs cleared CROSS JOIN fights ON fights.run_id=cleared.id
-  WHERE json_valid(fights.json)),
+  WHERE /*account:fight:fights*/=?5 AND json_valid(fights.json)),
 learned AS MATERIALIZED (
   SELECT facts.target_type, COUNT(DISTINCT cleared.id) AS seen_in,
     MAX(CASE WHEN json_valid(s.json) THEN json_extract(s.json,'$.target_name') END) AS target_name,
@@ -30,7 +30,7 @@ performance_facts AS MATERIALIZED (
     json_extract(fights.json,'$.target_type') AS target_type,
     json_extract(fights.json,'$.target_kind') AS target_kind
   FROM fights
-  WHERE fights.started>=?1 AND fights.started<?2
+  WHERE /*account:fight:fights*/=?5 AND fights.started>=?1 AND fights.started<?2
     AND fights.ended IS NOT NULL AND fights.local_dps IS NOT NULL AND json_valid(fights.json)),
 performance AS (
   SELECT facts.target_type, MAX(facts.local_dps) AS best_dps

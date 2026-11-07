@@ -7,9 +7,9 @@ WITH earlier AS MATERIALIZED (
                 AND kind IN ('victory','completion_dialogue'))
             THEN completed_at-started END AS clear_micros,
         EXISTS(SELECT 1 FROM drops INDEXED BY drops_white_runs
-            WHERE run_id=runs.id AND bag_rank=255) AS has_white
+            WHERE run_id=runs.id AND bag_rank=255 AND /*account:drop:drops*/=/*account:run:?1*/) AS has_white
     FROM runs INDEXED BY runs_loot_stats
-    WHERE dungeon=?2 AND (started,id)<(?3,?1)
+    WHERE /*account:character:runs.character_id*/=/*account:run:?1*/ AND dungeon=?2 AND (started,id)<(?3,?1)
 ), previous_white AS MATERIALIZED (
     SELECT started,id FROM earlier WHERE has_white ORDER BY started DESC,id DESC LIMIT 1
 )

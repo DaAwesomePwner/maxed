@@ -1,4 +1,5 @@
 use crate::common;
+use crate::common::account_scope_fixture::ACCOUNT;
 use common::stats::*;
 use maxed_types::*;
 
@@ -28,7 +29,7 @@ fn baseline(db: &mut rusqlite::Connection, fame_value: i32) {
 }
 
 fn detail(path: &std::path::Path, id: &str, character: Option<&str>) -> StatsSessionDetail {
-    maxed_store::open_reader(path)
+    crate::common::account_scope_fixture::open_reader(path)
         .unwrap()
         .stats_session(StatsSessionRequest {
             id: id.into(),
@@ -69,9 +70,9 @@ fn session_fame_matches_home_and_visits_add_up() {
             session("s1", 10 * MIN, 60 * MIN, Some(60 * MIN)),
         ],
     );
-    let reader = maxed_store::open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let home = reader
-        .home_summary(HomeScope::Session { id: "s1".into() })
+        .home_summary(HomeScope::Session { id: "s1".into() }, Some(ACCOUNT))
         .unwrap();
     let rows = reader.stats_sessions(page(10)).unwrap().rows;
     let s1 = rows.iter().find(|r| r.id == "s1").unwrap();
@@ -145,9 +146,9 @@ fn session_fame_counts_from_the_first_sample() {
             session("s1", 0, 5 * MIN, Some(5 * MIN)),
         ],
     );
-    let reader = maxed_store::open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let home = reader
-        .home_summary(HomeScope::Session { id: "s1".into() })
+        .home_summary(HomeScope::Session { id: "s1".into() }, Some(ACCOUNT))
         .unwrap();
     assert_eq!(
         (home.fame_delta, home.fame_missing_baselines),
@@ -171,7 +172,7 @@ fn empty_sessions_are_hidden_unless_requested() {
             session("s1", 2 * MIN, 4 * MIN, Some(4 * MIN)),
         ],
     );
-    let reader = maxed_store::open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let hidden = reader
         .stats_sessions(StatsSessionFilter {
             include_empty: false,
@@ -198,7 +199,7 @@ fn pages_newest_first_with_a_keyset_cursor() {
             )],
         );
     }
-    let reader = maxed_store::open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mut filter = page(2);
     let mut seen = vec![];
     loop {
@@ -235,7 +236,7 @@ fn character_filter_limits_sessions_and_totals() {
             session("s2", 3 * MIN, 4 * MIN, Some(4 * MIN)),
         ],
     );
-    let reader = maxed_store::open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mine = reader
         .stats_sessions(StatsSessionFilter {
             character_id: Some(C.into()),
@@ -276,7 +277,7 @@ fn in_progress_session_runs_until_last_traffic() {
     let (_dir, path, mut db) = database();
     let mut s = Stream::new("live");
     s.apply(&mut db, vec![session("s1", MIN, 8 * MIN, None)]);
-    let row = &maxed_store::open_reader(&path)
+    let row = &crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
         .stats_sessions(page(1))
         .unwrap()
@@ -287,7 +288,7 @@ fn in_progress_session_runs_until_last_traffic() {
 #[test]
 fn absent_and_invalid_sessions() {
     let (_dir, path, _db) = database();
-    let reader = maxed_store::open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     assert_eq!(
         reader
             .stats_session(StatsSessionRequest {
@@ -318,7 +319,7 @@ fn party_lists_runs_with_their_totals() {
         &mut db,
         vec![session("s1", 0, 0, None), EngineEvent::RunEnded(r1)],
     );
-    let party = maxed_store::open_reader(&path)
+    let party = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
         .stats_session_party("s1", None)
         .unwrap();
@@ -338,7 +339,7 @@ fn sessions_export_stops_at_ten_thousand() {
          FROM n;",
     )
     .unwrap();
-    let (rows, truncated) = maxed_store::open_reader(&path)
+    let (rows, truncated) = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
         .stats_sessions_export(
             StatsFilter {
@@ -405,7 +406,7 @@ fn session_loot_matches_feed_including_unknown_and_legacy_low_tiers() {
             session("s2", 31 * MIN, 60 * MIN, None),
         ],
     );
-    let reader = maxed_store::open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let filter = DropFilter {
         min_rank: None,
         place: None,

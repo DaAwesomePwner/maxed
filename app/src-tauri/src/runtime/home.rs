@@ -817,6 +817,7 @@ pub(super) fn validate_scope(scope: &HomeScope) -> Result<(), String> {
 
 pub(super) fn empty_history() -> HomeSummary {
     HomeSummary {
+        unattributed_history: false,
         dungeon_stats: None,
         runs: 0,
         clears: 0,
