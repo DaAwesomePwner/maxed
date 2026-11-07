@@ -58,6 +58,7 @@ pub fn session(id: &str, started: u64, last_traffic: u64, ended: Option<u64>) ->
 
 pub fn character_view(id: &str, name: &str, at: u64) -> CharacterView {
     CharacterView {
+        account_id: None,
         calculation_revision: None,
         id: id.into(),
         name: Some(name.into()),

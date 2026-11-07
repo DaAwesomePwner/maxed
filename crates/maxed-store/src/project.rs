@@ -419,7 +419,7 @@ fn project(
             }
         }
         EngineEvent::ScopeTimelineUpdated(update) => crate::players::write_timeline(tx, update)?,
-        EngineEvent::CaptureStateChanged(_) => {}
+        EngineEvent::CaptureStateChanged(_) | EngineEvent::LocalIdentityChanged { .. } => {}
     }
     Ok(())
 }

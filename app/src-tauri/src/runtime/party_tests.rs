@@ -890,6 +890,7 @@ fn fight(id: &str, boss: bool, players: &[(i32, f64)]) -> FightView {
         scope_id: Some("scope-a".into()),
         run_id: Some("run-a".into()),
         session_id: "session-a".into(),
+        owner_character_id: None,
         target_id: 900,
         target_generation: 0,
         boss_type: boss.then_some(300),
