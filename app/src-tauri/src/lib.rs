@@ -1154,6 +1154,10 @@ pub fn run() {
                 .set_storage_notice_sink(Arc::new(move |notice| {
                     let _ = storage_notices.emit("storage-maintenance-changed", notice);
                 }));
+            // Account-history notices also apply before capture has ever started.
+            app.state::<Arc<CaptureRuntime>>()
+                .publisher(app.handle().clone())
+                .map_err(std::io::Error::other)?;
             app.state::<Arc<CaptureRuntime>>()
                 .initialize_home(root)
                 .map_err(std::io::Error::other)?;

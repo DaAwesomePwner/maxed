@@ -169,6 +169,7 @@ fn character(id: &str) -> CharacterView {
     let mut c = demo::demo_run_story().character.unwrap();
     c.id = id.into();
     c.identity_verified = true;
+    c.account_id = Some(ACCOUNT.into());
     c
 }
 fn drop(id: &str, rank: Option<u8>) -> DropView {
@@ -1114,7 +1115,7 @@ fn key_pop_occurrence_uses_instance_id_and_dungeon_filter() {
 fn timed_run(id: &str, duration: u64) -> RunView {
     let mut run = demo::demo_run_story().run;
     run.id = id.into();
-    run.character_id = None;
+    run.character_id = Some("self".into());
     run.dungeon = "Lair of Shaitan".into();
     run.area_kind = AreaKind::Dungeon;
     run.started = Timestamp(1_000_000);
@@ -1889,4 +1890,46 @@ fn default_key_pop_policy_keeps_events_without_alerts() {
     assert_eq!(h.count("instance_events"), 1);
     assert_eq!(h.count("alert_occurrences"), 0);
     assert!(h.writer.claim_alerts(32).unwrap().is_empty());
+}
+
+#[test]
+fn account_scope_run_pb_ignores_other_accounts_and_unknown_owners() {
+    let mut h = Harness::new();
+    let mut a = character("self");
+    a.account_id = Some(format!("account-{}", "a".repeat(64)));
+    let mut b = character("other");
+    b.account_id = Some(format!("account-{}", "b".repeat(64)));
+    h.send(EngineEvent::CharacterUpdated(a), AlertLoudness::Off);
+    h.send(EngineEvent::CharacterUpdated(b), AlertLoudness::Off);
+    let mut foreign = timed_run("b-fast", 10_000_000);
+    foreign.character_id = Some("other".into());
+    send_timed(&mut h, EngineEvent::RunEnded(foreign), true);
+    // A's first clear cannot beat B's baseline, even if faster.
+    send_timed(
+        &mut h,
+        EngineEvent::RunEnded(timed_run("a-first", 5_000_000)),
+        true,
+    );
+    assert_eq!(h.count("alerts"), 0);
+    let mut foreign = timed_run("b-faster", 1_000_000);
+    foreign.character_id = Some("other".into());
+    send_timed(&mut h, EngineEvent::RunEnded(foreign), true);
+    let before = h.count("alerts");
+    // B's faster clear must not suppress A's own improvement.
+    send_timed(
+        &mut h,
+        EngineEvent::RunEnded(timed_run("a-improved", 4_000_000)),
+        true,
+    );
+    assert_eq!(h.count("alerts"), before + 1);
+    let mut unknown = timed_run("unknown", 500_000);
+    unknown.character_id = None;
+    send_timed(&mut h, EngineEvent::RunEnded(unknown), true);
+    assert_eq!(h.count("alerts"), before + 1);
+    send_timed(
+        &mut h,
+        EngineEvent::RunEnded(timed_run("a-again", 3_000_000)),
+        true,
+    );
+    assert_eq!(h.count("alerts"), before + 2);
 }

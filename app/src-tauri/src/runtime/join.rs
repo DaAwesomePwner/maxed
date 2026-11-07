@@ -14,6 +14,7 @@ use std::{
 
 #[derive(Clone)]
 pub(super) struct Bridge {
+    pub account_changed: Arc<dyn Fn(AccountHistoryChanged) + Send + Sync>,
     pub visibility: Arc<crate::bridge::PresentationVisibility>,
     // Full canonical envelopes, also used by replay consumers as store inputs.
     pub event: Arc<dyn Fn(EventEnvelope) + Send + Sync>,
@@ -25,6 +26,7 @@ pub(super) struct Bridge {
 impl Default for Bridge {
     fn default() -> Self {
         Self {
+            account_changed: Arc::new(|_| {}),
             visibility: Arc::default(),
             event: Arc::new(|_| {}),
             batch: None,
@@ -94,7 +96,9 @@ impl Default for Views {
 pub(super) struct Adapter {
     maintenance_work: super::maintenance::OwnerWork,
     pub engine: Engine,
-    writer: Option<StoreWriter>,
+    writer: Option<Arc<StoreWriter>>,
+    recovery: Option<super::account_history::Recovery>,
+    identity_key: [u8; 32],
     path: PathBuf,
     writer_config: WriterConfig,
     pending: VecDeque<maxed_store::ContextualEvent>,
@@ -157,6 +161,7 @@ impl Adapter {
         bridge: Bridge,
     ) -> Result<Self, String> {
         let stream_id = config.stream_id.clone();
+        let identity_key = config.identity_key;
         let engine = Engine::new(config, catalog.clone())
             .map_err(|_| "Catalog could not initialize the engine")?;
         let writer =
@@ -170,7 +175,9 @@ impl Adapter {
         let mut adapter = Self {
             maintenance_work: super::maintenance::OwnerWork::default(),
             engine,
-            writer: Some(writer),
+            writer: Some(Arc::new(writer)),
+            recovery: None,
+            identity_key,
             path,
             writer_config,
             pending: VecDeque::new(),
@@ -300,6 +307,32 @@ impl Adapter {
         let mut envelopes = Vec::with_capacity(events.len());
         for mut event in events {
             self.partial(&mut event);
+            let account = super::account_history::verified_account(&event);
+            if let (Some(account), Some(home)) = (account, &self.home) {
+                if let Some(notice) = home.observe_account(
+                    Some(&self.stream_id),
+                    account,
+                    Some(Sequence(Timestamp(self.sequence.0 .0 + 1))),
+                ) {
+                    (self.bridge.account_changed)(notice);
+                }
+                if self.live {
+                    if self.recovery.is_none() {
+                        if let Some(writer) = &self.writer {
+                            self.recovery = super::account_history::Recovery::start(
+                                home.clone(),
+                                writer.clone(),
+                                self.path.clone(),
+                                self.identity_key,
+                                self.bridge.account_changed.clone(),
+                            );
+                        }
+                    }
+                    if let Some(recovery) = &self.recovery {
+                        recovery.observe(account);
+                    }
+                }
+            }
             if let EngineEvent::CaptureStateChanged(status) = &event {
                 self.capture_status = status.clone();
             }
@@ -879,19 +912,24 @@ impl Adapter {
             // Resume the durable head with the exact original stream. Startup
             // recovery can close interrupted rows, then these retained terminal
             // revisions restore their recorded evidence before retry acknowledges.
-            self.writer = Some(
+            self.writer = Some(Arc::new(
                 start_writer(self.path.clone(), self.writer_config.clone())
                     .map_err(|e| e.to_string())?,
-            );
+            ));
         }
         self.drain()?;
         self.close()
     }
 
     fn reclaim_failed_writer(&mut self) {
+        if let Some(mut recovery) = self.recovery.take() {
+            recovery.stop();
+        }
         if let Some(writer) = self.writer.take() {
             if let Err(maxed_store::ContextualShutdownError { pending, .. }) =
-                writer.shutdown_with_alert_context()
+                Arc::try_unwrap(writer)
+                    .unwrap_or_else(|_| panic!("recovery writer still owned"))
+                    .shutdown_with_alert_context()
             {
                 self.retain_accepted(pending);
             }
@@ -912,6 +950,9 @@ impl Adapter {
     }
 
     pub fn close(&mut self) -> Result<(), String> {
+        if let Some(mut recovery) = self.recovery.take() {
+            recovery.stop();
+        }
         self.maintenance_work.stop();
         if let Some(writer) = &self.writer {
             writer.set_maintenance_blocked(true);
@@ -928,7 +969,10 @@ impl Adapter {
         let before = writer.status();
         let writer = self.writer.take().expect("writer checked above");
         let mut status = before;
-        match writer.shutdown_with_alert_context() {
+        match Arc::try_unwrap(writer)
+            .unwrap_or_else(|_| panic!("recovery writer still owned"))
+            .shutdown_with_alert_context()
+        {
             Ok(receipt) => {
                 status.state = StoreState::Closed;
                 status.queued = 0;

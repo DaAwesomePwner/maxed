@@ -26,6 +26,27 @@ impl StoreReader {
     pub fn current_account(&self) -> Result<Option<String>, StoreError> {
         current_account(&self.conn)
     }
+    /// Inclusive persisted sweep prefix; None means no completed batch.
+    pub fn recovery_progress(&self, account: &str) -> Result<Option<u16>, StoreError> {
+        recovery_progress(&self.conn, account)
+    }
+
+    /// Resolve the pointer and perform a scoped read in one SQLite snapshot.
+    /// `verified` overrides the pointer only for a verified native identity.
+    pub fn with_account<T>(
+        &self,
+        verified: Option<&str>,
+        read: impl FnOnce(&Self, Option<&str>) -> Result<T, StoreError>,
+    ) -> Result<T, StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let account = match verified {
+            Some(account) => Some(account.to_owned()),
+            None => self.current_account()?,
+        };
+        let result = read(self, account.as_deref())?;
+        tx.commit()?;
+        Ok(result)
+    }
 }
 
 /// Attach exact persisted IDs only, atomically. Never resolve candidates through

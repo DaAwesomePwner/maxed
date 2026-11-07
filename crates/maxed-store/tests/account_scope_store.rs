@@ -628,3 +628,47 @@ fn account_scope_regressed_identity_change_clamps_open_span() {
         .unwrap();
     assert_eq!(end, 100);
 }
+
+#[test]
+fn account_scope_snapshot_keeps_pointer_and_reads_together() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("history.sqlite3");
+    let mut db = Connection::open(&path).unwrap();
+    db.pragma_update(None, "journal_mode", "WAL").unwrap();
+    migrate(&mut db).unwrap();
+    seed(
+        &mut db,
+        vec![
+            character("a", Some(account('a'))),
+            character("b", Some(account('b'))),
+            identity(1, Some("a"), Some(account('a'))),
+        ],
+    );
+    let reader = maxed_store::open_reader(&path).unwrap();
+    reader
+        .with_account(None, |reader, resolved| {
+            assert_eq!(resolved, Some(account('a').as_str()));
+            db.execute("UPDATE current_account SET account_id=?1", [account('b')])
+                .unwrap();
+            assert_eq!(reader.current_account()?, Some(account('a')));
+            assert_eq!(reader.recovery_progress(&account('a'))?, None);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(reader.current_account().unwrap(), Some(account('b')));
+    reader
+        .with_account(None, |reader, account| {
+            reader.dungeon_profile(
+                DungeonProfileRequest {
+                    dungeon: "synthetic".into(),
+                    range: TimeRange {
+                        start: Timestamp(0),
+                        end: Timestamp(100),
+                    },
+                    character_id: None,
+                },
+                account,
+            )
+        })
+        .unwrap();
+}

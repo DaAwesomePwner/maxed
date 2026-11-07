@@ -117,7 +117,9 @@ fn setup() -> (tempfile::TempDir, Arc<CaptureRuntime>) {
     let dir = tempfile::tempdir().unwrap();
     let snapshot = demo::demo_snapshot();
     let session = snapshot.session.unwrap();
-    let character = snapshot.character.unwrap();
+    let mut character = snapshot.character.unwrap();
+    character.identity_verified = true;
+    character.account_id = Some(format!("account-{}", "a".repeat(64)));
     let start = session.started.0;
     let mut open = session.clone();
     open.ended = None;
@@ -127,6 +129,11 @@ fn setup() -> (tempfile::TempDir, Arc<CaptureRuntime>) {
     let events = [
         EngineEvent::SessionUpdated(open),
         EngineEvent::CharacterUpdated(character.clone()),
+        EngineEvent::LocalIdentityChanged {
+            at: Timestamp(start),
+            character_id: Some(character.id.clone()),
+            account_id: character.account_id.clone(),
+        },
         EngineEvent::MapEntered {
             realm_instance_key: None,
             at: Timestamp(start),

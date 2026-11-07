@@ -508,12 +508,13 @@ fn probes_cover_absent_legacy_and_compatible_schemas_without_requesting_work() {
         Some(14),
         Some(15),
         Some(16),
+        Some(maxed_store::SCHEMA_VERSION as usize),
     ] {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("live.sqlite3");
         if let Some(version) = version {
             let mut db = rusqlite::Connection::open(&path).unwrap();
-            if version == 16 {
+            if version == maxed_store::SCHEMA_VERSION as usize {
                 maxed_store::migrate(&mut db).unwrap();
             } else if version != 0 {
                 installed::install(&db, version);

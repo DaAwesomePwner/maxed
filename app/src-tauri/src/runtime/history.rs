@@ -33,6 +33,7 @@ impl HistoryCaller {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum HistoryKey {
+    Account(u64, Box<HistoryKey>),
     StorageStatus(bool),
     MaintenanceJobs,
     StatsMaps(StatsFilter),
@@ -86,7 +87,10 @@ pub(super) enum HistoryKey {
 }
 impl HistoryKey {
     fn storage(&self) -> bool {
-        matches!(self, Self::StorageStatus(_) | Self::MaintenanceJobs)
+        match self {
+            Self::Account(_, key) => key.storage(),
+            _ => matches!(self, Self::StorageStatus(_) | Self::MaintenanceJobs),
+        }
     }
     #[cfg(test)]
     pub(super) fn validate_for_tests(&self) -> Result<(), String> {
@@ -95,6 +99,7 @@ impl HistoryKey {
 
     pub(super) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::Account(_, key) => key.validate(),
             Self::StatsMaps(filter) | Self::StatsDungeons(filter) => validate_stats(filter),
             Self::DungeonProfile(request) => {
                 identifier(&request.dungeon)?;
@@ -505,6 +510,12 @@ impl<T: Send + 'static, F: FnOnce(HomeJob) -> Result<T, String> + Send + 'static
 pub(super) enum ReaderMessage {
     Job(Pending),
     Close,
+    RecoveryProgress(
+        std::path::PathBuf,
+        u64,
+        String,
+        mpsc::Sender<Result<Option<u16>, maxed_store::StoreError>>,
+    ),
 }
 
 pub(super) struct Pending {
@@ -613,6 +624,34 @@ fn reader_loop(owner: Weak<HomeReads>, receive: mpsc::Receiver<ReaderMessage>) {
                 let Some(owner) = owner.upgrade() else { break };
                 owner.run_reader(pending);
             }
+            Ok(ReaderMessage::RecoveryProgress(path, generation, account, reply)) => {
+                let Some(owner) = owner.upgrade() else { break };
+                let context = owner.context.lock().unwrap_or_else(|p| p.into_inner());
+                if !context.as_ref().is_some_and(|c| {
+                    c.namespace == super::Namespace::Live
+                        && c.database == path
+                        && c.generation == generation
+                }) {
+                    let _ = reply.send(Err(maxed_store::StoreError::Closed));
+                    continue;
+                }
+                owner
+                    .scheduler
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .open = true;
+                drop(context);
+                drop_kept_reader();
+                let result =
+                    maxed_store::open_reader(&path).and_then(|r| r.recovery_progress(&account));
+                let _ = reply.send(result);
+                owner
+                    .scheduler
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .open = false;
+                owner.idle.notify_all();
+            }
             Ok(ReaderMessage::Close) | Err(mpsc::RecvTimeoutError::Timeout) => {
                 drop_kept_reader();
                 if let Some(owner) = owner.upgrade() {
@@ -642,7 +681,7 @@ impl HomeReads {
         }
     }
 
-    fn send_reader(self: &Arc<Self>, mut message: ReaderMessage) {
+    pub(super) fn send_reader(self: &Arc<Self>, mut message: ReaderMessage) {
         let mut failed = None;
         for _ in 0..2 {
             let sender = {
@@ -696,6 +735,7 @@ impl HomeReads {
             context,
             operation,
         } = pending;
+        let revision = context.as_ref().map(|c| c.account_revision);
         // Only this active worker owns the reader. A dropped receiver skips SQL.
         let completion = if operation.closed() {
             operation.reject(None);
@@ -718,7 +758,8 @@ impl HomeReads {
             .active
             .as_ref()
             .is_none_or(|active| active.request != request || active.superseded)
-            || owner.generation.load(Ordering::Acquire) != namespace_generation;
+            || owner.generation.load(Ordering::Acquire) != namespace_generation
+            || revision.is_some_and(|r| r != owner.account_revision.load(Ordering::Acquire));
         // Retirement may race ahead of dispatching this job to the channel.
         if idle.is_zero() || superseded || queue.stopped {
             drop_kept_reader();
@@ -814,6 +855,8 @@ impl HomeReads {
                 }
                 Some(context)
             };
+        // Admission holds the context lock: a switch cannot race revision capture.
+        let key = HistoryKey::Account(self.account_revision.load(Ordering::Acquire), Box::new(key));
         let Some(request) = queue.request.checked_add(1) else {
             queue.retire();
             operation.reject(Some(UNAVAILABLE.into()));
@@ -869,6 +912,11 @@ impl HomeReads {
                             None
                         } else {
                             pending.context = context.clone();
+                            if let (Some(context), HistoryKey::Account(revision, _)) =
+                                (&context, &mut pending.key)
+                            {
+                                *revision = context.account_revision;
+                            }
                             Some(pending)
                         }
                     };
@@ -942,23 +990,14 @@ impl CaptureRuntime {
             HistoryCaller::MainWindow,
             HistoryKey::ScopeLoot(scope.clone(), cursor.clone(), limit, tiers.clone()),
             move |job| {
-                runtime.read_history(
+                runtime.read_account_history(
                     job,
                     || ScopeLootPage {
                         items: vec![],
                         next: None,
                         total_bags: 0,
                     },
-                    |reader| {
-                        reader.scope_loot(
-                            scope,
-                            // TODO(#4 T4C): native account lifecycle
-                            reader.current_account()?.as_deref(),
-                            cursor,
-                            limit,
-                            &tiers,
-                        )
-                    },
+                    |reader, account| reader.scope_loot(scope, account, cursor, limit, &tiers),
                 )
             },
         )
@@ -971,11 +1010,8 @@ impl CaptureRuntime {
             HistoryCaller::MainWindow,
             HistoryKey::DungeonBests,
             move |job| {
-                runtime.read_history(job, Vec::new, |reader| {
-                    reader.dungeon_bests(
-                        // TODO(#4 T4C): native account lifecycle
-                        reader.current_account()?.as_deref(),
-                    )
+                runtime.read_account_history(job, Vec::new, |reader, account| {
+                    reader.dungeon_bests(account)
                 })
             },
         )
@@ -1065,11 +1101,8 @@ impl CaptureRuntime {
             HistoryCaller::MainWindow,
             HistoryKey::Home(scope.clone()),
             move |job| {
-                runtime.read_history(job, empty_history, |reader| {
-                    reader.home_summary(
-                        scope, // TODO(#4 T4C): native account lifecycle
-                        reader.current_account()?.as_deref(),
-                    )
+                runtime.read_account_history(job, empty_history, |reader, account| {
+                    reader.home_summary(scope, account)
                 })
             },
         )

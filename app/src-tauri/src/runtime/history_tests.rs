@@ -1493,3 +1493,113 @@ fn reader_reuse_latency_bench() {
         runtime.shared.home.shutdown_reads();
     }
 }
+
+#[test]
+fn account_scope_same_stream_switch_supersedes_in_flight_read() {
+    let (_dir, runtime) = setup();
+    runtime.shared.views.store.lock().unwrap().state = StoreState::Ready;
+    let home = &runtime.shared.home;
+    home.context.lock().unwrap().as_mut().unwrap().stream_id = Some("synthetic".into());
+    let stream = home
+        .context
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .stream_id
+        .clone();
+    let a = format!("account-{}", "a".repeat(64));
+    let b = format!("account-{}", "b".repeat(64));
+    home.observe_account(stream.as_deref(), &a, None);
+    let (entered, release) = pause(&runtime);
+    let reading = runtime.clone();
+    let read =
+        std::thread::spawn(move || tauri::async_runtime::block_on(reading.home_summary(scope())));
+    entered.recv().unwrap();
+    let before = home.account_revision.load(Ordering::Acquire);
+    assert!(home.observe_account(stream.as_deref(), &b, None).is_some());
+    assert!(home.account_revision.load(Ordering::Acquire) > before);
+    *home.on_reader.lock().unwrap() = None;
+    release.send(()).unwrap();
+    assert!(matches!(
+        read.join().unwrap().unwrap(),
+        HistoryReply::Superseded
+    ));
+    let reading = runtime.clone();
+    let result = tauri::async_runtime::block_on(runtime.submit_history(
+        HistoryCaller::MainWindow,
+        HistoryKey::DungeonBests,
+        move |job| {
+            reading.read_account_history(job, || None, |_, account| Ok(account.map(str::to_owned)))
+        },
+    ))
+    .unwrap();
+    assert!(matches!(result, HistoryReply::Ready { value: Some(account) } if account == b));
+}
+
+#[test]
+fn account_scope_live_stopped_unknown_and_demo_resolve_their_own_database() {
+    let (dir, runtime) = setup();
+    let read = || {
+        let owner = runtime.shared.home.clone();
+        let context = owner.context.lock().unwrap().clone().unwrap();
+        runtime
+            .read_account_history(
+                super::home::HomeJob { owner, context },
+                || None,
+                |_, account| Ok(account.map(str::to_owned)),
+            )
+            .unwrap()
+    };
+    assert_eq!(read(), None);
+    let a = format!("account-{}", "a".repeat(64));
+    let b = format!("account-{}", "b".repeat(64));
+    for (name, account) in [("live.sqlite3", &a), ("demo.sqlite3", &b)] {
+        let mut db = rusqlite::Connection::open(dir.path().join(name)).unwrap();
+        maxed_store::migrate(&mut db).unwrap();
+        db.execute("INSERT OR IGNORE INTO accounts VALUES(?1)", [account])
+            .unwrap();
+        db.execute(
+            "INSERT OR REPLACE INTO current_account VALUES(1,?1)",
+            [account],
+        )
+        .unwrap();
+    }
+    assert_eq!(read(), Some(a.clone()));
+    {
+        let mut context = runtime.shared.home.context.lock().unwrap();
+        let context = context.as_mut().unwrap();
+        context.account = Some(b.clone());
+        context.stream_id = Some("synthetic".into());
+    }
+    runtime.shared.views.store.lock().unwrap().state = StoreState::Ready;
+    assert_eq!(read(), Some(b.clone()));
+    runtime.shared.views.store.lock().unwrap().state = StoreState::Closed;
+    assert_eq!(read(), Some(a.clone()));
+    runtime
+        .shared
+        .home
+        .context
+        .lock()
+        .unwrap()
+        .as_mut()
+        .unwrap()
+        .stream_id = None;
+    assert_eq!(read(), Some(a.clone()));
+    {
+        let mut context = runtime.shared.home.context.lock().unwrap();
+        let context = context.as_mut().unwrap();
+        context.namespace = Namespace::Demo;
+        context.database = dir.path().join("demo.sqlite3");
+        context.stream_id = Some("demo".into());
+        context.account = Some(a.clone());
+    }
+    assert_eq!(read(), Some(b));
+    assert_eq!(
+        maxed_store::open_reader(&dir.path().join("live.sqlite3"))
+            .unwrap()
+            .current_account()
+            .unwrap(),
+        Some(a)
+    );
+}
