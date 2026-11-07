@@ -1545,7 +1545,11 @@ fn account_scope_live_stopped_unknown_and_demo_resolve_their_own_database() {
         let context = owner.context.lock().unwrap().clone().unwrap();
         runtime
             .read_account_history(
-                super::home::HomeJob { owner, context },
+                super::home::HomeJob {
+                    owner,
+                    context,
+                    account_scoped: true,
+                },
                 || None,
                 |_, account| Ok(account.map(str::to_owned)),
             )
@@ -1601,5 +1605,55 @@ fn account_scope_live_stopped_unknown_and_demo_resolve_their_own_database() {
             .current_account()
             .unwrap(),
         Some(a)
+    );
+}
+
+#[test]
+fn account_scope_switch_preserves_active_and_queued_storage_reads() {
+    let (_dir, runtime) = setup();
+    let (entered, release) = pause(&runtime);
+    let reading = runtime.clone();
+    let first = std::thread::spawn(move || {
+        tauri::async_runtime::block_on(reading.submit_history(
+            HistoryCaller::Storage,
+            HistoryKey::StorageStatus(false),
+            {
+                let runtime = reading.clone();
+                move |job| runtime.read_history(job, || 0, |reader| reader.user_version())
+            },
+        ))
+    });
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    let queued = runtime.clone();
+    let mut second = Box::pin(runtime.submit_history(
+        HistoryCaller::Storage,
+        HistoryKey::StorageStatus(false),
+        move |job| queued.read_history(job, || 0, |reader| reader.user_version()),
+    ));
+    assert!(second
+        .as_mut()
+        .poll(&mut Context::from_waker(Waker::noop()))
+        .is_pending());
+    let stream = runtime
+        .shared
+        .home
+        .context
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .stream_id
+        .clone();
+    runtime
+        .shared
+        .home
+        .observe_account(stream.as_deref(), "synthetic-account", None);
+    *runtime.shared.home.on_reader.lock().unwrap() = None;
+    release.send(()).unwrap();
+    assert!(
+        matches!(first.join().unwrap().unwrap(), HistoryReply::Ready { value } if value == maxed_store::SCHEMA_VERSION)
+    );
+    assert!(
+        matches!(tauri::async_runtime::block_on(second).unwrap(), HistoryReply::Ready { value } if value == maxed_store::SCHEMA_VERSION)
     );
 }

@@ -1,7 +1,10 @@
 use super::*;
 use maxed_types::*;
 
-fn context(path: std::path::PathBuf, namespace: Namespace) -> super::super::home::HomeReadContext {
+pub(super) fn context(
+    path: std::path::PathBuf,
+    namespace: Namespace,
+) -> super::super::home::HomeReadContext {
     super::super::home::HomeReadContext {
         database: path,
         namespace,

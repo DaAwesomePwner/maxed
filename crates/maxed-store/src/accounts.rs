@@ -33,6 +33,14 @@ impl StoreReader {
 
     /// Resolve the pointer and perform a scoped read in one SQLite snapshot.
     /// `verified` overrides the pointer only for a verified native identity.
+    ///
+    /// The callback MUST NOT start another transaction (including calling this
+    /// wrapper recursively). SQLite rejects nested BEGINs; an error rolls back
+    /// this snapshot. Use single-statement readers or readers that explicitly
+    /// reuse an existing transaction, such as `dungeon_profile`. In particular,
+    /// `get_run`, `list_runs` and recap readers cannot be called here. A SAVEPOINT
+    /// outside those readers would not make their nested BEGIN valid either.
+    /// The account_scope_with_account_transaction_constraint test guards this contract.
     pub fn with_account<T>(
         &self,
         verified: Option<&str>,

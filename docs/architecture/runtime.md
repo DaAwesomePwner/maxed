@@ -233,9 +233,13 @@ The native history context retains the last verified account across identity los
 and provisional map transitions. Opening or restoring a source resolves its own
 DB pointer; playback never runs live legacy recovery. Scoped queries use one
 store snapshot for pointer resolution and aggregates, and verified identity reads
-wait for the ownership event's durable sequence. Account revisions participate
+wait for the complete acquisition batch, including the identity transition after
+CharacterUpdated. A failed writer returns unavailable immediately rather than
+occupying the reader until the durability timeout. Account revisions participate
 in request deduplication, admission and final-response checks: a same-stream
-switch retires an earlier request as `HistoryReply::Superseded`.
+switch retires an earlier account-dependent request as `HistoryReply::Superseded`.
+Account-independent queries, including storage status, retain their source lease
+without depending on the account revision.
 
 On verified live identity, a cancellable background worker recomputes character
 numbers 0 through 65535 with the installation key in batches of 4096. Progress
@@ -243,7 +247,10 @@ reads use the single history-reader thread; attachments and progress commits use
 the existing writer. Shutdown joins recovery before taking ownership of the
 writer for shutdown. Namespace retirement stops the sweep. Completed prefixes
 resume after restart; repeating an attached batch is safe. Unmatched rows remain
-stored and excluded from account totals. Recovery emits no identity diagnostics.
+stored and excluded from account totals. Recovery is submitted only on verified
+account changes; a failed attempt is not retried on repeated identity events.
+A sweep that attached any character emits its notice even when cancelled before
+completion. Recovery emits no identity diagnostics.
 
 `account-history-changed` carries `AccountHistoryChanged { revision, reason }`,
 with `account_switched` or `legacy_recovered`, never an account ID. The UI should

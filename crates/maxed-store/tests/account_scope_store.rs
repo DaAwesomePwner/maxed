@@ -672,3 +672,26 @@ fn account_scope_snapshot_keeps_pointer_and_reads_together() {
         })
         .unwrap();
 }
+
+#[test]
+fn account_scope_with_account_transaction_constraint() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("history.sqlite3");
+    migrate(&mut Connection::open(&path).unwrap()).unwrap();
+    let reader = maxed_store::open_reader(&path).unwrap();
+    // get_run owns a BEGIN, so it cannot nest inside the scoped snapshot.
+    assert!(reader
+        .with_account(None, |r, _| r.get_run("missing"))
+        .is_err());
+    assert!(reader
+        .with_account(None, |r, _| r.with_account(None, |_, _| Ok(())))
+        .is_err());
+    // Failure rolls back the outer transaction and leaves the connection reusable.
+    assert_eq!(reader.get_run("missing").unwrap(), None);
+    assert_eq!(
+        reader
+            .with_account(None, |r, account| r.dungeon_bests(account))
+            .unwrap(),
+        vec![]
+    );
+}

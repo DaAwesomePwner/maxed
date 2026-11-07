@@ -86,6 +86,20 @@ pub(super) enum HistoryKey {
     PlayerContext(String, String, Option<Timestamp>, Option<Timestamp>),
 }
 impl HistoryKey {
+    fn account_scoped(&self) -> bool {
+        match self {
+            Self::Account(_, key) => key.account_scoped(),
+            Self::Home(_)
+            | Self::HomeHud(..)
+            | Self::ScopeLoot(..)
+            | Self::DungeonBests
+            | Self::HomeDungeonStreak(_)
+            | Self::DungeonProfile(_)
+            | Self::HomeBossBaselines(_) => true,
+            _ => false,
+        }
+    }
+
     fn storage(&self) -> bool {
         match self {
             Self::Account(_, key) => key.storage(),
@@ -566,6 +580,22 @@ impl Scheduler {
     pub(super) fn active(&self) -> bool {
         self.active.is_some()
     }
+    pub(super) fn retire_accounts(&mut self) {
+        if let Some(active) = &mut self.active {
+            if active.key.account_scoped() {
+                active.superseded = true;
+            }
+        }
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|p| p.key.account_scoped())
+        {
+            if let Some(pending) = self.pending.take() {
+                pending.operation.reject(None);
+            }
+        }
+    }
     pub(super) fn retire(&mut self) {
         if let Some(active) = &mut self.active {
             active.superseded = true;
@@ -735,7 +765,11 @@ impl HomeReads {
             context,
             operation,
         } = pending;
-        let revision = context.as_ref().map(|c| c.account_revision);
+        let account_scoped = key.account_scoped();
+        let revision = context
+            .as_ref()
+            .filter(|_| account_scoped)
+            .map(|c| c.account_revision);
         // Only this active worker owns the reader. A dropped receiver skips SQL.
         let completion = if operation.closed() {
             operation.reject(None);
@@ -747,6 +781,7 @@ impl HomeReads {
             Some(operation.run(HomeJob {
                 owner: owner.clone(),
                 context,
+                account_scoped,
             }))
         } else {
             operation.reject(Some(UNAVAILABLE.into()));
@@ -856,7 +891,11 @@ impl HomeReads {
                 Some(context)
             };
         // Admission holds the context lock: a switch cannot race revision capture.
-        let key = HistoryKey::Account(self.account_revision.load(Ordering::Acquire), Box::new(key));
+        let key = if key.account_scoped() {
+            HistoryKey::Account(self.account_revision.load(Ordering::Acquire), Box::new(key))
+        } else {
+            key
+        };
         let Some(request) = queue.request.checked_add(1) else {
             queue.retire();
             operation.reject(Some(UNAVAILABLE.into()));

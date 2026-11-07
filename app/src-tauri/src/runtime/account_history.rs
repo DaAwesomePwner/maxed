@@ -36,11 +36,18 @@ impl HomeReads {
             return None;
         }
         if context.account.as_deref() == Some(account) {
+            if sequence.is_some_and(|next| {
+                context
+                    .identity_sequence
+                    .is_none_or(|old| next.0 .0 > old.0 .0)
+            }) {
+                context.identity_sequence = sequence;
+            }
             return None;
         }
         // The scheduler lock orders final responses against switches.
         let mut queue = self.scheduler.lock().ok()?;
-        queue.retire();
+        queue.retire_accounts();
         context.account = Some(account.to_owned());
         *self.resolved_account.lock().ok()? = Some((context.namespace, context.account.clone()));
         context.identity_sequence = sequence;
@@ -50,17 +57,16 @@ impl HomeReads {
             reason: AccountHistoryChangeReason::AccountSwitched,
         })
     }
-    fn recovered(&self, generation: u64) -> Option<AccountHistoryChanged> {
+    fn recovered(&self) -> Option<AccountHistoryChanged> {
         let mut context = self.context.lock().ok()?;
-        let context = context.as_mut()?;
-        if context.namespace != Namespace::Live || context.generation != generation {
-            return None;
-        }
         let mut queue = self.scheduler.lock().ok()?;
-        queue.retire();
-        context.account_revision = self.account_revision.fetch_add(1, Ordering::AcqRel) + 1;
+        queue.retire_accounts();
+        let revision = self.account_revision.fetch_add(1, Ordering::AcqRel) + 1;
+        if let Some(context) = context.as_mut() {
+            context.account_revision = revision;
+        }
         Some(AccountHistoryChanged {
-            revision: context.account_revision,
+            revision,
             reason: AccountHistoryChangeReason::LegacyRecovered,
         })
     }
@@ -73,7 +79,7 @@ impl CaptureRuntime {
         empty: impl FnOnce() -> T,
         read: impl FnOnce(&maxed_store::StoreReader, Option<&str>) -> Result<T, maxed_store::StoreError>,
     ) -> Result<T, String> {
-        let context = job.context.clone();
+        let context = job.owner.reader_context(&job.context, true)?;
         let active_live = context.namespace == Namespace::Live
             && context.stream_id.is_some()
             && self
@@ -105,8 +111,14 @@ impl CaptureRuntime {
                 {
                     break;
                 }
-                if std::time::Instant::now() >= deadline {
+                if status.state == maxed_types::StoreState::Failed
+                    || std::time::Instant::now() >= deadline
+                {
                     return Err(UNAVAILABLE.into());
+                }
+                #[cfg(test)]
+                if let Some(hook) = self.shared.home.on_identity_wait.lock().unwrap().clone() {
+                    hook();
                 }
                 std::thread::sleep(std::time::Duration::from_millis(5));
             }
@@ -121,6 +133,7 @@ pub(super) struct Recovery {
     cancel: Arc<AtomicBool>,
     worker: Option<std::thread::JoinHandle<()>>,
     send: crossbeam_channel::Sender<String>,
+    last_account: Option<String>,
 }
 impl Recovery {
     pub(super) fn start(
@@ -156,6 +169,10 @@ impl Recovery {
                 }
                 if completed.contains(&account) {
                     continue;
+                }
+                #[cfg(test)]
+                if let Some(hook) = home.on_recovery_attempt.lock().unwrap().clone() {
+                    hook();
                 }
                 let (reply, progress) = std::sync::mpsc::channel();
                 home.send_reader(super::history::ReaderMessage::RecoveryProgress(
@@ -198,9 +215,13 @@ impl Recovery {
                         break;
                     }
                     progress = Some(end);
+                    #[cfg(test)]
+                    if let Some(hook) = home.on_recovery_batch.lock().unwrap().clone() {
+                        hook(end);
+                    }
                 }
-                if attached > 0 && !stopped.load(Ordering::Acquire) {
-                    if let Some(changed) = home.recovered(generation) {
+                if attached > 0 {
+                    if let Some(changed) = home.recovered() {
                         notice(changed);
                     }
                 }
@@ -210,13 +231,22 @@ impl Recovery {
             cancel,
             worker: Some(worker),
             send,
+            last_account: None,
         })
     }
-    pub(super) fn observe(&self, account: &str) {
-        let _ = self.send.try_send(account.to_owned());
+    /// One attempt per verified account change, including failed attempts.
+    pub(super) fn observe(&mut self, account: &str) -> bool {
+        if self.last_account.as_deref() == Some(account) {
+            return false;
+        }
+        self.last_account = Some(account.to_owned());
+        self.send.try_send(account.to_owned()).is_ok()
+    }
+    pub(super) fn cancel(&self) {
+        self.cancel.store(true, Ordering::Release);
     }
     pub(super) fn stop(&mut self) {
-        self.cancel.store(true, Ordering::Release);
+        self.cancel();
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
@@ -231,3 +261,10 @@ impl Drop for Recovery {
 #[cfg(test)]
 #[path = "account_history_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "account_recovery_tests.rs"]
+mod recovery_tests;
+#[cfg(test)]
+#[path = "account_wait_tests.rs"]
+mod wait_tests;
