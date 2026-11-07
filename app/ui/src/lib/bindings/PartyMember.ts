@@ -5,4 +5,8 @@ import type { ParseOutcome } from "./ParseOutcome";
 import type { PartyMark } from "./PartyMark";
 import type { Timestamp } from "./Timestamp";
 
-export type PartyMember = { player_id: string, name_key?: string | null, name?: string | null, class_id?: number | null, level?: number | null, stars?: number | null, guild?: string | null, maxed?: number | null, equipment: Array<EquipmentView>, is_local: boolean, present?: boolean | null, out_of_view_since?: Timestamp | null, departed_at?: Timestamp | null, parse?: ParseOutcome | null, damage?: number | null, share?: number | null, boss_share?: number | null, flags: Array<ContributionFlag>, mark?: PartyMark | null, runs_together: number, };
+export type PartyMember = { player_id: string, name_key?: string | null, name?: string | null, class_id?: number | null, level?: number | null, stars?: number | null, guild?: string | null, maxed?: number | null, equipment: Array<EquipmentView>, is_local: boolean, 
+/**
+ * Maxed count and highlights were computed under exalt-split gating. This records the computation policy, not completeness of observations.
+ */
+maxed_gated?: boolean, present?: boolean | null, out_of_view_since?: Timestamp | null, departed_at?: Timestamp | null, parse?: ParseOutcome | null, damage?: number | null, share?: number | null, boss_share?: number | null, flags: Array<ContributionFlag>, mark?: PartyMark | null, runs_together: number, };

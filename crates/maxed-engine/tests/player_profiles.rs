@@ -222,6 +222,8 @@ fn local_profile_maxed_requires_shared_exalt_evidence_but_remote_does_not() {
         let local = rows.iter().find(|p| p.is_local).unwrap();
         let remote = rows.iter().find(|p| !p.is_local).unwrap();
         let expected = (level == Some(0)).then_some(8);
+        assert!(local.maxed_gated);
+        assert!(!remote.maxed_gated);
         assert_eq!(local.maxed, expected, "level {level:?}");
         assert_eq!(local.maxed, e.snapshot().character.unwrap().maxed);
         assert_eq!(

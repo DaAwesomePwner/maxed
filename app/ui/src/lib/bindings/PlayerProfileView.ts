@@ -3,4 +3,8 @@ import type { EquipmentView } from "./EquipmentView";
 import type { StatView } from "./StatView";
 import type { Timestamp } from "./Timestamp";
 
-export type PlayerProfileView = { scope_id: string, run_id?: string | null, player_id: string, object_id: number, is_local: boolean, name?: string | null, class_id?: number | null, level?: number | null, stars?: number | null, fame?: number | null, skin_id?: number | null, guild?: string | null, stats: Array<StatView>, maxed?: number | null, maxed_stats: Array<number>, equipment: Array<EquipmentView>, first_seen: Timestamp, last_seen: Timestamp, };
+export type PlayerProfileView = { scope_id: string, run_id?: string | null, player_id: string, object_id: number, is_local: boolean, 
+/**
+ * Maxed count and highlights were computed under exalt-split gating. This records the computation policy, not completeness of observations.
+ */
+maxed_gated?: boolean, name?: string | null, class_id?: number | null, level?: number | null, stars?: number | null, fame?: number | null, skin_id?: number | null, guild?: string | null, stats: Array<StatView>, maxed?: number | null, maxed_stats: Array<number>, equipment: Array<EquipmentView>, first_seen: Timestamp, last_seen: Timestamp, };
