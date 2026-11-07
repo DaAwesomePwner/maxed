@@ -16,7 +16,8 @@ import type { HomeSummary } from '../../src/lib/bindings/HomeSummary';
 
 afterEach(cleanup);
 const a = homeSnapshot();
-const b = { ...a, character: { ...a.character!, id: 'synthetic-b', name: 'Synthetic B' } };
+a.character!.account_id = 'account-a';
+const b = { ...a, character: { ...a.character!, id: 'synthetic-b', name: 'Synthetic B', account_id: 'account-b' } };
 function identity(account: string | null, character: string | null, sequence = '13'): EventEnvelope {
   return { stream_id: a.stream_id, sequence, at: a.at,
     event: { local_identity_changed: { at: a.at, account_id: account, character_id: character } } };

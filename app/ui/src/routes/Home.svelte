@@ -81,8 +81,10 @@
     const owner = client;
     if (!owner) return;
     let active = true;
+    let revision: number | null = null;
     const release = owner.onAccountHistoryChanged(notice => {
-      if (!active) return;
+      if (!active || revision === notice.revision) return;
+      revision = notice.revision;
       // Dispose synchronously: an already queued A reply cannot publish into B.
       controller?.dispose(); bestsController?.dispose(); homeReads?.dispose(); v4Reads?.dispose(); recapReads?.dispose();
       history = { phase: 'loading', summary: null, message: '', retryAvailable: false };
