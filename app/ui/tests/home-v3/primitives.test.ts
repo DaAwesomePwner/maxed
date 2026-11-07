@@ -12,7 +12,7 @@ import { emptyHomeVisuals } from '../../src/lib/home/visuals';
 import { setDebugMode } from '../../src/lib/debug/debug';
 
 afterEach(() => { vi.unstubAllGlobals(); setDebugMode(false); });
-const visuals = { ...emptyHomeVisuals(), objects: [
+const visuals = { ...emptyHomeVisuals(), phase: 'ready' as const, objects: [
   { object_type: 444, name: 'A very long ST item name that must occupy at most two lines', item_tier: 'ST', sprite: null, bag: null },
 ] };
 const resolveSpriteUrl = () => 'http://maxed-sprite.localhost/' + 'a'.repeat(64) + '/enchantPips.png';
@@ -167,4 +167,12 @@ it('renders explicit zero tallies and labelled missing art without fabricated va
   const page = render(BestBagCard, { best: bestDrop([drop], { ...emptyHomeVisuals(), phase: 'ready' }), visuals: { ...emptyHomeVisuals(), phase: 'ready' }, resolveSpriteUrl: () => null, meta: '—' });
   expect(screen.getByRole('img', { name: 'Item 444' })).toBeTruthy();
   expect(page.container.innerHTML).not.toMatch(/NaN|undefined/);
+});
+
+it.each(['loading', 'unavailable'] as const)('does not claim contents unknown while the catalog is %s', phase => {
+  setDebugMode(true);
+  const drop = retainedBag(), catalog = { ...emptyHomeVisuals(), phase };
+  const page = render(BestBagCard, { best: bestDrop([drop], catalog), visuals: catalog, resolveSpriteUrl, meta: '—' });
+  expect(page.queryByText('Contents unknown')).toBeNull();
+  expect(page.container.querySelector('.item-box')).toBeNull();
 });

@@ -378,8 +378,10 @@ legacy items are used only when contents are known. Catalog-tierless consumables
 follow every known tier. Classification belongs to the catalog: deliberately
 allowlisted UT consumables rank as UT and may precede UT equipment by item type.
 
-Best bags follow the store's `BestBagRef` order exactly: highest bag rank
-(unknown last), newest exact timestamp, then descending ID. Item tiers never
+Ranked bags follow the store's `BestBagRef` order: highest bag rank, newest
+exact timestamp, then descending ID. Unlike the store's Home query, which skips
+unranked bags, `homeLoot` retains them after ranked bags and features one when
+no ranked bag exists. Item tiers never
 override bag order, even for empty or unknown contents. Repeated IDs use the last
 accepted projection. Cached projections retain immutable input identity.
 

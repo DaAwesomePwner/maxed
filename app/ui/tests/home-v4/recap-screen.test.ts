@@ -101,7 +101,7 @@ it('caps_observed_fights_at_twelve_and_shows_the_remaining_count', () => {
 it.each([false, true])('best_bag_labels_contents_evidence: %s', contents_known => {
   const drop = { ...homeSnapshot().drops[0], contents_known, contents: [], items: [] };
   const page = render(RecapPlaceholder, { ...props(), recap: { ...recap(),
-    summary: { ...recap().summary, best: { drop, item: null } } } });
+    summary: { ...recap().summary, best: { drop } } } });
   expect(page.getByText(contents_known ? 'Observed contents' : 'Contents not observed')).toBeTruthy();
   expect(page.queryByText(contents_known ? 'Contents not observed' : 'Observed contents')).toBeNull();
 });
@@ -128,7 +128,7 @@ it('best_bag_names_and_sprites_resolve_from_the_catalog', async () => {
   const drop = { ...homeSnapshot().drops[0], source_estimated: true };
   const itemType = drop.contents[0]?.item_type ?? drop.items[0];
   const sprite: SpriteRef = { key: 'synthetic', sheet: 'synthetic.png', x: 0, y: 0, width: 8, height: 8 };
-  const input = { ...props(), recap: { ...recap(), summary: { ...recap().summary, best: { drop, item: null } } },
+  const input = { ...props(), recap: { ...recap(), summary: { ...recap().summary, best: { drop } } },
     resolveSpriteUrl: () => '/synthetic-sprite.png' };
   const page = render(RecapPlaceholder, input);
   expect(page.container.textContent).not.toMatch(/Item \d|Bag \d/);
@@ -242,7 +242,7 @@ it('shell_recap_survives_capture_loss_and_yields_to_the_next_live_area', async (
 it('placeholder_best_bag_names_are_read_once', () => {
   const drop = homeSnapshot().drops[0], input = props();
   const page = render(RecapPlaceholder, { ...input, recap: { ...input.recap,
-    summary: { ...input.recap.summary, best: { drop, item: null } } } });
+    summary: { ...input.recap.summary, best: { drop } } } });
   const labelled = [...page.container.querySelectorAll('.bag [role="img"]')].map(node => node.getAttribute('aria-label'));
   // The visible span names the item when there is one, else the bag; that sprite stays unlabelled.
   expect(labelled.filter(label => label !== '')).toHaveLength(labelled.length - 1);
@@ -252,7 +252,7 @@ it('placeholder_best_bag_names_are_read_once', () => {
 it('defers the recap item with no visuals and uses the same pick as Home after loading', async () => {
   const { bestItem } = await import('../../src/lib/home/v3/loot-rank');
   const drop = { ...homeSnapshot().drops[0], contents_known: true, items: [101, 102], contents: [] };
-  const input = { ...props(), recap: { ...recap(), summary: { ...recap().summary, best: { drop, item: null } } } };
+  const input = { ...props(), recap: { ...recap(), summary: { ...recap().summary, best: { drop } } } };
   const page = render(RecapPlaceholder, input);
   expect(bestItem(drop, input.visuals)).toBeNull();
   expect(page.container.querySelectorAll('.recap-loot .bag img')).toHaveLength(0);

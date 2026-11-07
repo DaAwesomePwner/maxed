@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { setDebugMode } from '../../src/lib/debug/debug';
-import { fight, fightSummary, flush, follow, main, mountRuns, player, ready, region, run, story } from './fixtures';
+import { advance, saved, fight, fightSummary, flush, follow, main, mountRuns, player, ready, region, run, story } from './fixtures';
 
 beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { setDebugMode(false); cleanup(); vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -178,4 +178,24 @@ it('shows one compact killed label with max HP, retaining HP left for an unconfi
   await fireEvent.click(main().getAllByRole('tab')[2]); await flush();
   expect(region('Fight damage').getByText('168,000 / 336,000 · 50%')).toBeTruthy();
   expect(region('Fight damage').getByText('Ended')).toBeTruthy();
+});
+
+it('restores focus when a saved bag revision replaces its list row with the featured card', async () => {
+  const { homeSnapshot } = await import('../home/fixtures');
+  const seed = homeSnapshot().drops[0];
+  const drops = [{ ...seed, id: 'old-best', run_id: 'run-1', at: '3000000', bag_rank: 90 },
+    { ...seed, id: 'focused', run_id: 'run-1', at: '7000000', bag_rank: 1 }];
+  const page = mountRuns({ hash: '#/runs/run-1', queries: { getRun: async () => ready(story({ drops })) } });
+  await flush();
+  await fireEvent.click(page.container.querySelector('[data-marker-id="drop:focused"]')!); await flush();
+  const before = document.activeElement;
+  expect(before?.getAttribute('data-drop-id')).toBe('focused');
+  expect(before?.classList.contains('row')).toBe(true);
+  const revised = { ...drops[1], bag_rank: 255 };
+  page.queries.getRun.mockResolvedValue(ready(story({ drops: [drops[0], revised] })));
+  page.event({ drop_updated: revised }, '13'); page.setStore(saved('13', page.snapshot.stream_id)); await advance();
+  expect(before?.isConnected).toBe(false);
+  expect(document.activeElement).not.toBe(before);
+  expect(document.activeElement?.getAttribute('data-drop-id')).toBe('focused');
+  expect(document.activeElement?.classList.contains('best-card')).toBe(true);
 });
