@@ -1,6 +1,6 @@
 # Known limitations
 
-Maxed is pre-release 0.1.3. These limits describe the available behavior and its
+Maxed is pre-release 0.1.4. These limits describe the available behavior and its
 evidence boundaries. Automated regressions cover several reported problems;
 Windows gameplay and installed-release acceptance remain incomplete.
 

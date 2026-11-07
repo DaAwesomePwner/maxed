@@ -42,7 +42,7 @@ Expected resources are `maxed.exe`, `LICENSE`, `NOTICE.md`, `THIRD-PARTY-NOTICES
 After packaging, generate metadata with explicit reviewed arguments. Set `$version` to the release being prepared:
 
 ```powershell
-$version = '0.1.3'
+$version = '0.1.4'
 $notes = [IO.File]::ReadAllText('reviewed-notes.txt')
 ./scripts/release/New-ReleaseMetadata.ps1 `
   -Version $version -Channel 'stable' `
