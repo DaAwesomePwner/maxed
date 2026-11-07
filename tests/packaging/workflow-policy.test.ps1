@@ -54,6 +54,36 @@ function StepSecretFailures($step, [bool]$allowSigning) {
 function Keys($value) { return (@($value.PSObject.Properties.Name | Sort-Object) -join ',') }
 # Independent literal policy fixtures pin every step, command, cache condition and action.
 # Do not load these expectations from the workflows being tested.
+$script:expectedAggregator = @'
+{
+  "needs": [
+    "rust-lint",
+    "rust-test",
+    "store-test",
+    "ui",
+    "packaging"
+  ],
+  "if": "${{ !cancelled() }}",
+  "runs-on": "ubuntu-latest",
+  "permissions": {
+    "contents": "read"
+  },
+  "steps": [
+    {
+      "name": "Require every test job to succeed",
+      "shell": "bash",
+      "env": {
+        "RUST_LINT_RESULT": "${{ needs.rust-lint.result }}",
+        "RUST_TEST_RESULT": "${{ needs.rust-test.result }}",
+        "STORE_TEST_RESULT": "${{ needs.store-test.result }}",
+        "UI_RESULT": "${{ needs.ui.result }}",
+        "PACKAGING_RESULT": "${{ needs.packaging.result }}"
+      },
+      "run": "failed=0\nprintf '%s: %s\\n' 'rust-lint' \"$RUST_LINT_RESULT\"\nif [[ \"$RUST_LINT_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'rust-test' \"$RUST_TEST_RESULT\"\nif [[ \"$RUST_TEST_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'store-test' \"$STORE_TEST_RESULT\"\nif [[ \"$STORE_TEST_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'ui' \"$UI_RESULT\"\nif [[ \"$UI_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'packaging' \"$PACKAGING_RESULT\"\nif [[ \"$PACKAGING_RESULT\" != success ]]; then failed=1; fi\nexit \"$failed\""
+    }
+  ]
+}
+'@ | ConvertFrom-Json
 $script:expectedJobs = @'
 {
   "rust-lint": {
@@ -204,7 +234,7 @@ $c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }
     if ($publish.steps[2].env.GH_TOKEN -cne '${{ github.token }}') { 'secret_scope' }
     if ((@($release.on.PSObject.Properties.Name) -join ',') -cne 'push' -or (@($release.on.push.PSObject.Properties.Name) -join ',') -cne 'tags' -or (@($release.on.push.tags) -join ',') -cne 'v*') { 'release_events' }
     if ((Keys $manual.on) -cne 'pull_request,push,schedule,workflow_call,workflow_dispatch' -or
-        (Keys $manual.on.pull_request) -cne 'branches,paths-ignore' -or (@($manual.on.pull_request.branches) -join ',') -cne 'main' -or
+        (Keys $manual.on.pull_request) -cne 'branches' -or (@($manual.on.pull_request.branches) -join ',') -cne 'main' -or
         @($manual.on.schedule).Count -ne 1 -or
         (Keys $manual.on.schedule[0]) -cne 'cron' -or $manual.on.schedule[0].cron -cne '17 9 * * *' -or
         (Keys $manual.on.workflow_dispatch) -cne '') { 'tests_events' }
@@ -212,8 +242,16 @@ $c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }
         (Keys $manual.on.workflow_call.inputs.release) -cne 'default,description,type' -or
         $manual.on.workflow_call.inputs.release.type -cne 'boolean' -or
         $manual.on.workflow_call.inputs.release.default -cne $false) { 'reusable_inputs' }
-    if ((Keys $manual.jobs) -cne 'packaging,rust-lint,rust-test,store-test,ui') { 'tests_job_shape' }
+    if ((Keys $manual.jobs) -cne 'packaging,rust-lint,rust-test,store-test,tests,ui') { 'tests_job_shape' }
+    # Keep the branch-protection check named tests. Exact shape disallows name
+    # overrides, checkout/tools, secrets, environments and failure suppression.
+    if (($manual.jobs.tests | ConvertTo-Json -Depth 20 -Compress) -cne
+        ($script:expectedAggregator | ConvertTo-Json -Depth 20 -Compress)) { 'tests_aggregator' }
+    $testJobs = @($manual.jobs.PSObject.Properties.Name | Where-Object { $_ -cne 'tests' } | Sort-Object)
+    if ((@($manual.jobs.tests.needs | Sort-Object) -join ',') -cne ($testJobs -join ',')) { 'tests_aggregator_needs' }
     foreach ($property in $manual.jobs.PSObject.Properties) {
+        if ($property.Name -ceq 'tests') { continue }
+        if ($property.Name -cnotin $script:expectedJobs.PSObject.Properties.Name) { 'tests_job_shape'; continue }
         $job = $property.Value
         if ('if' -in $job.PSObject.Properties.Name) { 'fork_pr_guard' }
         $expected = $script:expectedJobs.($property.Name)
@@ -234,11 +272,9 @@ $c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }
         }
     }
     $ignore = 'docs/architecture/**/*.md,docs/development/**/*.md,docs/release/**/*.md,docs/README.md,docs/known-limitations.md'
-    foreach ($event in @('push', 'pull_request')) {
-        if ((Keys $manual.on.$event) -cne 'branches,paths-ignore' -or
-            ($manual.on.$event.branches -join ',') -cne 'main' -or
-            ($manual.on.$event.'paths-ignore' -join ',') -cne $ignore) { 'tests_events' }
-    }
+    if ((Keys $manual.on.push) -cne 'branches,paths-ignore' -or
+        ($manual.on.push.branches -join ',') -cne 'main' -or
+        ($manual.on.push.'paths-ignore' -join ',') -cne $ignore) { 'tests_events' }
     if (($release.jobs.'prior-tests' | ConvertTo-Json -Depth 30 -Compress) -cne
         ($script:expectedPrior | ConvertTo-Json -Depth 30 -Compress)) { 'prior_tests' }
     if ($manual.concurrency.group -cne 'tests-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}' -or
@@ -269,12 +305,13 @@ $c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }
             if ([object]::ReferenceEquals($job, $release.jobs.tests)) { continue }
             $isPrior = [object]::ReferenceEquals($job, $release.jobs.'prior-tests')
             $isManual = [object]::ReferenceEquals($w, $manual)
+            $isAggregator = $isManual -and [object]::ReferenceEquals($job, $manual.jobs.tests)
             $isPublish = [object]::ReferenceEquals($w, $release) -and [object]::ReferenceEquals($job, $release.jobs.publish)
             $isCodeql = [object]::ReferenceEquals($w, $codeql) -and [object]::ReferenceEquals($job, $codeql.jobs.analyze)
-            $runner = if ($isCodeql) { 'ubuntu-24.04' } elseif ($isPrior) { 'ubuntu-latest' } else { 'windows-2022' }
+            $runner = if ($isCodeql) { 'ubuntu-24.04' } elseif ($isPrior -or $isAggregator) { 'ubuntu-latest' } else { 'windows-2022' }
             if ($job.'runs-on' -isnot [string] -or $job.'runs-on' -cne $runner) { 'job_policy' }
-            # Hosted runners need longer for the full test job; every other job keeps 45 minutes.
-            $timeout = if ($isManual) { 90 } elseif ($isPrior) { 5 } else { 45 }
+            # Test workers get 90 minutes; lookup gets 5; the aggregator uses the default.
+            $timeout = if ($isAggregator) { $null } elseif ($isManual) { 90 } elseif ($isPrior) { 5 } else { 45 }
             if ($job.'timeout-minutes' -ne $timeout -or $job.env -or $job.secrets -or $job.uses) { 'job_policy' }
             # Only CodeQL uploads security results; only the gated publisher writes contents.
             if ($isCodeql) {
@@ -446,6 +483,21 @@ $perfStep = @($m.jobs.'rust-lint'.steps | Where-Object name -CEQ 'Perf feature c
 Assert ($perfStep.Count -eq 1 -and $perfStep[0].run.Contains('cargo clippy --offline --locked -p maxed-app --all-targets --features perf-live')) 'test workflow lints the perf-only driver offline'
 $stepNamed = { param($m, $name) @($m.jobs.'rust-lint'.steps | Where-Object name -CEQ $name)[0] }
 foreach ($case in @(
+    @{ want = 'tests_aggregator_needs'; mutate = { param($r,$m) $m.jobs.tests.needs = @('rust-lint','rust-test','store-test','ui') } },
+    @{ want = 'tests_aggregator_needs'; mutate = { param($r,$m) $m.jobs | Add-Member extra $m.jobs.ui } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs.tests.if = '${{ always() }}' } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs.tests.PSObject.Properties.Remove('if') } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs | Add-Member renamed $m.jobs.tests; $m.jobs.PSObject.Properties.Remove('tests') } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs.tests | Add-Member name renamed } },
+    @{ want = 'tests_events'; mutate = { param($r,$m) $m.on.pull_request | Add-Member 'paths-ignore' @('docs/**') } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs.tests.permissions | Add-Member actions 'write' } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs.tests.permissions.contents = 'write' } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs.tests | Add-Member secrets 'inherit' } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs.tests | Add-Member environment 'release-signing' } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs.tests.'runs-on' = 'windows-2022' } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs.tests.steps += $m.jobs.ui.steps[0] } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs.tests.steps[0].env.UI_RESULT = '${{ secrets.OTHER }}' } },
+    @{ want = 'tests_aggregator'; mutate = { param($r,$m) $m.jobs.tests.steps[0].run += '; exit 0' } },
     @{ want = 'permissions'; mutate = { param($r,$m) $r.permissions.contents = 'write' } },
     @{ want = 'publish_shape'; mutate = { param($r,$m) $r.jobs.publish | Add-Member container 'image' } },
     @{ want = 'publish_shape'; mutate = { param($r,$m) $r.jobs.publish | Add-Member services @{} } },
@@ -592,7 +644,7 @@ foreach ($change in @('write','extra','failed')) {
     Assert ($want -in @(Failures $r $m $c)) "reject prior tests $change"
 }
 # Exercise the generic rule on every job, including the reusable release caller.
-foreach ($target in @('release.tests', 'release.prior-tests', 'release.package', 'release.publish', 'tests.rust-lint', 'tests.rust-test', 'tests.store-test', 'tests.ui', 'tests.packaging', 'codeql.analyze')) {
+foreach ($target in @('release.tests', 'release.prior-tests', 'release.package', 'release.publish', 'tests.rust-lint', 'tests.rust-test', 'tests.store-test', 'tests.ui', 'tests.packaging', 'tests.tests', 'codeql.analyze')) {
     $r = $releaseText | ConvertFrom-Json; $m = $manualText | ConvertFrom-Json; $c = $codeqlText | ConvertFrom-Json
     $workflow, $jobName = $target.Split('.')
     $job = @{ release = $r; tests = $m; codeql = $c }[$workflow].jobs.$jobName
