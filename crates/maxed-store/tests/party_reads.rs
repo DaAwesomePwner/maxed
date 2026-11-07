@@ -164,15 +164,16 @@ fn writer(path: &std::path::Path) -> StoreWriter {
 }
 
 fn submit(writer: &StoreWriter, sequence: &mut u64, event: EngineEvent) {
-    writer
-        .try_submit(EventEnvelope {
+    crate::common::submit(
+        writer,
+        EventEnvelope {
             fight_chart_omitted: false,
             stream_id: "party-reads".into(),
             sequence: Sequence(Timestamp(*sequence)),
             at: Timestamp(0),
             event,
-        })
-        .unwrap();
+        },
+    );
     *sequence += 1;
 }
 

@@ -19,21 +19,20 @@ fn check(reason: FightEnd) {
     )
     .unwrap();
     let send = |event| {
-        writer
-            .try_submit_with_alert_context(
-                event,
-                AlertContext {
-                    chat: None,
-                    live: true,
-                    preferences: AlertPreferences {
-                        personal_best: AlertLoudness::Banner,
-                        ..Default::default()
-                    },
-                    key_pop_dungeon: None,
-                    bag_window: None,
+        crate::common::submit_with_context_retrying(
+            &writer,
+            event,
+            AlertContext {
+                chat: None,
+                live: true,
+                preferences: AlertPreferences {
+                    personal_best: AlertLoudness::Banner,
+                    ..Default::default()
                 },
-            )
-            .unwrap();
+                key_pop_dungeon: None,
+                bag_window: None,
+            },
+        );
         writer.flush().unwrap();
     };
     let mut character = demo::demo_snapshot().character.unwrap();

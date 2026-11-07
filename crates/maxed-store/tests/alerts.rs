@@ -220,9 +220,11 @@ impl Harness {
         self.seq += 1;
         let mut ctx = context(AlertLoudness::Banner);
         ctx.bag_window = window;
-        self.writer
-            .try_submit_with_alert_context(common::envelope(self.seq, event), ctx)
-            .unwrap();
+        crate::common::submit_with_context_retrying(
+            &self.writer,
+            common::envelope(self.seq, event),
+            ctx,
+        );
         self.writer.flush().unwrap();
     }
     fn new() -> Self {
@@ -1076,9 +1078,11 @@ fn key_pop_occurrence_uses_instance_id_and_dungeon_filter() {
     let ctx: AlertContext = serde_json::from_value(value).unwrap();
     for _ in 0..2 {
         h.seq += 1;
-        h.writer
-            .try_submit_with_alert_context(common::envelope(h.seq, portal("portal-1")), ctx.clone())
-            .unwrap();
+        crate::common::submit_with_context_retrying(
+            &h.writer,
+            common::envelope(h.seq, portal("portal-1")),
+            ctx.clone(),
+        );
         h.writer.flush().unwrap();
     }
     assert_eq!(h.count("instance_events"), 1);
@@ -1094,9 +1098,11 @@ fn key_pop_occurrence_uses_instance_id_and_dungeon_filter() {
     value["preferences"]["key_pop_dungeons"] = serde_json::json!(["Lost Halls"]);
     let ctx: AlertContext = serde_json::from_value(value).unwrap();
     h.seq += 1;
-    h.writer
-        .try_submit_with_alert_context(common::envelope(h.seq, portal("portal-2")), ctx)
-        .unwrap();
+    crate::common::submit_with_context_retrying(
+        &h.writer,
+        common::envelope(h.seq, portal("portal-2")),
+        ctx,
+    );
     h.writer.flush().unwrap();
     assert_eq!(h.count("alert_occurrences"), 1);
     assert_eq!(h.logs().len(), 1);
@@ -1126,9 +1132,7 @@ fn send_timed(h: &mut Harness, event: EngineEvent, live: bool) {
     h.seq += 1;
     let mut ctx = context(AlertLoudness::Banner);
     ctx.live = live;
-    h.writer
-        .try_submit_with_alert_context(common::envelope(h.seq, event), ctx)
-        .unwrap();
+    crate::common::submit_with_context_retrying(&h.writer, common::envelope(h.seq, event), ctx);
     h.writer.flush().unwrap();
 }
 
@@ -1237,15 +1241,14 @@ fn run_time_pb_obeys_personal_best_loudness() {
         h.seq += 1;
         let mut ctx = context(level);
         ctx.live = true;
-        h.writer
-            .try_submit_with_alert_context(
-                common::envelope(
-                    h.seq,
-                    EngineEvent::RunEnded(timed_run("record", 86_000_000)),
-                ),
-                ctx,
-            )
-            .unwrap();
+        crate::common::submit_with_context_retrying(
+            &h.writer,
+            common::envelope(
+                h.seq,
+                EngineEvent::RunEnded(timed_run("record", 86_000_000)),
+            ),
+            ctx,
+        );
         h.writer.flush().unwrap();
         assert_eq!(h.logs().len(), usize::from(level != AlertLoudness::Off));
         if let Some(alert) = h.logs().first() {
@@ -1873,9 +1876,11 @@ fn default_key_pop_policy_keeps_events_without_alerts() {
         ..context(AlertLoudness::Banner)
     };
     h.seq += 1;
-    h.writer
-        .try_submit_with_alert_context(common::envelope(h.seq, portal("default-off")), ctx)
-        .unwrap();
+    crate::common::submit_with_context_retrying(
+        &h.writer,
+        common::envelope(h.seq, portal("default-off")),
+        ctx,
+    );
     h.writer.flush().unwrap();
     assert_eq!(h.count("instance_events"), 1);
     assert_eq!(h.count("alert_occurrences"), 0);

@@ -88,16 +88,28 @@ pub fn filter(sort: RunSort, limit: u16) -> RunFilter {
 
 /// Model the adapter's ownership-preserving backpressure behavior. Contention
 /// may legitimately return Full even before the queue reaches its capacity.
-pub fn submit(writer: &maxed_store::StoreWriter, mut event: EventEnvelope) {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+pub fn submit(writer: &maxed_store::StoreWriter, event: EventEnvelope) {
+    submit_with_context_retrying(writer, event, maxed_store::AlertContext::default());
+}
+
+/// Retry only transient backpressure, preserving the event and alert context.
+/// Do not flush here: callers own their fixture's commit boundaries.
+pub fn submit_with_context_retrying(
+    writer: &maxed_store::StoreWriter,
+    mut event: EventEnvelope,
+    context: maxed_store::AlertContext,
+) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
-        match writer.try_submit(event) {
+        match writer.try_submit_with_alert_context(event, context.clone()) {
             Ok(()) => return,
-            Err(maxed_store::SubmitError::Full(returned))
-                if std::time::Instant::now() < deadline =>
-            {
+            Err(maxed_store::SubmitError::Full(returned)) => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "synthetic submission timed out after 10s on Full: {returned:?}"
+                );
                 event = returned;
-                std::thread::yield_now();
+                std::thread::sleep(std::time::Duration::from_millis(1));
             }
             Err(error) => panic!("synthetic submission failed: {error:?}"),
         }

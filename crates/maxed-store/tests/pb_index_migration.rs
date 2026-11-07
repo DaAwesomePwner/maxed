@@ -170,15 +170,14 @@ fn v6_upgrade_adds_pb_indexes_without_rewriting_prior_checksums() {
     .into_iter()
     .enumerate()
     {
-        writer
-            .try_submit_with_alert_context(
-                common::envelope(events.len() as u64 + 1 + i as u64, event),
-                maxed_store::AlertContext {
-                    live: true,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
+        crate::common::submit_with_context_retrying(
+            &writer,
+            common::envelope(events.len() as u64 + 1 + i as u64, event),
+            maxed_store::AlertContext {
+                live: true,
+                ..Default::default()
+            },
+        );
     }
     writer.flush().unwrap();
     let db = Connection::open(&path).unwrap();

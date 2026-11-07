@@ -112,7 +112,23 @@ fn busy_batch_is_retained_retry_is_ordered_and_full_returns_event() {
     assert_eq!(writer.status().state, StoreState::Failed);
     assert_eq!(writer.status().queued, 1);
     assert!(writer.status().durable.is_none());
-    assert!(matches!(writer.try_submit(event.clone()),Err(SubmitError::Failed(e)) if e==event));
+    // Contention can return Full before the worker failure is checked.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut pending = event.clone();
+    let result = loop {
+        match writer.try_submit(pending) {
+            Err(SubmitError::Full(returned)) => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "waiting for Failed timed out after 10s on Full: {returned:?}"
+                );
+                pending = returned;
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            result => break result,
+        }
+    };
+    assert!(matches!(result,Err(SubmitError::Failed(e)) if e==event));
     lock.execute_batch("ROLLBACK").unwrap();
     writer.retry().unwrap();
     assert_eq!(writer.flush().unwrap().sequence.0 .0, 1);
