@@ -61,6 +61,7 @@ $script:expectedAggregator = @'
     "rust-test",
     "store-test",
     "ui",
+    "ui-vitest",
     "packaging"
   ],
   "if": "${{ !cancelled() }}",
@@ -77,9 +78,10 @@ $script:expectedAggregator = @'
         "RUST_TEST_RESULT": "${{ needs.rust-test.result }}",
         "STORE_TEST_RESULT": "${{ needs.store-test.result }}",
         "UI_RESULT": "${{ needs.ui.result }}",
+        "UI_VITEST_RESULT": "${{ needs.ui-vitest.result }}",
         "PACKAGING_RESULT": "${{ needs.packaging.result }}"
       },
-      "run": "failed=0\nprintf '%s: %s\\n' 'rust-lint' \"$RUST_LINT_RESULT\"\nif [[ \"$RUST_LINT_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'rust-test' \"$RUST_TEST_RESULT\"\nif [[ \"$RUST_TEST_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'store-test' \"$STORE_TEST_RESULT\"\nif [[ \"$STORE_TEST_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'ui' \"$UI_RESULT\"\nif [[ \"$UI_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'packaging' \"$PACKAGING_RESULT\"\nif [[ \"$PACKAGING_RESULT\" != success ]]; then failed=1; fi\nexit \"$failed\""
+      "run": "failed=0\nprintf '%s: %s\\n' 'rust-lint' \"$RUST_LINT_RESULT\"\nif [[ \"$RUST_LINT_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'rust-test' \"$RUST_TEST_RESULT\"\nif [[ \"$RUST_TEST_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'store-test' \"$STORE_TEST_RESULT\"\nif [[ \"$STORE_TEST_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'ui' \"$UI_RESULT\"\nif [[ \"$UI_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'ui-vitest' \"$UI_VITEST_RESULT\"\nif [[ \"$UI_VITEST_RESULT\" != success ]]; then failed=1; fi\nprintf '%s: %s\\n' 'packaging' \"$PACKAGING_RESULT\"\nif [[ \"$PACKAGING_RESULT\" != success ]]; then failed=1; fi\nexit \"$failed\""
     }
   ]
 }
@@ -121,7 +123,8 @@ $script:expectedJobs = @'
       {"uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": {"node-version": "22.16.0"}},
       {"name": "Restore Rust cache", "if": "runner.environment == 'github-hosted'", "uses": "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-rust-test-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}", "restore-keys": "${{ github.event_name == 'pull_request' && format('rust-rust-test-{0}-', runner.os) || '' }}"}},
       {"name": "Restore locked tools", "run": "rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }"},
-      {"name": "Rust tests", "env": {"TMP": "${{ runner.temp }}", "TEMP": "${{ runner.temp }}"}, "run": "cargo test --offline --locked --workspace --exclude maxed-store\nif ($LASTEXITCODE) { throw 'Rust tests failed.' }"},
+      {"name": "Install cargo-nextest", "run": "$ProgressPreference = 'SilentlyContinue'\n$zip = Join-Path $env:RUNNER_TEMP 'cargo-nextest-0.9.149.zip'\nInvoke-WebRequest -Uri 'https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.149/cargo-nextest-0.9.149-x86_64-pc-windows-msvc.zip' -OutFile $zip\n$hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash\nif ($hash -ne 'bf904b85c7c5c2a29c340053a8d9d8e8027ff0d55a2bf7cef7d23032f8166438') { throw \"cargo-nextest checksum mismatch: $hash\" }\n$bin = Join-Path ($env:CARGO_HOME ?? (Join-Path $HOME '.cargo')) 'bin'\nExpand-Archive -LiteralPath $zip -DestinationPath $bin -Force\ncargo nextest --version\nif ($LASTEXITCODE) { throw 'cargo-nextest install failed.' }"},
+      {"name": "Rust tests", "env": {"TMP": "${{ runner.temp }}", "TEMP": "${{ runner.temp }}"}, "run": "cargo nextest run --offline --locked --workspace --exclude maxed-store --no-fail-fast\nif ($LASTEXITCODE) { throw 'Rust tests failed.' }\ncargo test --offline --locked --workspace --exclude maxed-store --doc\nif ($LASTEXITCODE) { throw 'Rust doc tests failed.' }"},
       {"name": "Bindings freshness", "run": "git diff --exit-code HEAD -- app/ui/src/lib/bindings app/ui/tests/fixtures crates/maxed-types/tests/fixtures/p1-demo.json\nif ($LASTEXITCODE) { throw 'Generated bindings or fixtures changed; regenerate and commit them.' }\n$untracked = @(git ls-files --others -- app/ui/src/lib/bindings app/ui/tests/fixtures crates/maxed-types/tests/fixtures/p1-demo.json)\nif ($LASTEXITCODE) { throw 'Could not check untracked bindings or fixtures.' }\nif ($untracked.Count -gt 0) { throw ('Untracked generated bindings or fixtures: ' + ($untracked -join ', ')) }"},
       {"name": "Prune Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "run": "Remove-Item -LiteralPath target/debug/incremental -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem target/debug/deps, target/debug/.fingerprint, target/debug/build -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*maxed*' -or $_.Extension -in @('.exe', '.pdb') } | Remove-Item -Recurse -Force\nGet-ChildItem target/debug -File -ErrorAction SilentlyContinue | Remove-Item -Force"},
       {"name": "Save Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "uses": "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-rust-test-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}}
@@ -170,9 +173,33 @@ $script:expectedJobs = @'
       {"uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": {"node-version": "22.16.0"}},
       {"name": "Restore Rust cache", "if": "runner.environment == 'github-hosted'", "uses": "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-ui-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}", "restore-keys": "${{ github.event_name == 'pull_request' && format('rust-ui-{0}-', runner.os) || '' }}"}},
       {"name": "Restore locked tools", "run": "rustup toolchain install 1.99.0 --profile minimal\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }"},
-      {"name": "UI", "run": "foreach ($s in @('check', 'check:tests', 'test', 'test:ui', 'build')) { npm.cmd --prefix app/ui run $s; if ($LASTEXITCODE) { throw 'UI check failed.' } }"},
+      {"name": "UI", "run": "foreach ($s in @('check', 'check:tests', 'test', 'build')) { npm.cmd --prefix app/ui run $s; if ($LASTEXITCODE) { throw 'UI check failed.' } }\nnpm.cmd --prefix app/ui run test:ui -- tests/home-v2/smoke-replay.test.ts\nif ($LASTEXITCODE) { throw 'UI smoke replay failed.' }"},
       {"name": "Prune Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "run": "Remove-Item -LiteralPath target/debug/incremental -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem target/debug/deps, target/debug/.fingerprint, target/debug/build -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*maxed*' -or $_.Extension -in @('.exe', '.pdb') } | Remove-Item -Recurse -Force\nGet-ChildItem target/debug -File -ErrorAction SilentlyContinue | Remove-Item -Force"},
       {"name": "Save Rust cache", "if": "runner.environment == 'github-hosted' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'", "uses": "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "with": {"path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db\ntarget", "key": "rust-ui-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}"}}
+    ],
+    "permissions": {
+      "contents": "read"
+    }
+  },
+  "ui-vitest": {
+    "runs-on": "windows-2022",
+    "timeout-minutes": 90,
+    "strategy": {
+      "fail-fast": false,
+      "matrix": {
+        "shard": [1, 2]
+      }
+    },
+    "defaults": {
+      "run": {
+        "shell": "pwsh"
+      }
+    },
+    "steps": [
+      {"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": {"persist-credentials": false}},
+      {"uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": {"node-version": "22.16.0"}},
+      {"name": "Restore locked tools", "run": "npm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }"},
+      {"name": "UI tests", "env": {"UI_SHARD": "${{ matrix.shard }}"}, "run": "npm.cmd --prefix app/ui run test:ui -- --shard=\"$env:UI_SHARD/2\" --exclude tests/home-v2/smoke-replay.test.ts\nif ($LASTEXITCODE) { throw 'UI tests failed.' }"}
     ],
     "permissions": {
       "contents": "read"
@@ -249,7 +276,7 @@ $c = if ($v.Split('+')[0].Contains('-')) { 'beta' } else { 'stable' }
         (Keys $manual.on.workflow_call.inputs.release) -cne 'default,description,type' -or
         $manual.on.workflow_call.inputs.release.type -cne 'boolean' -or
         $manual.on.workflow_call.inputs.release.default -cne $false) { 'reusable_inputs' }
-    if ((Keys $manual.jobs) -cne 'packaging,rust-lint,rust-test,store-test,tests,ui') { 'tests_job_shape' }
+    if ((Keys $manual.jobs) -cne 'packaging,rust-lint,rust-test,store-test,tests,ui,ui-vitest') { 'tests_job_shape' }
     # Keep the branch-protection check named tests. Exact shape disallows name
     # overrides, checkout/tools, secrets, environments and failure suppression.
     if (($manual.jobs.tests | ConvertTo-Json -Depth 20 -Compress) -cne
@@ -544,6 +571,11 @@ foreach ($case in @(
     @{ want = 'rust_cache'; mutate = { param($r,$m) (& $stepNamed $m 'Restore Rust cache').with.'restore-keys' = 'rust-rust-lint-${{ runner.os }}-' } },
     @{ want = 'rust_cache'; mutate = { param($r,$m) (& $stepNamed $m 'Restore Rust cache').with.PSObject.Properties.Remove('restore-keys') } },
     @{ want = 'tests_job_shape'; mutate = { param($r,$m) $m.jobs.'store-test'.strategy.matrix.shard = @(1, 2) } },
+    @{ want = 'tests_job_shape'; mutate = { param($r,$m) $m.jobs.'ui-vitest'.strategy.matrix.shard = @(1) } },
+    @{ want = 'tests_commands'; mutate = { param($r,$m) $s = $m.jobs.'ui-vitest'.steps | Where-Object name -CEQ 'UI tests'; $s.run = $s.run.Replace(' --exclude tests/home-v2/smoke-replay.test.ts', '') } },
+    @{ want = 'tests_commands'; mutate = { param($r,$m) $s = $m.jobs.ui.steps | Where-Object name -CEQ 'UI'; $s.run = $s.run.Replace('npm.cmd --prefix app/ui run test:ui -- tests/home-v2/smoke-replay.test.ts', 'Write-Output skipped') } },
+    @{ want = 'tests_commands'; mutate = { param($r,$m) $s = $m.jobs.'rust-test'.steps | Where-Object name -CEQ 'Rust tests'; $s.run = $s.run.Replace(' --doc', ' --doc --no-run') } },
+    @{ want = 'tests_aggregator_needs'; mutate = { param($r,$m) $m.jobs.tests.needs = @($m.jobs.tests.needs | Where-Object { $_ -cne 'ui-vitest' }) } },
     @{ want = 'tests_job_shape'; mutate = { param($r,$m) $m.jobs.'store-test'.PSObject.Properties.Remove('strategy') } },
     @{ want = 'tests_step_shape'; mutate = { param($r,$m) ($m.jobs.'store-test'.steps | Where-Object name -CEQ 'Store tests').env.PSObject.Properties.Remove('TMP') } },
     @{ want = 'tests_step_shape'; mutate = { param($r,$m) ($m.jobs.'rust-test'.steps | Where-Object name -CEQ 'Rust tests').PSObject.Properties.Remove('env') } },
@@ -639,13 +671,13 @@ foreach ($case in @(
     & $case.mutate $r $m $c
     Assert ($case.want -in @(Failures $r $m $c)) "reject mutation $($case.want)"
 }
-foreach ($name in @('rust-lint','rust-test','store-test','ui','packaging')) {
+foreach ($name in @('rust-lint','rust-test','store-test','ui','ui-vitest','packaging')) {
     foreach ($change in @('permission','secret','drop')) {
         $r = $releaseText | ConvertFrom-Json; $m = $manualText | ConvertFrom-Json; $c = $codeqlText | ConvertFrom-Json
         switch ($change) {
             permission { $m.jobs.$name.permissions | Add-Member actions 'write' }
             secret { $m.jobs.$name | Add-Member secrets 'inherit' }
-            drop { $m.jobs.$name.steps = @($m.jobs.$name.steps | Where-Object { $_.name -notin @('Rust lint','Rust tests','Store tests','UI','Packaging and collectors') }) }
+            drop { $m.jobs.$name.steps = @($m.jobs.$name.steps | Where-Object { $_.name -notin @('Rust lint','Rust tests','Store tests','UI','UI tests','Packaging and collectors') }) }
         }
         $want = switch ($change) { permission { 'permissions' }; secret { 'secret_scope' }; drop { 'tests_step_order' } }
         Assert ($want -in @(Failures $r $m $c)) "reject $name $change"
@@ -662,7 +694,7 @@ foreach ($change in @('write','extra','failed')) {
     Assert ($want -in @(Failures $r $m $c)) "reject prior tests $change"
 }
 # Exercise the generic rule on every job, including the reusable release caller.
-foreach ($target in @('release.tests', 'release.prior-tests', 'release.package', 'release.publish', 'tests.rust-lint', 'tests.rust-test', 'tests.store-test', 'tests.ui', 'tests.packaging', 'tests.tests', 'codeql.analyze')) {
+foreach ($target in @('release.tests', 'release.prior-tests', 'release.package', 'release.publish', 'tests.rust-lint', 'tests.rust-test', 'tests.store-test', 'tests.ui', 'tests.ui-vitest', 'tests.packaging', 'tests.tests', 'codeql.analyze')) {
     $r = $releaseText | ConvertFrom-Json; $m = $manualText | ConvertFrom-Json; $c = $codeqlText | ConvertFrom-Json
     $workflow, $jobName = $target.Split('.')
     $job = @{ release = $r; tests = $m; codeql = $c }[$workflow].jobs.$jobName
@@ -670,7 +702,7 @@ foreach ($target in @('release.tests', 'release.prior-tests', 'release.package',
     Assert ('job_policy' -in @(Failures $r $m $c)) "reject $target job continue-on-error"
 }
 $baseline = $manualText | ConvertFrom-Json
-foreach ($jobName in @('rust-lint','rust-test','store-test','ui','packaging')) {
+foreach ($jobName in @('rust-lint','rust-test','store-test','ui','ui-vitest','packaging')) {
 for ($i = 0; $i -lt $baseline.jobs.$jobName.steps.Count; $i++) {
     foreach ($field in @('continue-on-error', 'if')) {
         $r = $releaseText | ConvertFrom-Json; $m = $manualText | ConvertFrom-Json; $c = $codeqlText | ConvertFrom-Json

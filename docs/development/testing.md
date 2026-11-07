@@ -105,15 +105,24 @@ paths are used. Pull requests whose `Cargo.lock` or toolchain differs from main
 fall back to the newest cache with the same job prefix; main, schedule and
 dispatch runs restore exact keys only, so the caches they save never carry stale
 artifacts from an older lockfile.
-Five parallel jobs run: `rust-lint` (fmt and both clippy checks), `rust-test`
+Six parallel jobs run: `rust-lint` (fmt and both clippy checks), `rust-test`
 (workspace tests excluding maxed-store, then bindings freshness), `store-test`
-(maxed-store tests), `ui` (all five UI scripts), and `packaging` (offline memory
-tooling and packaging/collector checks). Each Rust job has its own cache key.
-`store-test` runs as three matrix shards using `cargo nextest run --partition
-count:N/3`, because its SQLite integration suite dominates wall time. The job
-downloads a pinned `cargo-nextest` release and checks its SHA-256 before use.
-Shard 1 also runs the crate's doctests, which nextest does not run, and is the
-only shard that saves the cache. The store and workspace test steps point
+(maxed-store tests), `ui` (svelte-check, node tests, build and the Vitest
+smoke-replay file), `ui-vitest` (every other Vitest file) and `packaging`
+(offline memory tooling and packaging/collector checks). Each Rust job has its
+own cache key.
+`rust-test` and `store-test` download a pinned `cargo-nextest` release and check
+its SHA-256 before use. nextest runs each test in its own process and runs test
+binaries concurrently; doctests, which nextest does not run, still run through
+`cargo test --doc`. `store-test` runs as three matrix shards using
+`cargo nextest run --partition count:N/3`, because its SQLite integration suite
+dominates wall time. Shard 1 also runs the crate's doctests and is the only
+shard that saves the cache. `ui-vitest` runs as two Node-only shards
+(`vitest --shard=N/2`) that exclude `tests/home-v2/smoke-replay.test.ts`; that
+file shells out to `cargo`, so it runs in the `ui` job with the Rust toolchain.
+Store fixtures that seed hundreds of rows or install historical schemas wrap the
+writes in one transaction, as production migrations do; autocommitting each
+statement syncs the disk once per statement, which is slow on hosted Windows. The store and workspace test steps point
 `TMP`/`TEMP` at `runner.temp`, which is on the runner's work disk (`D:`), so
 temporary SQLite databases avoid the slower OS disk.
 The `tests` aggregator on `ubuntu-latest` is the single required check for this
@@ -123,7 +132,7 @@ check name. It needs every test job and runs unless cancelled, failing unless
 all results are `success`. It checks results without checkout or tools.
 An aggregator failure also fails a reusable workflow call, so release packaging
 remains blocked by `needs.tests.result == 'success'` when tests run.
-The UI job also installs the pinned minimal Rust toolchain and fetches locked
+The `ui` job also installs the pinned minimal Rust toolchain and fetches locked
 Cargo dependencies before its offline CLI smoke-replay test, using a separate
 `rust-ui-` cache with the same restore, prune and save conditions.
 Generated bindings and fixtures must remain current. Release tags reuse a
