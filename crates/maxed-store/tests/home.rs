@@ -507,6 +507,7 @@ fn fame_sampling_keeps_endpoints_exact_delta_and_character_identity() {
         [],
     )
     .unwrap();
+    db.execute_batch("BEGIN").unwrap();
     for i in 1..=301 {
         let character = if i % 2 == 0 {
             "second"
@@ -519,6 +520,7 @@ fn fame_sampling_keeps_endpoints_exact_delta_and_character_identity() {
         )
         .unwrap();
     }
+    db.execute_batch("COMMIT").unwrap();
     let reader = open_reader(&path).unwrap();
     let home = reader.home_summary(today(1, 302)).unwrap();
     assert_eq!(home.fame.len(), 301);
@@ -949,6 +951,7 @@ fn fame_sampling_preserves_short_character_segment_and_all_boundaries_under_cap(
     other.id = "B".into();
     add(&mut db, vec![EngineEvent::CharacterUpdated(other)]);
     db.execute("DELETE FROM fame_samples", []).unwrap();
+    db.execute_batch("BEGIN").unwrap();
     for i in 1..=600 {
         let character = if (302..=303).contains(&i) {
             "B"
@@ -961,6 +964,7 @@ fn fame_sampling_preserves_short_character_segment_and_all_boundaries_under_cap(
         )
         .unwrap();
     }
+    db.execute_batch("COMMIT").unwrap();
     let home = open_reader(&path).unwrap().home_summary(session()).unwrap();
     assert!(home.fame.len() <= 120);
     assert!(home.fame_sampled);
@@ -984,6 +988,7 @@ fn fame_endpoint_overflow_drops_oldest_whole_segments() {
     add(&mut db, vec![EngineEvent::CharacterUpdated(other)]);
     db.execute("DELETE FROM fame_samples", []).unwrap();
     // 300 segments of three points: 600 mandatory endpoints. Keep newest 256.
+    db.execute_batch("BEGIN").unwrap();
     for i in 0..900 {
         let character = if i / 3 % 2 == 0 {
             "B"
@@ -996,6 +1001,7 @@ fn fame_endpoint_overflow_drops_oldest_whole_segments() {
         )
         .unwrap();
     }
+    db.execute_batch("COMMIT").unwrap();
     let home = open_reader(&path).unwrap().home_summary(session()).unwrap();
     assert_eq!(home.fame.len(), 512);
     assert_eq!(home.fame.first().unwrap().at, Timestamp(132));
@@ -1022,6 +1028,7 @@ fn fame_endpoint_overflow_drops_oldest_whole_segments() {
 fn single_character_fame_sampling_keeps_exact_budget_and_endpoints() {
     let (_dir, path, db) = database();
     db.execute("DELETE FROM fame_samples", []).unwrap();
+    db.execute_batch("BEGIN").unwrap();
     for i in 1..=600 {
         db.execute(
             "INSERT INTO fame_samples VALUES('single',?1,'demo-character',?1,?1,'demo-session')",
@@ -1029,6 +1036,7 @@ fn single_character_fame_sampling_keeps_exact_budget_and_endpoints() {
         )
         .unwrap();
     }
+    db.execute_batch("COMMIT").unwrap();
     let home = open_reader(&path).unwrap().home_summary(session()).unwrap();
     assert_eq!(home.fame.len(), 120);
     assert!(home.fame_sampled);
