@@ -98,7 +98,9 @@ fn history_commands_match_durable_live_story_after_stop() {
         history_ready(tauri::async_runtime::block_on(
             h.runtime.home_summary(scope.clone())
         )),
-        reader.home_summary(scope).unwrap(),
+        reader
+            .home_summary(scope, reader.current_account().unwrap().as_deref())
+            .unwrap(),
     );
     assert_eq!(h.runtime.store_status(), before);
 }

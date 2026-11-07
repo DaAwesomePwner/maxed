@@ -10,12 +10,13 @@ impl StoreReader {
     pub fn home_dungeon_streak(
         &self,
         request: HomeDungeonStreakRequest,
+        account: Option<&str>,
     ) -> Result<HomeDungeonStreak, StoreError> {
         identifier(&request.dungeon)?;
         let (ended, last, dry, average): (i64, Option<i64>, Option<i64>, Option<f64>) = self
             .conn
             .prepare_cached(include_str!("home_streak.sql"))?
-            .query_row([&request.dungeon], |row| {
+            .query_row(rusqlite::params![request.dungeon, account], |row| {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
             })?;
         Ok(HomeDungeonStreak {

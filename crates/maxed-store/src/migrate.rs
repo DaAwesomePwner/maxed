@@ -4,8 +4,10 @@ use sha2::{Digest, Sha256};
 use std::{marker::PhantomData, path::Path, rc::Rc, time::Duration};
 
 /// Latest schema supported by this build, matching SQLite's `user_version`.
-pub const SCHEMA_VERSION: i64 = 17;
+pub const SCHEMA_VERSION: i64 = 18;
 pub(crate) const BUSY_TIMEOUT: Duration = Duration::from_millis(250);
+
+const ACCOUNT_READS: &str = include_str!("../migrations/018_account_reads.sql");
 
 const ACCOUNTS: &str = include_str!("../migrations/017_accounts.sql");
 
@@ -99,6 +101,7 @@ pub(crate) fn check_schema(conn: &Connection) -> Result<i64, StoreError> {
             LOOT_STATS_INDEXES,
             MAINTENANCE_RECEIPTS,
             ACCOUNTS,
+            ACCOUNT_READS,
         ]
         .iter()
         .take(version as usize)
@@ -281,6 +284,14 @@ fn migrate_script(conn: &mut Connection, script: &str) -> Result<(), StoreError>
         tx.execute(
             "INSERT INTO schema_migrations VALUES(17,?1)",
             [digest(ACCOUNTS.as_bytes())],
+        )?;
+    }
+    if version < 18 {
+        tx.execute_batch(ACCOUNT_READS)
+            .map_err(|_| StoreError::Migration)?;
+        tx.execute(
+            "INSERT INTO schema_migrations VALUES(18,?1)",
+            [digest(ACCOUNT_READS.as_bytes())],
         )?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;

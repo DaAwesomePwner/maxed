@@ -24,12 +24,20 @@ pub(crate) fn run_records(
     run: &RunFacts,
     chase_types: &[u16],
 ) -> Result<RunRecap, StoreError> {
+    let account: Option<String> = conn.query_row(
+        "SELECT (SELECT ac.account_id FROM runs owner_run JOIN characters ac ON ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=owner_run.character_id),owner_run.character_id) WHERE owner_run.id=?1)",
+        [run_id],
+        |row| row.get(0),
+    )?;
+    let known = account.is_some();
     let (clears, previous_best, dry_runs, had_previous_white): (i64, Option<i64>, i64, bool) = conn
         .prepare_cached(include_str!("records_runs.sql"))?
         .query_row(params![run_id, run.dungeon, run.started], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })?;
-    let clear_number = run.cleared.then(|| count(clears + 1)).transpose()?;
+    let clear_number = (known && run.cleared)
+        .then(|| count(clears + 1))
+        .transpose()?;
     let pb_clear = run
         .clear_micros
         .map(unsigned)
@@ -41,8 +49,7 @@ pub(crate) fn run_records(
                 previous_best_micros: previous,
             })
         });
-    let dry_streak_end = run
-        .has_white
+    let dry_streak_end = (known && run.has_white)
         .then(|| -> Result<_, StoreError> {
             Ok(DryStreakEnd {
                 runs: count(dry_runs)?,
@@ -58,7 +65,7 @@ pub(crate) fn run_records(
         }
         _ => {}
     }
-    if run.has_white && !had_previous_white {
+    if known && run.has_white && !had_previous_white {
         milestones.push(RecapMilestone::FirstWhite);
     }
     if let Some(items) = new_items(conn, run_id, chase_types)? {
@@ -67,7 +74,7 @@ pub(crate) fn run_records(
     Ok(RunRecap {
         run_id: run_id.into(),
         clear_number,
-        in_a_row: 1,
+        in_a_row: u32::from(known),
         chain: None,
         pb_clear,
         dry_streak_end,

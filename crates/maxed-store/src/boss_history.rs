@@ -55,6 +55,7 @@ fn read_rows<T>(
     conn: &Connection,
     request: BossHistoryRequest,
     lean: bool,
+    account: Option<&str>,
     mut decode: impl FnMut(&Row<'_>) -> Result<T, StoreError>,
 ) -> Result<(Vec<T>, bool), StoreError> {
     let filter = StatsFilter {
@@ -77,7 +78,7 @@ fn read_rows<T>(
     // Without a target predicate, ?3 is the last slot; the earlier numbered
     // slots remain valid even in the all-time variant.
     let parameter_count = statement.parameter_count();
-    let bindings = params![lo, hi, character, targets];
+    let bindings = params![lo, hi, character, targets, account];
     let mut query = statement.query(&bindings[..parameter_count])?;
     let mut rows = Vec::new();
     while let Some(row) = query.next()? {
@@ -90,7 +91,7 @@ fn read_rows<T>(
 
 impl StoreReader {
     pub fn boss_history(&self, request: BossHistoryRequest) -> Result<BossHistory, StoreError> {
-        let (rows, truncated) = read_rows(&self.conn, request, false, |row| {
+        let (rows, truncated) = read_rows(&self.conn, request, false, None, |row| {
             let mut durations: Vec<u64> = serde_json::from_str(&row.get::<_, String>(8)?)?;
             Ok(BossHistoryRow {
                 target_type: row.get(0)?,
@@ -111,8 +112,9 @@ impl StoreReader {
     pub fn home_boss_baselines(
         &self,
         request: BossHistoryRequest,
+        account: Option<&str>,
     ) -> Result<HomeBossBaselines, StoreError> {
-        let (rows, truncated) = read_rows(&self.conn, request, true, |row| {
+        let (rows, truncated) = read_rows(&self.conn, request, true, account, |row| {
             let mut durations: Vec<u64> = serde_json::from_str(&row.get::<_, String>(4)?)?;
             Ok(HomeBossBaseline {
                 target_type: row.get(0)?,

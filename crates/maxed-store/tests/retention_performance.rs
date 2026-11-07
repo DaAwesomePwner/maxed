@@ -1,12 +1,13 @@
 //! Synthetic, opt-in Phase 1 evidence. Never opens installed history.
 mod common;
 
+use crate::common::account_scope_fixture::ACCOUNT;
 use common::installed_schema;
 use maxed_store::{
     apply_batch,
     backup::{BackupEnvironment, BackupStore},
     maintenance::{Control, Phase, Step, StoppedMaintenance},
-    migrate, open_reader, start_writer, WriterConfig,
+    migrate, start_writer, WriterConfig,
 };
 use maxed_types::*;
 use rusqlite::{params, types::ValueRef, Connection};
@@ -218,7 +219,7 @@ fn queries(path: &Path, last: u64) -> Vec<[u8; 32]> {
     fn hash(value: impl serde::Serialize) -> [u8; 32] {
         Sha256::digest(serde_json::to_vec(&value).unwrap()).into()
     }
-    let reader = open_reader(path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(path).unwrap();
     let story = reader.get_run("demo-run").unwrap().unwrap();
     let fight = reader.get_fight(&story.fights[0].id).unwrap().unwrap();
     let session = story.run.session_id.clone();
@@ -233,7 +234,7 @@ fn queries(path: &Path, last: u64) -> Vec<[u8; 32]> {
                 .list_runs(common::filter(RunSort::Newest, 100))
                 .unwrap(),
         ),
-        hash(reader.dungeon_bests().unwrap()),
+        hash(reader.dungeon_bests(Some(ACCOUNT)).unwrap()),
         hash(&fight),
         hash(reader.get_fight("scale-fight-000001").unwrap().unwrap()),
         hash(
@@ -274,14 +275,17 @@ fn queries(path: &Path, last: u64) -> Vec<[u8; 32]> {
         ),
         hash(
             reader
-                .dungeon_profile(DungeonProfileRequest {
-                    dungeon: story.run.dungeon.clone(),
-                    character_id: None,
-                    range: TimeRange {
-                        start: Timestamp(0),
-                        end: Timestamp(86_400_000_000),
+                .dungeon_profile(
+                    DungeonProfileRequest {
+                        dungeon: story.run.dungeon.clone(),
+                        character_id: None,
+                        range: TimeRange {
+                            start: Timestamp(0),
+                            end: Timestamp(86_400_000_000),
+                        },
                     },
-                })
+                    Some(ACCOUNT),
+                )
                 .unwrap(),
         ),
     ];
@@ -298,9 +302,19 @@ fn queries(path: &Path, last: u64) -> Vec<[u8; 32]> {
             },
         },
     ] {
-        result.push(hash(reader.home_summary(scope.clone()).unwrap()));
-        result.push(hash(reader.home_hud(scope.clone(), &[], &[]).unwrap()));
-        result.push(hash(reader.scope_loot(scope, None, 100, &[]).unwrap()));
+        result.push(hash(
+            reader.home_summary(scope.clone(), Some(ACCOUNT)).unwrap(),
+        ));
+        result.push(hash(
+            reader
+                .home_hud(scope.clone(), Some(ACCOUNT), &[], &[])
+                .unwrap(),
+        ));
+        result.push(hash(
+            reader
+                .scope_loot(scope, Some(ACCOUNT), None, 100, &[])
+                .unwrap(),
+        ));
     }
     result
 }

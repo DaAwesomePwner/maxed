@@ -15,6 +15,7 @@ impl StoreReader {
     pub fn home_hud(
         &self,
         scope: HomeScope,
+        account: Option<&str>,
         tiers: &[(u16, Option<String>)],
         potions: &[(u16, PotionStat)],
     ) -> Result<HomeHud, StoreError> {
@@ -36,7 +37,7 @@ impl StoreReader {
         let potions = serde_json::to_string(&potions.into_iter().collect::<Vec<_>>())?;
         let (json, fame, elapsed): (String, Option<i64>, i64) = self.conn.query_row(
             HOME_HUD_SQL.as_str(),
-            params![kind, id, lo, hi, tiers, potions],
+            params![kind, id, lo, hi, account, tiers, potions],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
         let mut hud: HomeHud = serde_json::from_str(&json)?;

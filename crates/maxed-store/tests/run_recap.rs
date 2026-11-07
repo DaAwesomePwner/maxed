@@ -1,5 +1,5 @@
 //! Synthetic history: stable recap ownership and the existing PB evidence rule.
-use maxed_store::{open_reader, StoreError};
+use maxed_store::StoreError;
 use maxed_types::*;
 use rusqlite::{params, Connection};
 
@@ -99,7 +99,7 @@ impl Fixture {
     }
 
     fn recap(&self, id: &str, chase: &[u16]) -> RunRecap {
-        open_reader(&self.dir.path().join("recap.sqlite"))
+        crate::common::account_scope_fixture::open_reader(&self.dir.path().join("recap.sqlite"))
             .unwrap()
             .run_recap(&RunRecapRequest { run_id: id.into() }, chase)
             .unwrap()
@@ -522,7 +522,7 @@ fn repeat_ordinal_uses_visits_and_defaults_when_missing_or_capped() {
 fn unknown_run_is_none() {
     let t = Fixture::new();
     assert_eq!(
-        open_reader(&t.dir.path().join("recap.sqlite"))
+        crate::common::account_scope_fixture::open_reader(&t.dir.path().join("recap.sqlite"))
             .unwrap()
             .run_recap(
                 &RunRecapRequest {
@@ -540,7 +540,7 @@ fn run_recap_rejects_invalid_id() {
     let t = Fixture::new();
     for run_id in [String::new(), "x".repeat(257), "bad\0id".into()] {
         assert!(matches!(
-            open_reader(&t.dir.path().join("recap.sqlite"))
+            crate::common::account_scope_fixture::open_reader(&t.dir.path().join("recap.sqlite"))
                 .unwrap()
                 .run_recap(&RunRecapRequest { run_id }, &[]),
             Err(StoreError::InvalidEvent)

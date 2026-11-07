@@ -13,6 +13,7 @@ use std::collections::HashSet;
 
 struct VisitFacts {
     session: String,
+    account: Option<String>,
     character: Option<String>,
     map: String,
     instance: Option<String>,
@@ -38,6 +39,7 @@ impl StoreReader {
             .query_row([&request.visit_id], |row| {
                 Ok(VisitFacts {
                     session: row.get(0)?,
+                    account: row.get(7)?,
                     character: row.get(1)?,
                     map: row.get(2)?,
                     instance: row.get(3)?,
@@ -56,13 +58,16 @@ impl StoreReader {
         // Period collection is independent of the bounded journey inference.
         let periods = if let Some(key) = &visit.instance {
             tx.prepare_cached(include_str!("visit_periods.sql"))?
-                .query_map(params![visit.session, key], |row| {
-                    Ok(VisitPeriod {
-                        visit_id: row.get(0)?,
-                        started: timestamp(row.get(1)?)?,
-                        ended: row.get::<_, Option<i64>>(2)?.map(timestamp).transpose()?,
-                    })
-                })?
+                .query_map(
+                    params![visit.session, key, visit.account, request.visit_id],
+                    |row| {
+                        Ok(VisitPeriod {
+                            visit_id: row.get(0)?,
+                            started: timestamp(row.get(1)?)?,
+                            ended: row.get::<_, Option<i64>>(2)?.map(timestamp).transpose()?,
+                        })
+                    },
+                )?
                 .collect::<Result<Vec<_>, _>>()?
         } else {
             vec![visit.period]
@@ -95,6 +100,14 @@ impl StoreReader {
             let Some(castle) = castle else {
                 continue;
             };
+            let castle_account: Option<String> = tx.query_row(
+                "SELECT (SELECT ac.account_id FROM runs owner_run JOIN characters ac ON ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=owner_run.character_id),owner_run.character_id) WHERE owner_run.id=?1)",
+                [&castle],
+                |row| row.get(0),
+            )?;
+            if visit.account.is_none() || castle_account != visit.account {
+                continue;
+            }
             if let Some(name) = journey::castle_realm_name(&tx, Some(&castle))? {
                 title = name;
                 break;
@@ -135,14 +148,14 @@ impl StoreReader {
         };
         bounded(&recap, MAX_RUN_STORY_BYTES)?;
         let mut bytes = serde_json::to_vec(&recap)?.len();
-        let args = params![recap.session_id, scope];
+        let args = params![recap.session_id, scope, visit.account];
         recap.fights = fight_summaries(&tx, include_str!("visit_fights.sql"), args, &mut bytes)?;
         (recap.drops, recap.drops_limited) =
             run_screen::load_details(&tx, include_str!("visit_drops.sql"), args, &mut bytes)?;
         (recap.announcements, recap.announcements_limited) = run_screen::load_events(
             &tx,
             include_str!("visit_announcements.sql"),
-            args,
+            &args[..2],
             &mut bytes,
         )?;
         (recap.boss_fights, recap.boss_fights_limited) =
@@ -150,10 +163,10 @@ impl StoreReader {
         recap.fame_delta = tx
             .prepare_cached(include_str!("visit_fame.sql"))?
             .query_row(
-                params![recap.session_id, scope, recap.character_id],
+                params![recap.session_id, scope, recap.character_id, visit.account],
                 |row| row.get(0),
             )?;
-        recap.best_dps = records::best_dps(&tx, include_str!("visit_records.sql"), args)?;
+        recap.best_dps = records::best_dps(&tx, include_str!("visit_account_records.sql"), args)?;
         let recap = bound_visit(recap)?;
         tx.commit()?;
         Ok(Some(recap))

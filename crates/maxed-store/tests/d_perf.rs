@@ -1,9 +1,9 @@
 //! Synthetic release gates. They need same-machine baseline inputs via
 //! environment variables; see docs/release/performance.md#synthetic-storeengine-gates.
+use crate::common::account_scope_fixture::ACCOUNT;
 use maxed_store::{apply_batch, migrate, open_reader, StoreError, StoreReader};
 use maxed_types::*;
 use std::time::Duration;
-#[path = "common/receipt_support.rs"]
 mod common;
 #[path = "common/d_legacy.rs"]
 mod d_legacy;
@@ -40,11 +40,15 @@ fn home_history_thirty_warm_reads() {
             reader.boss_history(request.clone()).unwrap()
         });
         report_home_read(&format!("home_baselines/90d/{targets}"), || {
-            reader.home_boss_baselines(request.clone()).unwrap()
+            reader
+                .home_boss_baselines(request.clone(), Some(ACCOUNT))
+                .unwrap()
         });
     }
     report_home_read("dungeon_profile/90d", || {
-        reader.dungeon_profile(fixture.profile_request()).unwrap()
+        reader
+            .dungeon_profile(fixture.profile_request(), Some(ACCOUNT))
+            .unwrap()
     });
     report_home_read("boss_history/all-time", || {
         reader
@@ -78,8 +82,8 @@ fn report_profile_materialization(fixture: &home_workload::Fixture) {
     // Controlled alternative: materialize valid full fight JSON before extracting
     // the same scalar facts. Keep this benchmark tied to the production scopes.
     for (name, source) in [
-        ("learning", "FROM cleared_runs cleared CROSS JOIN fights ON fights.run_id=cleared.id\n  WHERE json_valid(fights.json)"),
-        ("performance", "FROM fights\n  WHERE fights.started>=?1 AND fights.started<?2\n    AND fights.ended IS NOT NULL AND fights.local_dps IS NOT NULL AND json_valid(fights.json)"),
+        ("learning", "FROM cleared_runs cleared CROSS JOIN fights ON fights.run_id=cleared.id\n  WHERE (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))))=?5 AND json_valid(fights.json)"),
+        ("performance", "FROM fights\n  WHERE (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))))=?5 AND fights.started>=?1 AND fights.started<?2\n    AND fights.ended IS NOT NULL AND fights.local_dps IS NOT NULL AND json_valid(fights.json)"),
     ] {
         assert_eq!(full_json.matches(source).count(), 1, "review {name} materialization benchmark when the scope changes");
         full_json = full_json.replace(source, &format!("FROM {name}_valid fights"))
@@ -96,7 +100,8 @@ fn report_profile_materialization(fixture: &home_workload::Fixture) {
                     request.range.start.0 as i64,
                     request.range.end.0 as i64,
                     request.character_id,
-                    request.dungeon
+                    request.dungeon,
+                    ACCOUNT
                 ],
                 |r| {
                     let mut offsets: Vec<u64> =
@@ -236,7 +241,7 @@ fn report_upgraded_story(shape: runs_workload::Shape, dense: bool) {
         0
     );
     let start = std::time::Instant::now();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     eprintln!("upgraded {} reader open: {:?}", shape.name, start.elapsed());
     let start = std::time::Instant::now();
     let first = reader.get_run(runs_workload::RUN).unwrap().unwrap();
@@ -307,19 +312,19 @@ fn dungeon_stats_and_story_totals_thirty_warm_reads() {
             ))
             .unwrap();
         let details = plan
-            .query_map(rusqlite::params![kind, session, start, end], |r| {
+            .query_map(rusqlite::params![kind, session, start, end, ACCOUNT], |r| {
                 r.get::<_, String>(3)
             })
             .unwrap()
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         eprintln!("Home scope {kind} plan:\n{}", details.join("\n"));
-        let summary = reader.home_summary(scope.clone()).unwrap();
+        let summary = reader.home_summary(scope.clone(), Some(ACCOUNT)).unwrap();
         assert_eq!(summary.runs, 10_000);
         assert_eq!(summary.dungeon_stats.unwrap().len(), 20);
         assert!(
             d_workload::warm(&format!("Home dungeon stats scope={kind}"), || reader
-                .home_summary(scope.clone())
+                .home_summary(scope.clone(), Some(ACCOUNT))
                 .unwrap())
                 < Duration::from_millis(50)
         );
@@ -331,7 +336,7 @@ fn dungeon_stats_and_story_totals_thirty_warm_reads() {
         let fixture = runs_workload::build(shape);
         let reader = fixture.validate();
         let start = std::time::Instant::now();
-        let setup = open_reader(&fixture.path).unwrap();
+        let setup = crate::common::account_scope_fixture::open_reader(&fixture.path).unwrap();
         eprintln!(
             "{} reader open/config/schema: {:?}",
             shape.name,
@@ -453,7 +458,7 @@ fn worst_run_repeated_fight_updates_do_not_grow_with_history() {
         fights: EARLY,
         ..runs_workload::WORST
     });
-    let reader = open_reader(&fixture.path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&fixture.path).unwrap();
     let mut updated = reader.get_fight(runs_workload::FIGHT).unwrap().unwrap();
     let small = reader.get_fight("fight-00010").unwrap().unwrap();
     assert_eq!(updated.players.len(), 85);
@@ -497,7 +502,7 @@ fn worst_run_repeated_fight_updates_do_not_grow_with_history() {
                 envelope(&mut sequence, fight)
             })
             .collect();
-        apply_batch(&mut fixture.db, &events).unwrap();
+        maxed_store::apply_batch(&mut fixture.db, &events).unwrap();
     }
     assert_eq!(
         fixture
@@ -539,7 +544,7 @@ fn worst_run_repeated_fight_updates_do_not_grow_with_history() {
             };
             let event = envelope(sequence, updated.clone());
             let start = std::time::Instant::now();
-            apply_batch(db, &[event]).unwrap();
+            maxed_store::apply_batch(db, &[event]).unwrap();
             if i >= 20 {
                 samples.push(start.elapsed());
             }

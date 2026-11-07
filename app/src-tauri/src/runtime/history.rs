@@ -949,7 +949,16 @@ impl CaptureRuntime {
                         next: None,
                         total_bags: 0,
                     },
-                    |reader| reader.scope_loot(scope, cursor, limit, &tiers),
+                    |reader| {
+                        reader.scope_loot(
+                            scope,
+                            // TODO(#4 T4C): native account lifecycle
+                            reader.current_account()?.as_deref(),
+                            cursor,
+                            limit,
+                            &tiers,
+                        )
+                    },
                 )
             },
         )
@@ -961,7 +970,14 @@ impl CaptureRuntime {
         self.submit_history(
             HistoryCaller::MainWindow,
             HistoryKey::DungeonBests,
-            move |job| runtime.read_history(job, Vec::new, |reader| reader.dungeon_bests()),
+            move |job| {
+                runtime.read_history(job, Vec::new, |reader| {
+                    reader.dungeon_bests(
+                        // TODO(#4 T4C): native account lifecycle
+                        reader.current_account()?.as_deref(),
+                    )
+                })
+            },
         )
         .await
     }
@@ -1049,7 +1065,12 @@ impl CaptureRuntime {
             HistoryCaller::MainWindow,
             HistoryKey::Home(scope.clone()),
             move |job| {
-                runtime.read_history(job, empty_history, |reader| reader.home_summary(scope))
+                runtime.read_history(job, empty_history, |reader| {
+                    reader.home_summary(
+                        scope, // TODO(#4 T4C): native account lifecycle
+                        reader.current_account()?.as_deref(),
+                    )
+                })
             },
         )
         .await

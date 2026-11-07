@@ -82,7 +82,12 @@ fn replay_home_fixture(name: &str) -> (Vec<LiveSnapshot>, HomeSummary) {
     let path = dir.path().join("demo.sqlite3");
     let reopened = open_reader(&path).expect("reopened database");
     assert_eq!(
-        reopened.home_summary(session(&final_snapshot)).unwrap(),
+        reopened
+            .home_summary(
+                session(&final_snapshot),
+                reopened.current_account().unwrap().as_deref()
+            )
+            .unwrap(),
         home
     );
     if name == "zero-duration" {
@@ -269,7 +274,9 @@ fn late_revision_updates_one_recent_run() {
     adapter.publish_snapshot();
     let scope = session(&views.snapshot.lock().unwrap());
     let reader = open_reader(&path).unwrap();
-    let before = reader.home_summary(scope.clone()).unwrap();
+    let before = reader
+        .home_summary(scope.clone(), reader.current_account().unwrap().as_deref())
+        .unwrap();
     assert_eq!((before.runs, before.clears), (1, 0));
     assert_eq!(before.recent_runs[0].outcome, Some(Outcome::Left));
     // Completion index 65 is bit 41. This is decoded packet injection, not a
@@ -311,7 +318,9 @@ fn late_revision_updates_one_recent_run() {
         .finish(Timestamp(OFFSET + 12_030_000), FightEnd::CaptureStopped)
         .unwrap();
     adapter.close().unwrap();
-    let after = reader.home_summary(scope.clone()).unwrap();
+    let after = reader
+        .home_summary(scope.clone(), reader.current_account().unwrap().as_deref())
+        .unwrap();
     assert_eq!((after.runs, after.clears), (1, 1));
     assert_eq!(after.recent_runs.len(), 1);
     assert_eq!(after.recent_runs[0].id, before.recent_runs[0].id);
@@ -322,7 +331,17 @@ fn late_revision_updates_one_recent_run() {
     maxed_store::apply_batch(&mut db, &events.lock().unwrap()).unwrap();
     drop(db);
     assert_eq!(
-        open_reader(&path).unwrap().home_summary(scope).unwrap(),
+        open_reader(&path)
+            .unwrap()
+            .home_summary(
+                scope,
+                open_reader(&path)
+                    .unwrap()
+                    .current_account()
+                    .unwrap()
+                    .as_deref()
+            )
+            .unwrap(),
         after
     );
 }
@@ -377,19 +396,35 @@ fn typed_death_after_clear_and_consecutive_sessions_keep_separate_facts() {
     .collect();
     maxed_store::apply_batch(&mut db, &events).unwrap();
     let reader = open_reader(&path).unwrap();
-    let first = reader.home_summary(session(&snapshot)).unwrap();
+    let first = reader
+        .home_summary(
+            session(&snapshot),
+            reader.current_account().unwrap().as_deref(),
+        )
+        .unwrap();
     assert_eq!((first.runs, first.clears, first.deaths), (1, 1, 1));
     assert!(first.recent_runs[0].completed_at.is_some());
     assert!(first.recent_runs[0].died_at.is_some());
     let second = reader
-        .home_summary(HomeScope::Session {
-            id: next_session.id,
-        })
+        .home_summary(
+            HomeScope::Session {
+                id: next_session.id,
+            },
+            reader.current_account().unwrap().as_deref(),
+        )
         .unwrap();
     assert_eq!((second.runs, second.clears, second.deaths), (1, 0, 0));
     assert_eq!(second.recent_runs[0].id, next_run.id);
     maxed_store::apply_batch(&mut db, &events).unwrap();
-    assert_eq!(reader.home_summary(session(&snapshot)).unwrap(), first);
+    assert_eq!(
+        reader
+            .home_summary(
+                session(&snapshot),
+                reader.current_account().unwrap().as_deref()
+            )
+            .unwrap(),
+        first
+    );
 }
 
 #[test]
@@ -440,13 +475,30 @@ fn run_end_before_durability_retry_converges_to_one_summary() {
     assert!(status.durable.unwrap().0 .0 < snapshot.sequence.0 .0);
     let before = open_reader(&path)
         .unwrap()
-        .home_summary(scope.clone())
+        .home_summary(
+            scope.clone(),
+            open_reader(&path)
+                .unwrap()
+                .current_account()
+                .unwrap()
+                .as_deref(),
+        )
         .unwrap();
     assert_eq!(before.runs, 1);
     assert!(before.recent_runs[0].ended.is_none());
     db.execute_batch("ROLLBACK").unwrap();
     adapter.retry_and_close().unwrap();
-    let after = open_reader(&path).unwrap().home_summary(scope).unwrap();
+    let after = open_reader(&path)
+        .unwrap()
+        .home_summary(
+            scope,
+            open_reader(&path)
+                .unwrap()
+                .current_account()
+                .unwrap()
+                .as_deref(),
+        )
+        .unwrap();
     assert_eq!(after.runs, 1);
     assert_eq!(after.recent_runs.len(), 1);
     assert!(after.recent_runs[0].ended.is_some());

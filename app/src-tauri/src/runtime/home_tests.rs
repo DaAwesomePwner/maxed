@@ -185,7 +185,12 @@ fn home_streak_reads_through_the_history_worker() {
     let reader = maxed_store::open_reader(&path).unwrap();
     let dungeon = snapshot.run.unwrap().dungeon;
     let request = HomeDungeonStreakRequest { dungeon };
-    let expected = reader.home_dungeon_streak(request.clone()).unwrap();
+    let expected = reader
+        .home_dungeon_streak(
+            request.clone(),
+            reader.current_account().unwrap().as_deref(),
+        )
+        .unwrap();
     assert_eq!(expected.last_white_at, Some(bag.at));
     let runtime = Arc::new(CaptureRuntime::default());
     runtime.initialize_home(root.path().into()).unwrap();
@@ -470,10 +475,11 @@ fn playback_replacement_waits_for_reader_and_rejects_same_namespace_generation()
     let replace = thread::spawn(move || open(&switching, &app_data, Namespace::Replay).close());
     wait_for_invalidation(&runtime);
     assert!(!replace.is_finished());
+    let stored = maxed_store::open_reader(&database).unwrap();
     assert_eq!(
-        maxed_store::open_reader(&database)
-            .unwrap()
-            .home_summary(today())
+        stored
+            // TODO(#4 T4C): native account lifecycle
+            .home_summary(today(), stored.current_account().unwrap().as_deref())
             .unwrap()
             .runs,
         1

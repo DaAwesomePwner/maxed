@@ -3,7 +3,7 @@ WITH all_time_clears AS MATERIALIZED (
         row_number() OVER (PARTITION BY r.dungeon
             ORDER BY r.completed_at-r.started, r.started, r.id) AS ordinal
     FROM runs r
-    WHERE r.outcome='cleared' AND r.completed_at>r.started
+    WHERE (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=r.character_id),r.character_id))=?1 AND r.outcome='cleared' AND r.completed_at>r.started
       AND CASE WHEN json_valid(r.json) THEN json_extract(r.json,'$.area_kind') END='dungeon'
       AND r.id IN (SELECT run_id FROM run_evidence WHERE kind IN ('victory','completion_dialogue'))
 ), result AS (

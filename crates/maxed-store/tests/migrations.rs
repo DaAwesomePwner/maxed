@@ -1,3 +1,4 @@
+use crate::common::account_scope_fixture::ACCOUNT;
 use maxed_store::{migrate, StoreError, SCHEMA_VERSION};
 use rusqlite::Connection;
 
@@ -138,7 +139,7 @@ fn v1_backfill_is_atomic_and_reopens_as_v8() {
     let path = dir.path().join("legacy");
     let db = legacy(&path);
     assert!(matches!(
-        maxed_store::open_reader(&path),
+        crate::common::account_scope_fixture::open_reader(&path),
         Err(StoreError::Migration)
     ));
     let old_checksum: String = db
@@ -170,7 +171,7 @@ fn v1_backfill_is_atomic_and_reopens_as_v8() {
     db.execute("UPDATE fights SET json=?1", [original]).unwrap();
     crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
     crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
-    let reader = maxed_store::open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let story = reader.get_run("demo-run").unwrap().unwrap();
     assert_eq!(story.fights.len(), 1);
     assert_eq!(story.fights[0].ordinal, 1);
@@ -193,7 +194,7 @@ fn v1_backfill_is_atomic_and_reopens_as_v8() {
     )
     .unwrap();
     assert!(matches!(
-        maxed_store::open_reader(&path),
+        crate::common::account_scope_fixture::open_reader(&path),
         Err(StoreError::Migration)
     ));
 }
@@ -207,7 +208,7 @@ fn upgrade_never_creates_absent_and_initializes_only_empty_version_zero() {
     drop(Connection::open(&path).unwrap());
     maxed_store::upgrade_history(&path).unwrap();
     assert_eq!(
-        maxed_store::open_reader(&path)
+        crate::common::account_scope_fixture::open_reader(&path)
             .unwrap()
             .user_version()
             .unwrap(),
@@ -246,7 +247,7 @@ fn large_legacy_backfill_is_measured_separately_from_summary_reads() {
         "synthetic legacy backfill, 3000 fights: {:?}",
         start.elapsed()
     );
-    let reader = maxed_store::open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let start = std::time::Instant::now();
     let story = reader.get_run("demo-run").unwrap().unwrap();
     eprintln!(
@@ -339,7 +340,7 @@ fn cold_v2_upgrade_backfills_only_unambiguous_sessions_and_preserves_checksums()
         .unwrap();
     drop(db);
     assert!(matches!(
-        maxed_store::open_reader(&path),
+        crate::common::account_scope_fixture::open_reader(&path),
         Err(StoreError::Migration)
     ));
     crate::common::installed_schema::upgrade_after_confirmation(&path).unwrap();
@@ -369,7 +370,7 @@ fn cold_v2_upgrade_backfills_only_unambiguous_sessions_and_preserves_checksums()
             ]
         );
     }
-    let saved = maxed_store::open_reader(&path)
+    let saved = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
         .get_run("demo-run")
         .unwrap()
@@ -392,7 +393,7 @@ fn cold_v2_upgrade_backfills_only_unambiguous_sessions_and_preserves_checksums()
     )
     .unwrap();
     assert!(matches!(
-        maxed_store::open_reader(&path),
+        crate::common::account_scope_fixture::open_reader(&path),
         Err(StoreError::Migration)
     ));
 }
@@ -505,11 +506,14 @@ fn large_v2_backfill_is_measured_separately_from_home_reads() {
         0
     );
     let start = std::time::Instant::now();
-    let home = maxed_store::open_reader(&path)
+    let home = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .home_summary(HomeScope::Session {
-            id: "session-3000".into(),
-        })
+        .home_summary(
+            HomeScope::Session {
+                id: "session-3000".into(),
+            },
+            Some(ACCOUNT),
+        )
         .unwrap();
     eprintln!("separate post-upgrade Home read: {:?}", start.elapsed());
     assert_eq!(home.fame.len(), 100);
@@ -623,11 +627,14 @@ fn cold_v2_preserves_run_deaths_and_open_session_tails() {
         );
     }
     assert_eq!(db.query_row("SELECT count(*) FROM deaths WHERE stream_id='run-deaths' AND session_id='demo-session'",[],|r|r.get::<_,i64>(0)).unwrap(),2);
-    let home = maxed_store::open_reader(&path)
+    let home = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .home_summary(HomeScope::Session {
-            id: "demo-session".into(),
-        })
+        .home_summary(
+            HomeScope::Session {
+                id: "demo-session".into(),
+            },
+            Some(ACCOUNT),
+        )
         .unwrap();
     assert_eq!(home.deaths, 3);
 }

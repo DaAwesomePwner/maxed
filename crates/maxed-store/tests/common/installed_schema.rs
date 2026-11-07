@@ -355,6 +355,17 @@ pub fn assert_additive_upgrade(
                     pending, baseline,
                     "unexpected work attributed to migration 017"
                 );
+            } else if version == 18 {
+                let baseline: Vec<_> =
+                    normalized(include_str!("../../migrations/018_account_reads.sql"))
+                        .split(';')
+                        .map(normalized)
+                        .filter(|sql| !sql.is_empty())
+                        .collect();
+                assert_eq!(
+                    pending, baseline,
+                    "unexpected work attributed to migration 018"
+                );
             } else if version >= 16 {
                 assert!(!pending.is_empty(), "missing additive DDL trace");
                 for statement in &pending {

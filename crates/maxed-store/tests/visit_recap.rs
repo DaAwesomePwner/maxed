@@ -1,5 +1,5 @@
 //! Synthetic realm visits: interval ownership, bounded detail and historical records.
-use maxed_store::{open_reader, StoreError};
+use maxed_store::StoreError;
 use maxed_types::*;
 use rusqlite::{params, Connection};
 
@@ -145,7 +145,7 @@ impl Fixture {
     }
 
     fn read(&self, id: &str) -> Result<Option<VisitRecap>, StoreError> {
-        open_reader(&self.dir.path().join("visit.sqlite"))
+        crate::common::account_scope_fixture::open_reader(&self.dir.path().join("visit.sqlite"))
             .unwrap()
             .visit_recap(&VisitRecapRequest {
                 visit_id: id.into(),
@@ -621,7 +621,7 @@ fn live_visit_id_format() {
             event,
         })
         .collect::<Vec<_>>();
-    maxed_store::apply_batch(&mut t.db, &envelopes).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut t.db, &envelopes).unwrap();
     assert_eq!(
         t.recap("synthetic-live:visit:42").periods[0].visit_id,
         "synthetic-live:visit:42"
@@ -633,19 +633,53 @@ fn visit_recap_plans_avoid_base_scans() {
     let t = Fixture::new();
     for (file, args) in [
         ("visit_recap.sql", vec!["visit"]),
-        ("visit_periods.sql", vec!["session", "instance"]),
+        (
+            "visit_periods.sql",
+            vec![
+                "session",
+                "instance",
+                crate::common::account_scope_fixture::ACCOUNT,
+                "visit",
+            ],
+        ),
         ("visit_castle.sql", vec!["session", "10", "visit"]),
-        ("visit_fights.sql", vec!["session", "[[10,20],[30,40]]"]),
-        ("visit_bosses.sql", vec!["session", "[[10,20],[30,40]]"]),
+        (
+            "visit_fights.sql",
+            vec![
+                "session",
+                "[[10,20],[30,40]]",
+                crate::common::account_scope_fixture::ACCOUNT,
+            ],
+        ),
+        (
+            "visit_bosses.sql",
+            vec![
+                "session",
+                "[[10,20],[30,40]]",
+                crate::common::account_scope_fixture::ACCOUNT,
+            ],
+        ),
         ("visit_records.sql", vec!["session", "[[10,20],[30,40]]"]),
-        ("visit_drops.sql", vec!["session", "[[10,20],[30,40]]"]),
+        (
+            "visit_drops.sql",
+            vec![
+                "session",
+                "[[10,20],[30,40]]",
+                crate::common::account_scope_fixture::ACCOUNT,
+            ],
+        ),
         (
             "visit_announcements.sql",
             vec!["session", "[[10,20],[30,40]]"],
         ),
         (
             "visit_fame.sql",
-            vec!["session", "[[10,20],[30,40]]", "self"],
+            vec![
+                "session",
+                "[[10,20],[30,40]]",
+                "self",
+                crate::common::account_scope_fixture::ACCOUNT,
+            ],
         ),
     ] {
         let sql = std::fs::read_to_string(

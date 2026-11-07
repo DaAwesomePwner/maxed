@@ -53,7 +53,7 @@ not delete history; active readers may keep committed pages in the WAL.
 
 ## Schema and recovery
 
-Migrations 001–017 are transactional, with their SHA-256 script checksums and `user_version`
+Migrations 001–018 are transactional, with their SHA-256 script checksums and `user_version`
 written together. Unknown existing databases, changed checksums, and future schema
 versions are rejected. Foreign keys are enabled on all connections. Readers open
 read-only and query-only, with the same bounded busy timeout, and cannot move across
@@ -328,7 +328,7 @@ Migration 017 adds nullable indexed `characters.account_id`, known `accounts`,
 a singleton `current_account`, first-event `observation_characters`, stream/session
 `identity_spans`, and per-account `account_recovery` progress. No legacy JSON is
 rewritten and existing characters remain unknown. Account IDs are HMAC pseudonyms;
-identity keys never enter the store. Home/records readers are not changed here.
+identity keys never enter the store. Account readers require explicit ownership.
 
 Reader contract: `character_accounts(id,canonical_id,account_id)` resolves flattened
 aliases; `run_accounts(id,account_id)` follows the run's character. `fame_accounts`
@@ -369,3 +369,7 @@ crash is safe. Native recovery computes candidates for 0..=65535; storage never
 receives the identity key. Unattributed history remains stored, excluded from
 account totals, with an attribution notice supplied by later readers/UI. A sole
 known account is never evidence of ownership.
+
+HomeSummary.unattributed_history reports database-wide unknown run/fight/drop ownership; Home shows one notice for excluded totals, records and bests, while dungeon_bests retains its account-scoped vector response.
+
+Migration 018 adds only runs_character(character_id,id), so the database-wide attribution notice can seek unknown run owners without scanning run payloads; observation checks use existing primary/run indexes.

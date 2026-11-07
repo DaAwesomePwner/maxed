@@ -1,5 +1,5 @@
 -- Same filter and eligibility rules as boss_history.sql; only Home's scalar baselines.
--- Parameters: ?1 lo, ?2 hi, ?3 character, ?4 JSON target types.
+-- Parameters: ?1 lo, ?2 hi, ?3 character, ?4 JSON target types, ?5 account (NULL excludes history).
 WITH /*fight_character*/,
 scoped_fights AS (
   SELECT fights.id, fights.started, fights.ended, fights.local_dps,
@@ -7,7 +7,7 @@ scoped_fights AS (
     CASE WHEN json_valid(fights.json) THEN CAST(json_extract(fights.json,'$.kill.at') AS INTEGER) END AS kill_at,
     CASE WHEN json_valid(fights.json) THEN json_extract(fights.json,'$.kill.provisional') END AS provisional
   FROM fights
-  WHERE /*range*/ (?1 IS NULL OR fights.started>=?1) AND (?2 IS NULL OR fights.started<?2)),
+  WHERE (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))))=?5 AND /*range*/ (?1 IS NULL OR fights.started>=?1) AND (?2 IS NULL OR fights.started<?2)),
 targets AS MATERIALIZED (
   SELECT * FROM scoped_fights WHERE target_type IS NOT NULL
     AND /*targets*/ (?4 IS NULL OR target_type IN (SELECT value FROM json_each(?4)))),

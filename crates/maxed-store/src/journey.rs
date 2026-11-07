@@ -6,6 +6,7 @@ use std::ops::Range;
 
 pub(crate) struct VisitRow {
     pub id: String,
+    pub account: Option<String>,
     pub kind: String,
     pub map: String,
     pub run_id: Option<String>,
@@ -22,7 +23,7 @@ pub(crate) fn session_visits(
 ) -> Result<Vec<VisitRow>, StoreError> {
     let mut statement = conn.prepare_cached(
         "SELECT map_visits.id,kind,map,run_id,r.dungeon,
-                map_visits.started,map_visits.ended
+                map_visits.started,map_visits.ended,(SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=CASE WHEN map_visits.run_id IS NOT NULL THEN r.character_id ELSE map_visits.character_id END),CASE WHEN map_visits.run_id IS NOT NULL THEN r.character_id ELSE map_visits.character_id END))
          FROM map_visits INDEXED BY map_visits_session
          LEFT JOIN runs r ON r.id=map_visits.run_id
          WHERE map_visits.session_id=?1
@@ -31,6 +32,7 @@ pub(crate) fn session_visits(
     let rows = statement.query_map([session_id], |row| {
         Ok(VisitRow {
             id: row.get(0)?,
+            account: row.get(7)?,
             kind: row.get(1)?,
             map: row.get(2)?,
             run_id: row.get(3)?,
@@ -57,14 +59,17 @@ fn step_kind(visit: &VisitRow) -> Option<ChainStepKind> {
 }
 
 pub(crate) fn chain_range(visits: &[VisitRow], index: usize) -> Option<Range<usize>> {
-    visits.get(index)?;
+    visits.get(index)?.account.as_ref()?;
     let mut start = 0;
     while start + 1 < visits.len() {
-        if visits[start].kind == "realm"
+        if visits[start].account.is_some()
+            && visits[start].account == visits[start + 1].account
+            && visits[start].kind == "realm"
             && step_kind(&visits[start + 1]) == Some(ChainStepKind::Castle)
         {
             let mut end = start + 2;
             while end < visits.len()
+                && visits[end].account == visits[start].account
                 && matches!(
                     step_kind(&visits[end]),
                     Some(ChainStepKind::Chamber | ChainStepKind::Sanctuary)
@@ -85,7 +90,10 @@ pub(crate) fn chain_range(visits: &[VisitRow], index: usize) -> Option<Range<usi
 
 /// Non-dungeon or unresolved visits have no repeat ordinal.
 pub(crate) fn in_a_row(visits: &[VisitRow], index: usize) -> u32 {
-    let Some(visit) = visits.get(index).filter(|v| v.kind == "dungeon") else {
+    let Some(visit) = visits
+        .get(index)
+        .filter(|v| v.kind == "dungeon" && v.account.is_some())
+    else {
         return 0;
     };
     let Some(dungeon) = visit.dungeon.as_deref() else {
@@ -93,6 +101,9 @@ pub(crate) fn in_a_row(visits: &[VisitRow], index: usize) -> u32 {
     };
     let mut count: u32 = 1;
     for previous in visits[..index].iter().rev() {
+        if previous.account != visit.account {
+            break;
+        }
         match previous.kind.as_str() {
             "nexus" | "other_hub" => continue,
             "dungeon" if previous.dungeon.as_deref() == Some(dungeon) => {
@@ -151,12 +162,17 @@ fn step(
     } else {
         ("drops_run", "run_id=?1")
     };
-    // Realm predicates use parameters 2..4; dungeon predicates need only run_id.
+    // Realm predicates use parameters 2..4; both variants bind the account at 5.
     let ended = visit.ended.unwrap_or(i64::MAX);
-    let bindings = params![visit.run_id, session_id, visit.started, ended];
-    let bindings = if realm { bindings } else { &bindings[..1] };
+    let bindings = params![
+        visit.run_id,
+        session_id,
+        visit.started,
+        ended,
+        visit.account
+    ];
     let combat_sql = format!(
-        "WITH scoped_fights AS MATERIALIZED (SELECT * FROM fights INDEXED BY {fight_index} WHERE {fight_scope}),
+        "WITH scoped_fights AS MATERIALIZED (SELECT * FROM fights INDEXED BY {fight_index} WHERE {fight_scope} AND (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='fight' AND observation_id=fights.id),(SELECT character_id FROM runs WHERE id=fights.run_id))))=?5),
          party_scope(fight_id) AS (SELECT id FROM scoped_fights),
          {},
          spans AS (
@@ -181,14 +197,14 @@ fn step(
     let party_dps = party_dps.filter(|value| value.is_finite());
     // Junk bags are excluded upstream by migration 011 and the writer.
     let drops_sql = format!(
-        "WITH scoped_drops AS MATERIALIZED (SELECT * FROM drops INDEXED BY {drop_index} WHERE {drop_scope})
+        "WITH scoped_drops AS MATERIALIZED (SELECT * FROM drops INDEXED BY {drop_index} WHERE {drop_scope} AND (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='drop' AND observation_id=drops.id),(SELECT character_id FROM runs WHERE id=drops.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='drop' AND observation_id=drops.id),(SELECT character_id FROM runs WHERE id=drops.run_id))))=?5)
          SELECT count(*),count(*) FILTER (WHERE bag_rank=255) FROM scoped_drops"
     );
     let (bags, whites): (u32, u32) = conn
         .prepare_cached(&drops_sql)?
         .query_row(bindings, |row| Ok((row.get(0)?, row.get(1)?)))?;
     let items_sql = format!(
-        "WITH scoped_drops AS (SELECT * FROM drops INDEXED BY {drop_index} WHERE {drop_scope}),
+        "WITH scoped_drops AS (SELECT * FROM drops INDEXED BY {drop_index} WHERE {drop_scope} AND (SELECT ac.account_id FROM characters ac WHERE ac.id=coalesce((SELECT verified_id FROM character_aliases WHERE provisional_id=coalesce((SELECT character_id FROM observation_characters WHERE kind='drop' AND observation_id=drops.id),(SELECT character_id FROM runs WHERE id=drops.run_id))),coalesce((SELECT character_id FROM observation_characters WHERE kind='drop' AND observation_id=drops.id),(SELECT character_id FROM runs WHERE id=drops.run_id))))=?5),
          appearances AS (
              SELECT i.item_type,d.bag_rank,d.at,i.slot,d.id,
                  row_number() OVER (PARTITION BY i.item_type ORDER BY d.bag_rank DESC,d.at,i.slot,d.id) AS n

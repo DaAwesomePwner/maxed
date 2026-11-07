@@ -1,3 +1,4 @@
+use crate::common::account_scope_fixture::ACCOUNT;
 use maxed_types::*;
 use rusqlite::params;
 
@@ -174,13 +175,18 @@ fn dungeon_profile_matches_legacy_on_mixed_distributed_history() {
                 ..fixture.profile_request()
             };
             assert_eq!(
-                reader.dungeon_profile(request.clone()).unwrap().bosses,
+                reader
+                    .dungeon_profile(request.clone(), Some(ACCOUNT))
+                    .unwrap()
+                    .bosses,
                 legacy_profile(&fixture.db, &request),
                 "{request:?}"
             );
         }
     }
-    let profile = reader.dungeon_profile(fixture.profile_request()).unwrap();
+    let profile = reader
+        .dungeon_profile(fixture.profile_request(), Some(ACCOUNT))
+        .unwrap();
     assert!(!profile.bosses.is_empty());
     assert_eq!(
         profile
@@ -215,7 +221,9 @@ fn home_boss_baselines_match_legacy_fields_in_every_filter_variant() {
                     target_types,
                 };
                 let legacy = legacy_bosses(&fixture.db, &request);
-                let result = reader.home_boss_baselines(request.clone()).unwrap();
+                let result = reader
+                    .home_boss_baselines(request.clone(), Some(ACCOUNT))
+                    .unwrap();
                 assert_eq!(result.truncated, legacy.truncated);
                 assert_eq!(
                     result.rows,
@@ -261,7 +269,9 @@ fn home_boss_baselines_match_current_boss_history_in_every_filter_variant() {
                     target_types,
                 };
                 let full = reader.boss_history(request.clone()).unwrap();
-                let lean = reader.home_boss_baselines(request.clone()).unwrap();
+                let lean = reader
+                    .home_boss_baselines(request.clone(), Some(ACCOUNT))
+                    .unwrap();
                 assert_eq!(lean.truncated, full.truncated, "{request:?}");
                 assert_eq!(lean.rows.len(), full.rows.len(), "{request:?}");
                 if request.target_types.as_ref().is_none_or(|v| !v.is_empty())
@@ -313,7 +323,7 @@ fn home_boss_baselines_match_current_boss_history_in_every_filter_variant() {
 #[test]
 fn home_boss_baselines_validate_filters() {
     let (_dir, path, _db) = crate::common::stats::database();
-    let reader = maxed_store::open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let request = BossHistoryRequest {
         range: None,
         character_id: None,
@@ -343,7 +353,107 @@ fn home_boss_baselines_validate_filters() {
             ..request.clone()
         },
     ] {
-        assert!(reader.home_boss_baselines(invalid).is_err());
+        assert!(reader.home_boss_baselines(invalid, Some(ACCOUNT)).is_err());
     }
-    assert!(reader.home_boss_baselines(request).unwrap().rows.is_empty());
+    assert!(reader
+        .home_boss_baselines(request, Some(ACCOUNT))
+        .unwrap()
+        .rows
+        .is_empty());
+}
+
+#[test]
+fn account_scope_large_history_home_hud_bests_streak_plans() {
+    use rusqlite::types::Value;
+    let f = home_workload::Fixture::build(90); // 12,600 fights across the existing distributed fixture.
+    let scope = include_str!("../src/home_scope.sql");
+    let home = include_str!("../src/home.sql")
+        .replace("/*home_scope*/", scope)
+        .replace(
+            "/*dungeon_stats*/",
+            include_str!("../src/dungeon_stats.sql"),
+        );
+    let hud = include_str!("../src/home_hud.sql")
+        .replace("/*home_scope*/", scope)
+        .replace(
+            "/*party_average_scoped*/",
+            include_str!("../src/party_average_scoped.sql"),
+        );
+    let base = vec![
+        Value::Integer(1),
+        Value::Null,
+        Value::Integer(f.range.start.0 as i64),
+        Value::Integer(f.range.end.0 as i64),
+        Value::Text(ACCOUNT.into()),
+    ];
+    let mut hud_args = base.clone();
+    hud_args.extend([Value::Text("[]".into()), Value::Text("[]".into())]);
+    for (name, sql, args, indexes) in [
+        (
+            "Home",
+            home,
+            base,
+            vec![
+                "pd_home_today_runs",
+                "runs_character",
+                "fights_started",
+                "drops_at",
+            ],
+        ),
+        (
+            "HUD",
+            hud,
+            hud_args,
+            vec!["fights_started", "drops_at", "identity_account"],
+        ),
+        (
+            "bests",
+            include_str!("../src/dungeon_bests.sql").into(),
+            vec![Value::Text(ACCOUNT.into())],
+            vec!["pd_run_evidence_kind"],
+        ),
+        (
+            "streak",
+            include_str!("../src/home_streak.sql").into(),
+            vec![
+                Value::Text(home_workload::DUNGEON.into()),
+                Value::Text(ACCOUNT.into()),
+            ],
+            vec!["runs_loot_stats", "drops_white_runs"],
+        ),
+    ] {
+        let plan =
+            f.db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+                .unwrap()
+                .query_map(rusqlite::params_from_iter(args), |r| r.get::<_, String>(3))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+                .join("\n");
+        eprintln!("account_scope {name}:\n{plan}");
+        for index in indexes {
+            assert!(plan.contains(index), "{name} missing {index}:\n{plan}");
+        }
+        for view in [
+            "run_accounts",
+            "fight_accounts",
+            "drop_accounts",
+            "character_accounts",
+        ] {
+            assert!(
+                !plan.contains(&format!("MATERIALIZE {view}")),
+                "{name}:\n{plan}"
+            );
+        }
+        // Range reads and streaks still seek their base rows. Best clear ranking
+        // retains its pre-existing all-time evidence walk.
+        if name != "bests" {
+            for alias in ["fights", "drops", "runs", "n"] {
+                assert!(
+                    !plan.lines().any(|line| line == format!("SCAN {alias}")),
+                    "{name}:\n{plan}"
+                );
+            }
+        }
+    }
 }

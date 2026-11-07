@@ -1,4 +1,4 @@
-use maxed_store::{apply_batch, migrate, open_reader, StoreReader};
+use maxed_store::{apply_batch, migrate, StoreReader};
 use maxed_types::*;
 use rusqlite::Connection;
 
@@ -109,7 +109,7 @@ impl LootDb {
     }
 
     pub fn reader(&self) -> StoreReader {
-        open_reader(&self.path).unwrap()
+        super::account_scope_fixture::open_reader(&self.path).unwrap()
     }
 }
 

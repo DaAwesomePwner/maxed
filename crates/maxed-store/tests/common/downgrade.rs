@@ -8,7 +8,7 @@ pub fn remove_maintenance_schema(db: &Connection) {
         db.execute_batch("DROP VIEW death_accounts; DROP VIEW fame_accounts; DROP VIEW drop_accounts; DROP VIEW fight_accounts; DROP VIEW run_accounts; DROP VIEW character_accounts;
         DROP TABLE identity_spans; DROP TABLE observation_characters; DROP TABLE account_recovery; DROP TABLE current_account;
         DROP INDEX characters_account; ALTER TABLE characters DROP COLUMN account_id; DROP TABLE accounts;
-        DELETE FROM schema_migrations WHERE version=17;").unwrap();
+        DROP INDEX IF EXISTS runs_character; DELETE FROM schema_migrations WHERE version>=17;").unwrap();
     }
     receipts::copy_to_legacy(db);
     db.execute_batch(

@@ -16,7 +16,11 @@ pub(crate) fn with_home_scope(sql: &str) -> String {
 impl StoreReader {
     /// One statement owns scope, aggregates and bounded details in one read snapshot.
     /// Today boundaries are caller-supplied local midnights, including DST changes.
-    pub fn home_summary(&self, scope: HomeScope) -> Result<HomeSummary, StoreError> {
+    pub fn home_summary(
+        &self,
+        scope: HomeScope,
+        account: Option<&str>,
+    ) -> Result<HomeSummary, StoreError> {
         let (kind, session_id, start, end) = match scope {
             HomeScope::Session { id } => {
                 if id.is_empty() || id.len() > 256 {
@@ -37,7 +41,7 @@ impl StoreReader {
             .conn
             .query_row(
                 HOME_SQL.as_str(),
-                params![kind, session_id, start, end],
+                params![kind, session_id, start, end, account],
                 |row| row.get(0),
             )
             .map_err(|error| {
@@ -99,7 +103,7 @@ mod tests {
             },
         ] {
             STATEMENTS.with(|s| s.borrow_mut().clear());
-            assert_eq!(reader.home_summary(scope).unwrap().runs, 0);
+            assert_eq!(reader.home_summary(scope, Some("account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).unwrap().runs, 0);
             STATEMENTS.with(|s| {
                 let statements = s.borrow();
                 assert_eq!(statements.len(), 1, "{statements:?}");
