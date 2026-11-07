@@ -5,6 +5,7 @@ use ts_rs::TS;
 fn export_bindings() {
     let directory =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/ui/src/lib/bindings");
+    AccountHistoryChanged::export_all_to(&directory).unwrap();
     EquipSlot::export_all_to(&directory).unwrap();
     SlotTiers::export_all_to(&directory).unwrap();
     RequirementPreset::export_all_to(&directory).unwrap();

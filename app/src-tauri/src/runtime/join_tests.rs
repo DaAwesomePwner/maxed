@@ -31,6 +31,7 @@ fn adapter(path: &Path, capacity: usize) -> (Adapter, Arc<Views>, Events) {
     let recorded = events.clone();
     let seen = events.clone();
     let bridge = Bridge {
+        account_changed: Arc::new(|_| {}),
         visibility: Arc::default(),
         party_changed: Arc::new(|_| {}),
         batch: None,

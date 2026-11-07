@@ -20,7 +20,12 @@ impl StoreReader {
         };
         let (lo, hi, character) = bounds(&filter)?;
         // Boss order and both character baselines must see the same history.
-        let tx = self.conn.unchecked_transaction()?;
+        let transaction = self
+            .conn
+            .is_autocommit()
+            .then(|| self.conn.unchecked_transaction())
+            .transpose()?;
+        let tx = &self.conn;
         let (clears, durations): (i64, String) = tx.query_row(
             &crate::account_sql::with_accounts("SELECT COUNT(*) FILTER (WHERE outcome='cleared'),
                 json_group_array(completed_at-started) FILTER (
@@ -81,7 +86,7 @@ impl StoreReader {
             } else {
                 // Missing or mixed-account run caches must aggregate only owned fights.
                 let id: String = row.get(0)?;
-                account_run_dps(&tx, &id, account)?
+                account_run_dps(tx, &id, account)?
             };
             if let Some(dps) = dps {
                 run_dps_samples = run_dps_samples
@@ -92,7 +97,9 @@ impl StoreReader {
         }
         drop(rows);
         drop(statement);
-        tx.commit()?;
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
         Ok(DungeonProfile {
             dungeon: request.dungeon,
             clears: count(clears)?,

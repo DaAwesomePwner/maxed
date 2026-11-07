@@ -79,6 +79,7 @@ pub enum Publication {
     Events(Vec<EventEnvelope>),
     Snapshot(Box<LiveSnapshot>),
     PartyChanged(PartyChanged),
+    AccountHistoryChanged(maxed_types::AccountHistoryChanged),
 }
 
 // Only compact, bounded event vectors can enter the worker queue.
@@ -87,6 +88,7 @@ enum QueuedPublication {
     Events(Vec<EventEnvelope>),
     Snapshot(Box<LiveSnapshot>),
     PartyChanged(PartyChanged),
+    AccountHistoryChanged(maxed_types::AccountHistoryChanged),
 }
 
 fn queued_event(event: EventEnvelope) -> EventEnvelope {
@@ -155,6 +157,9 @@ impl Publisher {
                     QueuedPublication::Events(events) => Publication::Events(events),
                     QueuedPublication::Snapshot(value) => Publication::Snapshot(value),
                     QueuedPublication::PartyChanged(value) => Publication::PartyChanged(value),
+                    QueuedPublication::AccountHistoryChanged(value) => {
+                        Publication::AccountHistoryChanged(value)
+                    }
                 })
             },
             failed,
@@ -289,6 +294,10 @@ impl Publisher {
                 self.enqueue(QueuedPublication::Snapshot(value), epoch);
                 return;
             }
+            Publication::AccountHistoryChanged(value) => {
+                self.enqueue(QueuedPublication::AccountHistoryChanged(value), epoch);
+                return;
+            }
             Publication::PartyChanged(value) => {
                 self.enqueue(QueuedPublication::PartyChanged(value), epoch);
                 return;
@@ -339,6 +348,9 @@ impl Publisher {
                     encoder_epoch = epoch;
                 }
                 let result = match publication {
+                    QueuedPublication::AccountHistoryChanged(value) => {
+                        app.emit("account-history-changed", value).map_err(|_| ())
+                    }
                     QueuedPublication::PartyChanged(value) => app
                         .state::<channels::LivePayloads>()
                         .send("party-changed", &value),
@@ -472,6 +484,7 @@ mod queue_tests {
                     QueuedPublication::Snapshot(_) => "snapshot",
                     QueuedPublication::Events(_) => "events",
                     QueuedPublication::PartyChanged(_) => "party",
+                    QueuedPublication::AccountHistoryChanged(_) => "account",
                 })
                 .unwrap();
                 if first {

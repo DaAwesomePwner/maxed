@@ -30,11 +30,19 @@ pub(super) struct HomeReadContext {
     pub generation: u64,
     pub stream_id: Option<String>,
     pub absent: bool,
+    pub account: Option<String>,
+    pub account_revision: u64,
+    pub identity_sequence: Option<maxed_types::Sequence>,
 }
+
+type AccountNotice = Arc<dyn Fn(maxed_types::AccountHistoryChanged) + Send + Sync>;
 
 pub(super) struct HomeReads {
     pub(super) context: Mutex<Option<HomeReadContext>>,
     pub(super) generation: AtomicU64,
+    pub(super) account_revision: AtomicU64,
+    pub(super) resolved_account: Mutex<Option<(Namespace, Option<String>)>>,
+    pub(super) account_notice: Mutex<Option<AccountNotice>>,
     live_database: Mutex<Option<PathBuf>>,
     pub(super) settings: Mutex<Option<Arc<crate::settings::SettingsStore>>>,
     pub(super) scheduler: Mutex<Scheduler>,
@@ -85,6 +93,9 @@ impl Default for HomeReads {
         Self {
             context: Default::default(),
             generation: Default::default(),
+            account_revision: Default::default(),
+            resolved_account: Default::default(),
+            account_notice: Default::default(),
             live_database: Default::default(),
             settings: Default::default(),
             scheduler: Default::default(),
@@ -189,12 +200,38 @@ impl HomeReads {
         generation
     }
 
-    fn install(&self, context: HomeReadContext) -> Result<(), String> {
+    fn install(&self, mut context: HomeReadContext) -> Result<(), String> {
         let mut current = self.context.lock().map_err(|_| UNAVAILABLE)?;
         if self.generation.load(Ordering::Acquire) != context.generation {
             return Err(CHANGED.into());
         }
+        // Lifecycle retirement closed the sole reader before installation.
+        // Startup preparation calls this only after migration has finished.
+        context.account = maxed_store::open_reader(&context.database)
+            .and_then(|reader| reader.current_account())
+            .ok()
+            .flatten();
+        let mut resolved = self.resolved_account.lock().map_err(|_| UNAVAILABLE)?;
+        let value = (context.namespace, context.account.clone());
+        let changed = resolved
+            .as_ref()
+            .map_or(context.account.is_some(), |old| old != &value);
+        *resolved = Some(value);
+        if changed {
+            context.account_revision = self.account_revision.fetch_add(1, Ordering::AcqRel) + 1;
+        }
+        let revision = context.account_revision;
         *current = Some(context);
+        drop(resolved);
+        drop(current);
+        if changed {
+            if let Some(notice) = self.account_notice.lock().ok().and_then(|n| n.clone()) {
+                notice(maxed_types::AccountHistoryChanged {
+                    revision,
+                    reason: maxed_types::AccountHistoryChangeReason::AccountSwitched,
+                });
+            }
+        }
         Ok(())
     }
 
@@ -204,7 +241,8 @@ impl HomeReads {
             Some(current)
                 if current.generation == expected.generation
                     && current.namespace == expected.namespace
-                    && current.stream_id == expected.stream_id =>
+                    && current.stream_id == expected.stream_id
+                    && current.account_revision == expected.account_revision =>
             {
                 Ok(())
             }
@@ -222,7 +260,8 @@ impl HomeReads {
             Some(current)
                 if current.generation == expected.generation
                     && current.namespace == expected.namespace
-                    && current.stream_id == expected.stream_id =>
+                    && current.stream_id == expected.stream_id
+                    && current.account_revision == expected.account_revision =>
             {
                 Ok(current.clone())
             }
@@ -250,6 +289,9 @@ impl HomeReads {
                 generation,
                 stream_id: None,
                 absent,
+                account: None,
+                account_revision: self.account_revision.load(Ordering::Acquire),
+                identity_sequence: None,
             })?;
         }
         Ok(())
@@ -327,6 +369,9 @@ impl HomeReads {
                             generation,
                             stream_id: None,
                             absent,
+                            account: None,
+                            account_revision: owner.account_revision.load(Ordering::Acquire),
+                            identity_sequence: None,
                         });
                     }
                 }
@@ -516,6 +561,8 @@ impl Shared {
         // Playback cleanup inside open_catalog runs only after every Home reader
         // has closed. Failed playback opens leave history unavailable. Live opens
         // do not replace the database, so existing history remains readable.
+        *self.home.account_notice.lock().map_err(|_| UNAVAILABLE)? =
+            Some(bridge.account_changed.clone());
         let mut adapter = match options.open_catalog(cancel, self.views.clone(), bridge, catalog) {
             Ok(adapter) => adapter,
             Err(error) => {
@@ -544,6 +591,9 @@ impl Shared {
             generation,
             stream_id: Some(stream_id.clone()),
             absent: false,
+            account: None,
+            account_revision: self.home.account_revision.load(Ordering::Acquire),
+            identity_sequence: None,
         })?;
         let mut delivery = self
             .views

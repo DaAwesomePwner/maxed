@@ -488,12 +488,13 @@ fn playback_replacement_waits_for_reader_and_rejects_same_namespace_generation()
     let stored = maxed_store::open_reader(&database).unwrap();
     assert_eq!(
         stored
-            // TODO(#4 T4C): native account lifecycle
-            .home_summary(today(), stored.current_account().unwrap().as_deref())
+            .with_account(None, |reader, account| reader
+                .home_summary(today(), account))
             .unwrap()
             .runs,
         1
     );
+    drop(stored); // Windows cannot replace playback while the oracle reader owns a handle.
     release.send(()).unwrap();
     assert_eq!(read.join().unwrap().unwrap(), HistoryReply::Superseded);
     replace.join().unwrap().unwrap();
@@ -1458,16 +1459,20 @@ fn verify_legacy_seed_identity(path: &std::path::Path) {
         character_id: Some(character.id.clone()),
         account_id: character.account_id.clone(),
     };
-    let events: Vec<_> = [EngineEvent::CharacterUpdated(character), identity]
-        .into_iter()
-        .enumerate()
-        .map(|(i, event)| EventEnvelope {
-            fight_chart_omitted: false,
-            stream_id: "synthetic-upgrade-identity".into(),
-            sequence: Sequence(Timestamp(i as u64 + 1)),
-            at: Timestamp(1_000_000),
-            event,
-        })
-        .collect();
+    let events: Vec<_> = [
+        EngineEvent::CaptureStateChanged(CaptureStatus::default()),
+        EngineEvent::CharacterUpdated(character),
+        identity,
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(i, event)| EventEnvelope {
+        fight_chart_omitted: false,
+        stream_id: "synthetic-upgrade-identity".into(),
+        sequence: Sequence(Timestamp(i as u64 + 1)),
+        at: Timestamp(1_000_000),
+        event,
+    })
+    .collect();
     maxed_store::apply_batch(&mut rusqlite::Connection::open(path).unwrap(), &events).unwrap();
 }

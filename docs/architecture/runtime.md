@@ -226,3 +226,26 @@ boosts available before the character's maxed-stat count is known.
 
 WebView2 launch arguments and their isolation trade-offs are documented under
 [WebView2 memory policy](../release/performance.md#webview2-memory-policy).
+
+### Current-account history
+
+The native history context retains the last verified account across identity loss
+and provisional map transitions. Opening or restoring a source resolves its own
+DB pointer; playback never runs live legacy recovery. Scoped queries use one
+store snapshot for pointer resolution and aggregates, and verified identity reads
+wait for the ownership event's durable sequence. Account revisions participate
+in request deduplication, admission and final-response checks: a same-stream
+switch retires an earlier request as `HistoryReply::Superseded`.
+
+On verified live identity, a cancellable background worker recomputes character
+numbers 0 through 65535 with the installation key in batches of 4096. Progress
+reads use the single history-reader thread; attachments and progress commits use
+the existing writer. Shutdown joins recovery before taking ownership of the
+writer for shutdown. Namespace retirement stops the sweep. Completed prefixes
+resume after restart; repeating an attached batch is safe. Unmatched rows remain
+stored and excluded from account totals. Recovery emits no identity diagnostics.
+
+`account-history-changed` carries `AccountHistoryChanged { revision, reason }`,
+with `account_switched` or `legacy_recovered`, never an account ID. The UI should
+invalidate Home summary, HUD, scope loot, bests, streak, dungeon profile and boss
+baselines, and retry superseded requests for its current view.
