@@ -3,11 +3,16 @@ use maxed_store::{migrate, open_reader, upgrade_history, StoreError};
 use rusqlite::{params, types::Value, Connection};
 use std::collections::BTreeSet;
 
-const NEW_TABLES: [&str; 4] = [
+const NEW_TABLES: [&str; 9] = [
     "maintenance_jobs",
     "backup_generations",
     "event_streams",
     "event_receipts_v2",
+    "accounts",
+    "current_account",
+    "observation_characters",
+    "identity_spans",
+    "account_recovery",
 ];
 
 fn fixture(db: &mut Connection, version: usize) {
@@ -33,6 +38,15 @@ fn fixture(db: &mut Connection, version: usize) {
 }
 
 fn assert_empty_additions(db: &Connection) {
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM characters WHERE account_id IS NOT NULL",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
     for table in NEW_TABLES {
         assert_eq!(
             db.query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r
@@ -55,9 +69,9 @@ fn exact_v12_v14_and_v15_upgrade_preserves_history_and_adds_empty_maintenance_sc
         let original_checksums = checksums(&db);
         let (result, trace) = trace_sql(&mut db, migrate);
         result.unwrap();
-        assert_eq!(user_version(&db), 16);
-        assert_eq!(maxed_store::SCHEMA_VERSION, 16);
-        let attributed = assert_additive_upgrade(&trace, version, 16, &objects);
+        assert_eq!(user_version(&db), maxed_store::SCHEMA_VERSION);
+        assert_eq!(maxed_store::SCHEMA_VERSION, 17);
+        let attributed = assert_additive_upgrade(&trace, version, 17, &objects);
         if version == 12 {
             assert!(attributed[&13].iter().all(|sql| sql.starts_with("CREATE ")));
             assert!(attributed[&14]
@@ -83,7 +97,7 @@ fn exact_v12_v14_and_v15_upgrade_preserves_history_and_adds_empty_maintenance_sc
         assert!(
             objects
                 .iter()
-                .all(|object| upgraded_objects.contains(object)),
+                .all(|object| account_schema_preserves(object, &upgraded_objects)),
             "installed objects changed"
         );
         let upgraded = history(&db);
@@ -115,7 +129,10 @@ fn exact_v12_v14_and_v15_upgrade_preserves_history_and_adds_empty_maintenance_sc
             "idempotent migration changed history"
         );
         drop(db);
-        assert_eq!(open_reader(&path).unwrap().user_version().unwrap(), 16);
+        assert_eq!(
+            open_reader(&path).unwrap().user_version().unwrap(),
+            maxed_store::SCHEMA_VERSION
+        );
     }
 }
 
@@ -131,7 +148,7 @@ fn history_entry_point_upgrades_exact_installs_without_changing_history() {
         upgrade_history(&path).unwrap();
         upgrade_history(&path).unwrap();
         let db = Connection::open(&path).unwrap();
-        assert_eq!(user_version(&db), 16);
+        assert_eq!(user_version(&db), maxed_store::SCHEMA_VERSION);
         assert_empty_additions(&db);
         let upgraded = history(&db);
         assert!(saved
@@ -174,7 +191,7 @@ fn late_ddl_fault_rolls_back_all_upgrade_work() {
         assert_integrity(&db);
         db.execute_batch("DROP TABLE event_receipts_v2").unwrap();
         migrate(&mut db).unwrap();
-        assert_eq!(user_version(&db), 16);
+        assert_eq!(user_version(&db), maxed_store::SCHEMA_VERSION);
     }
 }
 
@@ -182,7 +199,7 @@ fn late_ddl_fault_rolls_back_all_upgrade_work() {
 fn installed_registry_rejects_unknown_future_and_tampered_versions() {
     for version in [12, 14, 15] {
         for mutation in [
-            "PRAGMA user_version=17",
+            "PRAGMA user_version=18",
             "PRAGMA user_version=0",
             "PRAGMA user_version=-1",
             "DELETE FROM schema_migrations WHERE version=12",
@@ -199,7 +216,7 @@ fn installed_registry_rejects_unknown_future_and_tampered_versions() {
             let sums = checksums(&db);
             let before_version = user_version(&db);
             let result = migrate(&mut db);
-            if before_version == 17 {
+            if before_version == 18 {
                 assert!(matches!(result, Err(StoreError::NewerSchema)));
             } else {
                 assert!(matches!(result, Err(StoreError::Migration)));
@@ -218,7 +235,7 @@ fn installed_registry_rejects_unknown_future_and_tampered_versions() {
 fn receipt_registry_and_binary_keys_enforce_the_storage_contract() {
     let mut db = Connection::open_in_memory().unwrap();
     migrate(&mut db).unwrap();
-    assert_eq!(user_version(&db), 16);
+    assert_eq!(user_version(&db), maxed_store::SCHEMA_VERSION);
     assert_empty_additions(&db);
     db.execute(
         "INSERT INTO event_streams(stream_id) VALUES('synthetic-stream')",
@@ -336,7 +353,7 @@ fn receipt_registry_and_binary_keys_enforce_the_storage_contract() {
 fn jobs_are_requested_explicitly_and_reference_managed_verified_backups() {
     let mut db = Connection::open_in_memory().unwrap();
     migrate(&mut db).unwrap();
-    assert_eq!(user_version(&db), 16);
+    assert_eq!(user_version(&db), maxed_store::SCHEMA_VERSION);
     assert_empty_additions(&db);
     db.execute_batch(
         "INSERT INTO maintenance_jobs(kind,job_key,format_version,input_generation,input_revision)
@@ -409,7 +426,7 @@ fn existing_writer_writes_only_v2_receipts() {
         common::apply_legacy_batch(&mut db, &events);
         let saved = history(&db);
         migrate(&mut db).unwrap();
-        assert_eq!(user_version(&db), 16);
+        assert_eq!(user_version(&db), maxed_store::SCHEMA_VERSION);
         let changes = db.total_changes();
         maxed_store::apply_batch(&mut db, &events).unwrap();
         assert_eq!(db.total_changes(), changes);
@@ -490,9 +507,11 @@ fn exact_v15_is_accepted_and_preserves_shipped_loot_indexes() {
     );
     upgrade_history(&path).unwrap();
     let db = Connection::open(&path).unwrap();
-    assert_eq!(user_version(&db), 16);
+    assert_eq!(user_version(&db), maxed_store::SCHEMA_VERSION);
     let after = schema(&db);
-    assert!(before.iter().all(|object| after.contains(object)));
+    assert!(before
+        .iter()
+        .all(|object| account_schema_preserves(object, &after)));
     assert_empty_additions(&db);
 }
 
