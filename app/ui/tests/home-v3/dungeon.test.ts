@@ -283,7 +283,7 @@ it.each([false, true])('new ST bag row and its merged timeline marker animate on
   }
 });
 
-it('updates the arrival glow colour from current catalog tiers without replaying the arrival', async () => {
+it('updates the arrival glow colour when catalog tiers load', async () => {
   const snapshot = homeSnapshot(), seed = snapshot.drops[0];
   const loading = { ...emptyHomeVisuals(), phase: 'loading' as const, objects: [
     { object_type: 999, item_tier: null, name: 'Unrelated', sprite: null, bag: null },

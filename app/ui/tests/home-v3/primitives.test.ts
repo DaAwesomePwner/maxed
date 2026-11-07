@@ -169,10 +169,20 @@ it('renders explicit zero tallies and labelled missing art without fabricated va
   expect(page.container.innerHTML).not.toMatch(/NaN|undefined/);
 });
 
-it.each(['loading', 'unavailable'] as const)('does not claim contents unknown while the catalog is %s', phase => {
+it.each(['loading', 'unavailable'] as const)('does not claim known contents are unknown while the catalog is %s', phase => {
   setDebugMode(true);
   const drop = retainedBag(), catalog = { ...emptyHomeVisuals(), phase };
   const page = render(BestBagCard, { best: bestDrop([drop], catalog), visuals: catalog, resolveSpriteUrl, meta: '—' });
   expect(page.queryByText('Contents unknown')).toBeNull();
   expect(page.container.querySelector('.item-box')).toBeNull();
+});
+
+it.each(['loading', 'unavailable'] as const)('keeps unknown contents visible while the catalog is %s', phase => {
+  setDebugMode(true);
+  const catalog = { ...emptyHomeVisuals(), phase };
+  for (const drop of [retainedBag({ contents_known: false }), retainedBag({ contents: [], items: [] })]) {
+    const page = render(BestBagCard, { best: bestDrop([drop], catalog), visuals: catalog, resolveSpriteUrl, meta: '—' });
+    expect(page.getByText('Contents unknown')).toBeTruthy();
+    page.unmount();
+  }
 });
