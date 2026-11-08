@@ -82,6 +82,8 @@ fn read_drops(device: &mut dyn Device, stats_failed: &mut bool) -> Option<u32> {
 }
 
 const ADAPTER_SILENCE: Duration = Duration::from_secs(5);
+const SWITCH_GRACE: Duration = Duration::from_secs(1);
+const SWITCH_GUARD_WINDOW: Duration = Duration::from_secs(1);
 const CANDIDATE_DRAIN_BUDGET: usize = 8;
 
 pub struct CaptureHandle {
@@ -262,7 +264,8 @@ where
                 let mut stats_at = now();
                 let mut silence_since = None;
                 let mut last_delivered = None;
-                let mut guard_timestamps = false;
+                let mut guard_started = None;
+                let mut last_delivered_at = now();
                 let mut activity = vec![None; devices.len()];
                 while !worker_stop.load(Ordering::Acquire) {
                     let mut polled = None;
@@ -321,7 +324,13 @@ where
                     let had_frame = polled.is_some();
                     if let Some(mut frame) = polled {
                         silence_since = None;
-                        if !guard_timestamps || last_delivered.is_none_or(|at| frame.at > at) {
+                        let guarded = guard_started.is_some_and(|started| {
+                            now().duration_since(started) < SWITCH_GUARD_WINDOW
+                        });
+                        // Rejected initial copies are already covered by the switch gap.
+                        if !guarded || last_delivered.is_none_or(|at| frame.at > at) {
+                            guard_started = None;
+                            last_delivered_at = now();
                             last_delivered = Some(frame.at);
                             frame.index = index;
                             index = index.checked_add(1).ok_or(CaptureError::OpenFailed)?;
@@ -347,7 +356,7 @@ where
                                 match devices[i].poll() {
                                     Ok(Some(frame)) => {
                                         if matches!(parse_frame(&frame), Ok(Some(_))) {
-                                            activity[i] = Some((now(), frame.at));
+                                            activity[i] = Some(now());
                                         }
                                     }
                                     Ok(None) => {
@@ -369,16 +378,16 @@ where
                                 continue;
                             }
                             // Do not select a handle still working through a backlog.
-                            // Wire time also excludes mirrored/stale traffic that was
-                            // observed recently only because it was queued.
+                            // Arrival grace excludes straggler mirrored copies. Wire
+                            // timestamps cannot establish freshness across clock steps.
                             if drained
                                 && winner.is_none()
                                 && silence_since.is_some_and(|since| {
                                     (selected_error.is_some()
                                         || now().duration_since(since) >= ADAPTER_SILENCE)
-                                        && activity[i].is_some_and(|(observed, at)| {
+                                        && activity[i].is_some_and(|observed| {
                                             observed >= since
-                                                && last_delivered.is_none_or(|last| at > last)
+                                                && observed >= last_delivered_at + SWITCH_GRACE
                                         })
                                 })
                             {
@@ -393,7 +402,7 @@ where
                             previous_drops = read_drops(devices[0].as_mut(), &mut stats_failed);
                             stats_at = now();
                             silence_since = None;
-                            guard_timestamps = true;
+                            guard_started = Some(now());
                             // One synthetic loss marks uncertain continuity, not a
                             // measurement of how many packets the switch actually lost.
                             index = index.checked_add(1).ok_or(CaptureError::OpenFailed)?;

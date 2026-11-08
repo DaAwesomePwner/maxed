@@ -3,15 +3,27 @@ use crossbeam_channel::{unbounded, Sender};
 use maxed_types::Timestamp;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
 
+enum Read {
+    Frame(Result<Option<RawFrame>, CaptureError>),
+    Gate(RawFrame, Sender<()>, Receiver<()>),
+}
 struct FakeDevice {
-    frames: Receiver<Result<Option<RawFrame>, CaptureError>>,
+    frames: Receiver<Read>,
     drops: Arc<AtomicU32>,
     polls: Arc<AtomicUsize>,
     samples: Arc<AtomicUsize>,
 }
 impl Device for FakeDevice {
     fn poll(&mut self) -> Result<Option<RawFrame>, CaptureError> {
-        let result = self.frames.try_recv().unwrap_or(Ok(None));
+        let result = match self.frames.try_recv() {
+            Ok(Read::Frame(result)) => result,
+            Ok(Read::Gate(frame, entered, release)) => {
+                entered.send(()).unwrap();
+                release.recv_timeout(Duration::from_secs(2)).unwrap();
+                Ok(Some(frame))
+            }
+            Err(_) => Ok(None),
+        };
         self.polls.fetch_add(1, Ordering::SeqCst);
         result
     }
@@ -38,7 +50,7 @@ impl Backend for FakeBackend {
     }
 }
 struct Control {
-    tx: Sender<Result<Option<RawFrame>, CaptureError>>,
+    tx: Sender<Read>,
     drops: Arc<AtomicU32>,
     polls: Arc<AtomicUsize>,
     samples: Arc<AtomicUsize>,
@@ -96,7 +108,10 @@ fn frame(marker: u64, game: bool) -> RawFrame {
     }
 }
 fn send(control: &Control, marker: u64) {
-    control.tx.send(Ok(Some(frame(marker, true)))).unwrap();
+    control
+        .tx
+        .send(Read::Frame(Ok(Some(frame(marker, true)))))
+        .unwrap();
 }
 fn receive(handle: &CaptureHandle, marker: u64, index: u64) {
     let got = handle.frames.recv_timeout(Duration::from_secs(2)).unwrap();
@@ -168,12 +183,16 @@ fn non_game_candidate_does_not_switch_and_candidate_failure_is_nonfatal() {
     let (handle, c, clock) = setup(false);
     send(&c[0], 1);
     receive(&handle, 1, 0);
-    c[1].tx.send(Ok(Some(frame(2, false)))).unwrap();
+    c[1].tx
+        .send(Read::Frame(Ok(Some(frame(2, false)))))
+        .unwrap();
     clock.store(5000, Ordering::SeqCst);
     idle_rounds(&c[1]);
     assert!(handle.frames.is_empty());
     assert_eq!(handle.status().dropped_frames, 0);
-    c[1].tx.send(Err(CaptureError::OpenFailed)).unwrap();
+    c[1].tx
+        .send(Read::Frame(Err(CaptureError::OpenFailed)))
+        .unwrap();
     wait(|| c[1].tx.is_empty());
     idle_rounds(&c[0]);
     let polls = c[1].polls.load(Ordering::SeqCst);
@@ -190,10 +209,14 @@ fn selected_failure_drains_past_non_game_and_requires_fresh_game_evidence() {
         send(&c[0], 10);
         receive(&handle, 10, 0);
         idle_rounds(&c[0]);
-        clock.store(1000, Ordering::SeqCst);
-        c[1].tx.send(Ok(Some(frame(11, false)))).unwrap();
-        send(&c[1], if fresh { 12 } else { 10 });
-        c[0].tx.send(Err(CaptureError::OpenFailed)).unwrap();
+        clock.store(if fresh { 1000 } else { 1 }, Ordering::SeqCst);
+        c[1].tx
+            .send(Read::Frame(Ok(Some(frame(11, false)))))
+            .unwrap();
+        send(&c[1], 12);
+        c[0].tx
+            .send(Read::Frame(Err(CaptureError::OpenFailed)))
+            .unwrap();
         if fresh {
             wait(|| handle.status().dropped_frames == 1);
             assert!(
@@ -240,8 +263,11 @@ fn mirrored_adapters_drain_during_traffic_and_never_flap_during_pause() {
         clock.store(marker * 100, Ordering::SeqCst);
         send(&c[0], marker);
         receive(&handle, marker, marker - 1);
-        send(&c[1], marker);
+        idle_rounds(&c[0]);
+        clock.store(marker * 100 + 1, Ordering::SeqCst);
+        send(&c[1], marker + 1);
         wait(|| c[1].tx.is_empty());
+        idle_rounds(&c[1]);
     }
     idle_rounds(&c[0]);
     for time in [7000, 12000, 17000] {
@@ -270,5 +296,84 @@ fn switched_adapter_discards_equal_and_older_wire_timestamps() {
     assert!(handle.frames.is_empty());
     send(&c[1], 12);
     receive(&handle, 12, 2);
+    // The first accepted frame ends the guard, even before its timeout.
+    send(&c[1], 12);
+    receive(&handle, 12, 3);
+    send(&c[1], 2);
+    receive(&handle, 2, 4);
+    idle_rounds(&c[1]);
+    clock.store(10000, Ordering::SeqCst);
+    send(&c[0], 1);
+    wait(|| handle.status().dropped_frames == 2);
+    clock.store(11000, Ordering::SeqCst);
+    send(&c[0], 1);
+    receive(&handle, 1, 6);
+    handle.stop().unwrap();
+}
+
+#[test]
+fn timestamp_guard_expires_after_one_second_without_a_newer_frame() {
+    let (handle, c, clock) = setup(false);
+    send(&c[0], 100);
+    receive(&handle, 100, 0);
+    idle_rounds(&c[0]);
+    clock.store(5000, Ordering::SeqCst);
+    send(&c[1], 1); // Clock stepped backwards; arrival still qualifies.
+    wait(|| handle.status().dropped_frames == 1);
+    clock.store(5999, Ordering::SeqCst);
+    send(&c[1], 2);
+    idle_rounds(&c[1]);
+    assert!(handle.frames.is_empty());
+    clock.store(6000, Ordering::SeqCst);
+    send(&c[1], 3);
+    receive(&handle, 3, 2);
+    send(&c[1], 3);
+    receive(&handle, 3, 3);
+    send(&c[1], 1);
+    receive(&handle, 1, 4);
+    assert_eq!(handle.status().dropped_frames, 1);
+    handle.stop().unwrap();
+}
+
+#[test]
+fn candidate_backlog_must_be_drained_across_bounded_passes_before_selection() {
+    let (handle, c, clock) = setup(false);
+    send(&c[0], 1);
+    receive(&handle, 1, 0);
+    idle_rounds(&c[0]);
+    clock.store(5000, Ordering::SeqCst);
+    let (entered, waiting) = bounded(1);
+    let (release, gate) = bounded(1);
+    c[1].tx
+        .send(Read::Gate(frame(2, true), entered, gate))
+        .unwrap();
+    waiting.recv_timeout(Duration::from_secs(2)).unwrap();
+    // Fill the backlog while the first candidate read is held.
+    for marker in 3..10 {
+        send(&c[1], marker);
+    }
+    let (entered_ninth, waiting_ninth) = bounded(1);
+    let (release_ninth, gate_ninth) = bounded(1);
+    c[1].tx
+        .send(Read::Gate(frame(10, true), entered_ninth, gate_ninth))
+        .unwrap();
+    for marker in 11..19 {
+        send(&c[1], marker);
+    }
+    let selected_polls = c[0].polls.load(Ordering::SeqCst);
+    release.send(()).unwrap();
+    waiting_ninth.recv_timeout(Duration::from_secs(2)).unwrap();
+    // The ninth candidate read is in a new pass: selected got another poll,
+    // and a full eight-frame pass without an empty read could not switch.
+    assert!(c[0].polls.load(Ordering::SeqCst) > selected_polls);
+    assert_eq!(c[1].samples.load(Ordering::SeqCst), 0);
+    assert_eq!(handle.status().dropped_frames, 0);
+    assert!(handle.frames.is_empty());
+    release_ninth.send(()).unwrap();
+    wait(|| handle.status().dropped_frames == 1);
+    assert!(c[1].tx.is_empty());
+    assert!(handle.frames.is_empty());
+    send(&c[1], 19);
+    receive(&handle, 19, 2);
     handle.stop().unwrap();
 }
