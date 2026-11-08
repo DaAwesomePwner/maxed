@@ -64,7 +64,7 @@ it('does not offer saving retry for storage that failed to open without pending 
   const ready = await client.queryStore();
   client.queryStore = vi.fn(async () => ({ ...ready, state: 'failed' as const, queued: 0 }));
   render(Shell, { client, historyAdapter: fakeHistory('#/').adapter });
-  await screen.findByText('Storage could not open. Use Start Capture to try again.');
+  await screen.findByText("Couldn't save. Storage is unavailable; use Start Capture to try again.");
   expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull();
   expect(screen.queryByText("Couldn't save. Retry.")).toBeNull();
   expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).not.toBe('true');
