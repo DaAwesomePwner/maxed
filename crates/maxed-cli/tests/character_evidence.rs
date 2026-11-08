@@ -1,9 +1,10 @@
-//! Retained fixture observations, not evidence that selects exalt placement.
+//! Retained fixture observations under verified inside-boost exalt placement.
+//! Missing catalog caps and gear remain unknown; these captures do not select placement.
 use maxed_cli::{demo::replay_engine, Pipeline};
 use maxed_engine::EngineConfig;
 use maxed_protocol::{DecodeEvent, Packet};
 use maxed_recording::PcapReader;
-use maxed_types::{Catalog, EngineEvent, StatSplitReason};
+use maxed_types::{Catalog, EngineEvent, ExaltPlacement, StatSplitReason};
 use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -11,6 +12,20 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
+
+// All four captures retain these total-minus-boost values despite boost changes.
+// These are observed bases, NOT catalog caps (the replay has no class definitions).
+// (total stat, boost stat, exalt bonus, base)
+const STAT_EXPECTATIONS: [(u8, u8, i32, i32); 8] = [
+    (20, 48, 2, 75),
+    (21, 49, 1, 25),
+    (22, 50, 2, 55),
+    (26, 51, 0, 40),
+    (27, 52, 1, 50),
+    (28, 53, 1, 50),
+    (0, 46, 0, 750),
+    (3, 47, 0, 300),
+];
 
 fn check_fixture(name: &str) {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/scrubbed");
@@ -64,6 +79,9 @@ fn check_fixture(name: &str) {
                 {
                     equipment.insert(slots);
                 }
+                for (id, boost_id, _, base) in STAT_EXPECTATIONS {
+                    assert_eq!(stats[&id] - stats[&boost_id], base, "{name}: stat {id}");
+                }
                 complete += 1;
             }
         }
@@ -101,30 +119,26 @@ fn check_fixture(name: &str) {
         if !(105..=113).all(|id| c.stats.iter().any(|s| s.stat_id == id)) {
             continue;
         }
-        assert!(c.maxed.is_none());
+        // Verified placement cannot supply the deliberately absent catalog caps.
+        assert_eq!(c.maxed, None);
         let panel = c.stat_panel.unwrap();
-        assert!(panel.breakdown_provisional);
-        for (id, amount) in [
-            (20, 2),
-            (21, 1),
-            (22, 2),
-            (26, 0),
-            (27, 1),
-            (28, 1),
-            (0, 0),
-            (3, 0),
-        ] {
+        assert!(!panel.breakdown_provisional);
+        assert_eq!(panel.lines.len(), STAT_EXPECTATIONS.len());
+        for (id, _, amount, base) in STAT_EXPECTATIONS {
             let line = panel.lines.iter().find(|s| s.stat_id == id).unwrap();
             assert_eq!(line.exalt, Some(amount));
             assert_eq!(line.at_cap, None);
-            if amount != 0 {
-                assert!(line
-                    .split_evidence
-                    .as_ref()
-                    .unwrap()
-                    .reasons
-                    .contains(&StatSplitReason::UnverifiedPlacement));
-            }
+            assert_eq!(line.cap, None);
+            assert_eq!((line.gear, line.other), (None, None));
+            let evidence = line.split_evidence.as_ref().unwrap();
+            assert_eq!(evidence.placement, ExaltPlacement::VerifiedInsideBoost);
+            assert!(!evidence.cap_eligible);
+            assert_eq!(evidence.reasons, [StatSplitReason::MissingOperands]);
+            assert_eq!(line.base, Some(base), "{name}: stat {id}");
+            assert_eq!(line.total.unwrap() - line.boost.unwrap(), base);
+            // Even SPD boost 0 / exalt 2 cannot establish NegativeOther here:
+            // unknown gear is not zero gear. The engine's Shaitan counter-case
+            // supplies synthetic zero gear; this replay deliberately does not.
         }
         let slots = c
             .equipment
