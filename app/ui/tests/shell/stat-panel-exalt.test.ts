@@ -13,7 +13,7 @@ const line = (stat_id: number, exalt: number | null, placement: ExaltPlacement =
 const panel = (lines: StatLine[]) => ({ lines, conditions: [], breakdown_provisional: false });
 afterEach(() => setDebugMode(false));
 
-it('shows DTO bonuses directly: level two is +10 HP/MP and +2 for all six core stats', () => {
+it('shows observed bonus amounts directly: +10 HP/MP and +2 for all six core stats', () => {
   const ids = [0, 3, 20, 21, 22, 28, 26, 27];
   const labels = ['HP', 'MP', 'ATT', 'DEF', 'SPD', 'DEX', 'VIT', 'WIS'];
   const { container } = render(StatPanel, { panel: panel(ids.map(id => line(id, id < 4 ? 10 : 2))) });

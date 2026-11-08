@@ -206,7 +206,7 @@ fn local_profile_maxed_requires_shared_exalt_evidence_but_remote_does_not() {
         setup(&mut e);
         let mut local = remote();
         local.status.objectId = 1;
-        // Leave enough boost for nonzero exalt, including HP/MP's multiplier.
+        // Leave enough boost for the observed exalt bonus amounts.
         for id in [0, 3, 20, 21, 22, 26, 27, 28] {
             local.status.stats.push(stat(id, 85));
         }
@@ -221,7 +221,7 @@ fn local_profile_maxed_requires_shared_exalt_evidence_but_remote_does_not() {
         let rows = profiles(e.advance_to(Timestamp(250_000)));
         let local = rows.iter().find(|p| p.is_local).unwrap();
         let remote = rows.iter().find(|p| !p.is_local).unwrap();
-        let expected = (level == Some(0)).then_some(8);
+        let expected = level.is_some().then_some(8);
         assert!(local.maxed_gated);
         assert!(!remote.maxed_gated);
         assert_eq!(local.maxed, expected, "level {level:?}");
@@ -545,5 +545,90 @@ fn death_notice_sets_player_id_on_unique_match() {
             panic!("death expected")
         };
         assert_eq!(player_id.as_ref(), (!duplicate).then_some(&p.player_id));
+    }
+}
+
+#[test]
+fn exalted_huntress_counts_all_eight_caps_for_character_and_local_profile() {
+    // Sanitized issue #37/#38 numbers; synthetic identity and equipment.
+    let observations = [
+        (0, 46, 111, 1003, 253, 0, 750),
+        (3, 47, 112, 360, 10, 10, 350),
+        (20, 48, 105, 96, 31, 0, 65),
+        (21, 49, 106, 44, 19, 3, 25),
+        (22, 50, 107, 48, -2, 2, 50),
+        (26, 51, 108, 54, 14, 2, 40),
+        (27, 52, 109, 64, 4, 2, 60),
+        (28, 53, 110, 58, -2, 3, 60),
+    ];
+    for known_caps in [true, false] {
+        let mut cat = catalog();
+        cat.objects[0].object_type = 802;
+        cat.classes[0].object_type = 802;
+        cat.classes[0].stat_caps = if known_caps {
+            observations
+                .iter()
+                .map(|&(stat_id, _, _, _, _, _, value)| StatView { stat_id, value })
+                .collect()
+        } else {
+            vec![]
+        };
+        // Synthetic gear reconciles the signed boosts; these are not claims
+        // about the owner's equipment. Other is zero for every line.
+        cat.items[0].stat_bonuses = Some(
+            observations
+                .iter()
+                .map(|&(stat_id, _, _, _, boost, exalt, _)| StatView {
+                    stat_id,
+                    value: boost - exalt,
+                })
+                .collect(),
+        );
+        let mut e = Engine::new(config(), std::sync::Arc::new(cat)).unwrap();
+        apply(&mut e, 0, map("The Void"));
+        apply(&mut e, 1000, create(1, 1));
+        let mut stats = vec![
+            string(31, "Synthetic Huntress"),
+            stat(7, 20),
+            stat(8, 200),
+            stat(9, -1),
+            stat(10, -1),
+            stat(11, -1),
+        ];
+        stats.extend(observations.iter().flat_map(
+            |&(id, boost_id, exalt_id, total, boost, exalt, _)| {
+                [
+                    stat(id, total),
+                    stat(boost_id, boost),
+                    stat(exalt_id, exalt),
+                ]
+            },
+        ));
+        apply(&mut e, 2000, update(vec![object(1, 802, stats)], vec![]));
+        let character = e.snapshot().character.unwrap();
+        assert_eq!(character.class_id, Some(802));
+        assert_eq!(character.maxed, known_caps.then_some(8));
+        let panel = character.stat_panel.unwrap();
+        assert_eq!(panel.lines.len(), 8);
+        for (line, &(_, _, _, _, _, exalt, base)) in panel.lines.iter().zip(&observations) {
+            assert_eq!(line.base, Some(base));
+            assert_eq!(line.exalt, Some(exalt));
+            assert_eq!(line.other, Some(0));
+            assert_eq!(line.at_cap, known_caps.then_some(true));
+            let evidence = line.split_evidence.as_ref().unwrap();
+            assert_eq!(evidence.placement, ExaltPlacement::VerifiedInsideBoost);
+            assert!(!evidence.reasons.contains(&StatSplitReason::NegativeOther));
+        }
+        let rows = profiles(e.advance_to(Timestamp(250_000)));
+        let local = rows.iter().find(|p| p.is_local).unwrap();
+        assert_eq!(local.maxed, known_caps.then_some(8));
+        assert_eq!(
+            local.maxed_stats,
+            if known_caps {
+                vec![0, 3, 20, 21, 22, 28, 26, 27]
+            } else {
+                vec![]
+            }
+        );
     }
 }
