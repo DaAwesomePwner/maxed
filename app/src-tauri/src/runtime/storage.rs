@@ -262,6 +262,12 @@ impl CaptureRuntime {
             .clone()
     }
     pub fn retry_store(&self) -> Result<(), String> {
+        if !self.has_unsaved_summaries() {
+            let status = self.store_status();
+            if status.state != maxed_types::StoreState::Failed || status.queued == 0 {
+                return Ok(());
+            }
+        }
         // Retire the live/completed owner before retrying its retained writer.
         // A storage error from stop is precisely what this operation recovers.
         let _ = self.stop();

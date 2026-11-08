@@ -169,9 +169,18 @@ impl Publisher {
     }
 
     fn start(
+        emit: impl FnMut(QueuedPublication) -> Result<(), ()> + Send + 'static,
+        failed: Arc<dyn Fn() + Send + Sync>,
+        visibility: Arc<PresentationVisibility>,
+    ) -> Result<Self, String> {
+        Self::start_with_warning(emit, failed, visibility, || {})
+    }
+
+    fn start_with_warning(
         mut emit: impl FnMut(QueuedPublication) -> Result<(), ()> + Send + 'static,
         failed: Arc<dyn Fn() + Send + Sync>,
         visibility: Arc<PresentationVisibility>,
+        mut warn: impl FnMut() + Send + 'static,
     ) -> Result<Self, String> {
         // Eight transactions, each capped at EVENT_BATCH_LIMIT, backpressure
         // capture instead of retaining hundreds of mass-close vectors.
@@ -188,8 +197,10 @@ impl Publisher {
                 let mut party_epoch = worker_visibility.epoch();
                 let mut deliver = |publication| {
                     if emit(publication).is_err() {
-                        interrupted.set(true);
                         failure();
+                        if !interrupted.replace(true) {
+                            warn();
+                        }
                     }
                 };
                 loop {
@@ -349,13 +360,12 @@ impl Publisher {
         app: tauri::AppHandle,
         failed: Arc<dyn Fn() + Send + Sync>,
     ) -> Result<Self, String> {
-        let warned = std::sync::atomic::AtomicBool::new(false);
-        let failure = failed.clone();
+        let warning_app = app.clone();
         let mut encoder = payload::SnapshotEncoder::default();
         let visibility = app.state::<Arc<PresentationVisibility>>().inner().clone();
         let encoder_visibility = visibility.clone();
         let mut encoder_epoch = visibility.epoch();
-        Self::start(
+        Self::start_with_warning(
             move |publication| {
                 let epoch = encoder_visibility.epoch();
                 if epoch != encoder_epoch {
@@ -401,30 +411,24 @@ impl Publisher {
                             .send("live-snapshot", &encoder.encode(*value))
                     }
                 };
-                if result.is_err() {
-                    failure();
-                    if !warned.swap(true, std::sync::atomic::Ordering::AcqRel) {
-                        let _ = app.emit(
-                            "capture-status",
-                            CaptureStatus {
-                                state: CaptureState::Failed,
-                                message: DELIVERY_FAILED.into(),
-                                ..Default::default()
-                            },
-                        );
-                        // Still actionable when IPC itself is unavailable. These
-                        // UI calls stay on this worker, including failure paths.
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.set_title(
-                                "Maxed - Live updates interrupted; reconnect or restart Maxed",
-                            );
-                        }
-                    }
-                }
                 result.map_err(|_| ())
             },
             failed,
             visibility,
+            move || {
+                let _ = warning_app.emit(
+                    "capture-status",
+                    CaptureStatus {
+                        state: CaptureState::Failed,
+                        message: DELIVERY_FAILED.into(),
+                        ..Default::default()
+                    },
+                );
+                if let Some(window) = warning_app.get_webview_window("main") {
+                    let _ = window
+                        .set_title("Maxed - Live updates interrupted; reconnect or restart Maxed");
+                }
+            },
         )
     }
 }
@@ -681,6 +685,34 @@ mod queue_tests {
             assert!(fight.buckets.is_empty());
             assert_eq!(fight.buckets.capacity(), 0);
             assert!(fight.player_series.is_none());
+        }
+    }
+}
+
+#[cfg(test)]
+mod reconnect_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    #[test]
+    fn reconnect_rearms_native_warning_after_each_failure_episode() {
+        let warnings = Arc::new(AtomicUsize::new(0));
+        let observed = warnings.clone();
+        let publisher = Publisher::start_with_warning(
+            |_| Err(()),
+            Arc::new(|| {}),
+            Arc::default(),
+            move || {
+                observed.fetch_add(1, Ordering::SeqCst);
+            },
+        )
+        .unwrap();
+        for episode in 1..=2 {
+            for _ in 0..2 {
+                publisher.publish(Publication::Capture(CaptureStatus::default()));
+            }
+            assert!(publisher.flush().is_err());
+            assert_eq!(warnings.load(Ordering::SeqCst), episode);
+            publisher.reconnect(|| {}).unwrap();
         }
     }
 }

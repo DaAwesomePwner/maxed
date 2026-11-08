@@ -137,6 +137,8 @@
   let setupRetry: ReturnType<typeof setTimeout> | undefined;
   let errors = $state({ captureSubscription: '', captureAction: '', snapshot: '', store: '' });
   let unsavedClose = $state(false);
+  let unsavedDialog: HTMLDivElement | undefined = $state();
+  $effect(() => { if (unsavedClose) unsavedDialog?.focus(); });
   let pendingSummaries = $state(false);
   $effect(() => {
     if (preview) return;
@@ -578,7 +580,7 @@
       {#if preview}<p class="preview-note">Preview</p>{/if}
       {#if liveState.phase === 'resyncing'}<DebugNote text="Some updates may be missing." />{/if}
       {#if unsavedClose}
-        <div role="alertdialog" tabindex="-1" aria-label="Unsaved changes" aria-describedby="unsaved-description">
+        <div bind:this={unsavedDialog} role="alertdialog" tabindex="-1" aria-label="Unsaved changes" aria-describedby="unsaved-description">
           <p id="unsaved-description">Changes are not saved. Exiting without saving will discard pending summaries.</p>
           <button disabled={busy || preview} onclick={() => recoverStore()}>Retry saving</button>
           <button disabled={busy || preview} onclick={() => recoverStore(true)}>Exit without saving</button>
@@ -586,8 +588,10 @@
         </div>
       {/if}
       {#if store?.state === 'failed' || pendingSummaries}
-        <p class="store-warning" role="status">Couldn't save. Retry.</p>
-        {#if !unsavedClose}<button disabled={busy || preview} onclick={() => recoverStore()}>Retry saving</button>{/if}
+        {#if pendingSummaries || (store?.queued ?? 0) > 0}
+          <p class="store-warning" role="status">Couldn't save. Retry.</p>
+          {#if !unsavedClose}<button disabled={busy || preview} onclick={() => recoverStore()}>Retry saving</button>{/if}
+        {:else if !unsavedClose}<p class="store-warning" role="status">Storage could not open. Use Start Capture to try again.</p>{/if}
         <DebugNote text={`Latest durable sequence: ${store?.durable ?? "unavailable"}`} />
       {:else if liveState.historyFailed || errors.store || !store}<p class="storage-note">Storage Error</p>
       {/if}

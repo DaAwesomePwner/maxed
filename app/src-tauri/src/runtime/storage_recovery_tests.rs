@@ -82,6 +82,54 @@ fn start_fake(runtime: &CaptureRuntime, sink: StatusSink) -> (Sender<RawFrame>, 
 
 #[test]
 fn retry_preserves_summaries_and_allows_capture_restart() {
+    recovery_scenario(false);
+}
+
+#[test]
+fn native_close_retries_recovered_writer_without_discard() {
+    recovery_scenario(true);
+}
+
+// Use the real runtime for every storage/lifecycle operation; only the native
+// window and process exit are replaced by observations.
+struct RuntimeExit<'a> {
+    runtime: &'a CaptureRuntime,
+    discarded: std::cell::Cell<bool>,
+    code: std::cell::Cell<Option<i32>>,
+}
+impl crate::exit::ExitHost for RuntimeExit<'_> {
+    fn installing(&self) -> bool {
+        false
+    }
+    fn stop_updates(&self) -> Result<(), String> {
+        Ok(())
+    }
+    fn prepare(&self) {}
+    fn resume(&self) {}
+    fn unsaved(&self) -> bool {
+        self.runtime.has_unsaved_summaries()
+    }
+    fn delivery_failed(&self) -> bool {
+        self.runtime.presentation_failed()
+    }
+    fn retry_save(&self) -> Result<(), String> {
+        self.runtime.retry_store()
+    }
+    fn shutdown(&self) -> Result<(), String> {
+        self.runtime.shutdown()
+    }
+    fn discard(&self) {
+        self.discarded.set(true);
+        self.runtime.exit_without_saving();
+        let _ = self.runtime.flush_bridge();
+    }
+    fn warn(&self, _: bool) {}
+    fn exit(&self, code: i32) {
+        self.code.set(Some(code));
+    }
+}
+
+fn recovery_scenario(native_close: bool) {
     let directory = tempfile::tempdir().unwrap();
     let runtime = CaptureRuntime::default();
     let (sink, _) = sink();
@@ -129,13 +177,39 @@ fn retry_preserves_summaries_and_allows_capture_restart() {
     let path = directory.path().join("demo.sqlite3");
     let db = rusqlite::Connection::open(&path).unwrap();
     db.execute_batch("BEGIN IMMEDIATE").unwrap();
-    assert!(runtime.shutdown().is_err());
+    let control = crate::exit::ExitControl::default();
+    let host = RuntimeExit {
+        runtime: &runtime,
+        discarded: std::cell::Cell::new(false),
+        code: std::cell::Cell::new(None),
+    };
+    if native_close {
+        let publisher = runtime
+            .publisher_with(|failed| Publisher::new(|_| Err(()), failed))
+            .unwrap();
+        publisher.publish(Publication::Capture(CaptureStatus::default()));
+        assert!(publisher.flush().is_err());
+        assert!(runtime.presentation_failed());
+        assert!(crate::exit::run(&control, &host, false).is_err());
+        assert_eq!(host.code.get(), None);
+    } else {
+        assert!(runtime.shutdown().is_err());
+    }
     assert!(
         !runtime.closing.load(Ordering::Acquire),
         "cancelled exit permits recovery/restart"
     );
     assert_eq!(closes.load(Ordering::SeqCst), 1);
-    assert_eq!(runtime.status().state, CaptureState::Stopped);
+    if native_close {
+        assert_eq!(runtime.status().state, CaptureState::Failed);
+        assert_eq!(runtime.status().message, crate::bridge::DELIVERY_FAILED);
+        assert_eq!(
+            runtime.shared.status.lock().unwrap().state,
+            CaptureState::Stopped
+        );
+    } else {
+        assert_eq!(runtime.status().state, CaptureState::Stopped);
+    }
     assert_eq!(runtime.snapshot().capture.state, CaptureState::Stopped);
     assert_eq!(
         runtime.store_status().state,
@@ -147,10 +221,26 @@ fn retry_preserves_summaries_and_allows_capture_restart() {
     assert!(path.exists(), "recovery retains the demo database");
     db.execute_batch("ROLLBACK").unwrap();
     drop(db);
-    runtime.retry_store().unwrap();
-    assert!(!runtime.has_unsaved_summaries());
-    let (_send, _) = start_fake(&runtime, Arc::new(|_| {}));
-    runtime.shutdown().unwrap();
+    if native_close {
+        // shutdown still refuses retained recovery even though SQLite is now writable.
+        assert!(runtime.shutdown().is_err());
+        thread::sleep(crate::exit::NATIVE_DISCARD_DELAY + Duration::from_millis(20));
+        crate::exit::run(&control, &host, false).unwrap();
+        assert_eq!(host.code.get(), Some(1));
+        assert!(!host.discarded.get());
+        assert!(!runtime.has_unsaved_summaries());
+        let saved = rusqlite::Connection::open(&path).unwrap();
+        let ended: i64 = saved.query_row(
+            "SELECT COUNT(*) FROM fight_summaries WHERE json_extract(json, '$.end_reason') = 'app_closed'",
+            [], |row| row.get(0),
+        ).unwrap();
+        assert!(ended > 0, "the close-time summary was committed by retry");
+    } else {
+        runtime.retry_store().unwrap();
+        assert!(!runtime.has_unsaved_summaries());
+        let (_send, _) = start_fake(&runtime, Arc::new(|_| {}));
+        runtime.shutdown().unwrap();
+    }
     assert_eq!(runtime.store_status().queued, 0);
     assert!(
         path.exists(),
@@ -167,19 +257,20 @@ fn presentation_failure_allows_capture_update_and_reconnect() {
     let runtime = CaptureRuntime::default();
     let failing = Arc::new(AtomicBool::new(true));
     let emit_failure = failing.clone();
-    let shared = runtime.shared.clone();
-    let publisher = Publisher::new(
-        move |_| {
-            if emit_failure.load(Ordering::Acquire) {
-                Err(())
-            } else {
-                Ok(())
-            }
-        },
-        Arc::new(move || shared.bridge_failed.store(true, Ordering::Release)),
-    )
-    .unwrap();
-    *runtime.publisher.lock().unwrap() = Some(publisher.clone());
+    let publisher = runtime
+        .publisher_with(|failed| {
+            Publisher::new(
+                move |_| {
+                    if emit_failure.load(Ordering::Acquire) {
+                        Err(())
+                    } else {
+                        Ok(())
+                    }
+                },
+                failed,
+            )
+        })
+        .unwrap();
     publisher.publish(Publication::Capture(CaptureStatus::default()));
     assert!(publisher.flush().is_err());
     assert!(!runtime.shared.failed.load(Ordering::Acquire));
@@ -191,4 +282,15 @@ fn presentation_failure_allows_capture_update_and_reconnect() {
     assert!(!runtime.shared.bridge_failed.load(Ordering::Acquire));
     publisher.flush().unwrap();
     assert_ne!(runtime.status().state, CaptureState::Failed);
+}
+
+#[test]
+fn retry_without_pending_storage_keeps_capture_running() {
+    let runtime = CaptureRuntime::default();
+    let (_send, closes) = start_fake(&runtime, Arc::new(|_| {}));
+    wait_until(|| runtime.status().state == CaptureState::WaitingForGame);
+    runtime.retry_store().unwrap();
+    assert!(runtime.is_running());
+    assert_eq!(closes.load(Ordering::Acquire), 0);
+    runtime.stop().unwrap();
 }

@@ -48,6 +48,12 @@ impl ExitHost for NativeExit {
     fn unsaved(&self) -> bool {
         self.runtime.has_unsaved_summaries()
     }
+    fn delivery_failed(&self) -> bool {
+        self.runtime.presentation_failed()
+    }
+    fn retry_save(&self) -> Result<(), String> {
+        self.runtime.retry_store()
+    }
     fn shutdown(&self) -> Result<(), String> {
         self.runtime.shutdown()
     }
@@ -55,11 +61,15 @@ impl ExitHost for NativeExit {
         self.runtime.exit_without_saving();
         let _ = self.runtime.flush_bridge();
     }
-    fn warn(&self) {
+    fn warn(&self, native_fallback: bool) {
         let _ = self.app.emit("unsaved-close", ());
         if let Some(window) = self.app.get_webview_window("main") {
-            let _ =
-                window.set_title("Maxed — Unsaved changes. Retry saving or confirm exit in Maxed");
+            let title = if native_fallback {
+                exit::native_warning_title()
+            } else {
+                exit::UNSAVED_TITLE.to_string()
+            };
+            let _ = window.set_title(&title);
         }
     }
     fn exit(&self, code: i32) {
@@ -302,7 +312,7 @@ fn update_presentation_visibility(window: &tauri::Window) -> bool {
 }
 
 #[tauri::command]
-fn subscribe_live_payload(
+async fn subscribe_live_payload(
     app: tauri::AppHandle,
     webview: tauri::Webview,
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
@@ -315,18 +325,19 @@ fn subscribe_live_payload(
         runtime.publisher(app.clone())?;
     }
     let id = payloads.subscribe(webview.label(), event, channel)?;
-    if let Err(error) = runtime.reconnect_presentation() {
+    let runtime = runtime.inner().clone();
+    let reconnected =
+        tauri::async_runtime::spawn_blocking(move || runtime.reconnect_presentation())
+            .await
+            .map_err(|_| "Presentation reconnect worker failed".to_string())
+            .and_then(|result| result);
+    if let Err(error) = reconnected {
         let _ = payloads.unsubscribe(webview.label(), id);
         return Err(error);
     }
-    if !app
-        .state::<Arc<ExitControl>>()
-        .warned
-        .load(Ordering::Acquire)
-    {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.set_title("Maxed");
-        }
+    let title = app.state::<Arc<ExitControl>>().presentation_reconnected();
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_title(title);
     }
     Ok(id)
 }
@@ -1043,6 +1054,7 @@ async fn get_dungeon_portal_type(
 }
 
 fn clear_exit_warning(app: &tauri::AppHandle) {
+    app.state::<Arc<ExitControl>>().clear_native_warning();
     app.state::<Arc<ExitControl>>()
         .warned
         .store(false, Ordering::Release);
