@@ -299,3 +299,17 @@ fn successful_retry_never_discards_even_if_shutdown_fails() {
     );
     assert_eq!(host.code.get(), Some(1));
 }
+
+#[test]
+fn setup_failure_allows_exit_without_using_incomplete_services() {
+    let control = ExitControl::default();
+    control.setup_failed();
+    assert!(control.finished.load(Ordering::Acquire));
+    assert!(control.exiting.load(Ordering::Acquire));
+    assert_eq!(control.exit_code(), STARTUP_FAILURE_EXIT_CODE);
+    let host = Fake::default();
+    assert!(run(&control, &host, false).is_err());
+    assert!(host.calls.borrow().is_empty());
+    control.setup_failed();
+    assert_eq!(control.exit_code(), STARTUP_FAILURE_EXIT_CODE);
+}

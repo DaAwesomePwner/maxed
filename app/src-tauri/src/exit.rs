@@ -47,6 +47,13 @@ pub(crate) struct ExitControl {
     pub startup_failed: AtomicBool,
 }
 impl ExitControl {
+    /// Setup has not launched the window worker. Allow the queued exit without
+    /// entering normal shutdown, which requires a fully managed SetupService.
+    pub fn setup_failed(&self) {
+        self.startup_failed.store(true, Ordering::Release);
+        self.exiting.store(true, Ordering::Release);
+        self.finished.store(true, Ordering::Release);
+    }
     pub fn clear_native_warning(&self) {
         *self.native_warning_at.lock().unwrap() = None;
     }
