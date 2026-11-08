@@ -80,7 +80,7 @@ export const defaultLogsPosition = (): LogsPosition => ({
   range: null,
 });
 export interface FightPosition { playerWindow: number; selectedPlayerId: string | null; sourceWindow: number; plotted?: string[] | null }
-export interface StoryPosition { selectedTab?: string | null; allFights?: boolean; timelineWindow?: number; fightWindow?: number; lootWindow?: number; otherTargets?: boolean; otherFightWindow?: number; timelinePointId?: string | null }
+export interface StoryPosition { selectedTab?: string | null; allFights?: boolean; otherTargets?: boolean; timelinePointId?: string | null }
 
 export interface ListState {
   homeScope: 'session' | 'today' | null;
@@ -295,8 +295,6 @@ export function normalizeListState(input: unknown): ListState {
     storyPosition: record(position) ? {
       selectedTab: safeId(position.selectedTab) ? position.selectedTab : null,
       allFights: position.allFights === true, otherTargets: position.otherTargets === true,
-      timelineWindow: windowIndex(position.timelineWindow), fightWindow: windowIndex(position.fightWindow), lootWindow: windowIndex(position.lootWindow),
-      otherFightWindow: windowIndex(position.otherFightWindow),
       timelinePointId: safeId(position.timelinePointId) ? position.timelinePointId : null,
     } : null,
     runsPosition: validRunFilter(value.filters) && Array.isArray(previous) && previous.every(cursor => validRunCursor(cursor)

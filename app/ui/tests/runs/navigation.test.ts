@@ -2,7 +2,6 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { setDebugMode } from '../../src/lib/debug/debug';
-import { DENSE_STORY_ROWS } from '../../src/lib/phase2/contracts';
 import type { RunStory } from '../../src/lib/bindings/RunStory';
 import type { HomeSummary } from '../../src/lib/bindings/HomeSummary';
 import type { HistoryReply } from '../../src/lib/bindings/HistoryReply';
@@ -79,7 +78,7 @@ it.each(['initial', 'explicit'] as const)('death_anchor_waits_for_story_rows (%s
   expect(anchor).toBeTruthy(); expect(document.activeElement).toBe(anchor);
   expect(anchor!.getAttribute('tabindex')).toBe('-1');
   expect(anchor!.textContent).toMatch(/Death/);
-  expect(region('Timeline').queryAllByRole('link').length).toBeLessThanOrEqual(DENSE_STORY_ROWS);
+  expect(region('Timeline').queryAllByRole('link').length).toBeLessThanOrEqual(3);
 });
 
 it('clicking_fight_during_story_refresh_shows_fight_without_error', async () => {

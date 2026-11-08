@@ -25,7 +25,7 @@ it('phase2_checkpoint_legacy_state_and_optional_props', () => {
 it('checkpoint freezes the shared dense window sizes', async () => {
   const path = '../../src/lib/phase2/contracts.ts';
   const constants: Record<string, unknown> = await import(/* @vite-ignore */ path);
-  expect(constants).toMatchObject({ DENSE_STORY_ROWS: 3, DENSE_ALERT_ROWS: 4 });
+  expect(constants).toMatchObject({ DENSE_ALERT_ROWS: 4 });
 });
 
 it.each([-1, 1.2, Infinity, NaN, '2'])('phase2_navigation_windows_and_bounds rejects malformed windows (%s)', value => {

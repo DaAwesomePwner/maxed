@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { HistoryReply } from '../../src/lib/bindings/HistoryReply';
 import type { RunStory } from '../../src/lib/bindings/RunStory';
-import { DENSE_STORY_ROWS } from '../../src/lib/phase2/contracts';
 import { advance, click, deferred, fight, flush, follow, largeStory, main, mountRuns, player, ready, region, run, saved, source, story } from './fixtures';
 
 beforeEach(() => { setDebugMode(true);
