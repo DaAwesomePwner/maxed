@@ -260,19 +260,25 @@ impl CaptureRuntime {
     }
 
     pub(crate) fn publisher(&self, app: tauri::AppHandle) -> Result<Publisher, String> {
+        self.publisher_with(|failed| Publisher::native(app, failed))
+    }
+
+    // The factory substitutes only the presentation transport in tests; failure
+    // reporting and publisher ownership are the production path.
+    fn publisher_with(
+        &self,
+        create: impl FnOnce(Arc<dyn Fn() + Send + Sync>) -> Result<Publisher, String>,
+    ) -> Result<Publisher, String> {
         let mut publisher = self.publisher.lock().map_err(|_| WORKER_FAILED)?;
         if let Some(publisher) = publisher.as_ref() {
             return Ok(publisher.clone());
         }
         let shared = Arc::downgrade(&self.shared);
-        let created = Publisher::native(
-            app,
-            Arc::new(move || {
-                if let Some(shared) = shared.upgrade() {
-                    shared.bridge_failed.store(true, Ordering::Release);
-                }
-            }),
-        )?;
+        let created = create(Arc::new(move || {
+            if let Some(shared) = shared.upgrade() {
+                shared.bridge_failed.store(true, Ordering::Release);
+            }
+        }))?;
         let account_publisher = created.clone();
         *self
             .shared
@@ -305,6 +311,10 @@ impl CaptureRuntime {
                 publisher.publish(Publication::Snapshot(Box::new(snapshot)))
             }),
         }
+    }
+
+    pub(crate) fn presentation_failed(&self) -> bool {
+        self.shared.bridge_failed.load(Ordering::Acquire)
     }
 
     pub(crate) fn reconnect_presentation(&self) -> Result<(), String> {
