@@ -198,7 +198,7 @@ impl Decoder {
                     vec![diagnostic(Diagnostic::Recovering)]
                 }
             }
-            StreamEvent::Closed { .. } => {
+            StreamEvent::Closed { reason, .. } => {
                 if self.explain {
                     self.failures.push(StructuralReport::Stream {
                         context: context(
@@ -219,7 +219,9 @@ impl Decoder {
                 let mut out = Vec::new();
                 if partial {
                     out.push(diagnostic(Diagnostic::BadFrame));
-                    out.push(diagnostic(Diagnostic::Recovering));
+                    if reason != maxed_types::CloseReason::Stopped {
+                        out.push(diagnostic(Diagnostic::Recovering));
+                    }
                 }
                 out.push(diagnostic(Diagnostic::Closed));
                 out

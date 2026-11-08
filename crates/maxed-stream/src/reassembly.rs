@@ -53,6 +53,18 @@ impl Half {
                     .map(|p| p.seq.wrapping_add(u32::from(p.syn)))
                     .min_by_key(|seq| serial_distance(*seq, expected))
                     .unwrap();
+                if serial_distance(next, expected) as usize > MAX_BYTES {
+                    // A stray far-ahead segment must not pin the sequence cursor
+                    // ahead of all subsequent legitimate traffic.
+                    self.invalidate();
+                    events.push(StreamEvent::Gap {
+                        conn,
+                        dir,
+                        at,
+                        reason: GapReason::ReorderLimit,
+                    });
+                    break;
+                }
                 self.expected = Some(next);
                 events.push(StreamEvent::Gap {
                     conn,
@@ -131,6 +143,7 @@ struct Generation {
     flow: FlowKey,
     conn: ConnId,
     halves: [Half; 2],
+    latest_at: Timestamp,
 }
 struct Retired {
     flow: FlowKey,
@@ -177,7 +190,9 @@ impl Reassembler {
             let mut ranges: [Vec<(u32, usize)>; 2] = Default::default();
             for (i, mut half) in generation.halves.into_iter().enumerate() {
                 let was_closed = half.closed;
-                half.drain(generation.conn, DIRECTIONS[i], at, true, events);
+                if reason != CloseReason::Stopped {
+                    half.drain(generation.conn, DIRECTIONS[i], at, true, events);
+                }
                 if was_closed || !half.closed {
                     events.push(StreamEvent::Closed {
                         conn: generation.conn,
@@ -256,6 +271,7 @@ impl Reassembler {
                 flow: segment.flow,
                 conn: ConnId(self.next_id),
                 halves: Default::default(),
+                latest_at: at,
             });
         }
         let Some(index) = self.active.iter().position(|g| g.flow == segment.flow) else {
@@ -336,12 +352,17 @@ impl Reassembler {
             half.drain(conn, segment.dir, at, true, &mut events);
         }
         let segment_dir = segment.dir;
+        half.expected.get_or_insert(start);
         half.pending.push(segment);
         half.drain(
             conn,
             segment_dir,
             at,
-            half.pending.len() >= HOLE_SEGMENTS,
+            half.pending.len() >= HOLE_SEGMENTS
+                || half
+                    .pending
+                    .iter()
+                    .any(|p| generation.latest_at.0.saturating_sub(p.at.0) >= HOLE_AGE_MICROS),
             &mut events,
         );
         if generation.halves.iter().all(|h| h.closed) {
@@ -356,6 +377,8 @@ impl Reassembler {
     pub fn expire(&mut self, at: Timestamp) -> Vec<StreamEvent> {
         let mut events = Vec::new();
         for generation in &mut self.active {
+            generation.latest_at = generation.latest_at.max(at);
+            let at = generation.latest_at;
             for (i, half) in generation.halves.iter_mut().enumerate() {
                 if half
                     .pending
@@ -377,13 +400,17 @@ impl Reassembler {
         at: Timestamp,
         reason: GapReason,
     ) -> Vec<StreamEvent> {
-        let Some(generation) = self.active.iter_mut().find(|g| g.flow == flow) else {
-            return vec![];
+        let active = self.active.iter().position(|g| {
+            g.flow == flow
+                && g.halves[direction_index(dir)].opened
+                && !g.halves[direction_index(dir)].closed
+        });
+        let Some(index) = active else {
+            // No live directional recipient: retain the unattributed-loss path.
+            return self.gap_all(at, reason);
         };
+        let generation = &mut self.active[index];
         let half = &mut generation.halves[direction_index(dir)];
-        if !half.opened || half.closed {
-            return vec![];
-        }
         half.invalidate();
         vec![StreamEvent::Gap {
             conn: generation.conn,

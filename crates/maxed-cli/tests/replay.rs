@@ -205,3 +205,83 @@ fn malformed_frames_report_loss_to_the_attributed_flow_or_all_candidates() {
         }
     }
 }
+
+#[test]
+fn eof_partial_frame_and_pending_hole_do_not_report_capture_loss_or_deliver_tail() {
+    for hole in [false, true] {
+        let mut pipeline = Pipeline::default();
+        pipeline.push(frame(0, 9, true, b""));
+        pipeline.push(frame(
+            1,
+            if hole { 12 } else { 10 },
+            false,
+            if hole { &[0, 0, 0, 5, 105] } else { &[0, 0] },
+        ));
+        let events = pipeline.finish();
+        assert!(events.iter().all(|e| matches!(
+            e,
+            DecodeEvent::Diagnostic {
+                kind: Diagnostic::BadFrame | Diagnostic::Cancelled,
+                ..
+            }
+        )));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            DecodeEvent::Diagnostic {
+                kind: Diagnostic::Cancelled,
+                ..
+            }
+        )));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(
+                    e,
+                    DecodeEvent::Diagnostic {
+                        kind: Diagnostic::BadFrame,
+                        ..
+                    }
+                ))
+                .count(),
+            usize::from(!hole)
+        );
+    }
+}
+
+#[test]
+fn malformed_inactive_unopened_or_closed_flow_falls_back_to_visible_loss() {
+    for state in 0..3 {
+        let mut pipeline = Pipeline::default();
+        pipeline.push(frame(0, 9, true, b""));
+        let mut other = frame(1, 9, true, b"");
+        other.bytes[34..36].copy_from_slice(&50001u16.to_be_bytes());
+        pipeline.push(other);
+        let mut next_index = 2;
+        if state == 2 {
+            let mut fin = frame(2, 10, false, b"");
+            fin.bytes[47] = 1;
+            pipeline.push(fin);
+            next_index += 1;
+        }
+        let mut bad = frame(next_index, 10, false, &[0, 0]);
+        match state {
+            0 => bad.bytes[34..36].copy_from_slice(&50002u16.to_be_bytes()),
+            1 => {
+                bad.bytes[26..30].copy_from_slice(&[127, 0, 0, 2]);
+                bad.bytes[30..34].copy_from_slice(&[127, 0, 0, 1]);
+                bad.bytes[34..38].copy_from_slice(&[8, 2, 0xc3, 0x50]);
+            }
+            _ => {}
+        }
+        bad.bytes.pop();
+        let events = pipeline.push(bad);
+        assert!(events.iter().any(|e| matches!(
+            e,
+            DecodeEvent::Diagnostic {
+                conn: maxed_types::ConnId(2),
+                kind: Diagnostic::Recovering,
+                ..
+            }
+        )));
+    }
+}

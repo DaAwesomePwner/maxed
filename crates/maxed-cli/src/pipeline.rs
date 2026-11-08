@@ -131,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn eof_preserves_partial_frame_loss() {
+    fn eof_preserves_partial_frame_diagnostic_without_coverage_loss() {
         let mut p = Pipeline::default();
         p.push(frame(0, 50000, 9, true, &[]));
         p.push(frame(1, 50000, 10, false, &[0, 0]));
@@ -143,7 +143,7 @@ mod tests {
                 ..
             })
         ));
-        assert!(events.iter().any(|e| matches!(
+        assert!(!events.iter().any(|e| matches!(
             e,
             DecodeEvent::Diagnostic {
                 kind: Diagnostic::Recovering,

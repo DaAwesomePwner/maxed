@@ -216,7 +216,11 @@ Missing TCP bytes trigger a directional gap after 32 buffered segments, one
 second of capture time checked on subsequent frames, or the existing 2 MiB
 budget. Buffered bytes are retained for delivery after the gap, but RC4 alignment
 may prevent decoding until the existing recovery search succeeds. Quiet holes
-are reported at the next frame or close, not by a wall-clock timer. Partial
-protocol frames at close report loss. Malformed frames with insufficient flow
+are reported at the next frame or wire close, not by a wall-clock timer. Expiry
+uses a nondecreasing timestamp watermark per flow. Far-ahead sequence jumps
+beyond 2 MiB invalidate rather than pinning the cursor. Partial protocol frames
+at wire close report loss; teardown/EOF only reports a decode diagnostic and
+discards pending holes without marking coverage loss. Malformed frames with insufficient flow
 identity retain global invalidation so every candidate stream reports possible
-loss. Frames with readable addresses and ports affect only that flow/direction.
+loss. Frames with readable addresses and ports affect only that active flow/direction;
+inactive, unopened or closed recipients fall back to global invalidation.

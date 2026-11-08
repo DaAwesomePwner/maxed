@@ -266,19 +266,26 @@ baselines, and retry superseded requests for its current view.
 ## TCP loss bounds
 
 A directional sequence hole waits for at most 32 distinct buffered segments or
-one second of capture timestamp age, checked whenever another frame arrives.
+one second of capture timestamp age, checked whenever another frame arrives
+against each flow's highest observed capture timestamp. Regressing timestamps
+cannot lower that expiry watermark.
 The 2 MiB pending-byte cap can trigger recovery earlier. Recovery emits
 `ReorderLimit` before advancing to the earliest buffered sequence and delivering
 available bytes in sequence order; it does not discard the buffered tail.
-Close/replacement also flushes short unresolved holes with explicit gaps. With
-no further capture frames, age expiry waits until the next frame or shutdown.
+Forced advances cross at most 2 MiB of missing sequence space; farther queued
+data is discarded with an explicit gap and the next segment establishes a new
+cursor. Wire reset/replacement also flushes short unresolved holes with explicit
+gaps. With no further capture frames, age expiry waits until the next frame.
 These are passive reassembly bounds, not a guarantee of protocol recovery: the
 existing directional gate and RC4 alignment search still determine decodability.
 
-A protocol close with a partial header/body emits `BadFrame` and `Recovering`
-before `Closed`, preserving loss coverage. Teardown preserves these diagnostics
-while translating closes to cancellation. Malformed frames with a readable IPv4
-address/port prefix invalidate only that flow's observed direction. Unattributable
-frames (including noninitial fragments) retain global invalidation and emit
+A wire close with a partial header/body emits `BadFrame` and `Recovering`
+before `Closed`, preserving loss coverage. Capture teardown and replay EOF are
+not wire loss: pending holes are discarded without delivery or gaps, partial
+framing reports only `BadFrame`, and closes become cancellation. Malformed frames
+with a readable IPv4 address/port prefix invalidate only that flow's active
+observed direction. If that recipient is inactive, unopened or closed, use global
+invalidation. Unattributable frames (including noninitial fragments) retain global
+invalidation and emit
 recovery diagnostics for every active direction: any may have lost data.
 Assigned frame-index discontinuities still invalidate all active directions.

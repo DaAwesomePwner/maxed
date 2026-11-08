@@ -57,52 +57,56 @@ fn completed_frames_survive_a_later_impossible_length() {
 fn decoder_close_reports_partial_header_or_body_before_closed() {
     use maxed_protocol::{DecodeEvent, Decoder, Diagnostic};
     use maxed_types::{CloseReason, ConnId, Direction, StreamChunk, StreamEvent, Timestamp};
-    for bytes in [
-        vec![],
-        vec![0, 0],
-        vec![0, 0, 0, 8, 105],
-        vec![0, 0, 0, 5, 105],
-    ] {
-        let partial = !bytes.is_empty() && bytes.len() != 5 || bytes == [0, 0, 0, 8, 105];
-        let mut decoder = Decoder::default();
-        decoder.push(StreamEvent::Opened {
-            conn: ConnId(1),
-            dir: Direction::ClientToServer,
-            at: Timestamp(0),
-            fresh: true,
-            syn_proven: true,
-        });
-        decoder.push(StreamEvent::Data(StreamChunk {
-            conn: ConnId(1),
-            dir: Direction::ClientToServer,
-            at: Timestamp(1),
-            bytes,
-            origins: vec![],
-        }));
-        let events = decoder.push(StreamEvent::Closed {
-            conn: ConnId(1),
-            dir: Direction::ClientToServer,
-            at: Timestamp(2),
-            reason: CloseReason::Fin,
-        });
-        let kinds: Vec<_> = events
-            .into_iter()
-            .map(|e| match e {
-                DecodeEvent::Diagnostic { kind, .. } => kind,
-                _ => panic!("unexpected packet"),
-            })
-            .collect();
-        assert_eq!(
-            kinds,
-            if partial {
-                vec![
-                    Diagnostic::BadFrame,
-                    Diagnostic::Recovering,
-                    Diagnostic::Closed,
-                ]
-            } else {
-                vec![Diagnostic::Closed]
-            }
-        );
+    for reason in [CloseReason::Fin, CloseReason::Reset, CloseReason::Stopped] {
+        for bytes in [
+            vec![],
+            vec![0, 0],
+            vec![0, 0, 0, 8, 105],
+            vec![0, 0, 0, 5, 105],
+        ] {
+            let partial = !bytes.is_empty() && bytes.len() != 5 || bytes == [0, 0, 0, 8, 105];
+            let mut decoder = Decoder::default();
+            decoder.push(StreamEvent::Opened {
+                conn: ConnId(1),
+                dir: Direction::ClientToServer,
+                at: Timestamp(0),
+                fresh: true,
+                syn_proven: true,
+            });
+            decoder.push(StreamEvent::Data(StreamChunk {
+                conn: ConnId(1),
+                dir: Direction::ClientToServer,
+                at: Timestamp(1),
+                bytes,
+                origins: vec![],
+            }));
+            let events = decoder.push(StreamEvent::Closed {
+                conn: ConnId(1),
+                dir: Direction::ClientToServer,
+                at: Timestamp(2),
+                reason,
+            });
+            let kinds: Vec<_> = events
+                .into_iter()
+                .map(|e| match e {
+                    DecodeEvent::Diagnostic { kind, .. } => kind,
+                    _ => panic!("unexpected packet"),
+                })
+                .collect();
+            assert_eq!(
+                kinds,
+                if partial && reason == CloseReason::Stopped {
+                    vec![Diagnostic::BadFrame, Diagnostic::Closed]
+                } else if partial {
+                    vec![
+                        Diagnostic::BadFrame,
+                        Diagnostic::Recovering,
+                        Diagnostic::Closed,
+                    ]
+                } else {
+                    vec![Diagnostic::Closed]
+                }
+            );
+        }
     }
 }

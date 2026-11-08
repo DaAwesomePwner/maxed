@@ -91,8 +91,8 @@ impl Pipeline {
                 StreamEvent::Closed { conn, dir, at, .. } => Some((*conn, *dir, *at)),
                 _ => None,
             };
-            // Preserve loss diagnostics and buffered data, but synthesize each
-            // teardown even when cancellation has made the decoder terminal.
+            // Stopped streams discard pending holes and report partial framing
+            // only as BadFrame. Synthesize each teardown even if cancelled.
             decoded.extend(self.decode(vec![event]).into_iter().filter(|event| {
                 !matches!(
                     event,

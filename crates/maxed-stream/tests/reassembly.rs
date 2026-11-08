@@ -443,14 +443,19 @@ fn hole_budget_delivers_all_buffered_bytes_after_gap() {
 }
 
 #[test]
-fn short_holes_expire_or_flush_at_close_with_data_after_gap() {
+fn short_holes_expire_or_flush_at_wire_reset_with_data_after_gap() {
     for close in [false, true] {
         let mut stream = Reassembler::default();
         stream.push(segment(9, true, b""));
         stream.push(segment(12, false, b"tail"));
         assert!(stream.expire(Timestamp(1_000_000)).is_empty());
         let events = if close {
-            stream.close_all(Timestamp(1_000_001))
+            {
+                let mut rst = segment(10, false, b"");
+                rst.rst = true;
+                rst.at = Timestamp(2);
+                stream.push(rst)
+            }
         } else {
             stream.expire(Timestamp(1_000_001))
         };
@@ -488,4 +493,61 @@ fn flow_gap_leaves_other_flow_and_opposite_direction_contiguous() {
         assert!(matches!(events.as_slice(), [StreamEvent::Data(_)]));
         assert_eq!(data(events), b"ok");
     }
+}
+
+#[test]
+fn forced_far_ahead_hole_invalidates_without_pinning_the_cursor() {
+    for budget in [false, true] {
+        let mut stream = Reassembler::default();
+        stream.push(segment(9, true, b""));
+        stream.push(segment(10 + 0x4000_0000, false, b"stray"));
+        assert_eq!(data(stream.push(segment(10, false, b"ok"))), b"ok");
+        let events = if budget {
+            for offset in 1..31 {
+                assert!(stream
+                    .push(segment(10 + 0x4000_0000 + offset * 5, false, b"stray"))
+                    .is_empty());
+            }
+            stream.push(segment(10 + 0x4000_0000 + 31 * 5, false, b"stray"))
+        } else {
+            stream.expire(Timestamp(1_000_001))
+        };
+        assert!(matches!(
+            events.as_slice(),
+            [StreamEvent::Gap {
+                reason: GapReason::ReorderLimit,
+                ..
+            }]
+        ));
+        assert_eq!(data(stream.push(segment(12, false, b"next"))), b"next");
+    }
+}
+
+#[test]
+fn teardown_discards_pending_holes_without_gap_or_data() {
+    let mut stream = Reassembler::default();
+    stream.push(segment(9, true, b""));
+    stream.push(segment(12, false, b"tail"));
+    let events = stream.close_all(Timestamp(2_000_000));
+    assert!(events.iter().all(|e| matches!(
+        e,
+        StreamEvent::Closed {
+            reason: CloseReason::Stopped,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn capture_time_regression_cannot_postpone_an_already_aged_hole() {
+    let mut stream = Reassembler::default();
+    let mut syn = segment(9, true, b"");
+    syn.at = Timestamp(2_000_001);
+    stream.push(syn);
+    let mut late = segment(12, false, b"tail");
+    late.at = Timestamp(1);
+    let events = stream.push(late);
+    assert!(matches!(events.first(), Some(StreamEvent::Gap { .. })));
+    assert_eq!(data(events), b"tail");
+    assert_eq!(data(stream.push(segment(16, false, b"next"))), b"next");
 }
