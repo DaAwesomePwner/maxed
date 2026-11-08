@@ -64,12 +64,16 @@ it.each(['dungeon', 'realm'] as const)('keeps Reconnecting when a long %s resync
 });
 
 it.each(['#/runs', '#/runs/run-1', '#/fights/fight-1', '#/fights/fight-1/players/7', '#/alerts'])(
-  'terminal superseded stops activity without polling on %s', async hash => {
+  'repeated superseded settles after one bounded retry without polling on %s', async hash => {
     const superseded = vi.fn(async () => ({ status: 'superseded' as const }));
     mountPhase2({ hash, queries: { listRuns: superseded, getRun: superseded, getFight: superseded, getPlayerBreakdown: superseded }, alerts: superseded });
     await flush();
+    const initial = superseded.mock.calls.length;
+    expect(initial).toBeGreaterThan(0);
+    // Displacement gets one delayed automatic retry per reader, then waits for an explicit Retry.
+    await advance(5000);
     const calls = superseded.mock.calls.length;
-    expect(calls).toBeGreaterThan(0);
+    expect(calls).toBeLessThanOrEqual(initial * 2);
     expect(screen.getByRole('status', { name: 'Background activity' }).textContent).toBe('');
     await advance(60000);
     expect(superseded).toHaveBeenCalledTimes(calls);
