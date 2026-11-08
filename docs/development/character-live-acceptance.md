@@ -7,7 +7,7 @@ On 2026-10-17, **Wizard L20 (second account)** had explicit zero values for all 
 known-zero path for this tested situation. Later sparse updates omitted the fields; those omissions do not
 replace the observed zeros with unknown values. Missing initial fields in other captures must still stay unknown.
 
-**Gate P remains open.** Zero exalt levels cannot distinguish placement in base versus boost. No matching
+**Gate P remained open at this observation.** Zero exalt levels cannot distinguish placement in base versus boost. No matching
 catalog, gear bonuses, class caps, controlled equipment transition or nonzero-exalt SPD counter-case was available.
 The owner accepted the scoped Gate U pass on 2026-10-17 in
 private-repo PR 176 (archived, not public). This acceptance does not establish stat 113
@@ -29,8 +29,8 @@ On 2026-11-06 the owner accepted weapon/regen values versus the client, 100%/150
 behavior from Windows use. That is in-use acceptance, not a recorded Task 11 pass; the checklist below
 stays unexecuted.
 
-Gate P (exalt placement) remains open: at-cap, pots-left and maxed stay null when exalt is nonzero
-or unknown. Exalt damage (stat 113) remains deferred. Gate U acceptance does not resolve either gate.
+Gate P was resolved by the separate 2026-11-08 evidence below. Missing exalt observations or
+catalog caps still keep cap decisions unavailable. Exalt damage (stat 113) remains deferred.
 
 ## Provenance and method
 
@@ -176,8 +176,8 @@ Equipment slots also have one unchanged configuration across the sample, without
 
 Raw boosts retain their wire meaning. With zero exalt, the two proposed placement formulas coincide, so this
 sample cannot select either one. In particular SPD's zero boost/zero level does not resolve the earlier
-nonzero-level SPD counter-case. Gate P still requires matching catalog caps/gear and controlled nonzero-exalt
-observations/transitions. No cap, maxed-count or pots-left conclusion follows from the unavailable catalog.
+nonzero-level SPD counter-case. This historical sample alone did not resolve Gate P; see the later nonzero-exalt evidence below.
+No cap, maxed-count or pots-left conclusion follows from this unavailable catalog.
 
 ## Multi-account observations and code-reading risks
 
@@ -284,3 +284,45 @@ Also record the full Windows checks on the production-enabled revision: `cargo t
 `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, and
 `cargo clippy --locked -p maxed-app --all-targets --features perf-live -- -D warnings`.
 Neither this U pass nor later baseline acceptance unlocks the separate exalt-damage gate.
+
+
+## Gate P: inside boost, 2026-11-08
+
+Owner-reported sanitized database evidence in [#37](https://github.com/DaAwesomePwner/maxed/issues/37)
+and [#38](https://github.com/DaAwesomePwner/maxed/issues/38), from Maxed 0.2.0,
+establishes exalt bonuses inside raw boost: trained base = total − boost. Production
+now uses `VerifiedInsideBoost`. This records the issue evidence, not a fresh database
+inspection or a new live Windows acceptance run.
+
+The owner confirmed a level-20 class-802 Huntress as 8/8. Installed catalog caps
+match total minus boost in all 96 local profile snapshots, except one DEX value
+one above cap (still at cap). Classes 819 (17 snapshots) and 797 (2) corroborate
+this rule. A still-being-potted class 817 has exalted MP/DEX below cap, so exalt
+presence alone does not imply maxed.
+
+| Stat | Total | Raw boost | Exalt amount | Base / catalog cap |
+| --- | ---: | ---: | ---: | ---: |
+| HP | 1003 | 253 | 0 | 750 |
+| MP | 360 | 10 | 10 | 350 |
+| ATT | 96 | 31 | 0 | 65 |
+| DEF | 44 | 19 | 3 | 25 |
+| SPD | 48 | -2 | 2 | 50 |
+| VIT | 54 | 14 | 2 | 40 |
+| WIS | 64 | 4 | 2 | 60 |
+| DEX | 58 | -2 | 3 | 60 |
+
+Inside-base placement would subtract exalt again, putting six stats below cap,
+contradicting the owner's confirmation. Of the 96 profiles, 69 older rows stored
+8/8; provenance-gated newer rows stored unknown with only HP/ATT highlighted.
+Stats 111/112 take values 0, 5 and 10: they carry HP/MP bonus amounts, not levels.
+MP therefore splits as base 350, exalt 10, other 0 with zero gear MP, rather than
+an impossible exalt 50. The rail displays amounts (`Exalt +10`); any future level
+display must divide HP/MP amounts by five.
+
+A synthetic identity/catalog/equipment regression uses the table to verify all
+eight cap decisions, CharacterView.maxed and local PlayerProfileView.maxed/maxed_stats.
+Its signed synthetic gear reconciles SPD/DEX boosts; it does not identify the
+owner's equipment. Missing caps remain unknown, and contradictory negative Other
+still invalidates the split. No database, raw capture or identity is committed.
+This resolves placement only: stat 113 damage remains deferred, and Task 11,
+controlled equipment transitions and broader Windows UI acceptance remain separate.

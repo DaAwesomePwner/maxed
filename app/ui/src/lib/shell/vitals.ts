@@ -39,7 +39,7 @@ export function statCapUnavailableReason(line: StatLine): string | null {
   if (evidence.reasons.includes('unverified_placement')) return 'exalt placement unverified';
   return 'base or cap unavailable';
 }
-// Exalt is already scaled by the engine (HP/MP ×5); never treat it as a level.
+// Exalt carries the observed bonus amount, including HP/MP; never treat it as a level.
 export function statExalt(line: StatLine | null | undefined): number | null {
   const exalt = line?.exalt;
   return Number.isSafeInteger(exalt) && exalt! > 0 ? exalt! : null;

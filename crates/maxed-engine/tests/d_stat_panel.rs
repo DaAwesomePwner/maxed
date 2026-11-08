@@ -68,13 +68,11 @@ fn observed_levels_survive_sparse_updates_without_becoming_new_observations() {
         let p = c.stat_panel.unwrap();
         let attack = p.lines.iter().find(|s| s.stat_id == 20).unwrap();
         assert_eq!(attack.exalt, Some(2));
-        assert_eq!(attack.at_cap, None);
+        assert_eq!(attack.at_cap, Some(at == 4000));
         assert_eq!(p.lines[0].exalt, Some(0));
-        assert!(attack
-            .split_evidence
-            .as_ref()
-            .unwrap()
-            .reasons
-            .contains(&maxed_types::StatSplitReason::UnverifiedPlacement));
+        assert_eq!(
+            attack.split_evidence.as_ref().unwrap().placement,
+            maxed_types::ExaltPlacement::VerifiedInsideBoost
+        );
     }
 }

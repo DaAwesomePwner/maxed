@@ -1,4 +1,4 @@
-//! Shared checked stat split. Production placement remains provisional (Gate P).
+//! Shared checked stat split. Gate P evidence establishes exalt inside boost.
 use maxed_types::{ExaltPlacement, StatSplitEvidence, StatSplitReason};
 use std::collections::BTreeMap;
 #[derive(Debug, Default, PartialEq)]
@@ -47,7 +47,7 @@ pub(crate) fn panel(
         (28, 53, 110),
     ]
     .into_iter()
-    .map(|(stat_id, boost_id, level_id)| {
+    .map(|(stat_id, boost_id, exalt_id)| {
         let gear = gear_known
             .then(|| {
                 equipment
@@ -72,8 +72,8 @@ pub(crate) fn panel(
                 },
                 ..Default::default()
             },
-            stats.get(&level_id).copied(),
-            ExaltPlacement::ProvisionalInsideBoost,
+            stats.get(&exalt_id).copied(),
+            ExaltPlacement::VerifiedInsideBoost,
         );
         if gear_known && gear.is_none() {
             line.split_evidence
@@ -107,10 +107,10 @@ pub(crate) fn panel(
 }
 // Missing gear does not erase independently known base or exalt. A demonstrated
 // contradiction does: no negative Other, guessed zero, or per-stat placement override.
-fn split_line(mut line: StatLine, level: Option<i32>, placement: ExaltPlacement) -> StatLine {
+fn split_line(mut line: StatLine, amount: Option<i32>, placement: ExaltPlacement) -> StatLine {
     use StatSplitReason::*;
     let mut reasons = Vec::new();
-    line.exalt = match level {
+    line.exalt = match amount {
         None => {
             reasons.push(MissingExalt);
             None
@@ -119,13 +119,8 @@ fn split_line(mut line: StatLine, level: Option<i32>, placement: ExaltPlacement)
             reasons.push(InvalidExalt);
             None
         }
-        Some(n) => match n.checked_mul(if matches!(line.stat_id, 0 | 3) { 5 } else { 1 }) {
-            Some(value) => Some(value),
-            None => {
-                reasons.extend([InvalidExalt, Overflow]);
-                None
-            }
-        },
+        // Stats 105–112 carry bonus amounts, including HP/MP (111/112).
+        Some(n) => Some(n),
     };
     let verified = matches!(
         placement,
@@ -338,8 +333,8 @@ mod tests {
     }
 
     #[test]
-    fn stat_panel_maps_all_levels_independently_of_gear() {
-        for (level_id, stat_id, boost_id, amount) in [
+    fn stat_panel_maps_all_amounts_independently_of_gear() {
+        for (exalt_id, stat_id, boost_id, amount) in [
             (105, 20, 48, 2),
             (106, 21, 49, 2),
             (107, 22, 50, 2),
@@ -349,22 +344,25 @@ mod tests {
             (111, 0, 46, 10),
             (112, 3, 47, 10),
         ] {
-            let stats = BTreeMap::from([(level_id, 2), (stat_id, 100), (boost_id, 20)]);
+            let stats = BTreeMap::from([(exalt_id, amount), (stat_id, 100), (boost_id, 20)]);
             let p = panel(&stats, &BTreeMap::from([(stat_id, 80)]), [None; 4]);
             let line = p.lines.iter().find(|l| l.stat_id == stat_id).unwrap();
             assert_eq!(line.exalt, Some(amount));
             assert_eq!(line.base, Some(80));
-            assert_eq!((line.gear, line.other, line.at_cap), (None, None, None));
+            assert_eq!(
+                (line.gear, line.other, line.at_cap),
+                (None, None, Some(true))
+            );
         }
     }
 
     #[test]
-    fn stat_panel_zero_missing_negative_and_overflow_are_distinct() {
+    fn stat_panel_zero_missing_negative_and_large_amounts_are_distinct() {
         for (level, exalt, eligible) in [
             (Some(0), Some(0), Some(true)),
             (None, None, None),
             (Some(-1), None, None),
-            (Some(i32::MAX), None, None),
+            (Some(i32::MAX), Some(i32::MAX), Some(true)),
         ] {
             let mut stats = BTreeMap::from([(0, 750), (46, 0)]);
             if let Some(level) = level {
@@ -379,7 +377,7 @@ mod tests {
     #[test]
     fn stat_panel_shaitan_observations_preserve_spd_contradiction() {
         // Fixture-derived numeric observations; synthetic identity/catalog/gear.
-        for (id, boost_id, level_id, total, boost, level, base, other) in [
+        for (id, boost_id, exalt_id, total, boost, level, base, other) in [
             (0, 46, 111, 840, 90, 0, Some(750), Some(90)),
             (3, 47, 112, 390, 90, 0, Some(300), Some(90)),
             (20, 48, 105, 81, 6, 2, Some(75), Some(4)),
@@ -390,7 +388,7 @@ mod tests {
             (28, 53, 110, 55, 5, 1, Some(50), Some(4)),
         ] {
             let p = panel(
-                &BTreeMap::from([(id, total), (boost_id, boost), (level_id, level)]),
+                &BTreeMap::from([(id, total), (boost_id, boost), (exalt_id, level)]),
                 &BTreeMap::new(),
                 [Some(&[]); 4],
             );
