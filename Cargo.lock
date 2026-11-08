@@ -2265,7 +2265,7 @@ dependencies = [
 
 [[package]]
 name = "maxed-app"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2304,7 +2304,7 @@ dependencies = [
 
 [[package]]
 name = "maxed-assets"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "maxed-types",
  "png 0.18.1",
@@ -2319,7 +2319,7 @@ dependencies = [
 
 [[package]]
 name = "maxed-capture"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "crossbeam-channel",
  "libloading 0.8.9",
@@ -2331,7 +2331,7 @@ dependencies = [
 
 [[package]]
 name = "maxed-cli"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
@@ -2352,7 +2352,7 @@ dependencies = [
 
 [[package]]
 name = "maxed-engine"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "hmac",
  "maxed-assets",
@@ -2368,7 +2368,7 @@ dependencies = [
 
 [[package]]
 name = "maxed-protocol"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "maxed-types",
  "serde",
@@ -2378,7 +2378,7 @@ dependencies = [
 
 [[package]]
 name = "maxed-recording"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "maxed-types",
  "serde_json",
@@ -2387,7 +2387,7 @@ dependencies = [
 
 [[package]]
 name = "maxed-store"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "crossbeam-channel",
  "maxed-engine",
@@ -2404,7 +2404,7 @@ dependencies = [
 
 [[package]]
 name = "maxed-stream"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "maxed-types",
  "serde_json",
@@ -2412,7 +2412,7 @@ dependencies = [
 
 [[package]]
 name = "maxed-types"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "semver",
  "serde",
