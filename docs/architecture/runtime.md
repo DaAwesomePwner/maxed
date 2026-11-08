@@ -319,14 +319,20 @@ reassembly delivery 1→0, retransmission history 1→1, framing 1→1, RC4 1→
 Payload-buffer allocations have the same 7→5 / 6→4 reduction; the framer now
 uses one allocation when the header is available, instead of header allocation
 plus subsequent growth reallocations. Split headers need an initial small
-allocation and at most one further reservation. Event/origin containers and
+allocation and at most one further reservation. Reset releases the buffer, including
+any up-front reservation from an incomplete large frame. Event/origin containers and
 packet-specific field allocations are outside this count. Prefix overlap still
 moves the remaining bytes within the allocation. These are structural counts,
 not measured throughput or live Npcap performance claims.
 
 Hole expiry retains the capture-time watermark for small timestamp reorders.
 A backward step larger than the one-second age budget re-baselines the watermark
-and pending timestamps, preserving elapsed age where representable. Saturation
+and pending timestamps, preserving elapsed age where representable. That step
+remains reversible until a different capture timestamp arrives: returning to the
+old watermark restores pending timestamps before checking age, so a lone backward
+outlier cannot mass-expire holes. Continued timestamps behind the old watermark
+commit the new baseline. Repeated expiry calls at the same timestamp do not
+commit the step. Saturation
 near timestamp zero can discard less than one age budget of elapsed time; renewed
 clock progress still expires the hole within one second. The 32-segment bound
 also applies when capture timestamps stall or repeatedly move backward. The
