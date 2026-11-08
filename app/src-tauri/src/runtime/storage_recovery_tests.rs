@@ -121,6 +121,7 @@ impl crate::exit::ExitHost for RuntimeExit<'_> {
     fn discard(&self) {
         self.discarded.set(true);
         self.runtime.exit_without_saving();
+        let _ = self.runtime.flush_bridge();
     }
     fn warn(&self, _: bool) {}
     fn exit(&self, code: i32) {
@@ -225,7 +226,7 @@ fn recovery_scenario(native_close: bool) {
         assert!(runtime.shutdown().is_err());
         thread::sleep(crate::exit::NATIVE_DISCARD_DELAY + Duration::from_millis(20));
         crate::exit::run(&control, &host, false).unwrap();
-        assert!(host.code.get().is_some());
+        assert_eq!(host.code.get(), Some(1));
         assert!(!host.discarded.get());
         assert!(!runtime.has_unsaved_summaries());
         let saved = rusqlite::Connection::open(&path).unwrap();

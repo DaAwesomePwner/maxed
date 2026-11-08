@@ -224,7 +224,14 @@ fn early_and_expired_closes_only_renew_warning() {
     ] {
         let control = ExitControl::default();
         control.warned.store(true, Ordering::Release);
-        let old = Instant::now() - age;
+        // On a freshly booted runner, wait until an expired timestamp is
+        // representable rather than skipping the expiry assertion.
+        let old = loop {
+            if let Some(old) = Instant::now().checked_sub(age) {
+                break old;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        };
         *control.native_warning_at.lock().unwrap() = Some(old);
         let host = Fake {
             unsaved: Cell::new(true),
