@@ -66,9 +66,15 @@ fn replay_reader(
             let events = engine.observe_traffic(frame_at);
             envelope(&mut engine, &stream_id, events, &mut output);
         }
-        consume(&mut engine, &stream_id, batch.events, &mut output);
+        consume(&mut engine, &stream_id, batch.events, &mut output, true);
     }
-    consume(&mut engine, &stream_id, pipeline.finish(), &mut output);
+    consume(
+        &mut engine,
+        &stream_id,
+        pipeline.finish(),
+        &mut output,
+        false,
+    );
     let events = engine.finish(at, FightEnd::CaptureStopped);
     envelope(&mut engine, &stream_id, events, &mut output);
     Ok(output)
@@ -79,10 +85,17 @@ fn consume(
     stream_id: &str,
     decoded: Vec<DecodeEvent>,
     output: &mut Vec<EventEnvelope>,
+    observed: bool,
 ) {
     for event in decoded {
         let events = match event {
-            DecodeEvent::Packet(p) if p.alignment_verified => engine.apply_observed(p),
+            DecodeEvent::Packet(p) if p.alignment_verified => {
+                if observed {
+                    engine.apply_observed(p)
+                } else {
+                    engine.apply(p)
+                }
+            }
             DecodeEvent::Packet(p) => {
                 engine.diagnostic(p.conn, p.dir, p.at, Diagnostic::Recovering)
             }

@@ -4,6 +4,8 @@ The native application joins capture, decoding, interpretation, storage and pres
 
 ## Capture and clocks
 
+All modes share frame processing and directional traffic trust. Live idle timing uses monotonic arrivals; offline timing uses recording timestamps.
+
 The capture worker owns TCP reassembly and directional decode, then passes owned packets and diagnostics to one engine. Parsed game TCP payload counts as traffic; UI timers and unrelated frames do not. Unverified cipher alignment cannot establish game facts. A 250 ms tick handles idle expiry and dirty presentation even before the first game frame. Queued frames take priority. Quiet periods longer than five seconds advance a conservative wall-clock estimate with a five-second buffer for delayed capture batches.
 
 A stream owns an immutable validated catalog and the installation's random 32-byte identity key. Account strings are immediately HMAC-SHA256 hashed with domain separation; only opaque character IDs leave the engine. Remote damage attribution is bound to observed object generations. Party separately merges roster rows and links history by the normalized display-name key. `observe_live_traffic` and `apply_observed` separate traffic timing from decoded packets; offline adapters use replay timestamps. Thirty minutes without game traffic ends a session.

@@ -247,6 +247,7 @@ fn consume(
     projection: &mut Projection,
     report: &mut ReplayReport,
     events: Vec<DecodeEvent>,
+    observed: bool,
 ) -> Result<(), CliError> {
     for event in events {
         report.observe(&event);
@@ -256,7 +257,11 @@ fn consume(
                     projection.pending_map = Some(projection.maps.len());
                     projection.maps.push(map.name.clone());
                 }
-                engine.apply_observed(p)
+                if observed {
+                    engine.apply_observed(p)
+                } else {
+                    engine.apply(p)
+                }
             }
             DecodeEvent::Packet(p) => {
                 engine.diagnostic(p.conn, p.dir, p.at, Diagnostic::Recovering)
@@ -328,9 +333,21 @@ pub fn export_domain(input: &Path, catalog: &Path, output: &Path) -> Result<(), 
         if output.trusted_traffic {
             projection.consume(engine.observe_traffic(frame_at))?;
         }
-        consume(&mut engine, &mut projection, &mut report, output.events)?;
+        consume(
+            &mut engine,
+            &mut projection,
+            &mut report,
+            output.events,
+            true,
+        )?;
     }
-    consume(&mut engine, &mut projection, &mut report, pipeline.finish())?;
+    consume(
+        &mut engine,
+        &mut projection,
+        &mut report,
+        pipeline.finish(),
+        false,
+    )?;
     projection.consume(engine.finish(at, FightEnd::CaptureStopped))?;
     drop(reader);
     let input_hash = lower_hex(&hasher.finalize());
@@ -388,12 +405,22 @@ mod tests {
     #[test]
     fn hashing_reader_tracks_mutated_bytes_as_they_are_read() {
         use std::io::{Seek, SeekFrom};
+        struct RemoveFile(std::path::PathBuf);
+        impl Drop for RemoveFile {
+            fn drop(&mut self) {
+                let _ = fs::remove_file(&self.0);
+            }
+        }
         let path = std::env::temp_dir().join(format!("maxed-domain-hash-{}", std::process::id()));
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&path)
             .unwrap();
+        // Install the guard only after CREATE_NEW succeeds; never remove another file.
+        let cleanup = RemoveFile(path.clone());
+        // Shadow the handle so it closes before cleanup during unwinding (Windows).
+        let mut file = file;
         file.write_all(b"old-prefix-old-tail").unwrap();
         let mut hash = Sha256::new();
         let mut reader = HashingReader {
@@ -409,7 +436,7 @@ mod tests {
         assert_eq!(observed, b"old-prefix-new-tail");
         assert_eq!(hash.finalize(), Sha256::digest(&observed));
         drop(file);
-        fs::remove_file(path).unwrap();
+        drop(cleanup);
     }
 
     fn events(stream: &str) -> Vec<EventEnvelope> {
@@ -739,7 +766,8 @@ mod tests {
                                 objectId: damage.objectId,
                             }),
                         };
-                        consume(&mut engine, &mut projection, &mut report, vec![event]).unwrap();
+                        consume(&mut engine, &mut projection, &mut report, vec![event], true)
+                            .unwrap();
                         let first = &engine.snapshot().fights[0];
                         assert_eq!(first.target_id, 4);
                         assert_eq!(first.total_damage, 0.);
@@ -749,6 +777,7 @@ mod tests {
                             &mut projection,
                             &mut report,
                             vec![DecodeEvent::Packet(second)],
+                            true,
                         )
                         .unwrap();
                         assert!(engine
@@ -768,7 +797,7 @@ mod tests {
                         return;
                     }
                 }
-                consume(&mut engine, &mut projection, &mut report, vec![event]).unwrap();
+                consume(&mut engine, &mut projection, &mut report, vec![event], true).unwrap();
             }
         }
         panic!("demo fixture did not emit its first DAMAGE report");

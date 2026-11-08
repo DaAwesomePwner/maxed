@@ -692,3 +692,75 @@ fn export_hash_matches_decoded_recording_bytes() {
     let expected = format!("{:x}", Sha256::digest(&bytes));
     assert_eq!(read(&output)[0]["inputSha256"], expected);
 }
+
+#[test]
+fn demo_and_export_handle_an_unverified_midstream_prefix_end_to_end() {
+    use maxed_engine::EngineConfig;
+    use maxed_recording::{PcapReader, PcapWriter};
+    use maxed_types::{Catalog, EngineEvent, RawFrame, Timestamp};
+    use std::sync::Arc;
+    let scratch = Scratch::new();
+    let input = scratch.path("prefixed.pcap");
+    let mut writer = PcapWriter::new(fs::File::create(&input).unwrap()).unwrap();
+    let mut bytes = vec![0; 59];
+    bytes[12..14].copy_from_slice(&0x0800u16.to_be_bytes());
+    bytes[14] = 0x45;
+    bytes[16..18].copy_from_slice(&45u16.to_be_bytes());
+    bytes[23] = 6;
+    bytes[26..30].copy_from_slice(&[127, 0, 0, 1]);
+    bytes[30..34].copy_from_slice(&[127, 0, 0, 2]);
+    bytes[34..36].copy_from_slice(&50002u16.to_be_bytes());
+    bytes[36..38].copy_from_slice(&2050u16.to_be_bytes());
+    bytes[46] = 0x50;
+    bytes[47] = 0x10; // ACK without a captured SYN.
+    bytes[54..].copy_from_slice(&[0, 0, 0, 5, 105]);
+    writer
+        .write_frame(&RawFrame {
+            index: 0,
+            at: Timestamp(0),
+            original_len: 59,
+            bytes,
+        })
+        .unwrap();
+    let mut source = PcapReader::new(fs::File::open(fixture("story.pcap")).unwrap()).unwrap();
+    while let Some(mut frame) = source.next_frame().unwrap() {
+        frame.at.0 += 10_000_000;
+        writer.write_frame(&frame).unwrap();
+    }
+    writer.finish().unwrap();
+    let catalog: Catalog =
+        serde_json::from_slice(&fs::read(fixture("catalog.json")).unwrap()).unwrap();
+    let events =
+        maxed_cli::demo::replay_engine(&input, Arc::new(catalog), EngineConfig::default()).unwrap();
+    let sessions: Vec<_> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            EngineEvent::SessionUpdated(s) => Some(s),
+            _ => None,
+        })
+        .collect();
+    assert!(!sessions.is_empty());
+    assert!(sessions.iter().all(|s| s.started.0 >= 10_000_000));
+    assert!(sessions.last().unwrap().ended.is_some());
+    let output = scratch.path("prefixed.jsonl");
+    export_domain(&input, &fixture("catalog.json"), &output).unwrap();
+    let rows = read(&output);
+    let runs: Vec<_> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            EngineEvent::RunEnded(run) => Some(run),
+            _ => None,
+        })
+        .collect();
+    assert!(!runs.is_empty());
+    for run in runs {
+        assert!(rows.iter().any(|row| row["kind"] == "run"
+            && row["value"]["started"] == run.started.0
+            && row["value"]["ended"] == json!(run.ended.map(|t| t.0))
+            && row["value"]["outcome"] == json!(run.outcome)));
+    }
+    assert_eq!(
+        rows[0]["inputSha256"],
+        format!("{:x}", Sha256::digest(fs::read(input).unwrap()))
+    );
+}

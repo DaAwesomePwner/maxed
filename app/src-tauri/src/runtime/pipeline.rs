@@ -3,6 +3,8 @@ use maxed_protocol::{DecodeEvent, Decoder, Diagnostic};
 use maxed_stream::driver::{Codec, FrameDriver, ParsedFrame, TrustChange};
 use maxed_types::{ConnId, Direction, GapReason, RawFrame, StreamEvent, Timestamp};
 
+use std::sync::{atomic::AtomicBool, Arc};
+
 pub struct ProtocolCodec(Decoder);
 impl Codec for ProtocolCodec {
     type Event = DecodeEvent;
@@ -64,10 +66,10 @@ impl Codec for ProtocolCodec {
         }
     }
     fn clear(&mut self) {
+        // Drop buffers even when decoder cancellation suppresses diagnostics.
         self.0 = Decoder::default();
     }
 }
-use std::sync::{atomic::AtomicBool, Arc};
 pub(super) type PipelineEvent = maxed_stream::driver::PipelineEvent<DecodeEvent>;
 pub(super) struct Pipeline(FrameDriver<ProtocolCodec>);
 impl Pipeline {

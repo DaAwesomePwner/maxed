@@ -139,6 +139,37 @@ mod tests {
         }
     }
 
+    #[test]
+    fn live_and_cli_classify_recovery_and_teardown_identically() {
+        let conn = ConnId(7);
+        let dir = Direction::ServerToClient;
+        for kind in [
+            Diagnostic::Recovering,
+            Diagnostic::Recovered,
+            Diagnostic::Closed,
+            Diagnostic::Cancelled,
+            Diagnostic::BadFrame,
+            Diagnostic::UnknownId,
+        ] {
+            let event = DecodeEvent::Diagnostic {
+                conn,
+                dir,
+                at: Timestamp(42),
+                kind,
+            };
+            let expected = match kind {
+                Diagnostic::Recovering | Diagnostic::Recovered => TrustChange::Reset { conn, dir },
+                Diagnostic::Closed | Diagnostic::Cancelled => TrustChange::Closed { conn, dir },
+                _ => TrustChange::None,
+            };
+            assert_eq!(ProtocolCodec::trust(&event), expected);
+            assert_eq!(live_pipeline::ProtocolCodec::trust(&event), expected);
+            let teardown = matches!(kind, Diagnostic::Closed | Diagnostic::Cancelled);
+            assert_eq!(ProtocolCodec::is_teardown(&event), teardown);
+            assert_eq!(live_pipeline::ProtocolCodec::is_teardown(&event), teardown);
+        }
+    }
+
     fn event_keys(events: &[DecodeEvent]) -> Vec<String> {
         events
             .iter()

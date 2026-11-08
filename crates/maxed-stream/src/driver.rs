@@ -33,6 +33,7 @@ pub enum ParsedFrame {
         reason: GapReason,
     },
 }
+#[derive(Debug, PartialEq, Eq)]
 pub enum TrustChange {
     Packet {
         conn: ConnId,
@@ -68,6 +69,8 @@ pub struct FrameOutput<E> {
     pub events: Vec<PipelineEvent<E>>,
     pub trusted_traffic: bool,
 }
+/// Trust is directional and belongs to a stream generation, never a socket
+/// tuple alone. Retain only live entries (bounded by the reassembler limit).
 #[derive(Default)]
 struct TrafficTrust {
     streams: HashMap<(ConnId, Direction), (FlowKey, bool)>,
@@ -83,6 +86,8 @@ impl TrafficTrust {
             match event {
                 PipelineEvent::Opened { conn, dir } => {
                     if let Some(s) = segment {
+                        // Match the decoder fresh && syn_proven rule, including
+                        // verified fragments before the first complete packet.
                         self.streams.insert((*conn, *dir), (s.flow, s.syn));
                     }
                 }
@@ -193,11 +198,15 @@ impl<C: Codec> FrameDriver<C> {
     }
     pub fn finish_at(&mut self, at: Timestamp) -> Vec<PipelineEvent<C::Event>> {
         let mut output = Vec::new();
+        // Timers may have advanced beyond the last frame: close at the current
+        // adapter time, never at an older packet receipt.
         for event in self.streams.close_all(at.max(self.last_at)) {
             let close = match &event {
                 StreamEvent::Closed { conn, dir, at, .. } => Some((*conn, *dir, *at)),
                 _ => None,
             };
+            // Stopped streams discard holes and retain partial-frame diagnostics.
+            // Synthesize teardown even when decoder cancellation silences it.
             output.extend(
                 self.decode(vec![event])
                     .into_iter()

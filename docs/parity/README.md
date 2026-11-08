@@ -37,7 +37,8 @@ Corrected historical bugs included dropping server damage before target metadata
 Live capture, native replay/demo, CLI demo replay and domain export use
 `maxed_stream::driver::FrameDriver`. The driver owns frame-index gaps, stream
 expiry, decode ordering, synthetic cancellation at EOF, and directional traffic
-trust. Capture/protocol adapters provide only wire parsing and decoder operations;
+trust. Capture/protocol adapters provide wire parsing, decoder operations, and
+classification of protocol events for trust and teardown;
 no dependency or second frame parse is needed. The parsed segment is consumed by
 reassembly; its small flow/direction/SYN/payload metadata view accompanies the
 result, without cloning its payload.
@@ -54,3 +55,12 @@ idle expiry before accepting returning trusted traffic. Offline playback does
 not invent wall-clock silence between frames. Domain export hashes the exact
 read supplied to `PcapReader`, and validates both private output paths before
 creating files. These rules do not certify live capture or publication safety.
+
+Domain export uses `record::private_output_path`: it resolves existing ancestors
+and refuses paths inside a repository except under its `recordings/` directory.
+It also permits output outside repositories. Decode's `output_path` is stricter:
+it requires the project's private `recordings/` root even for external paths.
+Export retains the recording policy because its sanitized domain records contain
+no packet values, account identities or local paths, and external comparison
+workspaces are supported. Both export files are validated and use CREATE_NEW;
+this policy is not publication approval.
