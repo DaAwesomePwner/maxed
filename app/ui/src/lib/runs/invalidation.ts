@@ -1,5 +1,14 @@
 import type { EventEnvelope } from '../bindings/EventEnvelope';
-import type { Route } from '../navigation/routes';
+import type { FightRelationship, Route } from '../navigation/routes';
+
+// Only enrich invalidation scope; keep the URL and saved navigation entry unchanged.
+export function runInvalidationRoute(
+  route: Route | undefined, relationship: Pick<FightRelationship, 'fightId' | 'runId'> | null,
+): Route | undefined {
+  if (route?.kind !== 'player' || route.runId != null || relationship?.fightId !== route.fightId
+    || relationship.runId == null) return route;
+  return { ...route, runId: relationship.runId };
+}
 
 /** Called synchronously by both the subscription and Shell watermark owner. */
 export function invalidatesRunHistory(route: Route | undefined, envelope: EventEnvelope): boolean {
