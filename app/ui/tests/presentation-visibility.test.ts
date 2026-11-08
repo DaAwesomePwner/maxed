@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/svelte';
 import { createClient } from '../src/lib/bridge/client';
 import { createFixtureTransport } from '../src/lib/bridge/fixture';
 import { subscribeLive } from '../src/lib/bridge/live';
-import { createVisibilityPause, observePresentationVisibility, setNativePresentationVisible } from '../src/lib/bridge/visibility';
+import { isPresentationVisible, createVisibilityPause, observePresentationVisibility, setNativePresentationVisible } from '../src/lib/bridge/visibility';
 import { connectShell } from '../src/lib/shell/connection';
 import { createHomeLiveWindow } from '../src/lib/home/v2/live';
 import DungeonHome from '../src/lib/home/DungeonHome.svelte';
@@ -367,4 +367,41 @@ it('keeps dungeon fight starts, ends and boss kills received while hidden in the
     .flatMap(row => JSON.parse(row.dataset.markerMembers!) as string[]);
   expect(markers).toEqual(expect.arrayContaining([`fight:${first.id}`, `fight:${boss.id}`]));
   expect(createHomeLiveWindow).toHaveBeenCalledOnce();
+});
+
+it.each([
+  ['setDemo', false, false], ['setDemo', false, true],
+  ['setDemo', true, false], ['setDemo', true, true],
+  ['setAdapter', false, false], ['setAdapter', false, true],
+  ['setAdapter', true, false], ['setAdapter', true, true],
+] as const)('%s settles across visibility changes (reject=%s, restore before settle=%s)', async (method, reject, restoreBefore) => {
+  const client = createClient(createFixtureTransport(fixture));
+  vi.spyOn(client, 'setDocumentVisible').mockImplementation(async () => isPresentationVisible());
+  let resolve!: () => void, fail!: (error: Error) => void;
+  vi.spyOn(client, method).mockImplementation(() => new Promise<void>((yes, no) => { resolve = yes; fail = no; }));
+  const query = vi.spyOn(client, 'querySnapshot');
+  const poll = vi.spyOn(client, 'queryStore').mockResolvedValue(saved());
+  const state = vi.fn(), snapshot = vi.fn();
+  const live = subscribeLive(client, { state, snapshot }); releases.push(live.dispose);
+  await flush();
+  const pending = method === 'setDemo' ? live.setDemo(true) : live.setAdapter('synthetic-adapter');
+  setNativePresentationVisible(false);
+  if (restoreBefore) setNativePresentationVisible(true);
+  await flush();
+  expect(query).toHaveBeenCalledOnce();
+  const polls = poll.mock.calls.length;
+  if (reject) fail(new Error('private native error')); else resolve();
+  await pending; await flush();
+  if (reject) {
+    expect(state).toHaveBeenLastCalledWith(expect.objectContaining({ phase: 'failed', message: 'Capture failed. Reconnect.' }));
+    live.reconnect(); await flush();
+  }
+  expect(query).toHaveBeenCalledTimes(2);
+  expect(state).toHaveBeenLastCalledWith(expect.objectContaining({ phase: 'live' }));
+  expect(poll).toHaveBeenCalledTimes(polls + (restoreBefore ? 1 : 0));
+  if (!restoreBefore) {
+    setNativePresentationVisible(true); await flush();
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(poll).toHaveBeenCalledTimes(polls + 1);
+  }
 });
