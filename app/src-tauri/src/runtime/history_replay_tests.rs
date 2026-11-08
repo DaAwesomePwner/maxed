@@ -744,7 +744,11 @@ fn saved_death_and_partial_story_evidence() {
         assert_eq!((summary.target_type, summary.boss_type), (None, None));
         let player = ready(runtime.get_player_breakdown(summary.id.clone(), 1)).unwrap();
         assert_eq!(player.damage, 300.0);
-        assert_eq!((player.dps, player.rank, player.share), (None, None, None));
+        // Shares are derived on read from the fight total, not stored per player.
+        assert_eq!(
+            (player.dps, player.rank, player.share),
+            (None, None, Some(300.0 / story.fights[0].total_damage))
+        );
         assert_eq!(
             open_reader(&path).unwrap().get_run(&story.run.id).unwrap(),
             Some(story)

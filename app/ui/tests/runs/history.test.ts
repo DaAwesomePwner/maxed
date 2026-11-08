@@ -80,7 +80,8 @@ it.each(['failed', 'backpressured'] as const)('writer_state_retains_stale_story_
   page.event({ run_updated: run() }, '13'); await advance();
   expect(main().getByText('Invented Sanctum')).toBeTruthy();
   expect(screen.getAllByText(/saving.*failed|backlog|backpressure/i).length).toBeGreaterThan(0);
-  const retry = main().queryByRole('button', { name: /Retry/i });
+  // The run story's own Retry; the shell's storage banner adds a separate Retry saving action.
+  const retry = main().queryByRole('button', { name: /^Retry$/ });
   if (retry) { await (await import('@testing-library/svelte')).fireEvent.click(retry); await flush(); }
   expect(page.queries.getRun).toHaveBeenCalledTimes(1);
   page.setStore(saved('13')); await advance();
@@ -176,10 +177,12 @@ it('deferred_busy_retries_once_then_requires_stable_manual_retry', async () => {
   const queue = nativeQueue();
   const active = queue.submit('external-active');
   const replaced = Array.from({ length: 31 }, (_, i) => queue.submit(`external-pending:${i}`));
-  const page = mountRuns({ hash: '#/runs/run-1', queries: { getRun: () => queue.submit('run:run-1') } }); await flush();
+  const page = mountRuns({ hash: '#/runs/run-1', queries: { getRun: vi.fn().mockImplementationOnce(() => queue.submit('run:run-1')).mockResolvedValueOnce({ status: 'busy' }).mockImplementation(() => queue.submit('run:run-1')) } }); await flush();
   expect(page.queries.getRun).toHaveBeenCalledTimes(1);
   await advance(0); expect(page.queries.getRun).toHaveBeenCalledTimes(1);
   queue.finish(null); await active; await flush();
+  await advance(999); expect(page.queries.getRun).toHaveBeenCalledTimes(1);
+  await advance(1);
   expect(page.queries.getRun).toHaveBeenCalledTimes(2);
   queue.finish(null); await Promise.all(replaced); await flush();
   expect(main().getByText(/busy/i)).toBeTruthy();
@@ -195,16 +198,16 @@ it('deferred_busy_retries_once_then_requires_stable_manual_retry', async () => {
 it('current_superseded_does_not_spin_and_permanent_failure_stops', async () => {
   const page = mountRuns({ queries: { listRuns: async () => ({ status: 'superseded' }) } }); await flush();
   await advance(6000);
-  expect(page.queries.listRuns).toHaveBeenCalledTimes(1);
-  expect(main().queryByRole('button', { name: /Retry/i })).toBeNull();
+  expect(page.queries.listRuns).toHaveBeenCalledTimes(2);
+  expect(main().getByRole('button', { name: /Retry/i })).toBeTruthy();
   expect(screen.getByRole('status', { name: 'Background activity' }).textContent).toBe('');
   page.queries.listRuns.mockRejectedValueOnce(new Error('permanent read failure'));
   await edit('Dungeon', 'New input'); await advance(300);
   expect(main().getByText(/Run Error/i)).toBeTruthy();
-  await advance(6000); expect(page.queries.listRuns).toHaveBeenCalledTimes(2);
+  await advance(6000); expect(page.queries.listRuns).toHaveBeenCalledTimes(3);
   page.queries.listRuns.mockResolvedValue(ready(runPage())); await click(/Retry/i);
   expect(main().getByRole('link', { name: /Invented Sanctum/ })).toBeTruthy();
-  expect(page.queries.listRuns).toHaveBeenCalledTimes(3);
+  expect(page.queries.listRuns).toHaveBeenCalledTimes(4);
 });
 
 it.each(['manual', 'navigation'] as const)('startup_schema_error_stays_error_until_shared_recovery (%s)', async action => {

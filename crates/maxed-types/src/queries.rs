@@ -64,6 +64,8 @@ pub struct HomeCombat {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct PotionCount {
+    #[serde(default)]
+    pub object_type: Option<u16>,
     pub stat: PotionStat,
     pub count: u32,
 }

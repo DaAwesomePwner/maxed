@@ -349,7 +349,11 @@ pub(super) async fn command(
                 .await?,
         ),
         5 => json(runtime.list_alerts(alert_filter()).await?),
-        6 => json(runtime.scope_loot(scope(), None, 20, vec![]).await?),
+        6 => json(
+            runtime
+                .scope_loot(scope(), None, 20, history_test_catalog())
+                .await?,
+        ),
         7 => json(runtime.dungeon_bests().await?),
         8 => json(
             runtime
@@ -385,7 +389,7 @@ pub(super) async fn command(
                         dungeon: None,
                         chase: vec![],
                     },
-                    vec![],
+                    history_test_catalog(),
                 )
                 .await?,
         ),
@@ -476,13 +480,12 @@ fn ordinary_navigation_never_returns_busy() {
         pending(displaced.as_mut());
         let mut newest = Box::pin(command(&runtime, 3));
         pending(newest.as_mut());
-        assert_eq!(
-            tauri::async_runtime::block_on(displaced).unwrap(),
-            HistoryReply::Superseded
-        );
-        assert_eq!((counts(&runtime).0, counts(&runtime).1), (1, 1));
+        assert_eq!((counts(&runtime).0, counts(&runtime).1), (1, 2));
         release.send(()).unwrap();
         ready(tauri::async_runtime::block_on(active));
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        release.send(()).unwrap();
+        ready(tauri::async_runtime::block_on(displaced));
         entered.recv_timeout(Duration::from_secs(5)).unwrap();
         release.send(()).unwrap();
         ready(tauri::async_runtime::block_on(newest));
@@ -501,13 +504,12 @@ fn alerts_history_home_run_alert_competition_never_returns_busy() {
         pending(displaced.as_mut());
         let mut newest = Box::pin(command(&runtime, if first == 5 { 0 } else { 5 }));
         pending(newest.as_mut());
-        assert_eq!(
-            tauri::async_runtime::block_on(displaced).unwrap(),
-            HistoryReply::Superseded
-        );
-        assert_eq!((counts(&runtime).0, counts(&runtime).1), (1, 1));
+        assert_eq!((counts(&runtime).0, counts(&runtime).1), (1, 2));
         release.send(()).unwrap();
         ready(tauri::async_runtime::block_on(active));
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        release.send(()).unwrap();
+        ready(tauri::async_runtime::block_on(displaced));
         entered.recv_timeout(Duration::from_secs(5)).unwrap();
         release.send(()).unwrap();
         ready(tauri::async_runtime::block_on(newest));
@@ -525,15 +527,15 @@ fn newer_same_key_supersedes_active_even_when_newest_pending_changes_again() {
     pending(refresh.as_mut());
     let mut newest = Box::pin(command(&runtime, 4));
     pending(newest.as_mut());
-    assert_eq!(
-        tauri::async_runtime::block_on(refresh).unwrap(),
-        HistoryReply::Superseded
-    );
+    assert_eq!((counts(&runtime).0, counts(&runtime).1), (1, 2));
     release.send(()).unwrap();
     assert_eq!(
         tauri::async_runtime::block_on(active).unwrap(),
         HistoryReply::Superseded
     );
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(refresh));
     entered.recv_timeout(Duration::from_secs(5)).unwrap();
     release.send(()).unwrap();
     ready(tauri::async_runtime::block_on(newest));
@@ -760,7 +762,7 @@ fn dropped_pending_receiver_never_opens_a_reader_and_panic_recovers() {
 }
 
 #[test]
-fn startup_coalesces_before_any_reader_is_dispatched() {
+fn startup_keeps_distinct_lanes_with_bounded_admission() {
     let dir = tempfile::tempdir().unwrap();
     seed(&dir.path().join("live.sqlite3"));
     let runtime = Arc::new(CaptureRuntime::default());
@@ -772,20 +774,27 @@ fn startup_coalesces_before_any_reader_is_dispatched() {
     }));
     runtime.initialize_home(dir.path().into()).unwrap();
     entered.recv_timeout(Duration::from_secs(5)).unwrap();
-    let mut previous = None;
+    let mut admitted = Vec::new();
     for index in 0..14 {
         let mut next = Box::pin(command(&runtime, index));
-        pending(next.as_mut());
-        if let Some(old) = previous.replace(next) {
+        if index < 8 {
+            pending(next.as_mut());
+            admitted.push(next);
+        } else {
             assert_eq!(
-                tauri::async_runtime::block_on(old).unwrap(),
-                HistoryReply::Superseded
+                tauri::async_runtime::block_on(next).unwrap(),
+                HistoryReply::Busy
             );
         }
-        assert_eq!((counts(&runtime).0, counts(&runtime).1), (0, 1));
+        assert_eq!(
+            (counts(&runtime).0, counts(&runtime).1),
+            (0, (index + 1).min(8))
+        );
     }
     release.send(()).unwrap();
-    ready(tauri::async_runtime::block_on(previous.unwrap()));
+    for request in admitted {
+        ready(tauri::async_runtime::block_on(request));
+    }
 }
 
 #[test]
@@ -1183,8 +1192,13 @@ fn scope_loot_validates_before_read_and_returns_a_page() {
     let (_dir, runtime) = setup();
     for limit in [0, 101] {
         assert_eq!(
-            tauri::async_runtime::block_on(runtime.scope_loot(scope(), None, limit, vec![]))
-                .unwrap_err(),
+            tauri::async_runtime::block_on(runtime.scope_loot(
+                scope(),
+                None,
+                limit,
+                history_test_catalog()
+            ))
+            .unwrap_err(),
             super::history::INVALID
         );
     }
@@ -1192,7 +1206,7 @@ fn scope_loot_validates_before_read_and_returns_a_page() {
         scope(),
         None,
         20,
-        vec![],
+        history_test_catalog(),
     )));
     assert!(page.items.len() <= 20);
     // This runtime fixture seeds sessions/runs/fights, but deliberately no bags.
@@ -1656,4 +1670,97 @@ fn account_scope_switch_preserves_active_and_queued_storage_reads() {
     assert!(
         matches!(tauri::async_runtime::block_on(second).unwrap(), HistoryReply::Ready { value } if value == maxed_store::SCHEMA_VERSION)
     );
+}
+
+#[test]
+fn pending_same_lane_coalesces_without_displacing_other_lanes() {
+    let (_dir, runtime) = setup();
+    let (entered, release) = pause(&runtime);
+    let mut active = Box::pin(native(&runtime, HistoryCaller::NativeTest, "active"));
+    pending(active.as_mut());
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    let mut old = Box::pin(native(&runtime, HistoryCaller::NativeTest, "loot"));
+    pending(old.as_mut());
+    let mut other = Box::pin(native(&runtime, HistoryCaller::NativeTest, "logs"));
+    pending(other.as_mut());
+    let mut newer = Box::pin(native(&runtime, HistoryCaller::NativeTest, "loot"));
+    pending(newer.as_mut());
+    assert_eq!(
+        tauri::async_runtime::block_on(old).unwrap(),
+        HistoryReply::Superseded
+    );
+    assert_eq!(counts(&runtime).1, 2);
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(active));
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(newer));
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(other));
+}
+
+#[test]
+fn full_pending_queue_returns_busy_without_evicting_any_lane() {
+    let (_dir, runtime) = setup();
+    let (entered, release) = pause(&runtime);
+    let mut active = Box::pin(native(&runtime, HistoryCaller::NativeTest, "active"));
+    pending(active.as_mut());
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    let mut queued = Vec::new();
+    let keys: Vec<_> = (0..8).map(|i| format!("reader-{i}")).collect();
+    for key in &keys {
+        let mut request = Box::pin(native(&runtime, HistoryCaller::NativeTest, key));
+        pending(request.as_mut());
+        queued.push(request);
+    }
+    assert_eq!(counts(&runtime).1, 8);
+    assert_eq!(
+        tauri::async_runtime::block_on(native(&runtime, HistoryCaller::NativeTest, "overflow"))
+            .unwrap(),
+        HistoryReply::Busy
+    );
+    assert_eq!(counts(&runtime).1, 8);
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(active));
+    for request in queued {
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        release.send(()).unwrap();
+        ready(tauri::async_runtime::block_on(request));
+    }
+}
+
+#[test]
+fn startup_same_lane_coalesces_before_any_reader_is_dispatched() {
+    let dir = tempfile::tempdir().unwrap();
+    seed(&dir.path().join("live.sqlite3"));
+    let runtime = Arc::new(CaptureRuntime::default());
+    let (send, entered) = bounded(1);
+    let (release, wait) = bounded(1);
+    *runtime.shared.home.on_prepare.lock().unwrap() = Some(Arc::new(move || {
+        send.send(()).unwrap();
+        wait.recv_timeout(Duration::from_secs(10)).unwrap();
+    }));
+    runtime.initialize_home(dir.path().into()).unwrap();
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    let mut previous = None;
+    for _ in 0..14 {
+        let mut next = Box::pin(command(&runtime, 0));
+        pending(next.as_mut());
+        if let Some(old) = previous.replace(next) {
+            assert_eq!(
+                tauri::async_runtime::block_on(old).unwrap(),
+                HistoryReply::Superseded
+            );
+        }
+        assert_eq!((counts(&runtime).0, counts(&runtime).1), (0, 1));
+    }
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(previous.unwrap()));
+}
+
+fn history_test_catalog() -> maxed_store::CatalogQueryData {
+    static CATALOG: std::sync::LazyLock<maxed_store::CatalogQueryData> =
+        std::sync::LazyLock::new(maxed_store::CatalogQueryData::default);
+    CATALOG.clone()
 }

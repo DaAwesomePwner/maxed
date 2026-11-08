@@ -143,7 +143,7 @@ export function mountRuns(options: {
   };
 }
 
-/** Deterministic native-equivalent admission model, NOT a replacement UI/controller.
+/** Legacy single-slot contention model for UI recovery regressions, NOT a replacement controller.
  * Completion is explicit: an active SQL statement cannot be cancelled. Latest pending
  * replaces pending; same-key admission retires the active result. Abuse notices are
  * bounded and delivered only on the captured active completion epoch. All five query

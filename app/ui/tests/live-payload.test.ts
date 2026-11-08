@@ -249,3 +249,87 @@ test.each(['snapshot', 'delta'] as const)('a newer %s can overtake a batch witho
     expect(project.mock.calls.map(([value]) => value.sequence)).toEqual(['15']);
   } finally { connection.dispose(); }
 });
+
+test('same-sequence deltas require the exact revision base', async () => {
+  vi.useFakeTimers();
+  const initial = { ...full('10'), revision: '100' };
+  const transport = createFixtureTransport(initial);
+  const seen: LiveSnapshot[] = [];
+  const querySnapshot = vi.fn().mockResolvedValueOnce(initial)
+    .mockResolvedValue({ ...initial, revision: '103', map: 'recovered' });
+  const connection = subscribeLive({ ...createClient(transport), querySnapshot },
+    { snapshot: value => seen.push(value) });
+  try {
+    await settle();
+    transport.publishSnapshotUpdate({ base_sequence: '10', base_revision: '100',
+      snapshot: { ...initial, revision: '101', map: 'silent', fights: [], drops: [] },
+      removed_fights: [], removed_drops: [] });
+    expect(seen.at(-1)?.map).toBe('silent');
+    expect(seen.at(-1)?.fights).toEqual(initial.fights);
+    transport.publishSnapshotUpdate({ base_sequence: '10', base_revision: '100',
+      snapshot: { ...initial, revision: '103', map: 'wrong base', fights: [], drops: [] },
+      removed_fights: [], removed_drops: [] });
+    expect(seen.at(-1)?.map).toBe('silent');
+    await settle();
+    expect(querySnapshot).toHaveBeenCalledTimes(2);
+    expect(seen.at(-1)?.map).toBe('recovered');
+  } finally { connection.dispose(); vi.useRealTimers(); }
+});
+
+test('a same-watermark missed delta cannot be satisfied by an older query revision', async () => {
+  vi.useFakeTimers();
+  const initial = { ...full('10'), revision: '100' };
+  const transport = createFixtureTransport(initial);
+  const seen: LiveSnapshot[] = [];
+  let resolve!: (snapshot: LiveSnapshot) => void;
+  const pending = new Promise<LiveSnapshot>(done => { resolve = done; });
+  const querySnapshot = vi.fn().mockResolvedValueOnce(initial).mockReturnValueOnce(pending)
+    .mockResolvedValue({ ...initial, revision: '103', map: 'latest' });
+  const connection = subscribeLive({ ...createClient(transport), querySnapshot },
+    { snapshot: value => seen.push(value) });
+  try {
+    await settle();
+    transport.publishSnapshotUpdate({ base_sequence: '10', base_revision: '102',
+      snapshot: { ...initial, revision: '103', fights: [], drops: [] },
+      removed_fights: [], removed_drops: [] });
+    resolve({ ...initial, revision: '101', map: 'obsolete query' });
+    await settle();
+    expect(seen.at(-1)?.revision).toBe('100');
+    await vi.advanceTimersByTimeAsync(300);
+    expect(seen.at(-1)?.map).toBe('latest');
+    expect(querySnapshot).toHaveBeenCalledTimes(3);
+  } finally { connection.dispose(); vi.useRealTimers(); }
+});
+
+test('queried realm score followed by full publication and deltas needs no recovery query', async () => {
+  const { realmSnapshot } = await import('./home-v2/fixtures');
+  const source = realmSnapshot();
+  const score = (revision: string, current: number): LiveSnapshot => ({
+    ...source, revision,
+    instance: { ...source.instance!, realm_score: { current, max: 300000 } },
+  });
+  // Published 10 had score 100; the direct query materialized 11 with score 120.
+  const queried = score('11', 120);
+  const transport = createFixtureTransport(queried);
+  const querySnapshot = vi.fn().mockResolvedValue(queried);
+  const queryStore = vi.fn().mockResolvedValue({
+    state: 'ready', stream_id: source.stream_id, durable: source.sequence, queued: 0, message: '',
+  });
+  const historyBaseline = vi.fn(), seen: LiveSnapshot[] = [];
+  const connection = subscribeLive({ ...createClient(transport), querySnapshot, queryStore },
+    { snapshot: value => seen.push(value), historyBaseline });
+  try {
+    await settle();
+    const stores = queryStore.mock.calls.length;
+    // Native encoder sends full across the unpublished revision 11.
+    transport.publishSnapshotUpdate(score('12', 150));
+    transport.publishSnapshotUpdate({ base_sequence: source.sequence, base_revision: '12',
+      snapshot: { ...score('13', 180), fights: [], drops: [] }, removed_fights: [], removed_drops: [] });
+    await settle();
+    expect(seen.map(value => value.instance?.realm_score?.current)).toEqual([120, 150, 180]);
+    expect(seen.every(value => value.sequence === source.sequence)).toBe(true);
+    expect(querySnapshot).toHaveBeenCalledTimes(1);
+    expect(historyBaseline).toHaveBeenCalledTimes(1);
+    expect(queryStore).toHaveBeenCalledTimes(stores);
+  } finally { connection.dispose(); }
+});

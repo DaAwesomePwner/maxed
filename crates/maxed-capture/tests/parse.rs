@@ -121,3 +121,40 @@ fn rejects_each_truncation_and_invalid_header() {
     raw.bytes[12..14].copy_from_slice(&0x0806u16.to_be_bytes());
     assert!(parse_frame(&raw).unwrap().is_none());
 }
+
+#[test]
+fn malformed_frames_retain_only_trustworthy_directional_attribution() {
+    for tags in 0..=2 {
+        let valid = frame(b"body", 4, 0, tags);
+        let segment = parse_frame(&valid).unwrap().unwrap();
+        let ip = 14 + tags * 4;
+        let tcp = ip + 24;
+        for failure in 0..3 {
+            let mut raw = valid.clone();
+            match failure {
+                0 => {
+                    raw.bytes.pop();
+                }
+                1 => raw.bytes[ip + 6] = 0x20,
+                _ => raw.bytes[tcp + 12] = 0x40,
+            }
+            let error = parse_frame(&raw).err().unwrap();
+            assert_eq!(error.affected_flow(&raw), Some((segment.flow, segment.dir)));
+        }
+        let mut noninitial = valid.clone();
+        noninitial.bytes[ip + 7] = 1;
+        assert_eq!(
+            parse_frame(&noninitial)
+                .err()
+                .unwrap()
+                .affected_flow(&noninitial),
+            None
+        );
+        let mut short = valid;
+        short.bytes.truncate(tcp + 3);
+        assert_eq!(
+            parse_frame(&short).err().unwrap().affected_flow(&short),
+            None
+        );
+    }
+}

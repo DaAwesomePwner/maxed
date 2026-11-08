@@ -29,11 +29,5 @@ export const potionNames: Record<PotionStat, string> = {
   speed: 'Speed', dexterity: 'Dexterity', vitality: 'Vitality', wisdom: 'Wisdom',
 };
 
-/** Match the catalog's exact stat-potion names, including Greater and SB variants. */
-export function potionStat(name: string | null): PotionStat | null {
-  const label = name?.replace(/^Greater /, '').replace(/ \(SB\)$/, '');
-  return (Object.keys(potionNames) as PotionStat[]).find(stat => label === `Potion of ${potionNames[stat]}`) ?? null;
-}
-
 // The catalog's base white bag (crates/maxed-assets/src/rules.rs).
 export const WHITE_BAG_TYPE = 1292;

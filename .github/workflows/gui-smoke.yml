@@ -3,7 +3,8 @@
   "on": {
     "schedule": [{ "cron": "47 9 * * *" }],
     "pull_request": { "branches": ["main"] },
-    "workflow_dispatch": {}
+    "workflow_dispatch": {},
+    "workflow_call": {}
   },
   "concurrency": {
     "group": "gui-smoke-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}",
@@ -16,7 +17,7 @@
       "timeout-minutes": 45,
       "defaults": { "run": { "shell": "pwsh" } },
       "steps": [
-        { "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": { "persist-credentials": false } },
+        { "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "with": { "persist-credentials": false, "ref": "${{ github.sha }}" } },
         { "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", "with": { "node-version": "22.16.0" } },
         { "name": "Restore locked tools", "run": "$channel = [regex]::Match((Get-Content rust-toolchain.toml -Raw), '(?m)^channel\\s*=\\s*\"([^\"]+)\"\\s*$')\nif (-not $channel.Success) { throw 'Rust toolchain channel missing.' }\n$toolchain = $channel.Groups[1].Value\nrustup toolchain install $toolchain --profile minimal --component rustfmt --component clippy\nif ($LASTEXITCODE) { throw 'Rust restore failed.' }\nnpm.cmd ci --prefix app/ui --no-audit --no-fund\nif ($LASTEXITCODE) { throw 'UI restore failed.' }\ncargo fetch --locked\nif ($LASTEXITCODE) { throw 'Cargo restore failed.' }" },
         { "name": "Harness unit tests", "run": "node --test tests/gui-smoke/*.test.mjs\nif ($LASTEXITCODE) { throw 'CDP harness tests failed.' }\npwsh -NoProfile -File tests/gui-smoke/Invoke-GuiSmoke.test.ps1\nif ($LASTEXITCODE) { throw 'GUI launcher tests failed.' }" },

@@ -1,3 +1,4 @@
+import { createVisibilityPause, isPresentationVisible, observePresentationVisibility } from '../../bridge/visibility';
 import type { Client } from '../../bridge/client';
 import type { DungeonProfile } from '../../bindings/DungeonProfile';
 import type { HistoryReply } from '../../bindings/HistoryReply';
@@ -41,6 +42,8 @@ export function createRecapReads(
   receive: (load: RecapLoad | null) => void,
   timeoutMs = RECAP_SAVE_TIMEOUT_MS,
 ): { update(input: Input): void; retry(): void; dispose(): void } {
+  const visibility = createVisibilityPause();
+  let remaining = timeoutMs, timerStarted = 0;
   let input: Input | null = null, key: string | null = null, revision = 0, disposed = false;
   let phase: 'waiting' | 'reading' | 'settled' = 'settled';
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -58,17 +61,14 @@ export function createRecapReads(
     let retryUsed = false, superseded = 0;
     for (;;) {
       if (!current(attempt)) throw new ReadFailure('Recap replaced.');
+      if (!await visibility.wait() || !current(attempt)) throw new ReadFailure('Recap replaced.');
       const reply = await request();
       if (!current(attempt)) throw new ReadFailure('Recap replaced.');
       if (reply.status === 'ready') return reply.value;
-      if (reply.status === 'superseded') {
-        // Other Home readers share the native pending slot; retry the same
-        // inputs, backing off on repeated replacements so contention cannot
-        // fill the 32 attempts/s window.
-        if (++superseded > 1) await delay(Math.min(25 * 2 ** (superseded - 2), 200));
-        continue;
+      if (reply.status === 'superseded' && superseded++ < 2) {
+        await delay(RECAP_BUSY_RETRY_MS); continue;
       }
-      const control = historyControl(reply.status, retryUsed);
+      const control = historyControl(reply.status, retryUsed || reply.status === 'superseded');
       if (!control.retry) throw new ReadFailure(control.message);
       // Busy means the attempt window is full; retry once after it drains.
       retryUsed = true; await delay(RECAP_BUSY_RETRY_MS);
@@ -119,7 +119,7 @@ export function createRecapReads(
     }
   }
   function pump() {
-    if (!input?.recap || phase === 'settled') return;
+    if (!isPresentationVisible() || !input?.recap || phase === 'settled') return;
     const message = waiting();
     if (message !== null) {
       if (message !== HISTORY_CATCH_UP) { revision++; partial('failed', message); }
@@ -130,13 +130,24 @@ export function createRecapReads(
   }
   function start() {
     revision++; clearTimer(); phase = 'waiting'; receive({ status: 'saving' });
-    const attempt = revision;
-    timer = setTimeout(() => {
-      timer = undefined;
-      if (current(attempt)) receive({ status: 'partial', reason: 'timeout', message: HISTORY_CATCH_UP });
-    }, timeoutMs);
+    remaining = timeoutMs;
+    resumeTimer();
     pump();
   }
+  function resumeTimer() {
+    if (timer !== undefined || phase === 'settled' || !isPresentationVisible()) return;
+    const attempt = revision;
+    timerStarted = Date.now();
+    timer = setTimeout(() => {
+      timer = undefined; remaining = 0;
+      if (current(attempt)) receive({ status: 'partial', reason: 'timeout', message: HISTORY_CATCH_UP });
+    }, remaining);
+  }
+  const releaseVisibility = observePresentationVisibility(visible => {
+    if (!visible && timer !== undefined) {
+      remaining = Math.max(0, remaining - (Date.now() - timerStarted)); clearTimer();
+    } else if (visible) { resumeTimer(); pump(); }
+  });
   return {
     update(next) {
       if (disposed) return;
@@ -152,7 +163,7 @@ export function createRecapReads(
     retry() { if (!disposed && input?.recap) start(); },
     dispose() {
       if (disposed) return;
-      disposed = true; revision++; clearTimer(); input = null; receive(null);
+      disposed = true; visibility.dispose(); releaseVisibility(); revision++; clearTimer(); input = null; receive(null);
     },
   };
 }

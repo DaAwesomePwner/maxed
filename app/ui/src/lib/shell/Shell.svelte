@@ -136,6 +136,29 @@
   let setupStream: string | null = null;
   let setupRetry: ReturnType<typeof setTimeout> | undefined;
   let errors = $state({ captureSubscription: '', captureAction: '', snapshot: '', store: '' });
+  let unsavedClose = $state(false);
+  let unsavedDialog: HTMLDivElement | undefined = $state();
+  $effect(() => { if (unsavedClose) unsavedDialog?.focus(); });
+  let pendingSummaries = $state(false);
+  $effect(() => {
+    if (preview) return;
+    let disposed = false;
+    let release: (() => void) | undefined;
+    void client.onUnsavedClose(() => { unsavedClose = true; }).then(stop => {
+      if (disposed) stop(); else release = stop;
+    }).catch(() => { /* Store failure still exposes recovery actions. */ });
+    return () => { disposed = true; release?.(); };
+  });
+  async function recoverStore(discard = false) {
+    if (busy || preview) return;
+    busy = true;
+    try {
+      if (discard) await client.exitWithoutSaving();
+      else { await client.retryStore(); store = await client.queryStore(); pendingSummaries = false; }
+      unsavedClose = false; errors.captureAction = '';
+    } catch { errors.captureAction = discard ? 'Couldn’t exit. Retry.' : 'Couldn’t save. Retry saving.'; }
+    finally { busy = false; }
+  }
   let captureError = $derived([errors.captureSubscription, errors.captureAction].filter(Boolean).join(' '));
   let busy = $state(false);
   let router = $state<Router>();
@@ -455,7 +478,7 @@
     if (busy || preview) return;
     busy = true; errors.captureAction = '';
     try { await (start ? client.startCapture() : client.stopCapture()); }
-    catch { if (mounted) errors.captureAction = 'Capture failed. Retry.'; }
+    catch (error) { if (mounted) { pendingSummaries = String(error).includes('Pending summaries are not saved'); errors.captureAction = 'Capture failed. Retry.'; } }
     finally { if (mounted) busy = false; }
   }
   function save() {
@@ -556,9 +579,20 @@
     {#if navigation && router}
       {#if preview}<p class="preview-note">Preview</p>{/if}
       {#if liveState.phase === 'resyncing'}<DebugNote text="Some updates may be missing." />{/if}
-      {#if store?.state === 'failed'}
-        <p class="store-warning" role="status">Couldn't save. Retry.</p>
-        <DebugNote text={`Latest durable sequence: ${store.durable ?? "unavailable"}`} />
+      {#if unsavedClose}
+        <div bind:this={unsavedDialog} role="alertdialog" tabindex="-1" aria-label="Unsaved changes" aria-describedby="unsaved-description">
+          <p id="unsaved-description">Changes are not saved. Exiting without saving will discard pending summaries.</p>
+          <button disabled={busy || preview} onclick={() => recoverStore()}>Retry saving</button>
+          <button disabled={busy || preview} onclick={() => recoverStore(true)}>Exit without saving</button>
+          <button disabled={busy} onclick={() => { unsavedClose = false; }}>Keep Maxed open</button>
+        </div>
+      {/if}
+      {#if store?.state === 'failed' || pendingSummaries}
+        {#if pendingSummaries || (store?.queued ?? 0) > 0}
+          <p class="store-warning" role="status">Couldn't save. Retry.</p>
+          {#if !unsavedClose}<button disabled={busy || preview} onclick={() => recoverStore()}>Retry saving</button>{/if}
+        {:else if !unsavedClose}<p class="store-warning" role="status">Couldn't save. Storage is unavailable; use Start Capture to try again.</p>{/if}
+        <DebugNote text={`Latest durable sequence: ${store?.durable ?? "unavailable"}`} />
       {:else if liveState.historyFailed || errors.store || !store}<p class="storage-note">Storage Error</p>
       {/if}
       <h1 class:sr-only={homeRoute || ['runs', 'run', 'fight', 'player', 'run-player', 'loot', 'item', 'logs', 'alerts'].includes(navigation.entry.route.kind)} tabindex="-1">{routeTitle(navigation.entry.route)}</h1>

@@ -27,12 +27,12 @@ const settle = () => vi.advanceTimersByTimeAsync(0);
 const hud: HomeHud = { fame_per_hour: 1234, combat: { fights: 5, weighted_dps: 138,
   weighted_party_dps: 100, vs_party: 0.38, avg_rank: 2.6 }, whites: 2,
   ut_st: [101, 102, 103, 104, 105], ut_st_count: 5,
-  potions: [{ stat: 'life', count: 7 }, { stat: 'mana', count: 5 }, { stat: 'attack', count: 3 },
-    { stat: 'speed', count: 2 }, { stat: 'wisdom', count: 1 }] };
+  potions: [{ stat: 'life', object_type: 201, count: 7 }, { stat: 'mana', object_type: null, count: 5 }, { stat: 'attack', object_type: null, count: 3 },
+    { stat: 'speed', object_type: null, count: 2 }, { stat: 'wisdom', object_type: null, count: 1 }] };
 const sprite: SpriteRef = { key: 'synthetic', sheet: 'mapObjects.png', x: 0, y: 0, width: 8, height: 8 };
 const visuals = { ...emptyHomeVisuals(), client_fingerprint: 'a'.repeat(64), objects: [
   ...hud.ut_st.map(object_type => ({ object_type, name: `Synthetic item ${object_type}`, sprite, bag: null })),
-  { object_type: 201, name: 'Potion of Life', sprite, bag: null },
+  { object_type: 201, name: 'Synthetic catalog label', sprite, bag: null },
 ] };
 const props = { hud, sessionStarted: '0', nowMs: 5_400_000, visuals,
   resolveSpriteUrl: (s: SpriteRef) => spriteUrl(visuals.client_fingerprint, s)!,
@@ -201,8 +201,7 @@ it('home_reads_session_scope_verified_character_and_window_bosses_without_snapsh
   for (let i = 0; i < 5; i++) await h.page.rerender({ snapshot: { ...h.snapshot, at: String(Number(h.snapshot.at) + i) } });
   await vi.advanceTimersByTimeAsync(30_000);
   expect(h.read).toHaveBeenCalledOnce();
-  expect(h.catalog).toHaveBeenCalledTimes(8);
-  for (const [, limit] of h.catalog.mock.calls) expect(limit).toBe(1);
+  expect(h.catalog).not.toHaveBeenCalled();
   const types = h.visualRead.mock.calls.flatMap(([types]) => types);
   for (const type of [...hud.ut_st, 201, 1292]) expect(types).toContain(type);
   await h.page.rerender({ snapshot: { ...h.snapshot, character: { ...h.snapshot.character!, identity_verified: false } } });

@@ -27,6 +27,7 @@ fn database(count: usize) -> (tempfile::TempDir, std::path::PathBuf, Connection)
         fight.players[0].player_id = "TestMage".into();
         fight.players[0].is_local = true;
         fight.players[0].rank = Some(1);
+        fight.players[0].damage = fight.total_damage * 0.75;
         fight.players[0].share = Some(0.75);
         apply_batch(
             &mut db,

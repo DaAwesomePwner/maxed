@@ -232,6 +232,20 @@ fn boss_history_attributes_realm_fights_by_visit_interval() {
     let mut stream = Stream::new("synthetic-other-session");
     stream.apply(&mut db, vec![session("other-session", 0, 0, None)]);
     visit(&db, "wrong-session", "other-session", "beta", 20, None);
+    // Modern unknown first-event ownership must not be inferred from a later visit.
+    assert!(open_reader(&path)
+        .unwrap()
+        .boss_history(BossHistoryRequest {
+            character_id: Some("alpha".into()),
+            ..all()
+        })
+        .unwrap()
+        .rows
+        .is_empty());
+    // The interval fallback is only for pre-017 rows with no observation record.
+    db.execute("DELETE FROM observation_characters WHERE kind='fight'", [])
+        .unwrap();
+
     let reader = open_reader(&path).unwrap();
     let mine = reader
         .boss_history(BossHistoryRequest {

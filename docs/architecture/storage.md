@@ -385,3 +385,18 @@ account can override the pointer after its identity watermark is durable.
 Dungeon clear-time PB alerts compare only runs owned by the triggering run's
 account using the same alias-aware ownership expression as Home. Unknown owners
 neither establish nor beat a PB baseline.
+
+Character-filtered fight history and Stats loot totals resolve first-event
+ownership from `observation_characters`, including flattened `character_aliases`.
+A run's character remains the fallback when the observation has no character.
+Containing map visits are used only for legacy observations without an ownership
+record; later visit identity changes cannot reassign recorded observations.
+Revising a pre-017 observation preserves its absent ownership record so this
+legacy fallback remains available. Modern first-event records, including explicit
+unknown owners, remain immutable across revisions. Previously created ambiguous
+NULL-owner records stay unknown; no retrospective recovery is inferred.
+This preserves realm observations when capture begins mid-map without a visit.
+Stats deaths use their explicit character, falling back to the run's character;
+death-only and drop-only activity keeps character-filtered sessions eligible.
+
+The shell exposes **Retry saving** for failed storage with queued summaries or a start refused because summaries are pending. Storage-open failures with no queued summaries direct the user to use **Start Capture** instead. Retry is a no-op when nothing needs recovery; otherwise it first retires the capture owner, then retries and closes the retained writer in original order. It never replaces pending summaries with a new capture stream. A successful retry clears the exit warning and allows capture to start again. Unsaved close offers an explicit discard action that preserves committed history; cancelling or repeating close with healthy presentation retains pending memory. During presentation delivery failure only, a native title warning accepts a later close as discard confirmation only between two and sixty seconds after the warning. Earlier or expired closes only re-warn and renew the interval, without stopping updates or capture. A valid confirmation first calls `retry_store` to retry and close the retained writer; `shutdown` alone cannot recover that writer. A successful retry proceeds to shutdown without discard, even if presentation still fails. Discard is allowed only if the storage retry fails with summaries still pending and the native confirmation remains current. Resubscription clears native confirmation and restores the normal unsaved title.

@@ -142,7 +142,11 @@ pub(crate) fn owner(
         [id],
         |r| r.get(0),
     )?;
-    let character = if existing { None } else { character };
+    if existing {
+        // Preserve absent pre-017 ownership for legacy visit fallback. Modern
+        // first-event ownership (including NULL) is already stored and immutable.
+        return Ok(());
+    }
     let character = character.map(|id| project::resolve(tx, id)).transpose()?;
     tx.execute(
         "INSERT OR IGNORE INTO observation_characters VALUES(?1,?2,?3)",

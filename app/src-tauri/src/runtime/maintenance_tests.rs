@@ -262,7 +262,10 @@ fn capture_start_joins_an_actual_stopped_backup_copy_before_acquiring_live() {
 fn storage_reads_and_pending_page_reads_never_replace_each_other() {
     for key in [
         history::HistoryKey::Home(home_scope()),
-        history::HistoryKey::HomeHud(home_scope(), vec![], vec![]),
+        history::HistoryKey::HomeHud(
+            home_scope(),
+            maxed_store::CatalogQueryData::new(&[], &[]).identity(),
+        ),
         history::HistoryKey::BossHistory(maxed_types::BossHistoryRequest {
             range: None,
             character_id: None,
@@ -482,7 +485,8 @@ fn startup_manifest_restore_does_not_supersede_first_home_read() {
     }));
     runtime.initialize_home(root.path().into()).unwrap();
     waiting.recv_timeout(Duration::from_secs(5)).unwrap();
-    let mut home = Box::pin(runtime.home_hud(home_scope(), vec![], vec![]));
+    let mut home =
+        Box::pin(runtime.home_hud(home_scope(), maxed_store::CatalogQueryData::new(&[], &[])));
     poll_pending(home.as_mut());
     release.send(()).unwrap();
     assert!(matches!(

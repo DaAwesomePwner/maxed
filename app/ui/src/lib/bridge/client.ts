@@ -155,6 +155,8 @@ export interface Commands {
   get_startup_setup_required: { args: undefined; result: boolean };
   get_catalog_available: { args: undefined; result: boolean };
   get_capture_status: { args: undefined; result: CaptureStatus };
+  retry_store: { args: undefined; result: void };
+  exit_without_saving: { args: undefined; result: void };
   start_capture: { args: undefined; result: void };
   stop_capture: { args: undefined; result: void };
   get_live_snapshot: { args: undefined; result: LiveSnapshot };
@@ -204,6 +206,7 @@ export interface Events {
   'account-history-changed': AccountHistoryChanged;
   'storage-maintenance-changed': StorageMaintenanceChanged;
   'capture-status': CaptureStatus;
+  'unsaved-close': null;
   'presentation-visible': boolean;
   'engine-event': EventEnvelope | EventBatch;
   'live-snapshot': LiveSnapshotUpdate;
@@ -323,6 +326,9 @@ export function createClient(transport: Transport) {
     querySetup: (options?: { retry?: boolean }) => transport.invoke('get_setup_status', options),
     querySettings: () => transport.invoke('get_settings', undefined),
     queryStore: () => transport.invoke('get_store_status', undefined),
+    retryStore: () => transport.invoke('retry_store', undefined),
+    exitWithoutSaving: () => transport.invoke('exit_without_saving', undefined),
+    onUnsavedClose: (receive: () => void) => transport.listen('unsaved-close', receive),
     startCapture: () => transport.invoke('start_capture', undefined),
     stopCapture: () => transport.invoke('stop_capture', undefined),
     listAdapters: () => transport.invoke('list_adapters', undefined),

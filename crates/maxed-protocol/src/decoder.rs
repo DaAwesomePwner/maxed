@@ -198,7 +198,7 @@ impl Decoder {
                     vec![diagnostic(Diagnostic::Recovering)]
                 }
             }
-            StreamEvent::Closed { .. } => {
+            StreamEvent::Closed { reason, .. } => {
                 if self.explain {
                     self.failures.push(StructuralReport::Stream {
                         context: context(
@@ -209,11 +209,22 @@ impl Decoder {
                         event: StreamReportEvent::Closed,
                     });
                 }
-                self.streams.remove(&(conn, dir));
+                let partial = self
+                    .streams
+                    .remove(&(conn, dir))
+                    .is_some_and(|s| s.framer.has_pending());
                 if !self.streams.keys().any(|(id, _)| *id == conn) {
                     self.last_newticks.remove(&conn);
                 }
-                vec![diagnostic(Diagnostic::Closed)]
+                let mut out = Vec::new();
+                if partial {
+                    out.push(diagnostic(Diagnostic::BadFrame));
+                    if reason != maxed_types::CloseReason::Stopped {
+                        out.push(diagnostic(Diagnostic::Recovering));
+                    }
+                }
+                out.push(diagnostic(Diagnostic::Closed));
+                out
             }
             StreamEvent::Gap { .. } => {
                 if let Some(s) = self.streams.get_mut(&(conn, dir)) {
@@ -249,7 +260,7 @@ impl Decoder {
                 }
                 let framed = s.framer.push(&chunk.bytes);
                 let mut out = Vec::new();
-                for f in framed.frames {
+                for mut f in framed.frames {
                     let packet_ordinal = self.packet_ordinal;
                     self.packet_ordinal = self.packet_ordinal.saturating_add(1);
                     if let Some(count) = &mut s.packets_since_recovered {
@@ -257,7 +268,7 @@ impl Decoder {
                     }
                     let was_synced = s.alignment.is_synced();
                     let id = f[4];
-                    let plain = s.alignment.consume(id, &f[5..]);
+                    let plain = s.alignment.consume_in_place(id, &mut f[5..]);
                     if self.cancel.load(Ordering::Relaxed) {
                         self.terminated = true;
                         out.push(diagnostic(Diagnostic::Cancelled));
@@ -298,9 +309,10 @@ impl Decoder {
                         out.push(diagnostic(Diagnostic::Recovered));
                     }
                     match plain {
-                        Ok(Some(body)) => {
-                            s.observe_verification_tick(id, dir, &body);
-                            match decode_packet(id, dir, &body) {
+                        Ok(true) => {
+                            let body = &f[5..];
+                            s.observe_verification_tick(id, dir, body);
+                            match decode_packet(id, dir, body) {
                                 Ok((packet, left)) => {
                                     if let crate::Packet::NewTick(tick) = &packet {
                                         self.last_newticks.insert(conn, tick.tickId);
@@ -370,7 +382,7 @@ impl Decoder {
                                             ),
                                             failure: crate::explanation::explain_failure(
                                                 id,
-                                                &body,
+                                                body,
                                                 error,
                                                 s.alignment_verified && synced,
                                             ),
@@ -385,7 +397,7 @@ impl Decoder {
                                 }
                             }
                         }
-                        Ok(None) => {}
+                        Ok(false) => {}
                         Err(_) => out.push(diagnostic(Diagnostic::BadFields)),
                     }
                 }

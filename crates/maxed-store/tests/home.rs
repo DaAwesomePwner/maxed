@@ -352,7 +352,7 @@ fn weighted_share_requires_every_fights_known_unambiguous_local() {
                 .unwrap()
                 .recent_details[0]
                 .local_share,
-            None,
+            if variant == 0 { Some(0.74) } else { None },
             "variant {variant}"
         );
     }

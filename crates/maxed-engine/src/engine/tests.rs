@@ -1831,3 +1831,114 @@ fn chat_packet_names_and_map_are_bounded_at_utf8_boundaries() {
     assert_eq!(m.text, "hello");
     assert!(!m.truncated, "truncated describes the text only");
 }
+
+#[test]
+fn character_rebuilds_only_for_changed_local_inputs() {
+    let mut e = engine();
+    setup(&mut e);
+    let builds = e.character_rebuilds;
+    let before = e.character.clone();
+    apply(
+        &mut e,
+        3000,
+        tick(vec![
+            status(2, vec![stat(1, 9000)]),
+            status(1, vec![stat(57, 100)]),
+        ]),
+    );
+    assert_eq!(e.character_rebuilds, builds);
+    assert_eq!(e.character, before);
+    let events = apply(
+        &mut e,
+        4000,
+        tick(vec![
+            status(2, vec![stat(1, 8000)]),
+            status(1, vec![stat(57, 101)]),
+            status(2, vec![stat(1, 7000)]),
+        ]),
+    );
+    assert_eq!(e.character_rebuilds, builds + 1);
+    assert_eq!(e.character.as_ref().unwrap().fame, Some(101));
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event,
+        EngineEvent::CharacterUpdated(c) if c.fame == Some(101)))
+            .count(),
+        1
+    );
+    let builds = e.character_rebuilds;
+    apply(&mut e, 5000, update(vec![object(3, 100, vec![])], vec![]));
+    assert_eq!(e.character_rebuilds, builds);
+}
+
+#[test]
+fn target_refresh_visits_only_changed_classification_inputs() {
+    let mut e = engine();
+    apply(&mut e, 0, map("The Void"));
+    apply(&mut e, 1000, create(1, 1));
+    apply(&mut e, 2000, update(vec![player()], vec![]));
+    apply(&mut e, 3000, damage(1, 1, 100));
+    assert_eq!(e.target_refreshes, 0);
+    assert_eq!(e.snapshot().fights[0].target_kind, None);
+    apply(&mut e, 4000, update(vec![target()], vec![]));
+    assert_eq!(e.target_refreshes, 1);
+    assert_eq!(e.snapshot().fights[0].target_kind, Some(TargetKind::Boss));
+    apply(&mut e, 5000, tick(vec![status(2, vec![stat(1, 8000)])]));
+    apply(&mut e, 6000, damage(1, 2, 100));
+    assert_eq!(e.target_refreshes, 1);
+    apply(&mut e, 7000, quest(2));
+    assert_eq!(e.target_refreshes, 2);
+    assert!(e.snapshot().fights[0].is_current_quest);
+    apply(&mut e, 8000, quest(2));
+    assert_eq!(e.target_refreshes, 2);
+    apply(&mut e, 9000, quest(-1));
+    assert_eq!(e.target_refreshes, 3);
+    assert!(!e.snapshot().fights[0].is_current_quest);
+}
+
+#[test]
+fn clearing_entities_invalidates_character_on_next_remote_merge() {
+    let mut e = engine();
+    setup(&mut e);
+    let builds = e.character_rebuilds;
+    assert!(e.character.as_ref().unwrap().identity_verified);
+    e.clear_entities();
+    let events = apply(&mut e, 3000, tick(vec![status(2, vec![])]));
+    assert_eq!(e.character_rebuilds, builds + 1);
+    assert!(!e.character.as_ref().unwrap().identity_verified);
+    assert!(e.character.as_ref().unwrap().class_id.is_none());
+    assert!(events.iter().any(|event| matches!(event,
+        EngineEvent::CharacterUpdated(c) if !c.identity_verified)));
+    apply(&mut e, 4000, tick(vec![status(2, vec![])]));
+    assert_eq!(e.character_rebuilds, builds + 1);
+}
+
+#[test]
+fn forgetting_local_entity_invalidates_character_on_next_remote_merge() {
+    let mut e = engine();
+    setup(&mut e);
+    let builds = e.character_rebuilds;
+    e.forget_entity(1, &mut Vec::new());
+    let events = apply(&mut e, 3000, tick(vec![status(2, vec![])]));
+    assert_eq!(e.character_rebuilds, builds + 1);
+    assert!(!e.character.as_ref().unwrap().identity_verified);
+    assert!(e.character.as_ref().unwrap().class_id.is_none());
+    assert!(events.iter().any(|event| matches!(event,
+        EngineEvent::CharacterUpdated(c) if !c.identity_verified)));
+    apply(&mut e, 4000, tick(vec![status(2, vec![])]));
+    assert_eq!(e.character_rebuilds, builds + 1);
+}
+
+#[test]
+fn local_presence_and_identical_fields_do_not_rebuild_character() {
+    let mut e = engine();
+    setup(&mut e);
+    let builds = e.character_rebuilds;
+    let before = e.character.clone();
+    e.remove_entity(1, &mut Vec::new());
+    apply(&mut e, 3000, tick(vec![player().status]));
+    assert!(e.entities[&1].present);
+    assert_eq!(e.character_rebuilds, builds);
+    assert_eq!(e.character, before);
+}

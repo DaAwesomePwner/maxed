@@ -9,7 +9,7 @@ use crossbeam_channel::{bounded, select_biased, tick, Receiver, Sender};
 use maxed_capture::{CaptureConfig, CaptureError, CaptureHandle};
 use maxed_protocol::{DecodeEvent, Diagnostic, Packet};
 use maxed_types::{CaptureState, CaptureStatus, FightEnd, Timestamp};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -260,20 +260,25 @@ impl CaptureRuntime {
     }
 
     pub(crate) fn publisher(&self, app: tauri::AppHandle) -> Result<Publisher, String> {
+        self.publisher_with(|failed| Publisher::native(app, failed))
+    }
+
+    // The factory substitutes only the presentation transport in tests; failure
+    // reporting and publisher ownership are the production path.
+    fn publisher_with(
+        &self,
+        create: impl FnOnce(Arc<dyn Fn() + Send + Sync>) -> Result<Publisher, String>,
+    ) -> Result<Publisher, String> {
         let mut publisher = self.publisher.lock().map_err(|_| WORKER_FAILED)?;
         if let Some(publisher) = publisher.as_ref() {
             return Ok(publisher.clone());
         }
         let shared = Arc::downgrade(&self.shared);
-        let created = Publisher::native(
-            app,
-            Arc::new(move || {
-                if let Some(shared) = shared.upgrade() {
-                    shared.bridge_failed.store(true, Ordering::Release);
-                    shared.failed.store(true, Ordering::Release);
-                }
-            }),
-        )?;
+        let created = create(Arc::new(move || {
+            if let Some(shared) = shared.upgrade() {
+                shared.bridge_failed.store(true, Ordering::Release);
+            }
+        }))?;
         let account_publisher = created.clone();
         *self
             .shared
@@ -308,6 +313,21 @@ impl CaptureRuntime {
         }
     }
 
+    pub(crate) fn presentation_failed(&self) -> bool {
+        self.shared.bridge_failed.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn reconnect_presentation(&self) -> Result<(), String> {
+        let publisher = self.publisher.lock().map_err(|_| WORKER_FAILED)?.clone();
+        let shared = self.shared.clone();
+        if let Some(publisher) = publisher {
+            publisher.reconnect(move || shared.bridge_failed.store(false, Ordering::Release))?;
+        } else {
+            shared.bridge_failed.store(false, Ordering::Release);
+        }
+        Ok(())
+    }
+
     pub fn flush_bridge(&self) -> Result<(), String> {
         let publisher = self.publisher.lock().map_err(|_| WORKER_FAILED)?.clone();
         if let Some(publisher) = publisher {
@@ -331,7 +351,8 @@ impl CaptureRuntime {
             .store(true, Ordering::Release);
         drop(session);
         self.shared.upgrade.cancel_and_wait();
-        self.stop_and_flush()?;
+        self.stop()?;
+        let _ = self.flush_bridge(); // Presentation failure cannot veto durable update shutdown.
         if self
             .shared
             .recording
@@ -715,7 +736,6 @@ fn run_worker(
     let mut unknown = 0u32;
     let mut failures = 0u32;
     let mut open_streams = HashSet::new();
-    let mut traffic_trust = TrafficTrust::default();
     let mut waiting_for_game = true;
     // CaptureHandle has no status channel. Poll native discovery/failure status only;
     // frame-driven decoder transitions are published immediately below.
@@ -749,9 +769,9 @@ fn run_worker(
                             if let Err(error) = adapter.live_tick(at, time.quiet(arrived)) { storage_error = Some(error); }
                         }
                     }
-                    let segment = maxed_capture::parse_frame(&frame).ok().flatten();
-                    let events = pipeline.push(frame);
-                    if traffic_trust.observe(segment.as_ref(), &events) {
+                    let output = pipeline.push_frame(frame);
+                    let events = output.events;
+                    if output.trusted_traffic {
                         if let Err(error) = adapter.live_traffic(at) { storage_error = Some(error); }
                         time.frame(at.max(adapter.at()), arrived);
                     }
@@ -827,60 +847,6 @@ fn stop_pipeline(pipeline: &mut Pipeline, adapter: &mut Adapter) -> Result<(), S
         }
     }
     result
-}
-
-/// Trust is directional and belongs to a stream generation, never to a socket
-/// tuple alone. Retain only live entries (bounded by the reassembler's limit).
-#[derive(Default)]
-struct TrafficTrust {
-    streams: HashMap<(maxed_types::ConnId, maxed_types::Direction), (maxed_types::FlowKey, bool)>,
-}
-impl TrafficTrust {
-    fn observe(
-        &mut self,
-        segment: Option<&maxed_types::TcpSegment>,
-        events: &[PipelineEvent],
-    ) -> bool {
-        let mut verified_packet = false;
-        for event in events {
-            match event {
-                PipelineEvent::Opened { conn, dir } => {
-                    if let Some(segment) = segment {
-                        // Match Decoder's fresh && syn_proven rule, including
-                        // verified fragments before the first complete packet.
-                        self.streams
-                            .insert((*conn, *dir), (segment.flow, segment.syn));
-                    }
-                }
-                PipelineEvent::Decoded(DecodeEvent::Packet(packet)) => {
-                    if let Some((_, verified)) = self.streams.get_mut(&(packet.conn, packet.dir)) {
-                        *verified = packet.alignment_verified;
-                    }
-                    verified_packet |= packet.alignment_verified;
-                }
-                PipelineEvent::Decoded(DecodeEvent::Diagnostic {
-                    conn, dir, kind, ..
-                }) => match kind {
-                    Diagnostic::Closed | Diagnostic::Cancelled => {
-                        self.streams.remove(&(*conn, *dir));
-                    }
-                    Diagnostic::Recovering | Diagnostic::Recovered => {
-                        if let Some((_, verified)) = self.streams.get_mut(&(*conn, *dir)) {
-                            *verified = false;
-                        }
-                    }
-                    _ => {}
-                },
-            }
-        }
-        segment.is_some_and(|s| {
-            !s.bytes.is_empty()
-                && (verified_packet
-                    || self.streams.iter().any(|((_, dir), (flow, verified))| {
-                        *dir == s.dir && *flow == s.flow && *verified
-                    }))
-        })
-    }
 }
 
 #[derive(Default)]
@@ -981,3 +947,6 @@ mod party_tests;
 mod stats_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod storage_recovery_tests;

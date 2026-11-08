@@ -142,7 +142,7 @@
   });
   function persist() {
     missingRow = '';
-    onStateChange?.({ runsWindow: 0, filters: $state.snapshot(filter), runsPosition: { previous: $state.snapshot(previous), offset: pageOffset, summary }, scrollTop: 0, focusedRowId: null });
+    onStateChange?.({ filters: $state.snapshot(filter), runsPosition: { previous: $state.snapshot(previous), offset: pageOffset, summary }, scrollTop: 0, focusedRowId: null });
     const pane = region?.closest('main');
     if (pane) pane.scrollTop = 0;
   }

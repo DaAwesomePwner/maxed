@@ -20,7 +20,7 @@
   $effect(() => { if (!adapterEdited) adapter = $session.settings?.adapter_id ?? ''; });
   let progress = $derived(setupProgress($session.setup, $session.capture, preview, $session.busy || $session.extracting));
   let active = $derived(['Live', 'WaitingForGame', 'Recovering'].includes($session.capture?.state ?? ''));
-  let restartRequired = $derived($session.capture?.state === 'Failed' && ['Capture worker failed; restart Maxed', 'Live updates interrupted; reconnect or restart Maxed'].includes($session.capture.message));
+  let restartRequired = $derived($session.capture?.state === 'Failed' && ['Capture worker failed; restart Maxed'].includes($session.capture.message));
   let errorText = $derived(Object.values($session.errors).filter(Boolean).join(' '));
   let map = $state<string | null>(null);
   $effect(() => {

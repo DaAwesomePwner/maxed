@@ -60,11 +60,7 @@ pub(crate) fn equipment(entity: Option<&Entity>) -> Vec<EquipmentView> {
 
 impl Engine {
     pub(crate) fn maxed(&self, class: Option<u16>, stat: impl Fn(u8) -> Option<i32>) -> Option<u8> {
-        let class = self
-            .catalog
-            .classes
-            .iter()
-            .find(|c| Some(c.object_type) == class)?;
+        let class = &self.catalog.classes[*self.class_index.get(&class?)?];
         // Entity.calculateBaseStats: base = observed value - observed boost.
         // Missing boosts/caps never imply zero boosts or an 8/8 character.
         let mut count = 0;
@@ -81,11 +77,9 @@ impl Engine {
         class: Option<u16>,
         stat: impl Fn(u8) -> Option<i32>,
     ) -> Vec<u8> {
-        let Some(class) = self
-            .catalog
-            .classes
-            .iter()
-            .find(|c| Some(c.object_type) == class)
+        let Some(class) = class
+            .and_then(|ty| self.class_index.get(&ty))
+            .map(|&i| &self.catalog.classes[i])
         else {
             return vec![];
         };
@@ -109,9 +103,13 @@ impl Engine {
         let Some(local) = self.local.as_ref() else {
             return;
         };
+        #[cfg(test)]
+        {
+            self.character_rebuilds += 1;
+        }
+        self.character_dirty = false;
         let previous = self.character.clone();
         let entity = self.entities.get(&local.object);
-        let materialized = entity.is_some_and(|e| e.present);
         let verified = entity
             .and_then(|e| e.account)
             .map(|a| identity::character(&self.config.identity_key, &a, local.number));
@@ -218,6 +216,20 @@ impl Engine {
             }
             self.character = Some(next);
         }
+        self.refresh_character_context(events);
+    }
+
+    // Keep run/baseline observation ordering even when the view inputs did not change.
+    pub(crate) fn refresh_character_context(&mut self, events: &mut Vec<EngineEvent>) {
+        let Some(character) = self.character.as_ref() else {
+            return;
+        };
+        let id = character.id.clone();
+        let materialized = self
+            .local
+            .as_ref()
+            .and_then(|l| self.entities.get(&l.object))
+            .is_some_and(|e| e.present);
         if self
             .local
             .as_ref()

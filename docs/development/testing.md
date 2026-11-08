@@ -10,6 +10,8 @@ cargo test --locked --offline --workspace
 cargo fmt --all -- --check
 cargo clippy --locked --offline --workspace --all-targets -- -D warnings
 cargo clippy --locked --offline -p maxed-app --all-targets --features perf-live -- -D warnings
+cargo clippy --locked --offline -p maxed-app --all-targets --features updater-signing-tool -- -D warnings
+cargo test --locked --offline -p maxed-app --features updater-signing-tool --test integration updater_package::
 npm --prefix app/ui test
 npm --prefix app/ui run test:ui
 npm --prefix app/ui run check
@@ -105,12 +107,16 @@ paths are used. Pull requests whose `Cargo.lock` or toolchain differs from main
 fall back to the newest cache with the same job prefix; main, schedule and
 dispatch runs restore exact keys only, so the caches they save never carry stale
 artifacts from an older lockfile.
-Six parallel jobs run: `rust-lint` (fmt and both clippy checks), `rust-test`
+Six parallel jobs run: `rust-lint` (fmt and all clippy checks), `rust-test`
 (workspace tests excluding maxed-store, then bindings freshness), `store-test`
 (maxed-store tests), `ui` (svelte-check, node tests, build and the Vitest
 smoke-replay file), `ui-vitest` (every other Vitest file) and `packaging`
 (offline memory tooling and packaging/collector checks). Each Rust job has its
-own cache key.
+own cache key. The existing Windows Rust jobs also lint the
+`updater-signing-tool` feature and run the `integration` target filtered to
+`updater_package::` with nextest. This builds the verifier binary and exercises
+the real signing preflight with disposable keys and the locked Tauri CLI;
+production signing secrets are never provided.
 `rust-test` and `store-test` download a pinned `cargo-nextest` release and check
 its SHA-256 before use. nextest runs each test in its own process and runs test
 binaries concurrently; doctests, which nextest does not run, still run through
@@ -146,7 +152,11 @@ The reusable `release` input remains for caller compatibility.
 `.github/workflows/gui-smoke.yml` independently uses GitHub-hosted `windows-2022`
 daily at 09:47 UTC (`47 9 * * *`), for pull requests to `main`, including forks,
 and manual dispatch. Pushes to `main` do not trigger it.
-This job is not reusable and does not gate release signing. It has a 45-minute
+Release tags always call this workflow as a prerequisite, checking out
+`${{ github.sha }}` (the exact tagged commit), even when deterministic tests are
+reused. Packaging requires `needs.gui-smoke.result == 'success'`; failed,
+skipped or cancelled smoke runs block signing and therefore publication.
+The local reusable call passes no secrets or inputs. It has a 45-minute
 timeout, read-only contents permission, no secrets or environment scopes, and
 no persistent caches. Both workflows use `pull_request`, never privileged PR events.
 

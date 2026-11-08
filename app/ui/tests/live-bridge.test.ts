@@ -10,6 +10,7 @@ import { classifySequence, subscribeLive } from '../src/lib/bridge/live';
 import type { LiveState } from '../src/lib/bridge/live';
 import fixture from './fixtures/t0-live';
 import { notifyEventObserver } from '../src/lib/shell/event-observers';
+import { setNativePresentationVisible } from '../src/lib/bridge/visibility';
 import { setDebugMode } from '../src/lib/debug/debug';
 
 function deferred<T>() {
@@ -427,4 +428,69 @@ test('throwing side-effect observers do not cut off a batch or later observers a
     expect(states.at(-1)?.historyStale).toBe(true);
     expect(log).toHaveBeenCalledExactlyOnceWith('[maxed:shell] Live event observer failed', expect.any(Error));
   } finally { log.mockRestore(); setDebugMode(false); }
+});
+
+test.each(['resolve', 'reject'] as const)('a superseded transition cannot settle the current owner on %s', async completion => {
+  const old = deferred<void>(), current = deferred<void>();
+  const query = vi.fn(async () => snapshot());
+  const h = setup({ querySnapshot: query }); await settle();
+  const first = h.control.transition(() => old.promise);
+  const second = h.control.transition(() => current.promise);
+  if (completion === 'resolve') old.resolve(); else old.reject(new Error('private'));
+  await first; await settle();
+  expect(query).toHaveBeenCalledOnce();
+  expect(h.states.at(-1)?.phase).toBe('connecting');
+  current.resolve(); await second; await settle();
+  expect(query).toHaveBeenCalledTimes(2);
+  expect(h.states.at(-1)?.phase).toBe('live');
+});
+
+test.each(['reconnect', 'dispose'] as const)('a late transition rejection cannot override %s', async action => {
+  const pending = deferred<void>();
+  const h = setup(); await settle();
+  const transition = h.control.transition(() => pending.promise);
+  h.control[action](); await settle();
+  const count = h.states.length;
+  pending.reject(new Error('private')); await transition; await settle();
+  expect(h.states).toHaveLength(count);
+});
+
+test.each(['resolve', 'reject'] as const)('a transition settling with %s preserves native delivery failure', async completion => {
+  const pending = deferred<void>();
+  const h = setup(); await settle();
+  const transition = h.control.transition(() => pending.promise);
+  h.transport.publishCapture({ ...fixture.capture, state: 'Failed', message: 'Live updates interrupted; reconnect or restart Maxed' });
+  if (completion === 'resolve') pending.resolve(); else pending.reject(new Error('private'));
+  await transition; await settle();
+  expect(h.states.at(-1)).toMatchObject({ phase: 'failed', message: 'Restart Maxed.' });
+});
+
+test('same-watermark snapshots and reconnect baselines advance by revision only', async () => {
+  const baseline = { ...snapshot(), revision: '9007199254740992' };
+  const h = setup({ querySnapshot: vi.fn().mockResolvedValueOnce(baseline)
+    .mockResolvedValue({ ...baseline, revision: '9007199254740994', map: 'reconnected' }) });
+  await settle();
+  h.transport.publishSnapshotUpdate({ ...baseline, revision: '9007199254740993', map: 'silent update' });
+  expect(h.seen.at(-1)?.map).toBe('silent update');
+  h.transport.publishSnapshotUpdate({ ...baseline, map: 'obsolete' });
+  expect(h.seen.at(-1)?.map).toBe('silent update');
+  h.control.reconnect();
+  await settle();
+  expect(h.seen.at(-1)?.map).toBe('reconnected');
+  expect(h.seen.at(-1)?.sequence).toBe('10');
+  // Revision is not a durability watermark.
+  expect(h.histories.at(-1)?.durable).toBe('10');
+});
+
+test('visibility restore rejects an older revision at the same watermark', async () => {
+  const initial = { ...snapshot(), revision: '100' };
+  const h = setup({ querySnapshot: vi.fn().mockResolvedValueOnce(initial)
+    .mockResolvedValue({ ...initial, revision: '99', map: 'obsolete' }) });
+  await settle();
+  setNativePresentationVisible(false);
+  setNativePresentationVisible(true);
+  await settle();
+  expect(h.seen).toEqual([initial]);
+  h.transport.publishSnapshotUpdate({ ...initial, revision: '101', map: 'fresh' });
+  expect(h.seen.at(-1)?.map).toBe('fresh');
 });

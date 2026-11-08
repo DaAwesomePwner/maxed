@@ -86,18 +86,28 @@ impl Engine {
             && self.instance.quest_generation == Some(key.1)
     }
     pub(crate) fn refresh_targets(&mut self) {
-        let kinds: Vec<_> = self
-            .fights
-            .iter()
-            .map(|(&key, f)| {
-                (
-                    key,
-                    self.target_kind(key, f.base.target_type),
-                    self.is_quest(key),
-                )
-            })
-            .collect();
-        for (key, kind, quest) in kinds {
+        let quest = self.instance.quest.as_ref().and_then(|q| {
+            self.instance
+                .quest_generation
+                .map(|generation| (q.object_id, generation))
+        });
+        if self.refreshed_quest != quest {
+            self.target_dirty.extend(self.refreshed_quest);
+            self.target_dirty.extend(quest);
+            self.refreshed_quest = quest;
+        }
+        // New fights are classified at insertion. Only changed target types and
+        // the old/new quest keys can change an existing classification.
+        while let Some(key) = self.target_dirty.pop_first() {
+            let Some(f) = self.fights.get(&key) else {
+                continue;
+            };
+            #[cfg(test)]
+            {
+                self.target_refreshes += 1;
+            }
+            let kind = self.target_kind(key, f.base.target_type);
+            let quest = self.is_quest(key);
             if let Some(f) = self.fights.get_mut(&key) {
                 f.was_quest |= quest;
                 if f.base.target_kind != kind || f.base.is_current_quest != quest {
@@ -112,7 +122,7 @@ impl Engine {
     pub(crate) fn character_panel(&self, e: &Entity) -> StatPanel {
         let caps = e
             .object_type
-            .and_then(|ty| self.catalog.classes.iter().find(|c| c.object_type == ty))
+            .and_then(|ty| self.class_index.get(&ty).map(|&i| &self.catalog.classes[i]))
             .map(|c| c.stat_caps.iter().map(|s| (s.stat_id, s.value)).collect())
             .unwrap_or_default();
         let equipment: [Option<Vec<(u8, i32)>>; 4] = std::array::from_fn(|slot| {
@@ -120,10 +130,9 @@ impl Engine {
             if ty == -1 {
                 return Some(Vec::new());
             }
-            self.catalog
-                .items
-                .iter()
-                .find(|i| i32::from(i.object_type) == ty)?
+            self.item_index
+                .get(&u16::try_from(ty).ok()?)
+                .map(|&i| &self.catalog.items[i])?
                 .stat_bonuses
                 .as_ref()
                 .map(|s| s.iter().map(|s| (s.stat_id, s.value)).collect())

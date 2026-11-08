@@ -103,17 +103,17 @@ impl CaptureRuntime {
     pub async fn run_recap(
         self: &Arc<Self>,
         request: RunRecapRequest,
-        chase_types: Vec<u16>,
+        catalog: maxed_store::CatalogQueryData,
     ) -> Result<HistoryReply<Option<RunRecap>>, String> {
         let runtime = self.clone();
         self.submit_history(
             HistoryCaller::MainWindow,
-            HistoryKey::RunRecap(request.clone()),
+            HistoryKey::RunRecap(request.clone(), catalog.identity()),
             move |job| {
                 runtime.read_history(
                     job,
                     || None,
-                    |reader| reader.run_recap(&request, &chase_types),
+                    |reader| reader.run_recap(&request, catalog.chase_types()),
                 )
             },
         )
@@ -146,16 +146,15 @@ impl CaptureRuntime {
     pub async fn home_hud(
         self: &Arc<Self>,
         scope: HomeScope,
-        tiers: Vec<(u16, Option<String>)>,
-        potions: Vec<(u16, PotionStat)>,
+        catalog: maxed_store::CatalogQueryData,
     ) -> Result<HistoryReply<HomeHud>, String> {
         let runtime = self.clone();
         self.submit_history(
             HistoryCaller::MainWindow,
-            HistoryKey::HomeHud(scope.clone(), tiers.clone(), potions.clone()),
+            HistoryKey::HomeHud(scope.clone(), catalog.identity()),
             move |job| {
                 runtime.read_account_history(job, HomeHud::default, |reader, account| {
-                    reader.home_hud(scope, account, &tiers, &potions)
+                    reader.home_hud_catalog(scope, account, &catalog)
                 })
             },
         )

@@ -31,3 +31,36 @@ Both exports had 295,815 local-player damage and 2,922,639 summed fight damage. 
 | Run boundary/outcome | 2 | Observed exit versus later reference boundary; unknown versus null outcome |
 
 Corrected historical bugs included dropping server damage before target metadata, exporting zero-hit UI rows, missing neutral reconstruction defaults/enchant metadata, and Java numeric projection rounding. These results neither certify complete capture nor authorize fixture-wide exceptions. Durable behavior and current uncertainty are in the ledger, [protocol evidence](protocol-evidence.md), [kill evidence](kill-evidence.md) and [personal-best rules](../architecture/personal-bests.md).
+
+## Shared frame processing
+
+Live capture, native replay/demo, CLI demo replay and domain export use
+`maxed_stream::driver::FrameDriver`. The driver owns frame-index gaps, stream
+expiry, decode ordering, synthetic cancellation at EOF, and directional traffic
+trust. Capture/protocol adapters provide wire parsing, decoder operations, and
+classification of protocol events for trust and teardown;
+no dependency or second frame parse is needed. The parsed segment is consumed by
+reassembly; its small flow/direction/SYN/payload metadata view accompanies the
+result, without cloning its payload.
+
+Traffic follows the live rule: a SYN-proven direction can count payload fragments
+before a full packet, and verified decoded packets establish trust. Midstream
+unverified payload cannot start or extend a session. Recovery revokes trust and
+close removes it. Already-observed packets do not independently restart the
+traffic clock. This preserves live behavior, including its SYN-fragment rule.
+
+Clock sources deliberately differ: live idle expiry uses monotonic arrival time
+and its buffered timer; offline playback uses recording timestamps and checks
+idle expiry before accepting returning trusted traffic. Offline playback does
+not invent wall-clock silence between frames. Domain export hashes the exact
+read supplied to `PcapReader`, and validates both private output paths before
+creating files. These rules do not certify live capture or publication safety.
+
+Domain export uses `record::private_output_path`: it resolves existing ancestors
+and refuses paths inside a repository except under its `recordings/` directory.
+It also permits output outside repositories. Decode's `output_path` is stricter:
+it requires the project's private `recordings/` root even for external paths.
+Export retains the recording policy because its sanitized domain records contain
+no packet values, account identities or local paths, and external comparison
+workspaces are supported. Both export files are validated and use CREATE_NEW;
+this policy is not publication approval.

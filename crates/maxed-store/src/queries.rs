@@ -1,6 +1,6 @@
 use crate::{
     project::{micros, tag},
-    StoreError, StoreReader,
+    CatalogQueryData, StoreError, StoreReader,
 };
 use maxed_types::*;
 use rusqlite::{params, params_from_iter, types::Value, Connection, Params, Transaction};
@@ -362,9 +362,19 @@ impl StoreReader {
         object_id: i32,
     ) -> Result<Option<PlayerDamage>, StoreError> {
         identifier(fight_id)?;
-        let mut players = rows(&self.conn,
-            "SELECT length(CAST(json AS BLOB)),json FROM fight_players WHERE fight_id=?1 AND object_id=?2 LIMIT 2",
-            params![fight_id, object_id], 2, &mut 0, MAX_PLAYER_BYTES)?;
+        let mut players = rows(
+            &self.conn,
+            "SELECT length(CAST(payload AS BLOB)),payload FROM (
+                SELECT json_set(fight_players.json,'$.share',
+                    CASE WHEN json_extract(f.json,'$.total_damage')>0
+                    THEN damage/json_extract(f.json,'$.total_damage') END) AS payload
+                FROM fight_players JOIN fight_summaries f ON f.fight_id=fight_players.fight_id
+                WHERE fight_players.fight_id=?1 AND object_id=?2 LIMIT 2)",
+            params![fight_id, object_id],
+            2,
+            &mut 0,
+            MAX_PLAYER_BYTES,
+        )?;
         bounded(
             if players.len() == 1 {
                 players.pop()
@@ -382,8 +392,17 @@ impl StoreReader {
     ) -> Result<Option<PlayerDamage>, StoreError> {
         identifier(fight_id)?;
         identifier(player_id)?;
-        one(&self.conn, "SELECT length(CAST(json AS BLOB)),json FROM fight_players WHERE fight_id=?1 AND player_id=?2",
-            params![fight_id, player_id], MAX_PLAYER_BYTES)
+        one(
+            &self.conn,
+            "SELECT length(CAST(payload AS BLOB)),payload FROM (
+                SELECT json_set(fight_players.json,'$.share',
+                    CASE WHEN json_extract(f.json,'$.total_damage')>0
+                    THEN damage/json_extract(f.json,'$.total_damage') END) AS payload
+                FROM fight_players JOIN fight_summaries f ON f.fight_id=fight_players.fight_id
+                WHERE fight_players.fight_id=?1 AND player_id=?2)",
+            params![fight_id, player_id],
+            MAX_PLAYER_BYTES,
+        )
     }
 
     pub fn bag_count_since(&self, bag_type: u16, time: TimeRange) -> Result<u32, StoreError> {
@@ -511,6 +530,23 @@ impl StoreReader {
         limit: u16,
         tiers: &[(u16, Option<String>)],
     ) -> Result<ScopeLootPage, StoreError> {
+        self.scope_loot_catalog(
+            scope,
+            account,
+            cursor,
+            limit,
+            &CatalogQueryData::new(tiers, &[]),
+        )
+    }
+
+    pub fn scope_loot_catalog(
+        &self,
+        scope: HomeScope,
+        account: Option<&str>,
+        cursor: Option<String>,
+        limit: u16,
+        catalog: &CatalogQueryData,
+    ) -> Result<ScopeLootPage, StoreError> {
         validate_scope_loot(&scope, cursor.as_deref(), limit)?;
         let cursor = loot_cursor(&scope, cursor.as_deref())?;
         let (kind, id, lo, hi) = match &scope {
@@ -521,9 +557,8 @@ impl StoreReader {
             }
         };
         // One tier per u16 type; reject pathological metadata before allocating SQL JSON.
-        validate_loot_catalog(tiers, &[])?;
-        let unique: std::collections::BTreeMap<_, _> = tiers.iter().cloned().collect();
-        let tiers = serde_json::to_string(&unique.into_iter().collect::<Vec<_>>())?;
+        catalog.identity().validate()?;
+        let tiers = catalog.tiers_json();
         let json: Option<String> = self.conn.query_row(
             &crate::account_sql::with_accounts(include_str!("scope_loot.sql")),
             params![
@@ -701,6 +736,7 @@ mod tests {
         }
         for shape in [REALISTIC, WORST] {
             let fixture = build(shape);
+            crate::run_rows::tests::seed_identity_history(&fixture.db);
             let reader = fixture.validate();
             reader.conn.trace_v2(
                 rusqlite::trace::TraceEventCodes::SQLITE_TRACE_STMT,

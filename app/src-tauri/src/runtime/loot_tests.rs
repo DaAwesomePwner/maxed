@@ -181,11 +181,14 @@ fn loot_commands_reject_invalid_keys_before_queueing() {
                 dungeon: Some(name.clone()),
                 ..collection_request()
             },
-            vec![],
+            maxed_store::CatalogQueryData::new(&[], &[]).identity(),
         ));
         let mut request = collection_request();
         request.chase[0].dungeon = Some(name);
-        keys.push(HistoryKey::Collection(request, vec![]));
+        keys.push(HistoryKey::Collection(
+            request,
+            maxed_store::CatalogQueryData::new(&[], &[]).identity(),
+        ));
     }
     for cursor in [
         DropCursor {
@@ -208,17 +211,23 @@ fn loot_commands_reject_invalid_keys_before_queueing() {
     }
     let mut request = collection_request();
     request.chase = vec![request.chase[0].clone(); 101];
-    keys.push(HistoryKey::Collection(request, vec![]));
+    keys.push(HistoryKey::Collection(
+        request,
+        maxed_store::CatalogQueryData::new(&[], &[]).identity(),
+    ));
     let mut request = collection_request();
     request.chase[0].pinned_at = Timestamp(i64::MAX as u64 + 1);
-    keys.push(HistoryKey::Collection(request, vec![]));
     keys.push(HistoryKey::Collection(
-        collection_request(),
-        vec![(1, Some("x".repeat(17)))],
+        request,
+        maxed_store::CatalogQueryData::new(&[], &[]).identity(),
     ));
     keys.push(HistoryKey::Collection(
         collection_request(),
-        vec![(1, None); 65_537],
+        maxed_store::CatalogQueryData::new(&[(1, Some("x".repeat(17)))], &[]).identity(),
+    ));
+    keys.push(HistoryKey::Collection(
+        collection_request(),
+        maxed_store::CatalogQueryData::new(&vec![(1, None); 65_537], &[]).identity(),
     ));
     for key in keys {
         let error = tauri::async_runtime::block_on(runtime.submit_history(
@@ -398,14 +407,8 @@ fn loot_reads_share_history_admission() {
         pending(loot.as_mut());
         assert_eq!(
             runtime.shared.home.scheduler.lock().unwrap().counts(),
-            if abuse { (1, 1, 1, 32) } else { (1, 1, 0, 3) }
+            if abuse { (1, 1, 1, 32) } else { (1, 2, 0, 3) }
         );
-        if !abuse {
-            assert_eq!(
-                tauri::async_runtime::block_on(queued.as_mut()).unwrap(),
-                HistoryReply::Superseded
-            );
-        }
         release.send(()).unwrap();
         ready(tauri::async_runtime::block_on(active));
         entered.recv_timeout(Duration::from_secs(5)).unwrap();
@@ -417,6 +420,9 @@ fn loot_reads_share_history_admission() {
             );
             ready(tauri::async_runtime::block_on(queued));
         } else {
+            ready(tauri::async_runtime::block_on(queued));
+            entered.recv_timeout(Duration::from_secs(5)).unwrap();
+            release.send(()).unwrap();
             assert_eq!(ready(tauri::async_runtime::block_on(loot)).rows.len(), 1);
         }
     }
