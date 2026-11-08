@@ -150,4 +150,6 @@ Gate P (#37/#38) regeneration through `replay_engine` changes only the 24 `split
 `provisional_inside_boost` to `verified_inside_boost`, drops their `unverified_placement` reason, and sets the three
 `breakdown_provisional` flags to `false`. `cap_eligible` stays `false` with `missing_exalt` and `missing_operands`,
 because this story still observes no exalt levels. All 43 events, other values, ordering, sequence numbers, pcap
-bytes, catalog and prior provenance are unchanged.
+bytes, catalog and prior provenance are unchanged. Derived-output SHA-256 changed from
+`debf60d4ed900ac43e67a41359160613505fb8ce34a25ca00c6e85371bd43939` to
+`1b9f0690c93ed7cd487a52973ab18412b93a83a18f5289b721b0b73b51d341c3`.
