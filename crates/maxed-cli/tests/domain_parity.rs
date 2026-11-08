@@ -17,7 +17,7 @@ struct Scratch(PathBuf);
 impl Scratch {
     fn new() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target");
+        let root = std::env::temp_dir();
         fs::create_dir_all(&root).unwrap();
         let path = root.join(format!(
             "domain-tests-{}-{}",
@@ -672,4 +672,23 @@ fn capture_gap_classification_requires_rust_to_be_a_subset_including_multiplicit
                 .all(|d| d.path.starts_with("/value/evidence")));
         }
     }
+}
+
+#[test]
+fn export_rejects_repository_output_before_creating_files() {
+    let output = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("forbidden-domain.jsonl");
+    assert!(matches!(
+        export_domain(&fixture("story.pcap"), &fixture("catalog.json"), &output),
+        Err(CliError::InvalidArguments)
+    ));
+    assert!(!output.exists());
+}
+
+#[test]
+fn export_hash_matches_decoded_recording_bytes() {
+    let scratch = Scratch::new();
+    let output = scratch.export("hash.jsonl");
+    let bytes = fs::read(fixture("story.pcap")).unwrap();
+    let expected = format!("{:x}", Sha256::digest(&bytes));
+    assert_eq!(read(&output)[0]["inputSha256"], expected);
 }
