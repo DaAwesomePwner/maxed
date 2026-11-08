@@ -21,6 +21,7 @@
   import { invalidatesHomeHistory } from '../bridge/live';
   import { observePresentationVisibility } from '../bridge/visibility';
   import { createHistoryCache, type HistoryCache } from '../runs/history-cache';
+  import { runInvalidationRoute } from '../runs/invalidation';
   import { invalidatesSavedHistory } from './history-invalidation';
   import { notifyEventObserver } from './event-observers';
   import { createLogsPending, matchesPendingView } from '../logs/pending';
@@ -115,7 +116,7 @@
   };
   const dungeonMute = createDungeonMute(alerts, () => mounted && !preview && nativeDemo === false);
   setContext(DUNGEON_MUTE, dungeonMute);
-  const cache = untrack(() => historyCache) ?? createHistoryCache({ invalidates: invalidatesSavedHistory, route: () => router?.route });
+  const cache = untrack(() => historyCache) ?? createHistoryCache({ invalidates: invalidatesSavedHistory, route: () => runInvalidationRoute(router?.route, relationship) });
   setContext<ShellConnection>(SHELL_CONNECTION, { character: characterController, capture: sharedCapture, snapshot: sharedSnapshot, historyCache: cache,
     onEvent: receive => { eventObservers.add(receive); return () => { eventObservers.delete(receive); }; },
     homeRecap, recapPresentation: homeRecap.presentation, dismissHomeRecap: homeRecap.dismiss,
@@ -244,7 +245,7 @@
   function historyApplied(key: string, required: string | null) {
     logsPending.applied(key, required); pendingRevision++;
   }
-  const historyInvalidates = (event: EventEnvelope) => invalidatesSavedHistory(router?.route, event);
+  const historyInvalidates = (event: EventEnvelope) => invalidatesSavedHistory(runInvalidationRoute(router?.route, relationship), event);
   const historyInvalidated = (event: EventEnvelope) => invalidatesHomeHistory(event) || historyInvalidates(event);
   function rowsRendered(key: string) {
     if (key !== routeRowsKey) return;
@@ -444,7 +445,7 @@
         if (historyInvalidated(next) && (historyRequired === null || BigInt(next.sequence) > BigInt(historyRequired))) {
           historyRequired = next.sequence; historyInitial = false;
         }
-        if ((route?.kind === 'home' ? invalidatesHomeHistory(next) : invalidatesSavedHistory(route, next))
+        if ((route?.kind === 'home' ? invalidatesHomeHistory(next) : historyInvalidates(next))
           && (routeRequired === null || BigInt(next.sequence) > BigInt(routeRequired))) {
           routeRequired = next.sequence;
         }
@@ -593,7 +594,7 @@
           {#if !unsavedClose}<button disabled={busy || preview} onclick={() => recoverStore()}>Retry saving</button>{/if}
         {:else if !unsavedClose}<p class="store-warning" role="status">Couldn't save. Storage is unavailable; use Start Capture to try again.</p>{/if}
         <DebugNote text={`Latest durable sequence: ${store?.durable ?? "unavailable"}`} />
-      {:else if liveState.historyFailed || errors.store || !store}<p class="storage-note">Storage Error</p>
+      {:else if liveState.historyFailed || errors.store}<p class="storage-note">Storage Error</p>
       {/if}
       <h1 class:sr-only={homeRoute || ['runs', 'run', 'fight', 'player', 'run-player', 'loot', 'item', 'logs', 'alerts'].includes(navigation.entry.route.kind)} tabindex="-1">{routeTitle(navigation.entry.route)}</h1>
       <div class:home-content={homeRoute} class:route-content={!homeRoute}>

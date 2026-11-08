@@ -157,7 +157,7 @@ describe('persistent shell', () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(screen.getByText('Disconnected. Reconnect.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy();
-    expect(screen.getByText('Storage Error')).toBeTruthy();
+    expect(screen.queryByText('Storage Error')).toBeNull();
     const rail = screen.getByRole('complementary', { name: 'Character' });
     expect(within(rail).queryByRole('alert')).toBeNull();
     expect(within(rail).queryByRole('button', { name: 'Reconnect Capture' })).toBeNull();
@@ -167,7 +167,7 @@ describe('persistent shell', () => {
     expect(client.stopCapture).toHaveBeenCalledTimes(1);
     expect(within(rail).queryByRole('alert')).toBeNull();
     expect(screen.getByText('Disconnected. Reconnect.')).toBeTruthy();
-    expect(screen.getByText('Storage Error')).toBeTruthy();
+    expect(screen.queryByText('Storage Error')).toBeNull();
     expect(document.body.textContent).not.toContain('PRIVATE');
   });
   it('exposes an ordered registration failure without issuing dependent queries', async () => {
@@ -180,6 +180,20 @@ describe('persistent shell', () => {
     expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy();
     expect(client.querySnapshot).not.toHaveBeenCalled();
     expect(client.queryStore).not.toHaveBeenCalled();
+    expect(screen.queryByText('Storage Error')).toBeNull();
+    expect(document.body.textContent).not.toContain('PRIVATE');
+  });
+  it('does not label an unread store as failed, but reports a rejected store read', async () => {
+    vi.useFakeTimers();
+    const client = createClient(createFixtureTransport(fixture));
+    let rejectStore!: (error: Error) => void;
+    client.queryStore = vi.fn(() => new Promise<never>((_, reject) => { rejectStore = reject; }));
+    render(Shell, { client, historyAdapter: fakeHistory().adapter });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.queryStore).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Storage Error')).toBeNull();
+    rejectStore(new Error('PRIVATE storage failure'));
+    await vi.advanceTimersByTimeAsync(0);
     expect(screen.getByText('Storage Error')).toBeTruthy();
     expect(document.body.textContent).not.toContain('PRIVATE');
   });
