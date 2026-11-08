@@ -109,8 +109,9 @@ define_packets! {
         objectId:i32=r.i32()?,
         charId:i32=r.i32()?,
         // RS TomatoData.setUserId -> RealmCharacterStats.decode: candidate numeric
-        // counter snapshot. Known extended PcStats leave a 25-byte tail; their
-        // snapshots remain incomplete and cannot support completion fallback.
+        // counter snapshot. Bounded varint extensions are recognized in opt-in
+        // diagnostics only; extended snapshots remain incomplete and cannot
+        // support completion fallback or pass privacy admission.
         str:String=r.public_if(crate::privacy::character_stats, false)?,
     };
     44 => Text, "TEXT", ServerToClient, |r| {
