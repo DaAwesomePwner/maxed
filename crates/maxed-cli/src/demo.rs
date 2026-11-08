@@ -1,6 +1,5 @@
 //! Deterministic, entirely synthetic demo; no live capture, storage or notifications.
 use crate::{CliError, Pipeline};
-use maxed_capture::parse_frame;
 use maxed_engine::{Engine, EngineConfig};
 use maxed_protocol::{key_bytes, DecodeEvent, Diagnostic, Rc4};
 use maxed_recording::{PcapReader, PcapWriter};
@@ -60,19 +59,22 @@ fn replay_reader(
     let mut at = Timestamp(0);
     while let Some(frame) = reader.next_frame()? {
         at = Timestamp(at.0.max(frame.at.0));
-        // Only parsed game TCP payload is traffic; unrelated frames cannot keep
-        // a session alive. apply() also observes decoded packet receipt time.
-        if parse_frame(&frame)
-            .ok()
-            .flatten()
-            .is_some_and(|s| !s.bytes.is_empty())
-        {
-            let events = engine.observe_traffic(frame.at);
+        // Trust and decoding share one parse; only trusted payload advances traffic.
+        let frame_at = frame.at;
+        let batch = pipeline.push_frame(frame);
+        if batch.trusted_traffic {
+            let events = engine.observe_traffic(frame_at);
             envelope(&mut engine, &stream_id, events, &mut output);
         }
-        consume(&mut engine, &stream_id, pipeline.push(frame), &mut output);
+        consume(&mut engine, &stream_id, batch.events, &mut output, true);
     }
-    consume(&mut engine, &stream_id, pipeline.finish(), &mut output);
+    consume(
+        &mut engine,
+        &stream_id,
+        pipeline.finish(),
+        &mut output,
+        false,
+    );
     let events = engine.finish(at, FightEnd::CaptureStopped);
     envelope(&mut engine, &stream_id, events, &mut output);
     Ok(output)
@@ -83,10 +85,17 @@ fn consume(
     stream_id: &str,
     decoded: Vec<DecodeEvent>,
     output: &mut Vec<EventEnvelope>,
+    observed: bool,
 ) {
     for event in decoded {
         let events = match event {
-            DecodeEvent::Packet(p) if p.alignment_verified => engine.apply(p),
+            DecodeEvent::Packet(p) if p.alignment_verified => {
+                if observed {
+                    engine.apply_observed(p)
+                } else {
+                    engine.apply(p)
+                }
+            }
             DecodeEvent::Packet(p) => {
                 engine.diagnostic(p.conn, p.dir, p.at, Diagnostic::Recovering)
             }
