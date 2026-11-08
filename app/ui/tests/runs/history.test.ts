@@ -80,7 +80,8 @@ it.each(['failed', 'backpressured'] as const)('writer_state_retains_stale_story_
   page.event({ run_updated: run() }, '13'); await advance();
   expect(main().getByText('Invented Sanctum')).toBeTruthy();
   expect(screen.getAllByText(/saving.*failed|backlog|backpressure/i).length).toBeGreaterThan(0);
-  const retry = main().queryByRole('button', { name: /Retry/i });
+  // The run story's own Retry; the shell's storage banner adds a separate Retry saving action.
+  const retry = main().queryByRole('button', { name: /^Retry$/ });
   if (retry) { await (await import('@testing-library/svelte')).fireEvent.click(retry); await flush(); }
   expect(page.queries.getRun).toHaveBeenCalledTimes(1);
   page.setStore(saved('13')); await advance();

@@ -88,14 +88,24 @@ it.each([
   expect(container.querySelector('img') !== null).toBe(accepted);
 });
 
-it('exposes sticky delivery failure and disables capture retry that cannot repair the native publisher', async () => {
+it('offers Reconnect for an interrupted live delivery because reconnecting clears it', async () => {
   const transport = createFixtureTransport(fixture); const client = createClient(transport);
   render(Shell, { client, historyAdapter: fakeHistory().adapter });
   await screen.findByRole('heading', { name: fixture.character.name });
   transport.publishCapture({ ...fixture.capture, state: 'Failed', message: 'Live updates interrupted; reconnect or restart Maxed' });
-  await screen.findByText('Restart Maxed.');
+  const reconnect = await screen.findByRole('button', { name: 'Reconnect Capture' });
+  expect(reconnect.getAttribute('aria-disabled')).not.toBe('true');
+  expect(screen.queryByRole('button', { name: 'Start Capture' })).toBeNull();
+});
+
+it('keeps a capture worker failure sticky: restart required and capture retry disabled', async () => {
+  const transport = createFixtureTransport(fixture); const client = createClient(transport);
+  render(Shell, { client, historyAdapter: fakeHistory().adapter });
+  await screen.findByRole('heading', { name: fixture.character.name });
+  transport.publishCapture({ ...fixture.capture, state: 'Failed', message: 'Capture worker failed; restart Maxed' });
+  await screen.findAllByText(/Restart Maxed/);
   expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('true');
-  expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Reconnect Capture' })).toBeNull();
 });
 
 it.each([Setup, Settings])('passes explicit checks and detection retries while mount calls remain passive', async (component) => {
