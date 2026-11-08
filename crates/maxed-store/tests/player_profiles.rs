@@ -1245,3 +1245,114 @@ fn stored_provenance_normalizes_all_profile_reads_without_upgrading_replay() {
         }
     }
 }
+
+#[test]
+fn fight_revisions_match_full_replacement_and_only_write_changed_sources() {
+    fn rows(db: &Connection, table: &str) -> Vec<Vec<rusqlite::types::Value>> {
+        let mut statement = db
+            .prepare(&format!("SELECT * FROM {table} ORDER BY 1,2,3"))
+            .unwrap();
+        let columns = statement.column_count();
+        statement
+            .query_map([], |row| (0..columns).map(|i| row.get(i)).collect())
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    }
+    let mut actual = database();
+    let mut replacement = database();
+    actual
+        .execute_batch(
+            "CREATE TEMP TABLE writes(table_name TEXT, operation TEXT);
+         CREATE TEMP TRIGGER source_insert AFTER INSERT ON damage_sources BEGIN
+             INSERT INTO writes VALUES('source','insert'); END;
+         CREATE TEMP TRIGGER source_update AFTER UPDATE ON damage_sources BEGIN
+             INSERT INTO writes VALUES('source','update'); END;
+         CREATE TEMP TRIGGER source_delete AFTER DELETE ON damage_sources BEGIN
+             INSERT INTO writes VALUES('source','delete'); END;
+         CREATE TEMP TRIGGER player_update AFTER UPDATE ON fight_players BEGIN
+             INSERT INTO writes VALUES('player','update'); END;",
+        )
+        .unwrap();
+    let mut fight = demo::demo_snapshot().fights.remove(0);
+    let template = fight.players[0].clone();
+    assert!(!template.sources.is_empty());
+    fight.players = (0..40)
+        .map(|i| {
+            let mut player = template.clone();
+            player.player_id = format!("synthetic-{i}");
+            player.object_id = i;
+            player.is_local = i == 0;
+            player.sources = vec![template.sources[0].clone(); 3];
+            player
+        })
+        .collect();
+    for revision in 0..7 {
+        match revision {
+            1 => fight.players[0].sources[0].damage += 1.,
+            2 => {
+                fight.players[0].sources.remove(0);
+                fight.players[1].sources.push(template.sources[0].clone());
+                fight.players[2].name = Some("Synthetic changed".into());
+                fight.players[3].share = Some(0.125);
+            }
+            3 => {
+                fight.players.remove(1);
+                let mut added = template.clone();
+                added.player_id = "added".into();
+                fight.players.push(added);
+            }
+            4 => fight.players.reverse(),
+            5 => fight.players.clear(),
+            6 => fight.players.push(template.clone()),
+            _ => {}
+        }
+        actual.execute("DELETE FROM writes", []).unwrap();
+        let event = envelope(8 + revision * 2, EngineEvent::FightUpdated(fight.clone()));
+        apply_batch(&mut actual, std::slice::from_ref(&event)).unwrap();
+        // Force the reference path to insert all children from scratch.
+        replacement
+            .execute("DELETE FROM damage_sources WHERE fight_id=?1", [&fight.id])
+            .unwrap();
+        replacement
+            .execute("DELETE FROM fight_players WHERE fight_id=?1", [&fight.id])
+            .unwrap();
+        apply_batch(&mut replacement, &[event]).unwrap();
+        for table in [
+            "fights",
+            "fight_summaries",
+            "fight_players",
+            "damage_sources",
+        ] {
+            assert_eq!(
+                rows(&actual, table),
+                rows(&replacement, table),
+                "{table}, revision {revision}"
+            );
+        }
+        if revision == 1 {
+            let writes: Vec<(String, String)> = actual
+                .prepare("SELECT * FROM writes")
+                .unwrap()
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            assert_eq!(
+                writes,
+                [
+                    ("player".into(), "update".into()),
+                    ("source".into(), "update".into())
+                ]
+            );
+            // Old implementation deleted and inserted all 120 source rows.
+            assert_eq!(count(&actual, "damage_sources"), 120);
+        }
+        actual.execute("DELETE FROM writes", []).unwrap();
+        // A new receipt for the same projection must not rewrite either table.
+        let repeat = envelope(9 + revision * 2, EngineEvent::FightUpdated(fight.clone()));
+        apply_batch(&mut actual, std::slice::from_ref(&repeat)).unwrap();
+        apply_batch(&mut replacement, &[repeat]).unwrap();
+        assert_eq!(count(&actual, "writes"), 0);
+    }
+}
