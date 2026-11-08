@@ -3,7 +3,9 @@
 pub mod assets_bridge;
 pub mod bridge;
 pub mod demo;
+mod exit;
 mod gui_smoke;
+use exit::{ExitControl, ExitHost};
 pub mod interactive_rail;
 pub mod recording;
 pub mod runtime;
@@ -19,55 +21,65 @@ use maxed_types::{
 };
 use runtime::CaptureRuntime;
 use setup::SetupService;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::{atomic::Ordering, Arc};
 use tauri::{Emitter, Manager};
 use updater::service::UpdateService;
 
-#[derive(Default)]
-struct ExitControl {
-    exiting: AtomicBool,
-    finished: AtomicBool,
-    warned: AtomicBool,
-    startup_failed: AtomicBool,
-}
-
-impl ExitControl {
-    fn exit_code(&self) -> i32 {
-        i32::from(self.startup_failed.load(Ordering::Acquire))
-    }
-
-    fn discard_confirmed(&self, unsaved: bool) -> bool {
-        unsaved && self.warned.load(Ordering::Acquire)
-    }
-}
-
-#[tauri::command]
-async fn exit_without_saving(
+struct NativeExit {
     app: tauri::AppHandle,
-    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
-) -> Result<(), String> {
-    let runtime = runtime.inner().clone();
-    runtime.wait_history_preparation().await;
-    let setup = app.state::<Arc<SetupService>>().inner().clone();
-    if setup.updates.installing() {
-        return Err("Update operation is busy.".into());
+    runtime: Arc<CaptureRuntime>,
+    setup: Arc<SetupService>,
+}
+impl ExitHost for NativeExit {
+    fn installing(&self) -> bool {
+        self.setup.updates.installing()
     }
-    let exit = app.state::<Arc<ExitControl>>().inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        setup.updates.shutdown()?;
-        setup.cancel_pending(true);
-        setup.join_pending();
-        runtime.exit_without_saving();
-        let _ = runtime.flush_bridge();
-        exit.finished.store(true, Ordering::Release);
-        app.exit(exit.exit_code());
-        Ok(())
-    })
-    .await
-    .map_err(|_| "Exit worker failed".to_string())?
+    fn stop_updates(&self) -> Result<(), String> {
+        self.setup.updates.shutdown()
+    }
+    fn prepare(&self) {
+        self.setup.cancel_pending(true);
+        self.setup.join_pending();
+        tauri::async_runtime::block_on(self.runtime.wait_history_preparation());
+    }
+    fn resume(&self) {
+        self.setup.resume_after_cancelled_exit();
+    }
+    fn unsaved(&self) -> bool {
+        self.runtime.has_unsaved_summaries()
+    }
+    fn shutdown(&self) -> Result<(), String> {
+        self.runtime.shutdown()
+    }
+    fn discard(&self) {
+        self.runtime.exit_without_saving();
+        let _ = self.runtime.flush_bridge();
+    }
+    fn warn(&self) {
+        let _ = self.app.emit("unsaved-close", ());
+        if let Some(window) = self.app.get_webview_window("main") {
+            let _ =
+                window.set_title("Maxed — Unsaved changes. Retry saving or confirm exit in Maxed");
+        }
+    }
+    fn exit(&self, code: i32) {
+        self.app.exit(code);
+    }
+}
+fn exit_host(app: &tauri::AppHandle) -> NativeExit {
+    NativeExit {
+        app: app.clone(),
+        runtime: app.state::<Arc<CaptureRuntime>>().inner().clone(),
+        setup: app.state::<Arc<SetupService>>().inner().clone(),
+    }
+}
+#[tauri::command]
+async fn exit_without_saving(app: tauri::AppHandle) -> Result<(), String> {
+    let control = app.state::<Arc<ExitControl>>().inner().clone();
+    let host = exit_host(&app);
+    tauri::async_runtime::spawn_blocking(move || exit::run(&control, &host, true))
+        .await
+        .map_err(|_| "Exit worker failed".to_string())?
 }
 
 #[tauri::command]
@@ -302,7 +314,9 @@ fn subscribe_live_payload(
         // Preset picks and annotations can change before capture ever starts.
         runtime.publisher(app)?;
     }
-    payloads.subscribe(webview.label(), event, channel)
+    let id = payloads.subscribe(webview.label(), event, channel)?;
+    runtime.reconnect_presentation()?;
+    Ok(id)
 }
 
 #[tauri::command]
@@ -1377,79 +1391,11 @@ pub fn run() {
             }
             _ => false,
         };
-        if request_exit && !exit.exiting.swap(true, Ordering::AcqRel) {
-            let runtime = app.state::<Arc<CaptureRuntime>>().inner().clone();
-            let setup = app.state::<Arc<SetupService>>().inner().clone();
-            if setup.updates.installing() {
-                exit.exiting.store(false, Ordering::Release);
-                return;
-            }
-            setup.cancel_pending(true);
-            let app = app.clone();
+        if request_exit {
+            let host = exit_host(app);
             tauri::async_runtime::spawn_blocking(move || {
-                if setup.updates.shutdown().is_err() {
-                    setup.resume_after_cancelled_exit();
-                    exit.exiting.store(false, Ordering::Release);
-                    return;
-                }
-                setup.join_pending();
-                tauri::async_runtime::block_on(runtime.wait_history_preparation());
-                if exit.discard_confirmed(runtime.has_unsaved_summaries()) {
-                    runtime.exit_without_saving();
-                    let _ = runtime.flush_bridge();
-                    exit.finished.store(true, Ordering::Release);
-                    app.exit(exit.exit_code());
-                    return;
-                }
-                if runtime.shutdown().is_ok() {
-                    exit.finished.store(true, Ordering::Release);
-                    app.exit(exit.exit_code());
-                } else if !runtime.has_unsaved_summaries() {
-                    // Durable summaries permit exit, but failed final IPC is
-                    // recorded by shutdown and must not report a clean close.
-                    exit.finished.store(true, Ordering::Release);
-                    app.exit(1);
-                } else {
-                    setup.resume_after_cancelled_exit();
-                    // No UI response defaults to cancelling exit and preserving
-                    // data. Native window chrome provides a fallback confirmation:
-                    // another close confirms discard.
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.set_title(
-                            "Maxed — Unsaved changes. Close again to exit without saving",
-                        );
-                    }
-                    exit.warned.store(true, Ordering::Release);
-                    exit.exiting.store(false, Ordering::Release);
-                }
+                let _ = exit::run(&exit, &host, false);
             });
         }
     });
-}
-
-#[cfg(test)]
-mod exit_tests {
-    use super::*;
-    #[test]
-    fn startup_failure_survives_shutdown_and_discard_confirmation() {
-        let exit = ExitControl::default();
-        assert_eq!(exit.exit_code(), 0);
-        exit.startup_failed.store(true, Ordering::Release);
-        exit.exiting.store(true, Ordering::Release);
-        exit.finished.store(true, Ordering::Release);
-        assert_eq!(exit.exit_code(), 1);
-        exit.warned.store(true, Ordering::Release);
-        assert!(exit.discard_confirmed(true));
-        assert_eq!(exit.exit_code(), 1);
-    }
-
-    #[test]
-    fn unanswered_exit_preserves_changes_and_second_close_confirms_discard() {
-        let exit = ExitControl::default();
-        assert!(!exit.discard_confirmed(true));
-        exit.warned.store(true, Ordering::Release);
-        assert!(exit.discard_confirmed(true));
-        assert!(!exit.discard_confirmed(false));
-        assert!(!exit.finished.load(Ordering::Acquire));
-    }
 }
