@@ -270,7 +270,6 @@ impl CaptureRuntime {
             Arc::new(move || {
                 if let Some(shared) = shared.upgrade() {
                     shared.bridge_failed.store(true, Ordering::Release);
-                    shared.failed.store(true, Ordering::Release);
                 }
             }),
         )?;
@@ -308,6 +307,17 @@ impl CaptureRuntime {
         }
     }
 
+    pub(crate) fn reconnect_presentation(&self) -> Result<(), String> {
+        let publisher = self.publisher.lock().map_err(|_| WORKER_FAILED)?.clone();
+        let shared = self.shared.clone();
+        if let Some(publisher) = publisher {
+            publisher.reconnect(move || shared.bridge_failed.store(false, Ordering::Release))?;
+        } else {
+            shared.bridge_failed.store(false, Ordering::Release);
+        }
+        Ok(())
+    }
+
     pub fn flush_bridge(&self) -> Result<(), String> {
         let publisher = self.publisher.lock().map_err(|_| WORKER_FAILED)?.clone();
         if let Some(publisher) = publisher {
@@ -331,7 +341,8 @@ impl CaptureRuntime {
             .store(true, Ordering::Release);
         drop(session);
         self.shared.upgrade.cancel_and_wait();
-        self.stop_and_flush()?;
+        self.stop()?;
+        let _ = self.flush_bridge(); // Presentation failure cannot veto durable update shutdown.
         if self
             .shared
             .recording
@@ -981,3 +992,6 @@ mod party_tests;
 mod stats_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod storage_recovery_tests;

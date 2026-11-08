@@ -385,3 +385,5 @@ account can override the pointer after its identity watermark is durable.
 Dungeon clear-time PB alerts compare only runs owned by the triggering run's
 account using the same alias-aware ownership expression as Home. Unknown owners
 neither establish nor beat a PB baseline.
+
+The shell exposes **Retry saving** for failed storage or a start refused because summaries are pending. Retry first retires the capture owner, then retries and closes the retained writer in original order. It never replaces pending summaries with a new capture stream. A successful retry clears the exit warning and allows capture to start again. Unsaved close offers an explicit discard action that preserves committed history; cancelling or repeating close retains pending memory.

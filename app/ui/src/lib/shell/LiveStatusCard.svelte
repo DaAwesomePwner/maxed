@@ -13,7 +13,7 @@
   } = $props();
   let active = $derived(capture !== null && ['WaitingForGame', 'Live', 'Recovering'].includes(capture.state));
   let failed = $derived(capture !== null && ['Failed', 'NpcapMissing', 'NpcapIncompatible', 'PermissionDenied'].includes(capture.state));
-  let restartRequired = $derived(capture?.state === 'Failed' && ['Capture worker failed; restart Maxed', 'Live updates interrupted; reconnect or restart Maxed'].includes(capture.message));
+  let restartRequired = $derived(capture?.state === 'Failed' && ['Capture worker failed; restart Maxed'].includes(capture.message));
   // Native CaptureStatus.message is sanitized at the WebView boundary. Preserve
   // its specific remedy (including permanent worker failure), never exception text.
   let guidance = $derived(capture?.message || (capture ? captureGuidance[capture.state] : 'Connecting to capture status.'));
@@ -25,7 +25,7 @@
   let captureState = $derived(capture?.state ?? null);
   let clockLive = $derived(captureState === 'Live' && !preview && !view.stale);
   let elapsed = $derived(liveDuration(liveMs));
-  let reconnect = $derived(capture === null && error !== '');
+  let reconnect = $derived((capture === null && error !== '') || capture?.message === 'Live updates interrupted; reconnect or restart Maxed');
   let actionLabel = $derived(reconnect ? 'Reconnect Capture' : active ? 'Stop Capture'
     : failed && !restartRequired ? 'Retry Capture' : 'Start Capture');
   let actionUnavailable = $derived(reconnect ? preview || busy : active ? stopUnavailable : startUnavailable);

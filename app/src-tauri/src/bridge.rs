@@ -102,6 +102,7 @@ fn queued_event(event: EventEnvelope) -> EventEnvelope {
 enum Delivery {
     Publish(QueuedPublication, u64),
     Flush(Sender<Result<(), String>>),
+    Reconnect(Box<dyn FnOnce() + Send>),
 }
 
 /// One consumer preserves enqueue order across capture, domain and snapshot IPC.
@@ -223,6 +224,10 @@ impl Publisher {
                         delivery
                     };
                     match delivery {
+                        Delivery::Reconnect(recovered) => {
+                            interrupted.set(false);
+                            recovered();
+                        }
                         Delivery::Publish(publication, epoch)
                             if matches!(
                                 publication,
@@ -322,6 +327,16 @@ impl Publisher {
     }
 
     /// Call after releasing lifecycle locks, before command completion/app exit.
+    pub(crate) fn reconnect(
+        &self,
+        recovered: impl FnOnce() + Send + 'static,
+    ) -> Result<(), String> {
+        self.send
+            .send(Delivery::Reconnect(Box::new(recovered)))
+            .map_err(|_| DELIVERY_FAILED)?;
+        self.flush()
+    }
+
     pub fn flush(&self) -> Result<(), String> {
         let (done, wait) = bounded(1);
         self.send
@@ -400,8 +415,9 @@ impl Publisher {
                         // Still actionable when IPC itself is unavailable. These
                         // UI calls stay on this worker, including failure paths.
                         if let Some(window) = app.get_webview_window("main") {
-                            let _ =
-                                window.set_title("Maxed - Live updates interrupted; restart Maxed");
+                            let _ = window.set_title(
+                                "Maxed - Live updates interrupted; reconnect or restart Maxed",
+                            );
                         }
                     }
                 }

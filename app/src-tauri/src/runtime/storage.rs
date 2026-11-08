@@ -262,6 +262,9 @@ impl CaptureRuntime {
             .clone()
     }
     pub fn retry_store(&self) -> Result<(), String> {
+        // Retire the live/completed owner before retrying its retained writer.
+        // A storage error from stop is precisely what this operation recovers.
+        let _ = self.stop();
         let _lifecycle = self.session.lock().map_err(|_| super::WORKER_FAILED)?;
         let mut recovery = self
             .shared
