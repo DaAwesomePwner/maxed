@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({ listen: vi.fn(), invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke, Channel: class { onmessage = (_value: ArrayBuffer) => {}; } }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: mocks.listen }));
 import { readFileSync } from 'node:fs';
-import { nativeTransport } from '../src/lib/bridge/native';
+import { LIVE_PAYLOAD_EVENTS, nativeTransport } from '../src/lib/bridge/native';
 
 test.each(['live-snapshot', 'party-changed'] as const)('native %s subscriptions decode byte channels and release native ownership', async event => {
   let channel!: { onmessage(value: ArrayBuffer): void };
@@ -130,15 +130,11 @@ test('forwards the typed Character command and preserves native rejection withou
   expect(mocks.listen).not.toHaveBeenCalled();
 });
 
-test('channel subscriptions match the native subscribe allowlist', async () => {
+test('channel subscriptions match the native subscribe allowlist', () => {
   const nativeChannels = readFileSync('../src-tauri/src/bridge/channels.rs', 'utf8');
-  const match = nativeChannels.match(/if !matches!\(\s*event\.as_str\(\),([\s\S]*?)\)\s*\{/);
+  const match = nativeChannels.match(/if\s*!\s*matches\s*!\s*\(\s*event\s*\.\s*as_str\s*\(\s*\)\s*,([\s\S]*?)\)\s*\{/);
   expect(match).not.toBeNull();
-  const nativeEvents = [...match![1].matchAll(/"([^"]+)"/g)].map(value => value[1]).sort();
+  const nativeEvents = [...match![1].matchAll(/(["'])([^"']+)\1/g)].map(value => value[2]).sort();
   expect(nativeEvents.length).toBeGreaterThan(0);
-  const source = await import('../src/lib/bridge/native.ts?raw');
-  const tsMatch = source.default.match(/const LIVE_PAYLOAD_EVENTS[^=]*= new Set[^\(]*\(\[([\s\S]*?)\]\)/);
-  expect(tsMatch).not.toBeNull();
-  const tsEvents = [...tsMatch![1].matchAll(/'([^']+)'/g)].map(value => value[1]).sort();
-  expect(tsEvents).toEqual(nativeEvents);
+  expect([...LIVE_PAYLOAD_EVENTS].sort()).toEqual(nativeEvents);
 });

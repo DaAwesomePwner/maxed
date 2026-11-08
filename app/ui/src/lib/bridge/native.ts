@@ -4,7 +4,7 @@ import { createClient } from './client';
 import type { Events, Transport } from './client';
 
 // Keep in sync with LivePayloads::subscribe in bridge/channels.rs.
-const LIVE_PAYLOAD_EVENTS = new Set<keyof Events>(['live-snapshot', 'engine-event', 'party-changed']);
+export const LIVE_PAYLOAD_EVENTS = new Set<keyof Events>(['live-snapshot', 'engine-event', 'party-changed']);
 
 function decodePayload<T>(payload: T | string): T {
   if (typeof payload !== 'string') return payload;
@@ -21,7 +21,7 @@ export const nativeTransport: Transport = {
     const release = await listen<Events[K] | string>(event, (message) => {
       if (active) receive(decodePayload<Events[K]>(message.payload));
     });
-    // All other events are emitted directly by `app.emit`.
+    // Only these events also support byte channels; all others use the Tauri listener alone.
     if (!LIVE_PAYLOAD_EVENTS.has(event)) return () => { active = false; release(); };
     const channel = new Channel<ArrayBuffer>();
     const decoder = new TextDecoder();
