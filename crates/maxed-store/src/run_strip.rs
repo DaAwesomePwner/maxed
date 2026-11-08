@@ -27,15 +27,17 @@ pub(crate) const FIGHTS: &str = "WITH strip AS (
     ORDER BY s.started,s.fight_id LIMIT 64
 ) SELECT length(CAST(payload AS BLOB)),payload FROM strip";
 const LOCAL: &str = "SELECT length(CAST(payload AS BLOB)),payload FROM (
-    SELECT json_array(damage,rank,json_extract(json,'$.share')) AS payload
-    FROM fight_players WHERE fight_id=?1 AND json_extract(json,'$.is_local')=1
+    SELECT json_array(damage,rank,CASE WHEN json_extract(s.json,'$.total_damage')>0
+        THEN damage/json_extract(s.json,'$.total_damage') END) AS payload
+    FROM fight_players JOIN fight_summaries s ON s.fight_id=fight_players.fight_id WHERE fight_players.fight_id=?1 AND json_extract(fight_players.json,'$.is_local')=1
         AND NOT EXISTS (
             SELECT 1 FROM fights f, json_each(f.json,'$.issues') issue
             WHERE f.id=?1 AND issue.value='missing_identity'
         ) LIMIT 2)";
 const PLAYER: &str = "SELECT length(CAST(payload AS BLOB)),payload FROM (
-    SELECT json_array(damage,rank,json_extract(json,'$.share')) AS payload
-    FROM fight_players WHERE fight_id=?1 AND player_id=?2 LIMIT 1)";
+    SELECT json_array(damage,rank,CASE WHEN json_extract(s.json,'$.total_damage')>0
+        THEN damage/json_extract(s.json,'$.total_damage') END) AS payload
+    FROM fight_players JOIN fight_summaries s ON s.fight_id=fight_players.fight_id WHERE fight_players.fight_id=?1 AND player_id=?2 LIMIT 1)";
 
 impl StoreReader {
     pub fn run_fight_strip(
@@ -109,6 +111,13 @@ mod tests {
                 "{plan}"
             );
             assert!(!plan.contains(&format!("SCAN {table}")), "{plan}");
+            if sql == LOCAL || sql == PLAYER {
+                assert!(
+                    plan.contains("SEARCH s USING INDEX sqlite_autoindex_fight_summaries_1"),
+                    "{plan}"
+                );
+                assert!(!plan.contains("SCAN s"), "{plan}");
+            }
             if sql == LOCAL {
                 assert!(plan.contains("SEARCH f USING INDEX"), "{plan}");
                 assert!(!plan.contains("SCAN f"), "{plan}");

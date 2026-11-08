@@ -15,6 +15,10 @@ fn scalar_share_query_is_byte_identical_across_multiple_runs() {
     for players in [30, 360] {
         let mut db = Connection::open_in_memory().unwrap();
         let ids = runs_audit::seed(&mut db, 48, players);
+        // Old-style shares must describe the same damage/total as the new reader.
+        // Stale legacy values are covered by every_share_reader_ignores_legacy_player_share.
+        db.execute_batch("UPDATE fight_players SET json=json_set(json,'$.share',
+            damage/(SELECT json_extract(f.json,'$.total_damage') FROM fights f WHERE f.id=fight_id));").unwrap();
         let legacy = runs_audit::query(true);
         let current = runs_audit::query(false);
         assert_eq!(
