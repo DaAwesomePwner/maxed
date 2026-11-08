@@ -593,3 +593,23 @@ it('shows estimated-source evidence only in debug mode in the table and selected
   setDebugMode(false); await flush();
   expect(screen.getAllByText('est.').every(tag => !tag.hasAttribute('title'))).toBe(true);
 });
+
+it('retains the same-filter saved summary after contention exhausts its retry', async () => {
+  const fixture = mount({ summary: request => ({ totals: reviewTotals, days: request.days.map(() => reviewTotals) }) });
+  fixture.unmount();
+  const client = fixture.client, snapshot = homeSnapshot();
+  const store = { state: 'ready' as const, queued: 0, durable: '2', stream_id: snapshot.stream_id, message: '' };
+  const page = render(RouteFrame, { client, snapshot, route: { kind: 'loot', view: 'feed' }, required: '1', store });
+  await flush();
+  expect(document.querySelector('[data-kpi="bags"] .value')?.textContent).toBe('120');
+  const summary = vi.spyOn(client, 'getDropSummary').mockResolvedValue({ status: 'busy' });
+  await page.rerender({ required: '2' }); await flush();
+  await vi.advanceTimersByTimeAsync(2000); await flush();
+  expect(summary).toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  expect(document.querySelector('[data-kpi="bags"] .value')?.textContent).toBe('120');
+  summary.mockResolvedValue({ status: 'ready', value: { totals: reviewTotals, days: [reviewTotals] } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  expect(document.querySelector('[data-kpi="bags"] .value')?.textContent).toBe('120');
+});

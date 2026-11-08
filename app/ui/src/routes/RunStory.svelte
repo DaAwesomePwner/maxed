@@ -108,7 +108,7 @@
     void owner.onAccountHistoryChanged(notice => {
       revision++; bestsKey = '';
       if (notice.reason === 'account_switched') bests = null;
-      instance.retry();
+      instance.retry(true);
     }).then(stop => { if (current) release = stop; else stop(); }).catch(() => {});
     return () => { current = false; release?.(); instance.dispose(); };
   });

@@ -85,10 +85,11 @@ it('Superseded during initial read-ahead backs off before retrying the checkpoin
   controller.update(input); await flush();
   expect(queryHome).toHaveBeenCalledOnce();
   expect(states.at(-1)).toMatchObject({ phase: 'busy', retryAvailable: false, summary: null });
-  controller.update(input); await flush();
+  controller.update(input); controller.retry(); await flush();
+  await vi.advanceTimersByTimeAsync(1999);
   expect(queryHome).toHaveBeenCalledOnce();
   expect(states.at(-1)).toMatchObject({ phase: 'busy', retryAvailable: false });
-  controller.update({ ...input, store: saved('12') }); await vi.advanceTimersByTimeAsync(2000); await flush();
+  controller.update({ ...input, store: saved('12') }); await vi.advanceTimersByTimeAsync(1); await flush();
   expect(queryHome).toHaveBeenCalledTimes(2);
   expect(states.at(-1)).toMatchObject({ phase: 'ready', summary: { runs: 2 }, retryAvailable: true });
 });

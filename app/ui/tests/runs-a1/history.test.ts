@@ -159,3 +159,19 @@ it('disposal cannot requeue or publish an old route after its read finishes', as
   h.pending[1].resolve(ready('retired')); await flush(); await vi.advanceTimersByTimeAsync(2000); await flush();
   expect(h.getRun).toHaveBeenCalledTimes(2); expect(h.states).toHaveLength(count);
 });
+
+it.each(['busy', 'superseded'] as const)('successful reads renew the automatic %s retry budget', async status => {
+  const h = harness(); h.controller.update(h.input); await flush();
+  h.pending[0].resolve(ready('initial')); await flush();
+  for (const [index, required] of ['13', '14'].entries()) {
+    h.controller.update({ ...h.input, required, store: saved(required) });
+    await vi.advanceTimersByTimeAsync(1000);
+    h.pending[1 + index * 2].resolve({ status }); await flush();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(h.getRun).toHaveBeenCalledTimes(2 + index * 2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.getRun).toHaveBeenCalledTimes(3 + index * 2);
+    h.pending[2 + index * 2].resolve(ready(required)); await flush();
+    expect(h.last()).toMatchObject({ phase: 'ready', value: { story: { run: { id: required } } } });
+  }
+});

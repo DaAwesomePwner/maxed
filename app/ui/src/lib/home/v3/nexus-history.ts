@@ -48,7 +48,7 @@ export function createNexusHistory(
           loot = { phase: 'ready', value: reply.value, message: '', retryAvailable: false }; emit(); return;
         }
         const policy = historyControl(reply.status, attempt > 0);
-        loot = { ...loot, phase: reply.status, message: policy.message, retryAvailable: policy.retryAvailable }; emit();
+        loot = { ...loot, phase: 'busy', message: policy.message, retryAvailable: policy.retryAvailable }; emit();
         if (!policy.retry) return;
         await new Promise(resolve => setTimeout(resolve, 2000));
       }

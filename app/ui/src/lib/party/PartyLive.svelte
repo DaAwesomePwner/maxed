@@ -58,9 +58,14 @@
       try {
         if (required) {
           const pending = required;
-          const waiting = historyWaiting({ ...pending, store: await owner.queryStore() });
+          const saved = await owner.queryStore();
+          const waiting = historyWaiting({ ...pending, store: saved });
           if (disposed) return;
-          if (waiting) { message = waiting; dirty = true; return; }
+          if (waiting) {
+            message = waiting;
+            dirty = saved.state !== 'failed' && saved.stream_id === pending.streamId;
+            return;
+          }
           if (required === pending) required = null;
         }
         const reply = id === undefined ? await owner.getPartyLive() : await owner.getPartyRun(id);

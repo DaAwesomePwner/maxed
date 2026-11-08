@@ -91,7 +91,7 @@ export interface HistoryState {
   phase: 'loading' | 'ready' | 'stale' | 'superseded' | 'busy' | 'error';
   value: HistoryValue | null; message: string; retryAvailable: boolean;
 }
-export interface HistoryController { update(input: HistoryInput): void; retry(): void; dispose(): void }
+export interface HistoryController { update(input: HistoryInput): void; retry(afterCurrent?: boolean): void; dispose(): void }
 type HistoryClient = Pick<Client, 'getEventSummary' | 'getChatOverview' | 'getChatSender' | 'listWhisperPartners' | 'getStatsMaps' | 'listStatsSessions' | 'getStatsSession' | 'getStatsDungeons' | 'listChat' | 'listInstanceEvents' | 'listRuns' | 'getRun' | 'getRunFightStrip' | 'getFight' | 'getPlayerBreakdown' | 'getRunPlayer' | 'listDrops' | 'getItemHistory' | 'getLootStats' | 'getCollection' | 'getDropSummary'>;
 async function read(client: HistoryClient, query: HistoryQuery): Promise<HistoryReply<HistoryValue>> {
   const wrap = <T>(reply: HistoryReply<T>, value: (result: T) => HistoryValue): HistoryReply<HistoryValue> =>
@@ -169,7 +169,7 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
   let latest: Checkpoint = { required: null, version: 0 };
   let reservation: number | undefined;
   const endRead = () => { if (reservation !== undefined) cache?.end(reservation); reservation = undefined; };
-  let active = false, disposed = false, retryUsed = false;
+  let active = false, disposed = false, retryUsed = false, retryQueued = false;
   let control: 'superseded' | 'busy' | 'error' | null = null;
   let failure = '';
   let lastStart = -Infinity;
@@ -210,6 +210,7 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
         pending = request; return;
       }
       if (reply.status === 'ready') {
+        retryUsed = false;
         value = reply.value;
         if (route) cache?.put(key, { value, route, query, required: request.required }, readReservation);
         if (latest.version > request.version && !pending) pending = latest;
@@ -230,6 +231,7 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
       if (readReservation !== undefined) cache?.end(readReservation);
       if (reservation === readReservation) reservation = undefined;
       active = false;
+      if (retryQueued) { retryQueued = false; retry(); }
       if (!disposed) pump();
     });
   }
@@ -243,6 +245,14 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
       pump();
     }
   });
+  // Account changes may request one refresh after the active read settles.
+  function retry(afterCurrent = false) {
+    if (disposed || !input) return;
+    if (active) { retryQueued ||= afterCurrent; return; }
+    epoch++; retryUsed = false; control = null; lastStart = -Infinity;
+    hitRequired = undefined;
+    latest = { required: input.required, version: ++version }; pending = latest; pump();
+  }
   return {
     update(next) {
       if (disposed) return;
@@ -273,12 +283,7 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
       }
       input = next; pump();
     },
-    retry() {
-      if (disposed || !input || active) return;
-      epoch++; retryUsed = false; control = null; lastStart = -Infinity;
-      hitRequired = undefined;
-      latest = { required: input.required, version: ++version }; pending = latest; pump();
-    },
+    retry,
     dispose() {
       releaseVisibility();
       endRead();

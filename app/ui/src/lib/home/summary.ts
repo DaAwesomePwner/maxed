@@ -81,12 +81,12 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
           automaticRetryUsed = true; retryBusy = true; backingOff = true;
           emit('busy', policy.message, policy.retryAvailable);
         } else {
-          control = result.status;
+          control = 'busy';
           emit(control, policy.message, policy.retryAvailable);
         }
         return;
       }
-      summary = result.value; completed = request;
+      automaticRetryUsed = false; summary = result.value; completed = request;
       const stale = readAhead || request !== generation || waiting(input) !== null;
       emit(stale ? 'stale' : 'ready', stale ? waiting(input) ?? 'Refreshing saved observations.' : '');
     }).catch((error: unknown) => {

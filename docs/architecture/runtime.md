@@ -154,16 +154,6 @@ queries and the existing eight-entry storage FIFO. Only an identical query key
 (including account revision) coalesces a pending page request; unrelated queries
 retain FIFO order. A full queue returns Busy without displacing another reader.
 The existing 32-attempts-per-second admission limit remains in force.
-Saved-history page controllers retry Busy or Superseded once after at least one
-second, then expose manual retry while retaining saved values. Home uses one
-serial queue across summary, loot, PB, v4 cards and recap commands. Its summary
-and loot readers retry once after two seconds; supplemental readers allow two
-two-second supersession retries (and one Busy retry for v4/recap). Exhaustion
-remains explicit through the owning card's error/retry state; PB baselines retain
-their last value. Recap SQL and its save timeout pause while hidden. Party's
-saved-run view continues its throttled durability checks until the store catches
-up or the view is disposed.
-
 
 Receipt maintenance uses the same storage owner as capture. Accepted events,
 retry, flush, shutdown and retained unsaved work take priority. Default units admit

@@ -635,3 +635,21 @@ it('keeps waiting beyond three durability checks and refreshes without another e
   await vi.advanceTimersByTimeAsync(1000); await flush();
   expect(page.queries.getPartyRun).toHaveBeenCalledTimes(2);
 });
+
+it.each(['failed', 'changed-stream'] as const)('stops durability polling for %s and recovers through Retry', async reason => {
+  const page = await mount(view({ live: false }), true);
+  const store = vi.fn().mockResolvedValue({ state: reason === 'failed' ? 'failed' : 'ready',
+    queued: 0, durable: '1', stream_id: reason === 'failed' ? 'synth-store' : 'new-stream', message: '' });
+  page.client.queryStore = store;
+  page.transport.publishEngineEvent({ stream_id: 'synth-store', sequence: '3', at: '1', event: { run_ended: run({ id: 'synth-run' }) } });
+  await vi.advanceTimersByTimeAsync(1000); await flush();
+  expect(store).toHaveBeenCalledOnce();
+  expect(page.queries.getPartyRun).toHaveBeenCalledTimes(1);
+  expect(screen.getByText(reason === 'failed' ? /Saving failed/ : 'Waiting for saved history to catch up.')).toBeTruthy();
+  await vi.advanceTimersByTimeAsync(6000); await flush();
+  expect(store).toHaveBeenCalledOnce();
+  store.mockResolvedValue({ state: 'ready', queued: 0, durable: '3', stream_id: 'synth-store', message: '' });
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
+  expect(store).toHaveBeenCalledTimes(2);
+  expect(page.queries.getPartyRun).toHaveBeenCalledTimes(2);
+});

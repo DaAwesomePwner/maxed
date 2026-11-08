@@ -215,11 +215,19 @@ it('busy_after_supersession_waits_for_the_attempt_window_before_its_one_retry', 
   expect(h.last()).toMatchObject({ status: 'saved', data: { kind: 'run', streak: { runs_since_last_white: 2 } } });
 });
 
-it('repeated_supersession_backs_off_to_at_most_200ms', async () => {
+it('repeated_supersession_retries_twice_at_two_second_intervals_then_stops', async () => {
   const h = harness(); h.client.getRun.mockResolvedValue({ status: 'superseded' });
-  h.controller.update(h.input); await vi.advanceTimersByTimeAsync(1000);
-  // Immediate, then 25, 50, 100, 200, 200, 200 ms: 9 attempts in the first second, not 40.
-  expect(h.client.getRun.mock.calls.length).toBeLessThanOrEqual(9);
+  h.controller.update(h.input); await vi.advanceTimersByTimeAsync(1999);
+  expect(h.client.getRun).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(h.client.getRun).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1999);
+  expect(h.client.getRun).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(h.client.getRun).toHaveBeenCalledTimes(3);
+  expect(h.last()).toMatchObject({ status: 'partial', reason: 'failed' });
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(h.client.getRun).toHaveBeenCalledTimes(3);
 });
 
 it('superseded_visit_read_retries', async () => {

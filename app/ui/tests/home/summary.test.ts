@@ -127,10 +127,11 @@ describe('bounded durable Home reads', () => {
     h.history.retry(); await flush();
     expect(h.last()).toMatchObject({ phase: 'busy', retryAvailable: false, summary: { runs: 1 } });
     expect(h.last().message).not.toMatch(/error|failed|retry/i);
-    h.history.update(h.input); await flush();
+    h.history.update(h.input); h.history.retry(); await flush();
+    await vi.advanceTimersByTimeAsync(1999);
     expect(h.queryHome).toHaveBeenCalledTimes(2);
     const next = { ...h.input, scope: { today: { range: { start: '0', end: '86400000000' } } } };
-    h.history.update(next); await vi.advanceTimersByTimeAsync(2000); await flush();
+    h.history.update(next); await vi.advanceTimersByTimeAsync(1); await flush();
     expect(h.queryHome).toHaveBeenCalledTimes(3);
     h.pending[1].resolve(homeSummary({ runs: 2 })); await flush();
     expect(h.last()).toMatchObject({ phase: 'ready', retryAvailable: true, summary: { runs: 2 } });
@@ -171,4 +172,18 @@ describe('bounded durable Home reads', () => {
     expect(h.last().phase).toBe('ready');
   });
 
+});
+
+it.each(['busy', 'superseded'] as const)('successful Home reads renew the automatic %s retry budget', async status => {
+  vi.useFakeTimers();
+  const h = harness();
+  for (const [index, required] of ['13', '14'].entries()) {
+    h.queryHome.mockResolvedValueOnce({ status }).mockResolvedValueOnce({ status: 'ready', value: homeSummary({ runs: index + 1 }) });
+    h.history.update({ ...h.input, required, store: saved(required) }); await flush();
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(h.queryHome).toHaveBeenCalledTimes(1 + index * 2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.queryHome).toHaveBeenCalledTimes(2 + index * 2);
+    expect(h.last()).toMatchObject({ phase: 'ready', summary: { runs: index + 1 } });
+  }
 });
