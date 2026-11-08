@@ -121,7 +121,14 @@ Additional engine rationales appear below. They are not executable suppression I
   119 of 144 decoded bytes. That interpretation uses a four-byte little-endian
   header and a 16-byte (128-bit), least-significant-bit-first-per-byte bitmap.
   These snapshots remain incomplete; completion-counter fallback is unavailable
-  for them. The unexplained tail is not consumed by the production validator.
+  for them. Current issue #41 evidence instead leaves 18 bytes after 112 of
+  130 bytes and 67 present fields. Diagnostics recognize either suffix as an
+  unmodeled extension only after supported presence fields decode successfully,
+  with a nonzero header, at most 64 bytes and 32 complete compressed integers.
+  They report extension byte length/field count and `divergence=none`, without
+  tail bytes or values. Malformed, oversized and unsupported-presence cases
+  remain divergences. Recognition does not establish field semantics: the
+  production validator and privacy admission still reject extended snapshots.
 - Historical diagnostics establish that Recording A's 37 field failures all
   precede tick recovery on a reset-assumed fresh connection with no decoded
   NEWTICK. These are startup mis-decryptions shared with Java, not evidence for

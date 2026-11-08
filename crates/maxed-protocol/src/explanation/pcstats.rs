@@ -30,6 +30,24 @@ fn shape(bytes: &[u8]) -> String {
     shape_with_trust(bytes, true)
 }
 
+// Diagnostic recognition only, not snapshot admission or field semantics.
+// Both observed 18- and 25-byte suffixes fit these conservative growth bounds.
+fn extension_fields(tail: &[u8]) -> Option<usize> {
+    if tail.is_empty() || tail.len() > 64 {
+        return None;
+    }
+    let mut reader = Reader::new(tail);
+    let mut fields = 0;
+    while reader.remaining() != 0 {
+        if fields == 32 {
+            return None;
+        }
+        reader.ci().ok()?;
+        fields += 1;
+    }
+    Some(fields)
+}
+
 pub(super) fn shape_with_trust(bytes: &[u8], alignment_verified: bool) -> String {
     let mut out = format!(" base64Length={}", bytes.len());
     if !alignment_verified {
@@ -114,6 +132,18 @@ pub(super) fn shape_with_trust(bytes: &[u8], alignment_verified: bool) -> String
         reader.position(),
         reader.remaining()
     );
+    // Only a fully decoded, supported presence section can precede an extension.
+    // Discard values and expose only its bounded shape, even in opt-in reports.
+    if nonzero && !unknown {
+        if let Some(fields) = extension_fields(&data[reader.position()..]) {
+            let _ = write!(
+                out,
+                " extension=unmodeled_varints:bytes={}:fields={fields} divergence=none",
+                reader.remaining()
+            );
+            return out;
+        }
+    }
     if unknown {
         out.push_str(" divergence=unsupported_presence_bits@4");
     } else if reader.remaining() != 0 {
@@ -175,6 +205,70 @@ mod tests {
         out
     }
 
+    // Invented counters only: 67 present fields consume 112 bytes including
+    // the header/bitmap, matching issue #41's shape without captured data.
+    fn current_snapshot() -> Vec<u8> {
+        let mut data = vec![0; 20];
+        data[0] = 1;
+        for (index, &id) in ORDER.iter().take(67).enumerate() {
+            data[4 + usize::from(id / 8)] |= 1 << (id % 8);
+            if index < 25 {
+                data.extend([0x81, 1]);
+            } else {
+                data.push(1);
+            }
+        }
+        assert_eq!(data.len(), 112);
+        data
+    }
+
+    #[test]
+    fn current_extension_reports_shape_without_values_or_divergence() {
+        let mut data = current_snapshot();
+        data.extend([2; 14]);
+        data.extend([0x82, 1, 0x83, 1]);
+        let encoded = encode(&data);
+        let text = explain_create_success(&encoded, 191, true);
+        assert!(text.contains("decodedLength=130"));
+        assert!(text.contains("consumed=112 trailing=18 extension=unmodeled_varints:bytes=18:fields=16 divergence=none"));
+        assert!(!text.contains("tailHex="));
+        assert!(!text.contains("value=66"));
+        assert!(!crate::privacy::character_stats(&encoded));
+        let untrusted = explain_create_success(&encoded, 191, false);
+        assert!(!untrusted.contains("extension="));
+        assert!(!untrusted.contains("value="));
+    }
+
+    #[test]
+    fn extension_bounds_are_inclusive() {
+        let mut data = current_snapshot();
+        data.extend([0x81, 1].repeat(32));
+        assert!(shape(encode(&data).as_bytes())
+            .contains("extension=unmodeled_varints:bytes=64:fields=32 divergence=none"));
+    }
+
+    #[test]
+    fn malformed_oversize_and_unsupported_extensions_remain_divergences() {
+        for tail in [
+            vec![0x80],
+            vec![0xff; 5],
+            [0x80, 0x80, 0x80, 0x80, 1].repeat(13), // 65 bytes, only 13 fields
+            vec![1; 33],                            // within byte bound, beyond field bound
+        ] {
+            let mut data = current_snapshot();
+            data.extend(tail);
+            let text = shape(encode(&data).as_bytes());
+            assert!(text.contains("divergence=trailing@112"));
+            assert!(!text.contains("extension="));
+        }
+        let mut data = current_snapshot();
+        data[5] |= 8; // unsupported bit 11 must not be hidden by a valid suffix
+        data.extend([1; 18]);
+        assert!(shape(encode(&data).as_bytes()).contains("divergence=unsupported_presence_bits@4"));
+        let data = current_snapshot();
+        assert!(shape(encode(&data[..111]).as_bytes()).contains("divergence=counter_Truncated"));
+    }
+
     #[test]
     fn presence_field_order_values_widths_and_divergence() {
         let mut data = vec![0; 20];
@@ -231,7 +325,7 @@ mod tests {
         let text = shape(encode(&data).as_bytes());
         assert!(text.contains("leU32=16909060"));
         assert!(text.contains("tag=24@20:varintWidth=1:value=-1;"));
-        assert!(text.contains("divergence=trailing@21 tailHex=a55a"));
+        assert!(text.contains("extension=unmodeled_varints:bytes=2:fields=1 divergence=none"));
         assert!(!crate::privacy::character_stats(&encode(&data)));
     }
 
@@ -267,8 +361,8 @@ mod tests {
         assert!(crate::privacy::character_stats(&complete));
         assert!(shape(complete.as_bytes()).contains("divergence=none"));
 
-        // An arbitrary 25-byte suffix made of 18 valid compressed integers is
-        // still unclassified, even if it repeats identically across snapshots.
+        // The historical 25-byte suffix uses the same diagnostic recognition,
+        // without admitting its unknown semantics to the snapshot decoder.
         data.extend([1; 11]);
         for _ in 0..7 {
             data.extend([0x81, 1]);
@@ -276,10 +370,8 @@ mod tests {
         let extended = encode(&data);
         assert!(!crate::privacy::character_stats(&extended));
         let text = shape(extended.as_bytes());
-        assert!(text.contains("consumed=21 trailing=25 divergence=trailing@21"));
-        assert!(text.contains("tailCandidateVarints=["));
-        assert!(text.contains("unclassifiedRemaining=0"));
-        assert!(!text.contains("divergence=none"));
+        assert!(text.contains("consumed=21 trailing=25 extension=unmodeled_varints:bytes=25:fields=18 divergence=none"));
+        assert!(!text.contains("tailHex="));
         assert!(!text.contains(&extended));
     }
 }
