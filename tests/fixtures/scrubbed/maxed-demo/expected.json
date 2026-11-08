@@ -212,11 +212,10 @@
           "lines": [
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -233,11 +232,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -254,11 +252,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -275,11 +272,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -296,11 +292,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -317,11 +312,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -338,11 +332,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -359,11 +352,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -380,7 +372,7 @@
             }
           ],
           "conditions": [],
-          "breakdown_provisional": true
+          "breakdown_provisional": false
         }
       }
     }
@@ -978,11 +970,10 @@
           "lines": [
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -999,11 +990,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1020,11 +1010,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1041,11 +1030,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1062,11 +1050,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1083,11 +1070,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1104,11 +1090,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1125,11 +1110,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1146,7 +1130,7 @@
             }
           ],
           "conditions": [],
-          "breakdown_provisional": true
+          "breakdown_provisional": false
         }
       }
     }
@@ -1585,11 +1569,10 @@
           "lines": [
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1606,11 +1589,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1627,11 +1609,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1648,11 +1629,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1669,11 +1649,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1690,11 +1669,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1711,11 +1689,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1732,11 +1709,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1753,7 +1729,7 @@
             }
           ],
           "conditions": [],
-          "breakdown_provisional": true
+          "breakdown_provisional": false
         }
       }
     }
