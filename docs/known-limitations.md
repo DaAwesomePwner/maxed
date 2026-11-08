@@ -210,6 +210,8 @@ is recorded.
 - The “Runs list newest” 50 ms release gate fails on the development Mac at the
   task base too; this is a pre-existing performance limitation.
 
+Automatic adapter selection can re-select among handles opened at capture start after five seconds without frames; newly created adapters require restarting capture, and buffered candidate traffic may delay or misdirect re-selection.
+
 ## Passive TCP loss recovery
 
 Missing TCP bytes trigger a directional gap after 32 buffered segments, one

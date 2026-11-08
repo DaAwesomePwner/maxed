@@ -81,6 +81,8 @@ fn read_drops(device: &mut dyn Device, stats_failed: &mut bool) -> Option<u32> {
     }
 }
 
+const ADAPTER_SILENCE: Duration = Duration::from_secs(5);
+
 pub struct CaptureHandle {
     pub frames: Receiver<RawFrame>,
     status: Arc<Mutex<CaptureStatus>>,
@@ -161,6 +163,19 @@ where
     B: Backend + 'static,
     F: FnOnce() -> Result<B, CaptureError> + Send + 'static,
 {
+    start_with_clock(config, factory, Instant::now)
+}
+
+fn start_with_clock<B, F, C>(
+    config: CaptureConfig,
+    factory: F,
+    now: C,
+) -> Result<CaptureHandle, CaptureError>
+where
+    B: Backend + 'static,
+    F: FnOnce() -> Result<B, CaptureError> + Send + 'static,
+    C: Fn() -> Instant + Send + 'static,
+{
     if config.capacity == 0
         || config
             .adapter_id
@@ -239,31 +254,45 @@ where
                 let mut index = 0u64;
                 let mut previous_drops = None;
                 let mut stats_failed = false;
-                let mut stats_at = Instant::now();
+                let mut stats_at = now();
+                let mut last_frame_at = now();
+                let mut candidate = 1;
                 while !worker_stop.load(Ordering::Acquire) {
                     let mut winner = None;
+                    let mut selected_error = None;
                     let mut i = 0;
+                    // Always poll the selected handle first. Normal idle iterations
+                    // probe at most one candidate, round-robin, after five seconds.
                     while i < devices.len() {
                         if worker_stop.load(Ordering::Acquire) {
                             break;
                         }
                         let polled = match devices[i].poll() {
                             Ok(frame) => frame,
-                            Err(error) if !selected => {
+                            Err(error) if !selected || i != 0 => {
                                 // CaptureError has fixed descriptions; no native error text or adapter IDs.
                                 tracing::warn!(error = %error, "Discarding capture candidate after polling failure");
-                                errors.push(error);
                                 devices.remove(i);
                                 if devices.is_empty() {
                                     return Err(error);
                                 }
+                                if selected && selected_error.is_none() { break; }
                                 continue;
                             }
-                            Err(error) => return Err(error),
+                            Err(error) => {
+                                if config.adapter_id.is_some() || devices.len() == 1 {
+                                    return Err(error);
+                                }
+                                // One immediate pass over alternatives on selected failure.
+                                // Without a game frame, preserve the original terminal error.
+                                selected_error = Some(error);
+                                i = 1;
+                                continue;
+                            }
                         };
                         // Check on both busy and idle polls, bounded to four calls per second.
-                        if selected && stats_at.elapsed() >= Duration::from_millis(250) {
-                            stats_at = Instant::now();
+                        if selected && i == 0 && now().duration_since(stats_at) >= Duration::from_millis(250) {
+                            stats_at = now();
                             if let Some(current) = read_drops(devices[i].as_mut(), &mut stats_failed) {
                                 if let Some(previous) = previous_drops {
                                     let delta = current.wrapping_sub(previous);
@@ -278,32 +307,48 @@ where
                         }
                         if let Some(mut frame) = polled {
                             // BPF selects traffic; parser confirms the adapter before locking in.
-                            if !selected && !matches!(parse_frame(&frame), Ok(Some(_))) {
-                                i += 1;
-                                continue;
+                            if (!selected || i != 0) && !matches!(parse_frame(&frame), Ok(Some(_))) {
+                                // Ignore non-game traffic on candidates.
+                            } else {
+                                if selected && i != 0 {
+                                    index = index.checked_add(1).ok_or(CaptureError::OpenFailed)?;
+                                    record_loss(&worker_status, 1);
+                                    tracing::info!("Switching automatic capture adapter after traffic interruption");
+                                }
+                                if !selected || i != 0 {
+                                    devices.swap(0, i);
+                                    stats_failed = false;
+                                    // Ignore pre-selection loss, including on a returning handle.
+                                    // If unavailable, the first successful sample is the baseline.
+                                    previous_drops = read_drops(devices[0].as_mut(), &mut stats_failed);
+                                    stats_at = now();
+                                    selected = true;
+                                }
+                                last_frame_at = now();
+                                frame.index = index;
+                                index = index.checked_add(1).ok_or(CaptureError::OpenFailed)?;
+                                let drops = send_latest(&tx, &eviction, frame)
+                                    .map_err(|_| CaptureError::Stopped)?;
+                                record_loss(&worker_status, drops);
+                                winner = Some(i);
+                                break;
                             }
-                            frame.index = index;
-                            index = index.checked_add(1).ok_or(CaptureError::OpenFailed)?;
-                            let drops = send_latest(&tx, &eviction, frame)
-                                .map_err(|_| CaptureError::Stopped)?;
-                            record_loss(&worker_status, drops);
-                            winner = Some(i);
-                            break;
                         }
-                        i += 1;
+                        if selected && selected_error.is_none() {
+                            if i != 0 || devices.len() == 1
+                                || config.adapter_id.is_some()
+                                || now().duration_since(last_frame_at) < ADAPTER_SILENCE {
+                                break;
+                            }
+                            candidate = candidate.clamp(1, devices.len() - 1);
+                            i = candidate;
+                            candidate = if candidate + 1 < devices.len() { candidate + 1 } else { 1 };
+                        } else {
+                            i += 1;
+                        }
                     }
-                    if let Some(winner) = winner {
-                        if !selected {
-                            let mut device = devices.swap_remove(winner);
-                            // Ignore all loss before selection. If unavailable, the first
-                            // successful sample becomes the baseline rather than guessing.
-                            previous_drops = read_drops(device.as_mut(), &mut stats_failed);
-                            stats_at = Instant::now();
-                            devices.clear();
-                            devices.push(device);
-                            selected = true;
-                        }
-                    } else {
+                    if winner.is_none() {
+                        if let Some(error) = selected_error { return Err(error); }
                         thread::park_timeout(Duration::from_millis(5));
                     }
                 }
@@ -370,3 +415,7 @@ mod readiness_tests {
 #[cfg(test)]
 #[path = "stats_tests.rs"]
 mod stats_tests;
+
+#[cfg(test)]
+#[path = "reselection_tests.rs"]
+mod reselection_tests;
