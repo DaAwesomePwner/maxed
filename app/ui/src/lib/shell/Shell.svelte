@@ -591,7 +591,7 @@
         {#if pendingSummaries || (store?.queued ?? 0) > 0}
           <p class="store-warning" role="status">Couldn't save. Retry.</p>
           {#if !unsavedClose}<button disabled={busy || preview} onclick={() => recoverStore()}>Retry saving</button>{/if}
-        {:else if !unsavedClose}<p class="store-warning" role="status">Storage could not open. Use Start Capture to try again.</p>{/if}
+        {:else if !unsavedClose}<p class="store-warning" role="status">Couldn't save. Storage is unavailable; use Start Capture to try again.</p>{/if}
         <DebugNote text={`Latest durable sequence: ${store?.durable ?? "unavailable"}`} />
       {:else if liveState.historyFailed || errors.store || !store}<p class="storage-note">Storage Error</p>
       {/if}
