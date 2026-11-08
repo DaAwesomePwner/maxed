@@ -687,15 +687,38 @@ impl Engine {
         }
         if new {
             if self.fights.len() >= self.config.max_active_fights {
-                if let Some(old) = self
+                // Final kills can leave without losing coverage, but retain them
+                // through the same five-second window used by pair settlement.
+                let settled = self
                     .fights
                     .iter()
+                    .filter(|(_, f)| {
+                        f.pending.is_empty()
+                            && f.base.kill.as_ref().is_some_and(|kill| !kill.provisional)
+                            && f.base.ended.is_some_and(|end| {
+                                crate::clock::millis(self.now).0.saturating_sub(end.0) > 5_000_000
+                            })
+                    })
                     .min_by_key(|(_, f)| f.base.last_hit)
-                    .map(|(k, _)| *k)
-                {
-                    self.retire_fight(old, FightEnd::ResourceLimit, events);
+                    .map(|(k, _)| *k);
+                if let Some(old) = settled {
+                    self.retire_fight(old, FightEnd::Killed, events);
+                } else {
+                    let open = self
+                        .fights
+                        .iter()
+                        .filter(|(_, f)| f.base.ended.is_none())
+                        .min_by_key(|(_, f)| f.base.last_hit)
+                        .map(|(k, _)| *k);
+                    self.mark(CoverageIssue::ResourceLimit, events);
+                    if let Some(old) = open {
+                        self.retire_fight(old, FightEnd::ResourceLimit, events);
+                    } else {
+                        // All slots are awaiting final settlement. Drop the new
+                        // observation rather than prematurely settling a kill.
+                        return;
+                    }
                 }
-                self.mark(CoverageIssue::ResourceLimit, events);
             }
             let mut issues = vec![];
             if self.map.is_none() {
