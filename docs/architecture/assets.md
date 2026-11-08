@@ -105,6 +105,7 @@ The linked GUI delegates XML loading to `Equip`/`Weapon`; those same-revision so
 | Omitted fields | No subattacks + explicit item rate: projectile 0, omitted item count 1. [Weapon][x-weapon]. |
 | Missing subattack count | Missing `NumProjectiles` has no supported positive default. [Weapon][x-weapon]. |
 | Missing rate / reference | No default is adopted for missing item rate or `projectileId`. [Weapon][x-weapon]. |
+| PLAYERSHOOT wire lookup | With `<Subattack>` entries, `projectileId` is the XML-order subattack index; wire `-1` selects subattack 0 and then its projectile reference. A null/missing reference remains `missingProjectileDefinition`. Without a subattack mapping, wire `-1` selects projectile index 0 directly. |
 | Projectile lookup | Groups resolve the `Projectile` attribute `id`, not list position. [Equip][x-equip]. |
 | Damage | Existing fixed `Damage` and ranged `MinDamage`/`MaxDamage` reconstruction stays intact. |
 | Fire together | Plain subattacks are summed in this reference model. [GUI lines 449–467][x-gui]. |

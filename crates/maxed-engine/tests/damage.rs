@@ -436,8 +436,18 @@ fn subattack_wire_indices_select_projectiles_without_fallback() {
     use std::sync::Arc;
     for (mapping, cases) in [
         (
+            serde_json::json!([0]),
+            vec![(-1, Some(100.)), (0, Some(100.))],
+        ),
+        (
             serde_json::json!([2, 0, 1]),
-            vec![(0, Some(300.)), (1, Some(100.)), (2, Some(200.)), (3, None)],
+            vec![
+                (-1, Some(300.)),
+                (0, Some(300.)),
+                (1, Some(100.)),
+                (2, Some(200.)),
+                (3, None),
+            ],
         ),
         (
             serde_json::json!([0, 0, 0, 0, 0]),
@@ -465,7 +475,7 @@ fn subattack_wire_indices_select_projectiles_without_fallback() {
         ),
         (
             serde_json::json!([null, 2]),
-            vec![(0, None), (1, Some(300.))],
+            vec![(-1, None), (0, None), (1, Some(300.))],
         ),
     ] {
         for (wire, expected) in cases {
@@ -480,7 +490,7 @@ fn subattack_wire_indices_select_projectiles_without_fallback() {
                     ..prototype.clone()
                 })
                 .collect();
-            if mapping == serde_json::json!([0, 0, 0, 0, 0]) {
+            if mapping == serde_json::json!([0, 0, 0, 0, 0]) || mapping == serde_json::json!([0]) {
                 item.projectiles.truncate(1);
             }
             item.weapon_firing = Some(
@@ -540,7 +550,7 @@ fn subattack_damage_ranges_consume_rng_in_received_shot_order() {
     let mut e = Engine::new(config(), Arc::new(c)).unwrap();
     setup(&mut e);
     // Seed 1 yields 16807, 282475249, 1622650073. The fixed 200 consumes none.
-    for (bullet, wire, total) in [(1, 0, 307.), (2, 2, 507.), (3, 1, 616.), (4, 0, 919.)] {
+    for (bullet, wire, total) in [(1, -1, 307.), (2, 2, 507.), (3, 1, 616.), (4, 0, 919.)] {
         let Packet::PlayerShoot(mut p) = shoot(bullet) else {
             unreachable!()
         };

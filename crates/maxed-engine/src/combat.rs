@@ -226,14 +226,15 @@ impl Engine {
                         .as_ref()
                         .and_then(|f| f.subattack_projectile_indices.as_ref())
                         .filter(|indices| !indices.is_empty());
-                    let index = if let Some(indices) = subattacks {
-                        *indices
-                            .get(usize::try_from(p.projectileId).ok()?)?
-                            .as_ref()?
-                    } else if p.projectileId == -1 {
+                    let wire_index = if p.projectileId == -1 {
                         0
                     } else {
                         i16::from(p.projectileId)
+                    };
+                    let index = if let Some(indices) = subattacks {
+                        *indices.get(usize::try_from(wire_index).ok()?)?.as_ref()?
+                    } else {
+                        wire_index
                     };
                     i.projectiles.iter().find(|pdef| pdef.index == index)
                 });
