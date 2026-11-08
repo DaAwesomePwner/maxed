@@ -275,8 +275,9 @@ baselines, and retry superseded requests for its current view.
 
 A directional sequence hole waits for at most 32 distinct buffered segments or
 one second of capture timestamp age, checked whenever another frame arrives
-against each flow's highest observed capture timestamp. Regressing timestamps
-cannot lower that expiry watermark.
+against each flow's capture-time watermark. Small timestamp reorders retain that
+watermark; backward clock steps larger than one second re-baseline it as
+described below.
 The 2 MiB pending-byte cap can trigger recovery earlier. Recovery emits
 `ReorderLimit` before advancing to the earliest buffered sequence and delivering
 available bytes in sequence order; it does not discard the buffered tail.
@@ -328,9 +329,10 @@ not measured throughput or live Npcap performance claims.
 Hole expiry retains the capture-time watermark for small timestamp reorders.
 A backward step larger than the one-second age budget re-baselines the watermark
 and pending timestamps, preserving elapsed age where representable. That step
-remains reversible until a different capture timestamp arrives: returning to the
-old watermark restores pending timestamps before checking age, so a lone backward
-outlier cannot mass-expire holes. Continued timestamps behind the old watermark
+remains reversible until a different capture timestamp arrives: returning within
+one second behind the old watermark (inclusive), or beyond it, restores pending
+timestamps before checking age, so a lone backward outlier cannot mass-expire
+holes. Continued timestamps more than one second behind the old watermark
 commit the new baseline. Repeated expiry calls at the same timestamp do not
 commit the step. Saturation
 near timestamp zero can discard less than one age budget of elapsed time; renewed

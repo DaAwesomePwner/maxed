@@ -388,7 +388,7 @@ impl Reassembler {
             if let Some((previous, stepped)) = generation.clock_step {
                 if at != stepped {
                     generation.clock_step = None;
-                    if at >= previous {
+                    if previous.0.saturating_sub(at.0) <= HOLE_AGE_MICROS {
                         // A lone old timestamp was an outlier. Undo its shift
                         // before evaluating age on the restored timeline. Repeated
                         // expire calls for that same frame must not commit the step.

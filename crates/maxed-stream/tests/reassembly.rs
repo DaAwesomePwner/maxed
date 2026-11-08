@@ -716,10 +716,45 @@ fn first_microsecond_beyond_age_budget_rebaselines_and_still_expires() {
         ahead.dir = dir;
         ahead.at = Timestamp(1_000_001);
         assert!(stream.push(ahead).is_empty());
-        assert!(stream.expire(Timestamp(1_000_002)).is_empty());
+        // Stay outside the old reorder window to commit the new baseline.
+        assert!(stream.expire(Timestamp(1_000_000)).is_empty());
         assert!(stream.expire(Timestamp(2_000_000)).is_empty());
         let events = stream.expire(Timestamp(2_000_001));
         assert!(matches!(events.first(), Some(StreamEvent::Gap { .. })));
         assert_eq!(data(events), b"tail");
+    }
+}
+
+#[test]
+fn backward_outlier_is_undone_within_old_watermarks_reorder_window() {
+    for returned_at in [99_950_000, 99_000_000] {
+        for dir in [Direction::ClientToServer, Direction::ServerToClient] {
+            let mut stream = Reassembler::default();
+            for (seq, bytes) in [(9, &b""[..]), (12, &b"tail"[..])] {
+                let mut s = segment(seq, seq == 9, bytes);
+                s.dir = dir;
+                s.at = Timestamp(99_900_000);
+                stream.push(s);
+            }
+            assert!(stream.expire(Timestamp(100_000_000)).is_empty());
+            assert!(stream.expire(Timestamp(50_000_000)).is_empty());
+            // Return below the old watermark, including its exact reorder boundary.
+            let mut returning = segment(10, false, b"");
+            returning.dir = dir;
+            returning.at = Timestamp(returned_at);
+            assert!(stream.expire(returning.at).is_empty());
+            assert!(stream.push(returning).is_empty());
+            // The original pending age is restored, not reset or prematurely expired.
+            assert!(stream.expire(Timestamp(100_899_999)).is_empty());
+            let events = stream.expire(Timestamp(100_900_000));
+            assert!(matches!(
+                events.first(),
+                Some(StreamEvent::Gap {
+                    reason: GapReason::ReorderLimit,
+                    ..
+                })
+            ));
+            assert_eq!(data(events), b"tail");
+        }
     }
 }
