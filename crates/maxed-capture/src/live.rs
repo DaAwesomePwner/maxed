@@ -349,6 +349,7 @@ where
                         while i < devices.len() {
                             let mut failed = false;
                             let mut drained = false;
+                            let mut saw_game = false;
                             for _ in 0..CANDIDATE_DRAIN_BUDGET {
                                 if worker_stop.load(Ordering::Acquire) {
                                     break;
@@ -357,6 +358,7 @@ where
                                     Ok(Some(frame)) => {
                                         if matches!(parse_frame(&frame), Ok(Some(_))) {
                                             activity[i] = Some(now());
+                                            saw_game = true;
                                         }
                                     }
                                     Ok(None) => {
@@ -377,20 +379,22 @@ where
                                 activity.remove(i);
                                 continue;
                             }
-                            // Do not select a handle still working through a backlog.
-                            // Arrival grace excludes straggler mirrored copies. Wire
-                            // timestamps cannot establish freshness across clock steps.
-                            if drained
-                                && winner.is_none()
-                                && silence_since.is_some_and(|since| {
-                                    (selected_error.is_some()
-                                        || now().duration_since(since) >= ADAPTER_SILENCE)
-                                        && activity[i].is_some_and(|observed| {
-                                            observed >= since
-                                                && observed >= last_delivered_at + SWITCH_GRACE
-                                        })
-                                })
-                            {
+                            // A failed selected handle needs only game evidence from
+                            // this bounded pass; grace protects a still-working handle.
+                            // Normal switches wait for the candidate backlog to drain.
+                            let eligible = if selected_error.is_some() {
+                                saw_game
+                            } else {
+                                drained
+                                    && silence_since.is_some_and(|since| {
+                                        now().duration_since(since) >= ADAPTER_SILENCE
+                                            && activity[i].is_some_and(|observed| {
+                                                observed >= since
+                                                    && observed >= last_delivered_at + SWITCH_GRACE
+                                            })
+                                    })
+                            };
+                            if winner.is_none() && eligible {
                                 winner = Some(i);
                             }
                             i += 1;
@@ -415,7 +419,7 @@ where
                     }
                     // On selected failure, allow this bounded drain pass to find
                     // fresh evidence. Without it, preserve the terminal error;
-                    // do not wait indefinitely or trust an undrained backlog.
+                    // do not wait indefinitely for candidate traffic.
                     if let Some(error) = selected_error {
                         return Err(error);
                     }

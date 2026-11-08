@@ -5,7 +5,11 @@ use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
 
 enum Read {
     Frame(Result<Option<RawFrame>, CaptureError>),
-    Gate(RawFrame, Sender<()>, Receiver<()>),
+    Gate(
+        Result<Option<RawFrame>, CaptureError>,
+        Sender<()>,
+        Receiver<()>,
+    ),
 }
 struct FakeDevice {
     frames: Receiver<Read>,
@@ -17,10 +21,10 @@ impl Device for FakeDevice {
     fn poll(&mut self) -> Result<Option<RawFrame>, CaptureError> {
         let result = match self.frames.try_recv() {
             Ok(Read::Frame(result)) => result,
-            Ok(Read::Gate(frame, entered, release)) => {
+            Ok(Read::Gate(result, entered, release)) => {
                 entered.send(()).unwrap();
                 release.recv_timeout(Duration::from_secs(2)).unwrap();
-                Ok(Some(frame))
+                result
             }
             Err(_) => Ok(None),
         };
@@ -203,26 +207,39 @@ fn non_game_candidate_does_not_switch_and_candidate_failure_is_nonfatal() {
     handle.stop().unwrap();
 }
 #[test]
-fn selected_failure_drains_past_non_game_and_requires_fresh_game_evidence() {
-    for fresh in [true, false] {
+fn selected_failure_uses_current_game_evidence_without_arrival_grace() {
+    for game in [true, false] {
         let (handle, c, clock) = setup(false);
         send(&c[0], 10);
         receive(&handle, 10, 0);
-        idle_rounds(&c[0]);
-        clock.store(if fresh { 1000 } else { 1 }, Ordering::SeqCst);
+        // Earlier evidence alone must not rescue a later selected error.
+        send(&c[1], 11);
+        wait(|| c[1].tx.is_empty());
+        idle_rounds(&c[1]);
+        clock.store(50, Ordering::SeqCst);
+        let (entered, waiting) = bounded(1);
+        let (release, gate) = bounded(1);
+        c[0].tx
+            .send(Read::Gate(Err(CaptureError::OpenFailed), entered, gate))
+            .unwrap();
+        waiting.recv_timeout(Duration::from_secs(2)).unwrap();
         c[1].tx
             .send(Read::Frame(Ok(Some(frame(11, false)))))
             .unwrap();
-        send(&c[1], 12);
-        c[0].tx
-            .send(Read::Frame(Err(CaptureError::OpenFailed)))
-            .unwrap();
-        if fresh {
+        if game {
+            send(&c[1], 11);
+        }
+        release.send(()).unwrap();
+        if game {
             wait(|| handle.status().dropped_frames == 1);
             assert!(
                 handle.frames.is_empty(),
                 "drained evidence must be discarded"
             );
+            // The post-switch timestamp guard still applies.
+            send(&c[1], 10);
+            idle_rounds(&c[1]);
+            assert!(handle.frames.is_empty());
             send(&c[1], 13);
             receive(&handle, 13, 2);
             handle.stop().unwrap();
@@ -345,7 +362,7 @@ fn candidate_backlog_must_be_drained_across_bounded_passes_before_selection() {
     let (entered, waiting) = bounded(1);
     let (release, gate) = bounded(1);
     c[1].tx
-        .send(Read::Gate(frame(2, true), entered, gate))
+        .send(Read::Gate(Ok(Some(frame(2, true))), entered, gate))
         .unwrap();
     waiting.recv_timeout(Duration::from_secs(2)).unwrap();
     // Fill the backlog while the first candidate read is held.
@@ -355,7 +372,11 @@ fn candidate_backlog_must_be_drained_across_bounded_passes_before_selection() {
     let (entered_ninth, waiting_ninth) = bounded(1);
     let (release_ninth, gate_ninth) = bounded(1);
     c[1].tx
-        .send(Read::Gate(frame(10, true), entered_ninth, gate_ninth))
+        .send(Read::Gate(
+            Ok(Some(frame(10, true))),
+            entered_ninth,
+            gate_ninth,
+        ))
         .unwrap();
     for marker in 11..19 {
         send(&c[1], marker);
@@ -375,5 +396,24 @@ fn candidate_backlog_must_be_drained_across_bounded_passes_before_selection() {
     assert!(handle.frames.is_empty());
     send(&c[1], 19);
     receive(&handle, 19, 2);
+    handle.stop().unwrap();
+}
+
+#[test]
+fn timestamp_guard_expires_while_newly_selected_adapter_has_no_frames() {
+    let (handle, c, clock) = setup(false);
+    send(&c[0], 100);
+    receive(&handle, 100, 0);
+    idle_rounds(&c[0]);
+    clock.store(5000, Ordering::SeqCst);
+    send(&c[1], 101);
+    wait(|| handle.status().dropped_frames == 1);
+    idle_rounds(&c[1]);
+    clock.store(6000, Ordering::SeqCst);
+    idle_rounds(&c[1]);
+    assert!(handle.frames.is_empty());
+    send(&c[1], 1);
+    receive(&handle, 1, 2);
+    assert_eq!(handle.status().dropped_frames, 1);
     handle.stop().unwrap();
 }
