@@ -1134,6 +1134,37 @@ fn run_measurement_loops(handle: &tauri::AppHandle, service: &SetupService, loop
     }
 }
 
+fn report_build_failure() -> ! {
+    const MESSAGE: &str =
+        "Maxed could not start. Please restart Maxed. If the problem continues, reinstall Maxed.";
+    let failure = exit::startup_failure(|name| std::env::var_os(name).is_some());
+    eprintln!("{MESSAGE}");
+    #[cfg(windows)]
+    if failure.show_dialog {
+        show_startup_error(MESSAGE);
+    }
+    std::process::exit(failure.exit_code);
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn show_startup_error(message: &str) {
+    use windows::core::{w, PCWSTR};
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+
+    let message: Vec<u16> = message.encode_utf16().chain(Some(0)).collect();
+    // SAFETY: Both strings are NUL-terminated and live throughout this blocking
+    // call. No owner window exists yet; no pointer is retained by MessageBoxW.
+    unsafe {
+        let _ = MessageBoxW(
+            None,
+            PCWSTR(message.as_ptr()),
+            w!("Maxed"),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -1406,8 +1437,7 @@ pub fn run() {
         ])
         .build(tauri::generate_context!());
     let Ok(app) = app else {
-        eprintln!("Maxed window could not start");
-        return;
+        report_build_failure();
     };
     app.run(move |app, event| {
         let exit = app.state::<Arc<ExitControl>>().inner().clone();

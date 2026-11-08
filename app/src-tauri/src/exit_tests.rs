@@ -1,5 +1,31 @@
 use super::*;
 use std::cell::{Cell, RefCell};
+
+#[test]
+fn build_failure_requests_dialog_and_uses_startup_exit_code() {
+    let failure = startup_failure(|_| false);
+    let control = ExitControl::default();
+    assert_eq!(control.exit_code(), 0);
+    control.startup_failed.store(true, Ordering::Release);
+    assert_ne!(failure.exit_code, 0);
+    assert_eq!(failure.exit_code, control.exit_code());
+    assert!(failure.show_dialog);
+}
+
+#[test]
+fn build_failure_suppresses_dialog_for_each_automation_variable() {
+    for variable in [
+        "MAXED_GUI_SMOKE",
+        "MAXED_MEASURE_STARTUP",
+        "MAXED_MEASURE_DEMO",
+    ] {
+        let failure = startup_failure(|name| name == variable);
+        assert!(!failure.show_dialog, "{variable}");
+        assert_eq!(failure.exit_code, STARTUP_FAILURE_EXIT_CODE);
+    }
+    assert!(!startup_failure(|_| true).show_dialog);
+}
+
 #[derive(Default)]
 struct Fake {
     installing: bool,
