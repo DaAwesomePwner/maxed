@@ -51,6 +51,9 @@ impl ExitHost for NativeExit {
     fn delivery_failed(&self) -> bool {
         self.runtime.presentation_failed()
     }
+    fn retry_save(&self) -> Result<(), String> {
+        self.runtime.retry_store()
+    }
     fn shutdown(&self) -> Result<(), String> {
         self.runtime.shutdown()
     }
@@ -61,11 +64,12 @@ impl ExitHost for NativeExit {
     fn warn(&self, native_fallback: bool) {
         let _ = self.app.emit("unsaved-close", ());
         if let Some(window) = self.app.get_webview_window("main") {
-            let _ = window.set_title(if native_fallback {
-                "Maxed — Unsaved changes. Wait 2 seconds, then close again to exit without saving"
+            let title = if native_fallback {
+                exit::native_warning_title()
             } else {
-                exit::UNSAVED_TITLE
-            });
+                exit::UNSAVED_TITLE.to_string()
+            };
+            let _ = window.set_title(&title);
         }
     }
     fn exit(&self, code: i32) {

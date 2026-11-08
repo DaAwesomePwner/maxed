@@ -5,9 +5,17 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
-const NATIVE_DISCARD_DELAY: Duration = Duration::from_secs(2);
+pub(crate) const NATIVE_DISCARD_DELAY: Duration = Duration::from_secs(2);
+const NATIVE_DISCARD_EXPIRY: Duration = Duration::from_secs(60);
 pub(crate) const UNSAVED_TITLE: &str =
     "Maxed — Unsaved changes. Retry saving or confirm exit in Maxed";
+
+pub(crate) fn native_warning_title() -> String {
+    format!(
+        "Maxed — Unsaved changes. Wait {} seconds, then close again to exit without saving",
+        NATIVE_DISCARD_DELAY.as_secs()
+    )
+}
 
 #[derive(Default)]
 pub(crate) struct ExitControl {
@@ -41,6 +49,7 @@ pub(crate) trait ExitHost {
     fn resume(&self);
     fn unsaved(&self) -> bool;
     fn delivery_failed(&self) -> bool;
+    fn retry_save(&self) -> Result<(), String>;
     fn shutdown(&self) -> Result<(), String>;
     fn discard(&self);
     fn warn(&self, native_fallback: bool);
@@ -69,37 +78,52 @@ fn attempt(control: &ExitControl, host: &impl ExitHost, discard: bool) -> Result
     // Check the gap at entry, before a potentially slow save retry. Rapid
     // repeated close events must not become discard consent while waiting.
     let warning_at = *control.native_warning_at.lock().unwrap();
-    let native_discard =
-        host.delivery_failed() && warning_at.is_some_and(|at| at.elapsed() >= NATIVE_DISCARD_DELAY);
+    let native_pending = !discard
+        && host.delivery_failed()
+        && control.warned.load(Ordering::Acquire)
+        && host.unsaved();
+    let native_discard = native_pending
+        && warning_at.is_some_and(|at| {
+            (NATIVE_DISCARD_DELAY..=NATIVE_DISCARD_EXPIRY).contains(&at.elapsed())
+        });
+    if native_pending && warning_at.is_some() && !native_discard {
+        // Auto-repeat and stale confirmation only refresh the warning. Do not
+        // stop updates, prepare setup, or stop/resume capture on these closes.
+        return warn_pending(control, host);
+    }
     host.stop_updates()?;
     host.prepare();
-    let code = if discard && control.warned.load(Ordering::Acquire) && host.unsaved() {
+    // shutdown alone cannot retry a writer retained in recovery.
+    let retry_failed = native_discard && host.retry_save().is_err();
+    let native_discard_allowed = retry_failed
+        && host.delivery_failed()
+        && *control.native_warning_at.lock().unwrap() == warning_at;
+    let code = if (discard || native_discard_allowed)
+        && control.warned.load(Ordering::Acquire)
+        && host.unsaved()
+    {
         host.discard();
         control.exit_code()
     } else if host.shutdown().is_ok() {
-        control.exit_code()
-    } else if native_discard
-        && control.warned.load(Ordering::Acquire)
-        && host.unsaved()
-        && host.delivery_failed()
-        && *control.native_warning_at.lock().unwrap() == warning_at
-    {
-        host.discard();
         control.exit_code()
     } else if !host.unsaved() {
         1
     } else {
         host.resume();
-        control.warned.store(true, Ordering::Release);
-        let native_fallback = host.delivery_failed();
-        host.warn(native_fallback);
-        // Start (or restart) the reading interval after issuing the warning.
-        *control.native_warning_at.lock().unwrap() = native_fallback.then(Instant::now);
-        return Err("Changes are not saved; retry storage or exit without saving".into());
+        return warn_pending(control, host);
     };
     control.finished.store(true, Ordering::Release);
     host.exit(code);
     Ok(())
+}
+
+fn warn_pending(control: &ExitControl, host: &impl ExitHost) -> Result<(), String> {
+    control.warned.store(true, Ordering::Release);
+    let native_fallback = host.delivery_failed();
+    host.warn(native_fallback);
+    // Start (or restart) the reading interval after issuing the warning.
+    *control.native_warning_at.lock().unwrap() = native_fallback.then(Instant::now);
+    Err("Changes are not saved; retry storage or exit without saving".into())
 }
 
 #[cfg(test)]

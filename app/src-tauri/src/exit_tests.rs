@@ -7,6 +7,7 @@ struct Fake {
     update_error: bool,
     unsaved: Cell<bool>,
     shutdown_error: bool,
+    retry_error: bool,
     calls: RefCell<Vec<&'static str>>,
     code: Cell<Option<i32>>,
 }
@@ -33,6 +34,15 @@ impl ExitHost for Fake {
     }
     fn unsaved(&self) -> bool {
         self.unsaved.get()
+    }
+    fn retry_save(&self) -> Result<(), String> {
+        self.calls.borrow_mut().push("retry");
+        if self.retry_error {
+            Err("failed".into())
+        } else {
+            self.unsaved.set(false);
+            Ok(())
+        }
     }
     fn shutdown(&self) -> Result<(), String> {
         self.calls.borrow_mut().push("shutdown");
@@ -78,6 +88,7 @@ fn cancelled_unsaved_close_preserves_data_until_explicit_discard() {
     let host = Fake {
         unsaved: Cell::new(true),
         shutdown_error: true,
+        retry_error: true,
         ..Default::default()
     };
     for _ in 0..2 {
@@ -117,6 +128,7 @@ fn discard_requires_prior_warning() {
     let host = Fake {
         unsaved: Cell::new(true),
         shutdown_error: true,
+        retry_error: true,
         ..Default::default()
     };
     assert!(run(&control, &host, true).is_err());
@@ -130,6 +142,7 @@ fn dead_presentation_requires_native_warning_then_second_close() {
     let host = Fake {
         unsaved: Cell::new(true),
         shutdown_error: true,
+        retry_error: true,
         ..Default::default()
     };
     // A prior UI-only warning does not authorize a later native discard.
@@ -146,7 +159,7 @@ fn dead_presentation_requires_native_warning_then_second_close() {
     run(&control, &host, false).unwrap();
     assert_eq!(
         &host.calls.borrow()[..],
-        &["updates", "prepare", "shutdown", "discard"]
+        &["updates", "prepare", "retry", "discard"]
     );
     assert!(!host.unsaved.get());
     assert!(control.exiting.load(Ordering::Acquire));
@@ -158,6 +171,7 @@ fn recovered_presentation_does_not_discard_on_second_close() {
     let host = Fake {
         unsaved: Cell::new(true),
         shutdown_error: true,
+        retry_error: true,
         delivery_failed: Cell::new(true),
         ..Default::default()
     };
@@ -174,17 +188,19 @@ fn native_close_after_gap_saves_without_discard_when_storage_recovers() {
     let mut host = Fake {
         unsaved: Cell::new(true),
         shutdown_error: true,
+        retry_error: true,
         delivery_failed: Cell::new(true),
         ..Default::default()
     };
     assert!(run(&control, &host, false).is_err());
     *control.native_warning_at.lock().unwrap() = Some(Instant::now() - NATIVE_DISCARD_DELAY);
     host.shutdown_error = false;
+    host.retry_error = false;
     host.calls.borrow_mut().clear();
     run(&control, &host, false).unwrap();
     assert_eq!(
         &host.calls.borrow()[..],
-        &["updates", "prepare", "shutdown"]
+        &["updates", "prepare", "retry", "shutdown"]
     );
     assert_eq!(host.code.get(), Some(0));
 }
@@ -198,4 +214,55 @@ fn reconnect_clears_native_confirmation_and_restores_unsaved_title() {
     assert!(control.native_warning_at.lock().unwrap().is_none());
     control.warned.store(false, Ordering::Release);
     assert_eq!(control.presentation_reconnected(), "Maxed");
+}
+
+#[test]
+fn early_and_expired_closes_only_renew_warning() {
+    for age in [
+        Duration::ZERO,
+        NATIVE_DISCARD_EXPIRY + Duration::from_secs(1),
+    ] {
+        let control = ExitControl::default();
+        control.warned.store(true, Ordering::Release);
+        let old = Instant::now() - age;
+        *control.native_warning_at.lock().unwrap() = Some(old);
+        let host = Fake {
+            unsaved: Cell::new(true),
+            delivery_failed: Cell::new(true),
+            shutdown_error: true,
+            retry_error: true,
+            ..Default::default()
+        };
+        assert!(run(&control, &host, false).is_err());
+        assert_eq!(&host.calls.borrow()[..], &["native-warn"]);
+        assert!(control.native_warning_at.lock().unwrap().unwrap() > old);
+        assert!(!control.exiting.load(Ordering::Acquire));
+        assert!(host.unsaved.get());
+        assert_eq!(host.code.get(), None);
+    }
+}
+
+#[test]
+fn native_title_uses_confirmation_delay() {
+    assert!(native_warning_title()
+        .contains(&format!("Wait {} seconds", NATIVE_DISCARD_DELAY.as_secs())));
+}
+
+#[test]
+fn successful_retry_never_discards_even_if_shutdown_fails() {
+    let control = ExitControl::default();
+    control.warned.store(true, Ordering::Release);
+    *control.native_warning_at.lock().unwrap() = Some(Instant::now() - NATIVE_DISCARD_DELAY);
+    let host = Fake {
+        unsaved: Cell::new(true),
+        delivery_failed: Cell::new(true),
+        shutdown_error: true,
+        ..Default::default()
+    };
+    run(&control, &host, false).unwrap();
+    assert_eq!(
+        &host.calls.borrow()[..],
+        &["updates", "prepare", "retry", "shutdown"]
+    );
+    assert_eq!(host.code.get(), Some(1));
 }
