@@ -88,8 +88,22 @@ impl Alignment {
         self.synced.then_some(self.current_tick)
     }
     pub fn consume(&mut self, id: u8, body: &[u8]) -> Result<Option<Vec<u8>>, ProtocolError> {
+        // Keep the borrowed compatibility API bounded before making its copy.
         if self.cancel.load(Ordering::Relaxed) {
             return Ok(None);
+        }
+        if body.len() > crate::framing::MAX_FRAME - 5 {
+            return Err(ProtocolError::Length);
+        }
+        let mut plain = body.to_vec();
+        self.consume_in_place(id, &mut plain)
+            .map(|decoded| decoded.then_some(plain))
+    }
+
+    /// Decrypt an owned frame body without allocating a second payload buffer.
+    pub fn consume_in_place(&mut self, id: u8, body: &mut [u8]) -> Result<bool, ProtocolError> {
+        if self.cancel.load(Ordering::Relaxed) {
+            return Ok(false);
         }
         if body.len() > crate::framing::MAX_FRAME - 5 {
             return Err(ProtocolError::Length);
@@ -110,9 +124,8 @@ impl Alignment {
                 }
             }
             if self.synced {
-                let mut plain = body.to_vec();
-                self.cipher.apply(&mut plain);
-                return Ok(Some(plain));
+                self.cipher.apply(body);
+                return Ok(true);
             }
         }
         if tick {
@@ -124,7 +137,7 @@ impl Alignment {
                     let mut remaining = offset + self.delta;
                     while remaining > 0 {
                         if self.cancel.load(Ordering::Relaxed) {
-                            return Ok(None);
+                            return Ok(false);
                         }
                         let n = remaining.min(BATCH);
                         self.cipher.skip(n);
@@ -148,7 +161,7 @@ impl Alignment {
                 self.delta = 0;
             }
         }
-        Ok(None)
+        Ok(false)
     }
 }
 
