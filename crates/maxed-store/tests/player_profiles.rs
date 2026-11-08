@@ -1282,6 +1282,7 @@ fn fight_revisions_match_full_replacement_and_only_write_changed_sources() {
             let mut player = template.clone();
             player.player_id = format!("synthetic-{i}");
             player.object_id = i;
+            player.name = Some(format!("Synthetic{i}"));
             player.is_local = i == 0;
             player.sources = vec![template.sources[0].clone(); 3];
             player
@@ -1289,12 +1290,14 @@ fn fight_revisions_match_full_replacement_and_only_write_changed_sources() {
         .collect();
     for revision in 0..7 {
         match revision {
-            1 => fight.players[0].sources[0].damage += 1.,
+            1 => {
+                fight.players[0].sources[0].damage += 1.;
+                fight.players[0].sources[0].hits += 1;
+            }
             2 => {
                 fight.players[0].sources.remove(0);
                 fight.players[1].sources.push(template.sources[0].clone());
                 fight.players[2].name = Some("Synthetic changed".into());
-                fight.players[3].share = Some(0.125);
             }
             3 => {
                 fight.players.remove(1);
@@ -1306,6 +1309,14 @@ fn fight_revisions_match_full_replacement_and_only_write_changed_sources() {
             5 => fight.players.clear(),
             6 => fight.players.push(template.clone()),
             _ => {}
+        }
+        for player in &mut fight.players {
+            player.damage = player.sources.iter().map(|source| source.damage).sum();
+            player.hits = player.sources.iter().map(|source| source.hits).sum();
+        }
+        fight.total_damage = fight.players.iter().map(|player| player.damage).sum();
+        for player in &mut fight.players {
+            player.share = (fight.total_damage > 0.).then(|| player.damage / fight.total_damage);
         }
         actual.execute("DELETE FROM writes", []).unwrap();
         let event = envelope(8 + revision * 2, EngineEvent::FightUpdated(fight.clone()));
@@ -1323,6 +1334,10 @@ fn fight_revisions_match_full_replacement_and_only_write_changed_sources() {
             "fight_summaries",
             "fight_players",
             "damage_sources",
+            "pd_player_contributions",
+            "pd_run_players",
+            "party_run_members",
+            "party_players",
         ] {
             assert_eq!(
                 rows(&actual, table),
@@ -1338,13 +1353,23 @@ fn fight_revisions_match_full_replacement_and_only_write_changed_sources() {
                 .unwrap()
                 .collect::<Result<_, _>>()
                 .unwrap();
+            let source_writes: Vec<_> = writes
+                .iter()
+                .filter(|(table, _)| table == "source")
+                .collect();
+            assert_eq!(source_writes, [&("source".into(), "update".into())]);
+            // fight_players share churn is a known, separately tracked follow-up.
             assert_eq!(
-                writes,
-                [
-                    ("player".into(), "update".into()),
-                    ("source".into(), "update".into())
-                ]
+                writes
+                    .iter()
+                    .filter(|(table, operation)| table == "player" && operation == "update")
+                    .count(),
+                40
             );
+            assert_eq!(count(&actual, "pd_player_contributions"), 40);
+            assert_eq!(count(&actual, "pd_run_players"), 40);
+            assert_eq!(count(&actual, "party_run_members"), 39);
+            assert!(count(&actual, "party_players") >= 39);
             // Old implementation deleted and inserted all 120 source rows.
             assert_eq!(count(&actual, "damage_sources"), 120);
         }

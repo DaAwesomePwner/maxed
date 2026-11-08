@@ -519,6 +519,40 @@ mod tests {
     }
 
     #[test]
+    fn contribution_query_uses_run_index_and_player_key() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::migrate(&mut conn).unwrap();
+        let plan = conn
+            .prepare(&format!(
+                "EXPLAIN QUERY PLAN {}",
+                include_str!("player_fight_contributions.sql"),
+            ))
+            .unwrap()
+            .query_map(
+                params![
+                    "demo-run",
+                    "synthetic-player",
+                    r#"["fight-000","fight-001"]"#
+                ],
+                |row| row.get::<_, String>(3),
+            )
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .join("\n");
+        assert!(
+            plan.contains("SEARCH s USING") && plan.contains("fight_summaries_run (run_id=?"),
+            "{plan}"
+        );
+        assert!(plan.contains("SEARCH p USING INDEX sqlite_autoindex_fight_players_1 (fight_id=? AND player_id=?)"), "{plan}");
+        assert!(plan.contains("SEARCH other USING COVERING INDEX fight_players_object (fight_id=? AND object_id=?)"), "{plan}");
+        // json_each scans only the bounded input list; persisted tables must seek.
+        for line in plan.lines().filter(|line| line.contains("SCAN ")) {
+            assert!(line.contains("SCAN json_each VIRTUAL TABLE"), "{plan}");
+        }
+    }
+
+    #[test]
     fn contribution_queries_are_constant_and_preserve_object_ambiguity() {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::migrate(&mut conn).unwrap();
