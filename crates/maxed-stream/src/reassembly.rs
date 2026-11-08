@@ -149,6 +149,8 @@ struct Generation {
     conn: ConnId,
     halves: [Half; 2],
     latest_at: Timestamp,
+    // Keep one clock step reversible until capture time advances again.
+    clock_step: Option<(Timestamp, Timestamp)>,
 }
 struct Retired {
     flow: FlowKey,
@@ -277,6 +279,7 @@ impl Reassembler {
                 conn: ConnId(self.next_id),
                 halves: Default::default(),
                 latest_at: at,
+                clock_step: None,
             });
         }
         let Some(index) = self.active.iter().position(|g| g.flow == segment.flow) else {
@@ -382,10 +385,28 @@ impl Reassembler {
     pub fn expire(&mut self, at: Timestamp) -> Vec<StreamEvent> {
         let mut events = Vec::new();
         for generation in &mut self.active {
+            if let Some((previous, stepped)) = generation.clock_step {
+                if at != stepped {
+                    generation.clock_step = None;
+                    if at >= previous {
+                        // A lone old timestamp was an outlier. Undo its shift
+                        // before evaluating age on the restored timeline. Repeated
+                        // expire calls for that same frame must not commit the step.
+                        let forwards = previous.0 - stepped.0;
+                        for half in &mut generation.halves {
+                            for pending in &mut half.pending {
+                                pending.at.0 = pending.at.0.saturating_add(forwards);
+                            }
+                        }
+                        generation.latest_at = previous;
+                    }
+                }
+            }
             if generation.latest_at.0.saturating_sub(at.0) > HOLE_AGE_MICROS {
                 // A clock step starts a new capture-time baseline. Preserve elapsed
                 // hole age where representable; small timestamp reorders still use
                 // the watermark. The segment-count budget also bounds stalled clocks.
+                generation.clock_step = Some((generation.latest_at, at));
                 let backwards = generation.latest_at.0 - at.0;
                 for half in &mut generation.halves {
                     for pending in &mut half.pending {
