@@ -716,11 +716,22 @@ impl Engine {
                     } else {
                         // All slots are awaiting final settlement. Drop the new
                         // observation rather than prematurely settling a kill.
+                        if self.dropped_fight_targets.len() < self.config.max_entities {
+                            self.dropped_fight_targets.insert(key);
+                        } else if !self.dropped_fight_targets.contains(&key) {
+                            // Never forget lost damage silently when the marker
+                            // budget fills: conservatively taint new fights until
+                            // the next map instead of growing this set.
+                            self.dropped_fight_targets_overflow = true;
+                        }
                         return;
                     }
                 }
             }
             let mut issues = vec![];
+            if self.dropped_fight_targets.remove(&key) || self.dropped_fight_targets_overflow {
+                issues.push(CoverageIssue::ResourceLimit);
+            }
             if self.map.is_none() {
                 issues.push(CoverageIssue::Midstream);
             }
@@ -973,6 +984,47 @@ mod local_window_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dropped_target_markers_are_bounded_and_overflow_clears_with_world() {
+        let mut engine = Engine::new(
+            crate::EngineConfig {
+                max_entities: 4,
+                max_active_fights: 1,
+                ..Default::default()
+            },
+            std::sync::Arc::new(maxed_types::demo::demo_catalog()),
+        )
+        .unwrap();
+        engine.advance_to(Timestamp(1_000_000));
+        engine.report(42, 1, 1, true, Ok(100), &mut vec![]);
+        let fight = engine.fights.values_mut().next().unwrap();
+        fight.base.ended = Some(Timestamp(1_000_000));
+        fight.base.kill = Some(KillView {
+            at: Timestamp(1_000_000),
+            provisional: false,
+            evidence: KillEvidence::HpZeroRemoved,
+        });
+        for target in 43..60 {
+            engine.report(target, 1, 1, true, Ok(100), &mut vec![]);
+            // Model untracked entities leaving memory while their lost-hit
+            // evidence must survive for the rest of this map.
+            engine.entities.remove(&target);
+            assert!(engine.dropped_fight_targets.len() <= 4);
+            assert_eq!(engine.fights.len(), 1);
+        }
+        assert_eq!(engine.dropped_fight_targets.len(), 4);
+        assert!(engine.dropped_fight_targets_overflow);
+        engine.advance_to(Timestamp(7_000_000));
+        engine.report(60, 1, 1, true, Ok(100), &mut vec![]);
+        let fight = engine.fights.values().next().unwrap();
+        assert_eq!(fight.base.target_id, 60);
+        assert!(fight.base.issues.contains(&CoverageIssue::ResourceLimit));
+        assert!(!fight.base.complete_capture);
+        engine.finish(Timestamp(8_000_000), FightEnd::CaptureStopped);
+        assert!(engine.dropped_fight_targets.is_empty());
+        assert!(!engine.dropped_fight_targets_overflow);
+    }
 
     #[test]
     fn latest_open_fight_hit_ignores_ended_and_hitless_fights() {

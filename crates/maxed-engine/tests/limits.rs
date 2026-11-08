@@ -181,6 +181,10 @@ fn cap_preserves_kills_until_pairs_and_settlement_window_expire() {
         assert_eq!(snapshot.fights.len(), 1);
         assert_eq!(snapshot.fights[0].target_id, if can_retire { 3 } else { 2 });
         if !can_retire {
+            assert!(snapshot.issues.contains(&CoverageIssue::ResourceLimit));
+            let run = snapshot.run.as_ref().unwrap();
+            assert!(!run.complete_capture);
+            assert!(run.issues.contains(&CoverageIssue::ResourceLimit));
             assert!(snapshot.fights[0].complete_capture);
             assert!(snapshot.fights[0].issues.is_empty());
         }
@@ -210,4 +214,70 @@ fn provisional_kill_is_not_a_safe_eviction() {
         if f.end_reason == Some(FightEnd::ResourceLimit)
             && f.issues.contains(&CoverageIssue::ResourceLimit)
             && !f.complete_capture)));
+}
+
+#[test]
+fn dropped_target_retains_resource_limit_when_a_slot_frees() {
+    for change_map in [false, true] {
+        let mut c = config();
+        c.max_active_fights = 1;
+        let mut e = Engine::new(c, Arc::new(catalog())).unwrap();
+        setup(&mut e);
+        apply(&mut e, 1_000_000, tick(vec![]));
+        apply(&mut e, 1_000_000, damage(1, 1, 100));
+        apply(&mut e, 2_000_000, tick(vec![status(2, vec![stat(1, 0)])]));
+        apply(&mut e, 2_001_000, update(vec![], vec![2]));
+        apply(
+            &mut e,
+            3_000_000,
+            update(vec![object(3, 300, vec![])], vec![]),
+        );
+        apply(&mut e, 3_000_000, tick(vec![]));
+        let target_damage = |bullet| {
+            let maxed_protocol::Packet::Damage(mut d) = damage(1, bullet, 100) else {
+                unreachable!()
+            };
+            d.targetId = 3;
+            maxed_protocol::Packet::Damage(d)
+        };
+        let events = apply(&mut e, 3_000_000, target_damage(2));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, EngineEvent::FightStarted(_))));
+        if change_map {
+            apply(&mut e, 4_000_000, map("The Shatters"));
+            apply(&mut e, 4_001_000, create(1, 1));
+            apply(
+                &mut e,
+                4_002_000,
+                update(vec![player(), object(3, 300, vec![])], vec![]),
+            );
+        }
+        apply(&mut e, 9_000_000, tick(vec![]));
+        let events = apply(&mut e, 9_000_000, target_damage(3));
+        let started = events
+            .iter()
+            .find_map(|event| match event {
+                EngineEvent::FightStarted(f) => Some(f),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(started.target_id, 3);
+        assert_eq!(started.total_damage, 100.);
+        assert_eq!(started.first_hit, Some(Timestamp(9_000_000)));
+        assert_eq!(started.complete_capture, change_map);
+        assert_eq!(
+            started.issues.contains(&CoverageIssue::ResourceLimit),
+            !change_map
+        );
+        let snapshot = e.snapshot();
+        assert_eq!(snapshot.fights.len(), 1);
+        assert_eq!(snapshot.fights[0].complete_capture, change_map);
+        assert_eq!(
+            snapshot.fights[0]
+                .issues
+                .contains(&CoverageIssue::ResourceLimit),
+            !change_map
+        );
+    }
 }

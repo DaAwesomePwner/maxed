@@ -124,6 +124,8 @@ pub struct Engine {
     pub(crate) preceding: Option<crate::runs::Preceding>,
     pub(crate) fights: BTreeMap<(i32, u32), crate::fights::Fight>,
     pub(crate) retired_targets: BTreeSet<(i32, u32)>,
+    pub(crate) dropped_fight_targets: BTreeSet<(i32, u32)>,
+    pub(crate) dropped_fight_targets_overflow: bool,
     pub(crate) retired_entities: BTreeMap<i32, crate::world::RetiredEntity>,
     pub(crate) shots: BTreeMap<(i32, u16), crate::combat::Shot>,
     pub(crate) shot_number: u64,
@@ -252,6 +254,8 @@ impl Engine {
             preceding: None,
             fights: BTreeMap::new(),
             retired_targets: BTreeSet::new(),
+            dropped_fight_targets: BTreeSet::new(),
+            dropped_fight_targets_overflow: false,
             retired_entities: BTreeMap::new(),
             shots: BTreeMap::new(),
             shot_number: 0,
@@ -715,6 +719,8 @@ impl Engine {
         self.removed_enemies.clear();
         self.loot_tick = 0;
         self.retired_targets.clear();
+        self.dropped_fight_targets.clear();
+        self.dropped_fight_targets_overflow = false;
         self.pair_expiry.clear();
         self.dirty_fights.clear();
     }
