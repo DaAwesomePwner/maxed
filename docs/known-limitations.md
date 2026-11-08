@@ -210,7 +210,13 @@ is recorded.
 - The “Runs list newest” 50 ms release gate fails on the development Mac at the
   task base too; this is a pre-existing performance limitation.
 
-Automatic adapter selection can re-select among handles opened at capture start after five seconds without frames; newly created adapters require restarting capture, and buffered candidate traffic may delay or misdirect re-selection.
+## Automatic capture adapters
+
+Automatic selection keeps candidate handles drained and can re-select after five
+seconds without frames when another adapter has fresh game traffic. Only adapters
+opened at capture start are eligible; newly created adapters require restarting
+capture. Switching marks uncertain continuity and discards candidate observations,
+so decoding may need recovery. Live Windows/Npcap switching remains unverified.
 
 ## Passive TCP loss recovery
 

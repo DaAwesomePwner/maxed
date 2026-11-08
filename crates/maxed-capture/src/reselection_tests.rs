@@ -120,30 +120,35 @@ fn switches_both_ways_with_gap_and_fresh_drop_baselines() {
     receive(&handle, 1, 0);
     wait(|| c[0].samples.load(Ordering::SeqCst) == 1);
     c[1].drops.store(900, Ordering::SeqCst);
-    send(&c[1], 2);
+    idle_rounds(&c[0]);
     clock.store(4999, Ordering::SeqCst);
+    send(&c[1], 2);
     idle_rounds(&c[0]);
     assert!(handle.frames.is_empty());
     clock.store(5000, Ordering::SeqCst);
-    receive(&handle, 2, 2);
     wait(|| c[1].samples.load(Ordering::SeqCst) == 1);
+    send(&c[1], 3);
+    receive(&handle, 3, 2);
     assert_eq!(handle.status().dropped_frames, 1);
     assert_eq!(handle.status().state, CaptureState::Recovering);
     c[1].drops.store(903, Ordering::SeqCst);
     clock.store(5250, Ordering::SeqCst);
     wait(|| handle.status().dropped_frames == 4);
-    send(&c[1], 3);
-    receive(&handle, 3, 6);
+    send(&c[1], 4);
+    receive(&handle, 4, 6);
+    idle_rounds(&c[1]);
     c[0].drops.store(700, Ordering::SeqCst);
-    send(&c[0], 4);
     clock.store(10250, Ordering::SeqCst);
-    receive(&handle, 4, 8);
+    send(&c[0], 5);
+    wait(|| handle.status().dropped_frames == 5);
+    send(&c[0], 6);
+    receive(&handle, 6, 8);
     idle_rounds(&c[0]);
     clock.store(10500, Ordering::SeqCst);
     idle_rounds(&c[0]);
     assert_eq!(handle.status().dropped_frames, 5);
-    send(&c[0], 5);
-    receive(&handle, 5, 9);
+    send(&c[0], 7);
+    receive(&handle, 7, 9);
     handle.stop().unwrap();
 }
 #[test]
@@ -179,19 +184,91 @@ fn non_game_candidate_does_not_switch_and_candidate_failure_is_nonfatal() {
     handle.stop().unwrap();
 }
 #[test]
-fn selected_failure_switches_only_with_game_evidence() {
-    for game in [true, false] {
-        let (handle, c, _) = setup(false);
-        send(&c[0], 1);
-        receive(&handle, 1, 0);
-        c[1].tx.send(Ok(Some(frame(2, game)))).unwrap();
+fn selected_failure_drains_past_non_game_and_requires_fresh_game_evidence() {
+    for fresh in [true, false] {
+        let (handle, c, clock) = setup(false);
+        send(&c[0], 10);
+        receive(&handle, 10, 0);
+        idle_rounds(&c[0]);
+        clock.store(1000, Ordering::SeqCst);
+        c[1].tx.send(Ok(Some(frame(11, false)))).unwrap();
+        send(&c[1], if fresh { 12 } else { 10 });
         c[0].tx.send(Err(CaptureError::OpenFailed)).unwrap();
-        if game {
-            receive(&handle, 2, 2);
+        if fresh {
+            wait(|| handle.status().dropped_frames == 1);
+            assert!(
+                handle.frames.is_empty(),
+                "drained evidence must be discarded"
+            );
+            send(&c[1], 13);
+            receive(&handle, 13, 2);
             handle.stop().unwrap();
         } else {
             wait(|| handle.status().state == CaptureState::Failed);
+            assert!(handle.frames.is_empty());
             assert_eq!(handle.stop(), Err(CaptureError::OpenFailed));
         }
     }
+}
+
+#[test]
+fn candidate_evidence_before_silence_is_discarded_and_cannot_switch() {
+    let (handle, c, clock) = setup(false);
+    send(&c[0], 1);
+    receive(&handle, 1, 0);
+    send(&c[1], 9);
+    wait(|| c[1].tx.is_empty());
+    idle_rounds(&c[1]);
+    clock.store(1000, Ordering::SeqCst);
+    send(&c[0], 2);
+    receive(&handle, 2, 1);
+    idle_rounds(&c[0]);
+    clock.store(6000, Ordering::SeqCst);
+    idle_rounds(&c[1]);
+    assert!(handle.frames.is_empty());
+    assert_eq!(handle.status().dropped_frames, 0);
+    assert_eq!(c[1].samples.load(Ordering::SeqCst), 0);
+    handle.stop().unwrap();
+}
+
+#[test]
+fn mirrored_adapters_drain_during_traffic_and_never_flap_during_pause() {
+    let (handle, c, clock) = setup(false);
+    send(&c[0], 1);
+    receive(&handle, 1, 0);
+    for marker in 2..20 {
+        clock.store(marker * 100, Ordering::SeqCst);
+        send(&c[0], marker);
+        receive(&handle, marker, marker - 1);
+        send(&c[1], marker);
+        wait(|| c[1].tx.is_empty());
+    }
+    idle_rounds(&c[0]);
+    for time in [7000, 12000, 17000] {
+        clock.store(time, Ordering::SeqCst);
+        idle_rounds(&c[1]);
+        assert!(handle.frames.is_empty());
+        assert_eq!(handle.status().dropped_frames, 0);
+        assert_eq!(c[1].samples.load(Ordering::SeqCst), 0);
+    }
+    handle.stop().unwrap();
+}
+
+#[test]
+fn switched_adapter_discards_equal_and_older_wire_timestamps() {
+    let (handle, c, clock) = setup(false);
+    send(&c[0], 10);
+    receive(&handle, 10, 0);
+    idle_rounds(&c[0]);
+    clock.store(5000, Ordering::SeqCst);
+    send(&c[1], 11);
+    wait(|| handle.status().dropped_frames == 1);
+    for marker in [1, 10, 9] {
+        send(&c[1], marker);
+    }
+    idle_rounds(&c[1]);
+    assert!(handle.frames.is_empty());
+    send(&c[1], 12);
+    receive(&handle, 12, 2);
+    handle.stop().unwrap();
 }
