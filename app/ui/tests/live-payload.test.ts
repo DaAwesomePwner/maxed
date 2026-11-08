@@ -249,3 +249,54 @@ test.each(['snapshot', 'delta'] as const)('a newer %s can overtake a batch witho
     expect(project.mock.calls.map(([value]) => value.sequence)).toEqual(['15']);
   } finally { connection.dispose(); }
 });
+
+test('same-sequence deltas require the exact revision base', async () => {
+  vi.useFakeTimers();
+  const initial = { ...full('10'), revision: '100' };
+  const transport = createFixtureTransport(initial);
+  const seen: LiveSnapshot[] = [];
+  const querySnapshot = vi.fn().mockResolvedValueOnce(initial)
+    .mockResolvedValue({ ...initial, revision: '103', map: 'recovered' });
+  const connection = subscribeLive({ ...createClient(transport), querySnapshot },
+    { snapshot: value => seen.push(value) });
+  try {
+    await settle();
+    transport.publishSnapshotUpdate({ base_sequence: '10', base_revision: '100',
+      snapshot: { ...initial, revision: '101', map: 'silent', fights: [], drops: [] },
+      removed_fights: [], removed_drops: [] });
+    expect(seen.at(-1)?.map).toBe('silent');
+    expect(seen.at(-1)?.fights).toEqual(initial.fights);
+    transport.publishSnapshotUpdate({ base_sequence: '10', base_revision: '100',
+      snapshot: { ...initial, revision: '103', map: 'wrong base', fights: [], drops: [] },
+      removed_fights: [], removed_drops: [] });
+    expect(seen.at(-1)?.map).toBe('silent');
+    await settle();
+    expect(querySnapshot).toHaveBeenCalledTimes(2);
+    expect(seen.at(-1)?.map).toBe('recovered');
+  } finally { connection.dispose(); vi.useRealTimers(); }
+});
+
+test('a same-watermark missed delta cannot be satisfied by an older query revision', async () => {
+  vi.useFakeTimers();
+  const initial = { ...full('10'), revision: '100' };
+  const transport = createFixtureTransport(initial);
+  const seen: LiveSnapshot[] = [];
+  let resolve!: (snapshot: LiveSnapshot) => void;
+  const pending = new Promise<LiveSnapshot>(done => { resolve = done; });
+  const querySnapshot = vi.fn().mockResolvedValueOnce(initial).mockReturnValueOnce(pending)
+    .mockResolvedValue({ ...initial, revision: '103', map: 'latest' });
+  const connection = subscribeLive({ ...createClient(transport), querySnapshot },
+    { snapshot: value => seen.push(value) });
+  try {
+    await settle();
+    transport.publishSnapshotUpdate({ base_sequence: '10', base_revision: '102',
+      snapshot: { ...initial, revision: '103', fights: [], drops: [] },
+      removed_fights: [], removed_drops: [] });
+    resolve({ ...initial, revision: '101', map: 'obsolete query' });
+    await settle();
+    expect(seen.at(-1)?.revision).toBe('100');
+    await vi.advanceTimersByTimeAsync(300);
+    expect(seen.at(-1)?.map).toBe('latest');
+    expect(querySnapshot).toHaveBeenCalledTimes(3);
+  } finally { connection.dispose(); vi.useRealTimers(); }
+});

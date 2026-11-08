@@ -480,6 +480,11 @@ pub struct EventBatch {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct LiveSnapshot {
+    // Presentation revision within a stream; sequence remains the durable event watermark.
+    // Absent only in legacy/offline snapshots.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub revision: Option<Sequence>,
     pub at: Timestamp,
     pub stream_id: String,
     pub sequence: Sequence,

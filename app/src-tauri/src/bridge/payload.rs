@@ -10,7 +10,8 @@ impl SnapshotEncoder {
         let result = match &self.previous {
             Some(previous)
                 if previous.stream_id == snapshot.stream_id
-                    && previous.sequence.0 < snapshot.sequence.0 =>
+                    && previous.revision.unwrap_or(previous.sequence).0
+                        < snapshot.revision.unwrap_or(snapshot.sequence).0 =>
             {
                 let mut changes = snapshot.clone();
                 let fights: BTreeMap<_, _> =
@@ -29,6 +30,7 @@ impl SnapshotEncoder {
                     snapshot.drops.iter().map(|row| &row.id).collect();
                 LiveSnapshotUpdate::Delta(LiveDelta {
                     base_sequence: previous.sequence,
+                    base_revision: previous.revision,
                     snapshot: changes,
                     removed_fights: fights
                         .keys()
@@ -115,6 +117,26 @@ pub fn event_batches(events: Vec<maxed_types::EventEnvelope>) -> Vec<maxed_types
 mod tests {
     use super::*;
     use maxed_types::{EngineEvent, EventEnvelope, PlayerSeries, Sequence, TargetKind, Timestamp};
+
+    #[test]
+    fn silent_snapshot_uses_revision_as_delta_identity() {
+        let mut encoder = SnapshotEncoder::default();
+        let mut snapshot = maxed_types::demo::demo_snapshot();
+        snapshot.revision = Some(Sequence(Timestamp(1)));
+        assert!(matches!(
+            encoder.encode(snapshot.clone()),
+            LiveSnapshotUpdate::Full(_)
+        ));
+        snapshot.revision = Some(Sequence(Timestamp(2)));
+        snapshot.map = Some("changed metadata".into());
+        let LiveSnapshotUpdate::Delta(delta) = encoder.encode(snapshot.clone()) else {
+            panic!("new revision at the same event watermark must be a delta");
+        };
+        assert_eq!(delta.base_sequence, snapshot.sequence);
+        assert_eq!(delta.base_revision, Some(Sequence(Timestamp(1))));
+        assert_eq!(delta.snapshot.revision, snapshot.revision);
+        assert_eq!(delta.snapshot.map, snapshot.map);
+    }
 
     #[test]
     fn history_timeline_presentation_keeps_refresh_identity_and_flags() {
