@@ -63,7 +63,19 @@ it.each(['dungeon', 'realm'] as const)('keeps Reconnecting when a long %s resync
   pending.resolve({ ...snapshot, sequence: String(Number(snapshot.sequence) + 2) }); await flush();
 });
 
-it.each(['#/runs', '#/runs/run-1', '#/fights/fight-1', '#/fights/fight-1/players/7', '#/alerts'])(
+it('terminal superseded stops Alerts activity without polling', async () => {
+  const superseded = vi.fn(async () => ({ status: 'superseded' as const }));
+  mountPhase2({ hash: '#/alerts', alerts: superseded });
+  await flush();
+  const calls = superseded.mock.calls.length;
+  expect(calls).toBeGreaterThan(0);
+  expect(screen.getByRole('status', { name: 'Background activity' }).textContent).toBe('');
+  await advance(60000);
+  expect(superseded).toHaveBeenCalledTimes(calls);
+  expect(screen.getByRole('status', { name: 'Background activity' }).textContent).toBe('');
+});
+
+it.each(['#/runs', '#/runs/run-1', '#/fights/fight-1', '#/fights/fight-1/players/7'])(
   'repeated superseded settles after one bounded retry without polling on %s', async hash => {
     const superseded = vi.fn(async () => ({ status: 'superseded' as const }));
     mountPhase2({ hash, queries: { listRuns: superseded, getRun: superseded, getFight: superseded, getPlayerBreakdown: superseded }, alerts: superseded });
