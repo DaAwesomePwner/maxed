@@ -5,3 +5,6 @@ mod lifecycle;
 mod loading;
 #[path = "../parse.rs"]
 mod parse;
+
+#[path = "../native_loss.rs"]
+mod native_loss;
