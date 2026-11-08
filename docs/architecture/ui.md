@@ -206,7 +206,7 @@ changes asset settings (demo, assets path or settings) and replaced when a looku
 a new client fingerprint. Fully cached hovers make no native call. Failed lookups are
 retried on the next hover. Live numeric updates do not request details.
 
-The [design wording](../superpowers/specs/2026-10-10-item-hover-card-design.md#card-content)
+The design wording (private design notes)
 defines these enchant states:
 
 | Context | Card content |

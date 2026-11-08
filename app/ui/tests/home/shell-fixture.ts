@@ -16,7 +16,7 @@ export async function flushHomeRender() {
   await tick();
 }
 
-export function mountHome(snapshot = homeSnapshot({ area_kind: 'nexus', run: null }), summary = homeSummary(), hash = '#/', { preview = false, demo = false, queryHome, setupRead }: { preview?: boolean; demo?: boolean; queryHome?: Client['queryHome']; setupRead?: Client['querySetup'] } = {}) {
+export function mountHome(snapshot = homeSnapshot({ area_kind: 'nexus', run: null }), summary = homeSummary(), hash = '#/', { preview = false, demo = false, homeRedesign = productionFeatures.homeRedesign, queryHome, setupRead }: { preview?: boolean; demo?: boolean; homeRedesign?: boolean; queryHome?: Client['queryHome']; setupRead?: Client['querySetup'] } = {}) {
   const transport = createFixtureTransport(snapshot, { client_fingerprint: 'synthetic-home', objects: [] }, summary);
   const client = createClient(transport);
   const querySetup = client.querySetup;
@@ -27,7 +27,6 @@ export function mountHome(snapshot = homeSnapshot({ area_kind: 'nexus', run: nul
   const query = vi.spyOn(client, 'queryHome');
   const listeners = [vi.spyOn(client, 'onSnapshot'), vi.spyOn(client, 'onCapture'), vi.spyOn(client, 'onEngineEvent')];
   const browser = fakeHistory(hash);
-  // Legacy Home suites exercise the explicit v3 rollback path.
-  const page = render(Shell, { client, historyAdapter: browser.adapter, features: { ...productionFeatures, homeRedesign: false }, preview });
+  const page = render(Shell, { client, historyAdapter: browser.adapter, features: { ...productionFeatures, homeRedesign }, preview });
   return { ...page, transport, client, query, listeners, browser };
 }

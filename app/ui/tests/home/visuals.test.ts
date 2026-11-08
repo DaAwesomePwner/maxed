@@ -1,3 +1,4 @@
+import { WHITE_BAG_TYPE } from '../../src/lib/home/v4/hud';
 import { itemHoverParams } from '../../src/lib/components/item-hover';
 import { render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -19,7 +20,7 @@ const sprite = { key: 'synthetic', sheet: 'characters.png', x: 0, y: 0, width: 8
 const catalog = (types: number[]): VisualPage => ({ client_fingerprint: 'a'.repeat(64),
   objects: types.map(object_type => ({ object_type, name: `Catalog name ${object_type}`, sprite, bag: null })) });
 
-it('Dungeon resolves target, source items and loot in one batch, without querying on numeric updates', async () => {
+it('Dungeon batches target, source items and loot after the HUD lookup, without querying on numeric updates', async () => {
   const snapshot = homeSnapshot();
   snapshot.fights[0].players[0].sources[0].estimated = true;
   const types = homeVisualTypes(snapshot, null);
@@ -30,12 +31,12 @@ it('Dungeon resolves target, source items and loot in one batch, without queryin
   const client = createClient(createFixtureTransport(snapshot, pageData));
   const get = vi.spyOn(client, 'getObjectVisuals');
   const page = render(Home, { snapshot, client }); await flushHomeRender();
-  expect(within(screen.getByRole('tablist', { name: 'Encounters' })).getByText('Catalog enemy')).toBeTruthy();
+  expect(within(screen.getByRole('region', { name: 'Live boss' })).getByText('Catalog enemy')).toBeTruthy();
   expect(screen.getAllByText('Catalog sword').length).toBeGreaterThan(0);
   expect(screen.getByRole('img', { name: 'Catalog bag' })).toBeTruthy();
-  expect(screen.getByRole('img', { name: 'Catalog enemy' }).getAttribute('data-fallback')).toBe('false');
+  expect(within(screen.getByRole('region', { name: 'Live boss' })).getByRole('img', { name: 'Catalog enemy' }).getAttribute('data-fallback')).toBe('false');
   expect(page.container.querySelector('img')?.getAttribute('src')).toBe(`http://maxed-sprite.localhost/${'a'.repeat(64)}/characters.png/0-0-8-8.png`);
-  expect(get.mock.calls).toEqual([[types]]);
+  expect(get.mock.calls).toEqual([[[WHITE_BAG_TYPE]], [[...new Set([...types, WHITE_BAG_TYPE])].sort((a, b) => a - b)]]);
   expect(page.container.textContent).not.toMatch(/Target type|Item type|Bag type/);
   for (let sequence = 13; sequence < 20; sequence++) {
     const next = structuredClone(snapshot); next.sequence = String(sequence); next.fights[0].players[0].dps = sequence;
@@ -43,7 +44,7 @@ it('Dungeon resolves target, source items and loot in one batch, without queryin
   }
   expect(screen.getByRole('rowheader', { name: /\bYou$/ }).closest('tr')!
     .querySelector('td:nth-child(5)')?.textContent).toBe('19');
-  expect(get).toHaveBeenCalledOnce();
+  expect(get).toHaveBeenCalledTimes(2);
 });
 
 it('best bag and recent-run previews use catalog names and sprites too', async () => {

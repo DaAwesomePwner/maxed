@@ -8,16 +8,16 @@ afterEach(() => { cleanup(); vi.clearAllTimers(); vi.useRealTimers(); vi.restore
 
 it('phase2_checkpoint_legacy_state_and_optional_props', () => {
   for (const value of [emptyListState(), normalizeListState({}), normalizeListState(JSON.parse('{"scrollTop":0}'))]) {
-    expect(value).toMatchObject({ alertsPosition: null, runsWindow: 0, fightPosition: null });
+    expect(value).toMatchObject({ alertsPosition: null, fightPosition: null });
     expect(normalizeListState(JSON.parse(JSON.stringify(value)))).toEqual(value);
     expect(value.filters.limit).toBe(25);
   }
-  const input = { ...emptyListState(), runsWindow: 2, alertsPosition: {
+  const input = { ...emptyListState(), alertsPosition: {
     filter: { kind: null, range: null, query: 'literal %_', cursor: null, limit: 50 },
     previous: Array.from({ length: 130 }, () => null), window: 12,
   }, fightPosition: { playerWindow: 3, selectedPlayerId: 'player-17', sourceWindow: 4 } };
   const normalized = normalizeListState(input);
-  expect(normalized).toMatchObject({ runsWindow: 2, alertsPosition: { window: 12, previous: Array(100).fill(null) },
+  expect(normalized).toMatchObject({ alertsPosition: { window: 12, previous: Array(100).fill(null) },
     fightPosition: input.fightPosition });
   expect(normalizeListState(JSON.parse(JSON.stringify(normalized)))).toEqual(normalized);
 });
@@ -25,15 +25,14 @@ it('phase2_checkpoint_legacy_state_and_optional_props', () => {
 it('checkpoint freezes the shared dense window sizes', async () => {
   const path = '../../src/lib/phase2/contracts.ts';
   const constants: Record<string, unknown> = await import(/* @vite-ignore */ path);
-  expect(constants).toMatchObject({ DENSE_STORY_ROWS: 3, DENSE_FIGHT_ROWS: 5, DENSE_ALERT_ROWS: 4 });
+  expect(constants).toMatchObject({ DENSE_ALERT_ROWS: 4 });
 });
 
 it.each([-1, 1.2, Infinity, NaN, '2'])('phase2_navigation_windows_and_bounds rejects malformed windows (%s)', value => {
-  const normalized = normalizeListState({ ...emptyListState(), ...JSON.parse(JSON.stringify({ runsWindow: value,
-    fightPosition: { playerWindow: value, sourceWindow: value, selectedPlayerId: '\u0000' },
+  const normalized = normalizeListState({ ...emptyListState(), ...JSON.parse(JSON.stringify({ fightPosition: { playerWindow: value, sourceWindow: value, selectedPlayerId: '\u0000' },
     alertsPosition: { filter: { kind: null, range: null, query: '', cursor: null, limit: 50 }, previous: [], window: value },
   })) });
-  expect(normalized).toMatchObject({ runsWindow: 0, fightPosition: { playerWindow: 0, sourceWindow: 0, selectedPlayerId: null } });
+  expect(normalized).toMatchObject({ fightPosition: { playerWindow: 0, sourceWindow: 0, selectedPlayerId: null } });
   expect(normalized).toMatchObject({ alertsPosition: { window: 0 } });
 });
 

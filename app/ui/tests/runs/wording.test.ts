@@ -1,7 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { setDebugMode } from '../../src/lib/debug/debug';
-import Evidence from '../../src/lib/runs/Evidence.svelte';
 import BagList from '../../src/lib/home/v3/BagList.svelte';
 import { emptyHomeVisuals } from '../../src/lib/home/visuals';
 import { retainedBag } from '../runs-a4/loot-fixtures';
@@ -9,20 +8,6 @@ import { flush, mountRuns, ready, run, story, fight, player, source } from './fi
 
 beforeEach(() => { vi.useFakeTimers(); setDebugMode(false); });
 afterEach(() => { cleanup(); setDebugMode(false); vi.clearAllTimers(); vi.useRealTimers(); });
-
-it('keeps outcome tooltips and estimated clear badges debug-only', async () => {
-  render(Evidence, { estimated: true, evidence: [{ at: '9000000', evidence: {
-    completion_counter: { before: 1, after: 2, delay_micros: 1000000 },
-  } }] });
-  await flush();
-  expect(screen.queryByRole('button', { name: 'Outcome Evidence' })).toBeNull();
-  expect(screen.queryByText(/Estimated clear time/i)).toBeNull();
-  setDebugMode(true); await flush();
-  expect(screen.getByRole('button', { name: 'Outcome Evidence' })).toBeTruthy();
-  expect(screen.getByText(/Estimated clear time/i)).toBeTruthy();
-  setDebugMode(false); await flush();
-  expect(screen.queryByRole('button')).toBeNull();
-});
 
 it('keeps loot caveats and removal tooltips debug-only', async () => {
   const page = render(BagList, { drops: [retainedBag({ contents_known: false, source_estimated: true,

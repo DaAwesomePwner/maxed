@@ -13,8 +13,8 @@ The owner accepted the scoped Gate U pass on 2026-10-17 in
 private-repo PR 176 (archived, not public). This acceptance does not establish stat 113
 semantics, resolve Gate P or Gate X, or constitute Task 11 acceptance.
 
-See [Task 2 and the gate definitions](../superpowers/plans/2026-10-17-character-tab.md) and the
-[stat-split specification](../superpowers/specs/2026-10-15-character-tab-design.md).
+See Task 2 and the gate definitions (private design notes) and the
+stat-split specification (private design notes).
 
 ## Production enablement
 

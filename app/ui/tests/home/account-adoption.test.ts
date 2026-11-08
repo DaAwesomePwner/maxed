@@ -51,17 +51,17 @@ it('fresh Home keeps the same Realm screen until the paced verified snapshot', a
   const snapshot = provisional();
   const page = render(Home, { snapshot });
   await flushHomeRender();
-  const realm = page.container.querySelector('.realm-home');
+  const realm = page.container.querySelector('.realm-screen');
   expect(realm).not.toBeNull();
   await page.rerender({ event: identity(snapshot) });
   await flushHomeRender();
-  expect(page.container.querySelector('.realm-home')).toBe(realm);
+  expect(page.container.querySelector('.realm-screen')).toBe(realm);
   expect(page.container.querySelector('.nexus-home')).toBeNull();
   const verified = { ...snapshot, character: { ...snapshot.character!, id: 'synthetic-verified',
     identity_verified: true, account_id: 'synthetic-account-a' } };
   await page.rerender({ snapshot: verified });
   await flushHomeRender();
-  expect(page.container.querySelector('.realm-home')).toBe(realm);
+  expect(page.container.querySelector('.realm-screen')).toBe(realm);
 });
 
 it('Shell keeps the provisional rail and Realm screen after first verified identity', async () => {
@@ -69,18 +69,18 @@ it('Shell keeps the provisional rail and Realm screen after first verified ident
   const h = mountHome(snapshot);
   const rail = await screen.findByRole('complementary', { name: 'Character' });
   await within(rail).findByRole('heading', { name: 'Synthetic traveller' });
-  const realm = h.container.querySelector('.realm-home');
+  const realm = h.container.querySelector('.realm-screen');
   expect(realm).not.toBeNull();
   const event = identity(snapshot);
   h.transport.publishEngineEvent(event);
   await flushHomeRender();
   expect(within(rail).getByRole('heading', { name: 'Synthetic traveller' })).toBeTruthy();
-  expect(h.container.querySelector('.realm-home')).toBe(realm);
+  expect(h.container.querySelector('.realm-screen')).toBe(realm);
   h.transport.publishSnapshot({ ...snapshot, sequence: event.sequence,
     character: { ...snapshot.character!, id: 'synthetic-verified', identity_verified: true, account_id: 'synthetic-account-a' } });
   await flushHomeRender();
   expect(within(rail).getByRole('heading', { name: 'Synthetic traveller' })).toBeTruthy();
-  expect(h.container.querySelector('.realm-home')).toBe(realm);
+  expect(h.container.querySelector('.realm-screen')).toBe(realm);
 });
 
 it.each(['account_switched', 'legacy_recovered'] as const)('Home ignores duplicate %s revisions', async reason => {

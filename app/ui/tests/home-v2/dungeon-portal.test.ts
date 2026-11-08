@@ -102,7 +102,7 @@ it('Home requests the current dungeon portal and shows its sprite in the header'
   const page = render(Home, { snapshot, client }); await flushHomeRender();
   expect(lookup).toHaveBeenCalledWith(snapshot.run!.dungeon);
   expect(visuals.mock.calls.at(-1)![0]).toContain(900);
-  const icon = page.container.querySelector('.run-title .run-icon [role="img"]') as HTMLElement;
+  const icon = page.container.querySelector('.v4-header [role="img"]') as HTMLElement;
   expect(icon.getAttribute('aria-label')).toBe('Synthetic Portal');
   expect(icon.querySelector('img')).not.toBeNull();
   expect(icon.style.width).toBe('40px');

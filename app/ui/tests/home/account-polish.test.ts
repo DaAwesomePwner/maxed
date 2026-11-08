@@ -101,11 +101,11 @@ it.each(['notice', 'identity'] as const)('Home drops retained A during recovery 
   await flushHomeRender();
   await page.rerender({ capture: { ...a.capture, state: 'Recovering' } });
   await flushHomeRender();
-  expect(page.container.querySelector('.dungeon-home')).not.toBeNull();
+  expect(page.container.querySelector('.dungeon-screen')).not.toBeNull();
   if (source === 'notice') fixture.publishAccountHistoryChanged({ revision: 1, reason: 'account_switched' });
   else await page.rerender({ event: identity('account-b', b.character.id) });
   await flushHomeRender();
-  expect(page.container.querySelector('.dungeon-home')).toBeNull();
+  expect(page.container.querySelector('.dungeon-screen')).toBeNull();
 });
 
 it('clears the rendered ended streak without changing the run', async () => {

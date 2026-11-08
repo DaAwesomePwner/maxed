@@ -48,7 +48,7 @@
     onStateChange?: (patch: Partial<ListState>) => void; entryKey?: string; onRowsReady?: (key: string) => void;
   } = $props();
   const restored = untrack(() => normalizeListState(savedState));
-  let position = $state<StoryPosition>(restored.storyPosition ?? { allFights: false, timelineWindow: 0, fightWindow: 0, lootWindow: 0, otherTargets: false });
+  let position = $state<StoryPosition>(restored.storyPosition ?? { allFights: false, otherTargets: false });
   let region: HTMLDivElement;
   let missingRow = $state('');
   let selectedDropId = $state<string | null>(restored.focusedRowId?.startsWith('drop:') ? restored.focusedRowId.slice(5) : null);
