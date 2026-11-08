@@ -79,7 +79,7 @@ export function createHomeV4Reads(
   // the queue during retry delays so the other cards can still load.
   function read<T>(request: () => Promise<HistoryReply<T>>, current: () => boolean,
     accept: (value: T) => void, fail: () => void, complete: () => void = () => {}) {
-    let retryUsed = false, superseded = 0;
+    let retryUsed = false;
     const finish = (action: () => void) => { try { action(); } finally { complete(); } };
     function enqueue() {
       const next = queue.then(async () => {
@@ -93,11 +93,7 @@ export function createHomeV4Reads(
         }
         if (disposed || !current()) return;
         if (reply.status === 'ready') finish(() => accept(reply.value));
-        else if (reply.status === 'superseded') {
-          // Other history readers share the slot; retry the captured inputs.
-          if (++superseded > 1) later(enqueue, 25);
-          else enqueue();
-        } else if (historyControl(reply.status, retryUsed).retry) {
+        else if (historyControl(reply.status, retryUsed).retry) {
           retryUsed = true; later(enqueue, 2000);
         } else finish(fail);
       });

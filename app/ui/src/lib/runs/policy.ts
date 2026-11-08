@@ -22,9 +22,9 @@ export function historyFailure(error: unknown): string {
   ].includes(message) ? message : 'Saved history could not be loaded. Retry to refresh it.';
 }
 
-/** Busy receipt is the native retry-ready signal. Never retry Superseded. */
-export function historyControl(status: 'busy' | 'superseded', automaticRetryUsed: boolean) {
-  const retry = status === 'busy' && !automaticRetryUsed;
-  return { retry, retryAvailable: status === 'busy' && !retry,
-    message: status === 'superseded' || retry ? 'Refreshing saved history.' : 'Saved history is busy. Retry to refresh it.' };
+/** Contention gets one delayed automatic retry, then an explicit retry. */
+export function historyControl(_status: 'busy' | 'superseded', automaticRetryUsed: boolean) {
+  const retry = !automaticRetryUsed;
+  return { retry, retryAvailable: !retry,
+    message: retry ? 'Refreshing saved history.' : 'Saved history is busy. Retry to refresh it.' };
 }

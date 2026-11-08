@@ -26,17 +26,7 @@ export function createNexusHistory(
     const result = queue.then(read); queue = result.catch(() => {}); return result;
   }
   async function readCurrent<T>(request: number, read: () => Promise<HistoryReply<T>>): Promise<HistoryReply<T>> {
-    let superseded = 0;
-    while (!disposed && request === revision) {
-      const reply = await serial(async () => !await visibility.wait() || disposed || request !== revision
-        ? { status: 'superseded' as const } : read());
-      if (reply.status !== 'superseded') return reply;
-      // The native scheduler can replace its pending read. Retry unchanged
-      // inputs, yielding on repeated replacements rather than spinning.
-      if (++superseded > 1 && !disposed && request === revision) {
-        await new Promise<void>(resolve => setTimeout(resolve, 25));
-      }
-    }
+    if (!disposed && request === revision && await visibility.wait()) return serial(read);
     return { status: 'superseded' };
   }
   const emit = () => { if (!disposed) receive({ summary, loot, page }); };
@@ -58,6 +48,7 @@ export function createNexusHistory(
         const policy = historyControl(reply.status, attempt > 0);
         loot = { ...loot, phase: reply.status, message: policy.message, retryAvailable: policy.retryAvailable }; emit();
         if (!policy.retry) return;
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     } catch (error) {
       if (disposed || request !== revision) return;

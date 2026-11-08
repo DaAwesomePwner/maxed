@@ -93,8 +93,8 @@
     const instance = createRunHistory({ ...owner, getRun: async id => {
       const reply = await owner.getRun(id);
       if (reply.status === 'ready' && reply.value) {
-        try { const best = await owner.queryDungeonBests(); if (current) bests = best.status === 'ready' ? best.value : null; }
-        catch { if (current) bests = null; }
+        try { const best = await owner.queryDungeonBests(); if (current && best.status === 'ready') bests = best.value; }
+        catch { /* Keep the last saved PBs while history is unavailable. */ }
       }
       return current ? reply : { status: 'superseded' };
     } }, next => { history = next; });

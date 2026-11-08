@@ -262,3 +262,13 @@ identity diagnostics.
 with `account_switched` or `legacy_recovered`, never an account ID. The UI should
 invalidate Home summary, HUD, scope loot, bests, streak, dungeon profile and boss
 baselines, and retry superseded requests for its current view.
+
+
+Saved-history scheduling retains one active read, at most eight pending page
+queries and the existing eight-entry storage FIFO. Only an identical query key
+(including account revision) coalesces a pending page request; unrelated queries
+retain FIFO order. A full queue returns Busy without displacing another reader.
+The existing 32-attempts-per-second admission limit remains in force.
+UI history controllers retry Busy or Superseded once after a delay of at least
+one second, then expose manual retry while retaining saved values. Home uses a
+shared serial queue. Recap SQL and its save timeout pause while hidden.

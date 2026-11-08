@@ -45,7 +45,7 @@
   $effect(() => {
     const owner = client, id = runId;
     const route: Route = id === undefined ? { kind: 'party-live' } : { kind: 'party-run', runId: id };
-    let disposed = false, reading = false, dirty = false, lastRead = -Infinity, retries = 0, busyRetried = false;
+    let disposed = false, reading = false, dirty = false, lastRead = -Infinity, busyRetried = false;
     let scopeChanged = false, pendingScope: string | null = null;
     let required: { streamId: string; required: string } | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -60,7 +60,7 @@
           const pending = required;
           const waiting = historyWaiting({ ...pending, store: await owner.queryStore() });
           if (disposed) return;
-          if (waiting) { message = waiting; if (++retries <= 3) dirty = true; return; }
+          if (waiting) { message = waiting; dirty = true; return; }
           if (required === pending) required = null;
         }
         const reply = id === undefined ? await owner.getPartyLive() : await owner.getPartyRun(id);
@@ -70,7 +70,7 @@
           // The scope can change while the page remains mounted. Never carry a selection across maps.
           if (view?.scope_id !== reply.value?.scope_id) { void closePanel(false); if (view) readRecentRun(); }
           else if (selectedId && !reply.value?.members.some(member => (member.name_key ?? member.player_id) === selectedId)) void closePanel(false);
-          view = reply.value; message = reply.value ? '' : 'Party run not found'; error = ''; retries = 0; busyRetried = false;
+          view = reply.value; message = reply.value ? '' : 'Party run not found'; error = ''; busyRetried = false;
         } else {
           const control = historyControl(reply.status, busyRetried);
           message = control.message;
@@ -90,12 +90,12 @@
       if (!delay) void read();
       else timer = setTimeout(() => { timer = undefined; void read(); }, delay);
     }
-    refresh = () => { retries = 0; busyRetried = false; subscribe(); readPresets(); schedule(); };
+    refresh = () => { busyRetried = false; subscribe(); readPresets(); schedule(); };
     function subscribe() {
       if (disposed || subscribing || subscribed) return;
       subscribing = true;
       const receive = (event: EventEnvelope) => {
-        if (invalidatesParty(route, event)) { required = { streamId: event.stream_id, required: event.sequence }; retries = 0; schedule(); }
+        if (invalidatesParty(route, event)) { required = { streamId: event.stream_id, required: event.sequence }; schedule(); }
       };
       const subscription = id === undefined
         ? owner.onPartyChanged(notice => { if (partyNoticeInvalidates(route, notice)) schedule(notice); })

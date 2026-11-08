@@ -7,7 +7,7 @@ import type { HistoryReply } from '../../bindings/HistoryReply';
 import type { StoreStatus } from '../../bindings/StoreStatus';
 import { historyWaiting } from '../../runs/policy';
 
-/** Home's history commands share the native scheduler's single pending slot. */
+/** All Home history commands share one serial queue. Callers own bounded retries. */
 export function createHomeReads(owner: Client) {
   let disposed = false;
   const visibility = createVisibilityPause();
@@ -21,7 +21,7 @@ export function createHomeReads(owner: Client) {
         if (!await visibility.wait() || disposed || latest.get(kind) !== token) break;
         const reply = await query();
         if (disposed || latest.get(kind) !== token) return { status: 'superseded' };
-        if (reply.status !== 'superseded') return reply;
+        return reply;
       }
       return { status: 'superseded' };
     });
@@ -33,6 +33,13 @@ export function createHomeReads(owner: Client) {
     queryScopeLoot: (scope, limit) => read('loot', () => owner.queryScopeLoot(scope, limit)),
     queryScopeLootPage: (scope, cursor, limit) => read('loot', () => owner.queryScopeLootPage(scope, cursor, limit)),
     queryDungeonBests: () => read('bests', () => owner.queryDungeonBests()),
+    getHomeHud: (...args) => read('hud', () => owner.getHomeHud(...args)),
+    getHomeDungeonStreak: (...args) => read('streak', () => owner.getHomeDungeonStreak(...args)),
+    getDungeonProfile: (...args) => read('profile', () => owner.getDungeonProfile(...args)),
+    getHomeBossBaselines: (...args) => read('baselines', () => owner.getHomeBossBaselines(...args)),
+    getRun: (...args) => read('run', () => owner.getRun(...args)),
+    getRunRecap: (...args) => read('recap', () => owner.getRunRecap(...args)),
+    getVisitRecap: (...args) => read('visit', () => owner.getVisitRecap(...args)),
   };
   return { client, dispose() { disposed = true; visibility.dispose(); latest.clear(); } };
 }
@@ -56,7 +63,9 @@ export function createDungeonBests(client: Pick<Client, 'queryDungeonBests'>,
         try {
           const reply = await client.queryDungeonBests();
           if (!disposed && reply.status === 'ready') publish(reply.value);
-          else if (!disposed && reply.status === 'superseded') pending = true;
+          else if (!disposed && reply.status !== 'ready') {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
         } catch { /* Keep a saved baseline; an absent one stays PB —. No polling. */ }
       }
     } finally { running = false; }

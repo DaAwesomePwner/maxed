@@ -214,16 +214,14 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
         if (route) cache?.put(key, { value, route, query, required: request.required }, readReservation);
         if (latest.version > request.version && !pending) pending = latest;
         emit(pending ? 'stale' : 'ready', pending ? 'Refreshing saved observations.' : '');
-      } else if (reply.status === 'busy') {
+      } else if (!pending) {
         const state = historyControl(reply.status, retryUsed);
         if (state.retry) {
           retryUsed = true; pending ??= latest;
           // Native Busy already waited for the active reader to close.
-          lastStart = -Infinity;
+          lastStart = Date.now();
           emit('busy', state.message, false);
         } else { control = 'busy'; emit('busy', state.message, true); }
-      } else if (!pending) {
-        control = 'superseded'; emit('superseded', historyControl('superseded', retryUsed).message, false);
       }
     }).catch((error: unknown) => {
       if (disposed || token !== epoch) return;
@@ -276,7 +274,7 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
       input = next; pump();
     },
     retry() {
-      if (disposed || !input || control === 'superseded' || active) return;
+      if (disposed || !input || active) return;
       epoch++; retryUsed = false; control = null; lastStart = -Infinity;
       hitRequired = undefined;
       latest = { required: input.required, version: ++version }; pending = latest; pump();

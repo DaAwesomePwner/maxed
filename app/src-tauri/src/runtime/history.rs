@@ -548,7 +548,7 @@ struct Active {
 #[derive(Default)]
 pub(super) struct Scheduler {
     active: Option<Active>,
-    pending: Option<Pending>,
+    pending: VecDeque<Pending>,
     storage: VecDeque<Pending>,
     preparing: Option<u64>,
     request: u64,
@@ -562,7 +562,7 @@ impl Scheduler {
     pub(super) fn counts(&self) -> (usize, usize, usize, usize) {
         (
             usize::from(self.active.is_some()),
-            usize::from(self.pending.is_some()) + self.storage.len(),
+            self.pending.len() + self.storage.len(),
             self.notices.iter().filter(|n| n.is_some()).count(),
             self.attempts.iter().map(VecDeque::len).sum(),
         )
@@ -586,21 +586,21 @@ impl Scheduler {
                 active.superseded = true;
             }
         }
-        if self
-            .pending
-            .as_ref()
-            .is_some_and(|p| p.key.account_scoped())
-        {
-            if let Some(pending) = self.pending.take() {
+        let mut retained = VecDeque::new();
+        for pending in self.pending.drain(..) {
+            if pending.key.account_scoped() {
                 pending.operation.reject(None);
+            } else {
+                retained.push_back(pending);
             }
         }
+        self.pending = retained;
     }
     pub(super) fn retire(&mut self) {
         if let Some(active) = &mut self.active {
             active.superseded = true;
         }
-        if let Some(pending) = self.pending.take() {
+        for pending in self.pending.drain(..) {
             pending.operation.reject(None);
         }
         for pending in self.storage.drain(..) {
@@ -826,13 +826,13 @@ impl HomeReads {
             let storage_first = queue.storage.front().is_some_and(|storage| {
                 queue
                     .pending
-                    .as_ref()
+                    .front()
                     .is_none_or(|page| storage.request < page.request)
             });
             let pending = if storage_first {
                 queue.storage.pop_front()
             } else {
-                queue.pending.take()
+                queue.pending.pop_front()
             };
             let pending = pending?;
             if queue.stopped
@@ -922,8 +922,14 @@ impl HomeReads {
             } else {
                 queue.storage.push_back(pending);
             }
-        } else if let Some(previous) = queue.pending.replace(pending) {
+        } else if let Some(index) = queue.pending.iter().position(|p| p.key == pending.key) {
+            // Coalesce only identical queries, preserving their FIFO position.
+            let previous = std::mem::replace(&mut queue.pending[index], pending);
             previous.operation.reject(None);
+        } else if queue.pending.len() >= 8 {
+            pending.operation.busy();
+        } else {
+            queue.pending.push_back(pending);
         }
         if waiting {
             if queue.preparing.is_none() {
@@ -959,7 +965,10 @@ impl HomeReads {
                             Some(pending)
                         }
                     };
-                    queue.pending = queue.pending.take().and_then(fill_context);
+                    queue.pending = std::mem::take(&mut queue.pending)
+                        .into_iter()
+                        .filter_map(fill_context)
+                        .collect();
                     queue.storage = std::mem::take(&mut queue.storage)
                         .into_iter()
                         .filter_map(fill_context)
