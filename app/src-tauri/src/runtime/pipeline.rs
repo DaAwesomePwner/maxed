@@ -1,7 +1,7 @@
 use maxed_capture::{parse_frame, ParseError};
 use maxed_protocol::{DecodeEvent, Decoder};
 use maxed_stream::Reassembler;
-use maxed_types::{ConnId, Direction, GapReason, RawFrame, StreamEvent, Timestamp};
+use maxed_types::{ConnId, Direction, GapReason, RawFrame, StreamEvent, TcpSegment, Timestamp};
 use std::sync::{atomic::AtomicBool, Arc};
 
 // Keep stream openings ordered with decoder diagnostics without boxing hot-path packets.
@@ -51,13 +51,22 @@ impl Pipeline {
     }
 
     pub(super) fn push(&mut self, frame: RawFrame) -> Vec<PipelineEvent> {
+        let parsed = parse_frame(&frame);
+        self.push_parsed(frame, parsed)
+    }
+
+    pub(super) fn push_parsed(
+        &mut self,
+        frame: RawFrame,
+        parsed: Result<Option<TcpSegment>, ParseError>,
+    ) -> Vec<PipelineEvent> {
         let mut events = self.streams.expire(frame.at);
         self.last_at = frame.at;
         if frame.index != self.next_index {
             events.extend(self.streams.gap_all(frame.at, GapReason::CaptureDrop));
         }
         self.next_index = frame.index.saturating_add(1);
-        match parse_frame(&frame) {
+        match parsed {
             Ok(Some(segment)) => events.extend(self.streams.push(segment)),
             Ok(None) | Err(ParseError::UnsupportedLink) => {}
             Err(error) => {

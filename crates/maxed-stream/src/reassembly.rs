@@ -74,11 +74,11 @@ impl Half {
                 });
                 continue;
             };
-            let part = self.pending.remove(position);
+            let mut part = self.pending.remove(position);
+            let part_len = part.bytes.len();
             let start = part.seq.wrapping_add(u32::from(part.syn));
             let consumed = (-i64::from(serial_distance(start, expected))) as usize;
             if consumed < part.bytes.len() {
-                let fresh = part.bytes[consumed..].to_vec();
                 let Some(offset) = part.origin.offset.checked_add(consumed) else {
                     self.invalidate();
                     events.push(StreamEvent::Gap {
@@ -101,6 +101,11 @@ impl Half {
                     });
                     break;
                 }
+                // Reuse the segment allocation, including for a partial overlap.
+                if consumed != 0 {
+                    part.bytes.drain(..consumed);
+                }
+                let fresh = part.bytes;
                 self.expected = Some(expected.wrapping_add(fresh.len() as u32));
                 self.remember(expected, fresh.clone());
                 events.push(StreamEvent::Data(StreamChunk {
@@ -115,7 +120,7 @@ impl Half {
                     bytes: fresh,
                 }));
             }
-            if part.fin && self.expected == Some(start.wrapping_add(part.bytes.len() as u32)) {
+            if part.fin && self.expected == Some(start.wrapping_add(part_len as u32)) {
                 self.expected = self.expected.map(|seq| seq.wrapping_add(1));
                 self.closed = true;
                 self.pending.clear();
@@ -377,7 +382,20 @@ impl Reassembler {
     pub fn expire(&mut self, at: Timestamp) -> Vec<StreamEvent> {
         let mut events = Vec::new();
         for generation in &mut self.active {
-            generation.latest_at = generation.latest_at.max(at);
+            if generation.latest_at.0.saturating_sub(at.0) > HOLE_AGE_MICROS {
+                // A clock step starts a new capture-time baseline. Preserve elapsed
+                // hole age where representable; small timestamp reorders still use
+                // the watermark. The segment-count budget also bounds stalled clocks.
+                let backwards = generation.latest_at.0 - at.0;
+                for half in &mut generation.halves {
+                    for pending in &mut half.pending {
+                        pending.at.0 = pending.at.0.saturating_sub(backwards);
+                    }
+                }
+                generation.latest_at = at;
+            } else {
+                generation.latest_at = generation.latest_at.max(at);
+            }
             let at = generation.latest_at;
             for (i, half) in generation.halves.iter_mut().enumerate() {
                 if half

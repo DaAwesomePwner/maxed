@@ -260,7 +260,7 @@ impl Decoder {
                 }
                 let framed = s.framer.push(&chunk.bytes);
                 let mut out = Vec::new();
-                for f in framed.frames {
+                for mut f in framed.frames {
                     let packet_ordinal = self.packet_ordinal;
                     self.packet_ordinal = self.packet_ordinal.saturating_add(1);
                     if let Some(count) = &mut s.packets_since_recovered {
@@ -268,7 +268,7 @@ impl Decoder {
                     }
                     let was_synced = s.alignment.is_synced();
                     let id = f[4];
-                    let plain = s.alignment.consume(id, &f[5..]);
+                    let plain = s.alignment.consume_in_place(id, &mut f[5..]);
                     if self.cancel.load(Ordering::Relaxed) {
                         self.terminated = true;
                         out.push(diagnostic(Diagnostic::Cancelled));
@@ -309,9 +309,10 @@ impl Decoder {
                         out.push(diagnostic(Diagnostic::Recovered));
                     }
                     match plain {
-                        Ok(Some(body)) => {
-                            s.observe_verification_tick(id, dir, &body);
-                            match decode_packet(id, dir, &body) {
+                        Ok(true) => {
+                            let body = &f[5..];
+                            s.observe_verification_tick(id, dir, body);
+                            match decode_packet(id, dir, body) {
                                 Ok((packet, left)) => {
                                     if let crate::Packet::NewTick(tick) = &packet {
                                         self.last_newticks.insert(conn, tick.tickId);
@@ -381,7 +382,7 @@ impl Decoder {
                                             ),
                                             failure: crate::explanation::explain_failure(
                                                 id,
-                                                &body,
+                                                body,
                                                 error,
                                                 s.alignment_verified && synced,
                                             ),
@@ -396,7 +397,7 @@ impl Decoder {
                                 }
                             }
                         }
-                        Ok(None) => {}
+                        Ok(false) => {}
                         Err(_) => out.push(diagnostic(Diagnostic::BadFields)),
                     }
                 }

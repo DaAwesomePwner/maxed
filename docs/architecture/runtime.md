@@ -299,3 +299,35 @@ recovery diagnostics for every active direction: any may have lost data.
 Assigned frame-index discontinuities still invalidate all active directions.
 
 Presentation delivery failure is separate from engine failure. It does not block capture start or durable update installation. Successful live-payload resubscription queues a reset of the publisher interruption state and clears the queryable presentation failure; the shell reconnect action resubscribes and reads a fresh baseline. A dead publisher still reports reconnect failure. Final IPC failure after durable application shutdown exits with code 1.
+
+### Packet buffer ownership
+
+The live caller parses each captured frame once and passes that result to the
+pipeline. It retains a cloned segment for the existing TrafficTrust observation
+contract. Reassembly moves the segment's payload allocation into its output;
+partial overlaps drain the consumed prefix in place. Exact delivered-byte history
+is retained because conflicting retransmissions can overlap arbitrary subranges.
+The framer reserves the declared bounded size when its header is available, and
+the decoder decrypts the owned frame body in place before borrowing it for typed
+parsing. Replay/demo/export routing and trust rules are unchanged.
+
+Structural accounting for one in-order segment containing one complete frame,
+without recording or typed-field allocations: full-payload copies are FFI 1→1,
+capture parsing/live retention 2→2 (two parses become one parse plus a clone),
+reassembly delivery 1→0, retransmission history 1→1, framing 1→1, RC4 1→0:
+7→5 total on the live path, or 6→4 with a single-parse offline caller.
+Payload-buffer allocations have the same 7→5 / 6→4 reduction; the framer now
+uses one allocation when the header is available, instead of header allocation
+plus subsequent growth reallocations. Split headers need an initial small
+allocation and at most one further reservation. Event/origin containers and
+packet-specific field allocations are outside this count. Prefix overlap still
+moves the remaining bytes within the allocation. These are structural counts,
+not measured throughput or live Npcap performance claims.
+
+Hole expiry retains the capture-time watermark for small timestamp reorders.
+A backward step larger than the one-second age budget re-baselines the watermark
+and pending timestamps, preserving elapsed age where representable. Saturation
+near timestamp zero can discard less than one age budget of elapsed time; renewed
+clock progress still expires the hole within one second. The 32-segment bound
+also applies when capture timestamps stall or repeatedly move backward. The
+forced sequence advance remains bounded at 2 MiB inclusive, including wraparound.

@@ -539,10 +539,126 @@ fn teardown_discards_pending_holes_without_gap_or_data() {
 }
 
 #[test]
+fn forced_advance_byte_boundary_including_wraparound() {
+    for expected in [10u32, u32::MAX - 10] {
+        for distance in [2_097_152u32, 2_097_153] {
+            for dir in [Direction::ClientToServer, Direction::ServerToClient] {
+                let mut stream = Reassembler::default();
+                let mut syn = segment(expected.wrapping_sub(1), true, b"");
+                syn.dir = dir;
+                stream.push(syn);
+                let next = expected.wrapping_add(distance);
+                let mut ahead = segment(next, false, b"x");
+                ahead.dir = dir;
+                assert!(stream.push(ahead).is_empty());
+                let events = stream.expire(Timestamp(1_000_001));
+                assert!(matches!(events.first(), Some(StreamEvent::Gap { .. })));
+                if distance == 2_097_152 {
+                    assert_eq!(data(events), b"x");
+                } else {
+                    assert_eq!(events.len(), 1);
+                    let mut normal = segment(expected, false, b"ok");
+                    normal.dir = dir;
+                    normal.at = Timestamp(1_000_001);
+                    assert_eq!(data(stream.push(normal)), b"ok");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn backward_clock_step_restores_reorder_tolerance_in_both_directions() {
+    for dir in [Direction::ClientToServer, Direction::ServerToClient] {
+        let mut stream = Reassembler::default();
+        let mut send = |seq, at, bytes: &[u8]| {
+            let mut s = segment(seq, seq == 9, bytes);
+            s.dir = dir;
+            s.at = Timestamp(at);
+            stream.push(s)
+        };
+        send(9, 10_000_000, b"");
+        assert!(send(12, 2_000_000, b"tail").is_empty());
+        assert_eq!(data(send(10, 2_000_001, b"ok")), b"oktail");
+        assert!(send(18, 2_000_002, b"next").is_empty());
+        assert!(stream.expire(Timestamp(3_000_001)).is_empty());
+        let events = stream.expire(Timestamp(3_000_002));
+        assert!(matches!(events.first(), Some(StreamEvent::Gap { .. })));
+        assert_eq!(data(events), b"next");
+    }
+}
+
+#[test]
+fn existing_hole_keeps_its_age_across_clock_step_and_small_reorders() {
+    for dir in [Direction::ClientToServer, Direction::ServerToClient] {
+        let mut stream = Reassembler::default();
+        for (seq, at, bytes) in [(9, 10_000_000, &b""[..]), (12, 10_000_000, &b"tail"[..])] {
+            let mut s = segment(seq, seq == 9, bytes);
+            s.dir = dir;
+            s.at = Timestamp(at);
+            stream.push(s);
+        }
+        assert!(stream.expire(Timestamp(10_500_000)).is_empty());
+        assert!(stream.expire(Timestamp(2_000_000)).is_empty());
+        assert!(stream.expire(Timestamp(1_900_000)).is_empty());
+        assert!(stream.expire(Timestamp(2_499_999)).is_empty());
+        let events = stream.expire(Timestamp(2_500_000));
+        assert!(matches!(events.first(), Some(StreamEvent::Gap { .. })));
+        assert_eq!(data(events), b"tail");
+    }
+}
+
+#[test]
+fn stalled_capture_clock_still_expires_by_segment_budget() {
+    for dir in [Direction::ClientToServer, Direction::ServerToClient] {
+        let mut stream = Reassembler::default();
+        let mut syn = segment(9, true, b"");
+        syn.dir = dir;
+        syn.at = Timestamp(10_000_000);
+        stream.push(syn);
+        for offset in 0..32 {
+            let mut s = segment(12 + offset, false, b"x");
+            s.dir = dir;
+            s.at = Timestamp(1);
+            let events = stream.push(s);
+            if offset < 31 {
+                assert!(events.is_empty());
+            } else {
+                assert!(matches!(events.first(), Some(StreamEvent::Gap { .. })));
+                assert_eq!(data(events), vec![b'x'; 32]);
+            }
+        }
+    }
+}
+
+#[test]
+fn delivery_reuses_segment_allocation_even_with_partial_overlap() {
+    let mut stream = Reassembler::default();
+    stream.push(segment(9, true, b""));
+    let first = segment(10, false, b"abc");
+    let allocation = first.bytes.as_ptr();
+    let events = stream.push(first);
+    let StreamEvent::Data(chunk) = &events[0] else {
+        panic!("expected data")
+    };
+    assert_eq!(chunk.bytes.as_ptr(), allocation);
+    let overlap = segment(11, false, b"bcdef");
+    let allocation = overlap.bytes.as_ptr();
+    let events = stream.push(overlap);
+    let StreamEvent::Data(chunk) = &events[0] else {
+        panic!("expected data")
+    };
+    assert_eq!(chunk.bytes.as_ptr(), allocation);
+    assert_eq!(chunk.bytes, b"def");
+    assert_eq!(chunk.origins[0].offset, 56);
+}
+
+#[test]
 fn capture_time_regression_cannot_postpone_an_already_aged_hole() {
     let mut stream = Reassembler::default();
     let mut syn = segment(9, true, b"");
-    syn.at = Timestamp(2_000_001);
+    // Exactly the age budget remains a reorder, not a clock re-baseline.
+    syn.at = Timestamp(1_000_001);
     stream.push(syn);
     let mut late = segment(12, false, b"tail");
     late.at = Timestamp(1);

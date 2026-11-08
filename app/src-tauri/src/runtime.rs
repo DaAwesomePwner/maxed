@@ -760,9 +760,9 @@ fn run_worker(
                             if let Err(error) = adapter.live_tick(at, time.quiet(arrived)) { storage_error = Some(error); }
                         }
                     }
-                    let segment = maxed_capture::parse_frame(&frame).ok().flatten();
-                    let events = pipeline.push(frame);
-                    if traffic_trust.observe(segment.as_ref(), &events) {
+                    let parsed = maxed_capture::parse_frame(&frame);
+                    let events = pipeline.push_parsed(frame, parsed.clone());
+                    if traffic_trust.observe(parsed.as_ref().ok().and_then(Option::as_ref), &events) {
                         if let Err(error) = adapter.live_traffic(at) { storage_error = Some(error); }
                         time.frame(at.max(adapter.at()), arrived);
                     }

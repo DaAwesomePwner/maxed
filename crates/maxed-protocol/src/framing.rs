@@ -34,6 +34,13 @@ impl Framer {
     pub fn push(&mut self, mut bytes: &[u8]) -> FramerOutput {
         let mut frames = Vec::new();
         while !bytes.is_empty() {
+            // The common case has a complete header in this chunk: allocate
+            // the final bounded size before copying even the header.
+            if self.buffer.is_empty() && bytes.len() >= 4 {
+                if let Ok(len) = framed_len(bytes) {
+                    self.buffer.reserve_exact(len);
+                }
+            }
             let target = if self.buffer.len() < 4 {
                 4
             } else {
@@ -62,6 +69,7 @@ impl Framer {
                         };
                     }
                 };
+                self.buffer.reserve_exact(len - self.buffer.len());
                 if self.buffer.len() == len {
                     frames.push(std::mem::take(&mut self.buffer));
                 }
