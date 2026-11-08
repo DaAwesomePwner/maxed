@@ -6,6 +6,31 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 pub(crate) const NATIVE_DISCARD_DELAY: Duration = Duration::from_secs(2);
+pub(crate) const STARTUP_FAILURE_EXIT_CODE: i32 = 1;
+
+pub(crate) struct StartupFailure {
+    pub exit_code: i32,
+    pub show_dialog: bool,
+}
+
+/// Presence alone suppresses a modal, including empty or non-Unicode values.
+pub(crate) fn startup_failure(
+    dialog_shown: &AtomicBool,
+    mut env_is_set: impl FnMut(&str) -> bool,
+) -> StartupFailure {
+    StartupFailure {
+        exit_code: STARTUP_FAILURE_EXIT_CODE,
+        show_dialog: ![
+            "MAXED_GUI_SMOKE",
+            "MAXED_MEASURE_STARTUP",
+            "MAXED_MEASURE_DEMO",
+        ]
+        .into_iter()
+        .any(&mut env_is_set)
+            && !dialog_shown.swap(true, Ordering::AcqRel),
+    }
+}
+
 const NATIVE_DISCARD_EXPIRY: Duration = Duration::from_secs(60);
 pub(crate) const UNSAVED_TITLE: &str =
     "Maxed — Unsaved changes. Retry saving or confirm exit in Maxed";
@@ -26,6 +51,13 @@ pub(crate) struct ExitControl {
     pub startup_failed: AtomicBool,
 }
 impl ExitControl {
+    /// Setup has not launched the window worker. Allow the queued exit without
+    /// entering normal shutdown, which requires a fully managed SetupService.
+    pub fn setup_failed(&self) {
+        self.startup_failed.store(true, Ordering::Release);
+        self.exiting.store(true, Ordering::Release);
+        self.finished.store(true, Ordering::Release);
+    }
     pub fn clear_native_warning(&self) {
         *self.native_warning_at.lock().unwrap() = None;
     }
@@ -38,7 +70,11 @@ impl ExitControl {
         }
     }
     pub fn exit_code(&self) -> i32 {
-        i32::from(self.startup_failed.load(Ordering::Acquire))
+        if self.startup_failed.load(Ordering::Acquire) {
+            STARTUP_FAILURE_EXIT_CODE
+        } else {
+            0
+        }
     }
 }
 

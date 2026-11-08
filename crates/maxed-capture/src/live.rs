@@ -6,7 +6,7 @@ use std::sync::{
     Arc, Mutex, MutexGuard,
 };
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
 pub struct CaptureConfig {
@@ -29,6 +29,10 @@ pub struct AdapterInfo {
 
 pub trait Device {
     fn poll(&mut self) -> Result<Option<RawFrame>, CaptureError>;
+    /// Cumulative kernel-buffer drops for this handle; unavailable backends return None.
+    fn dropped_packets(&mut self) -> Result<Option<u32>, CaptureError> {
+        Ok(None)
+    }
 }
 pub trait Backend {
     fn discover(&mut self) -> Result<Vec<AdapterInfo>, CaptureError>;
@@ -49,6 +53,38 @@ fn set_error(status: &Mutex<CaptureStatus>, error: CaptureError) {
     };
     status.message = error.to_string();
 }
+
+fn record_loss(status: &Mutex<CaptureStatus>, drops: u32) {
+    if drops > 0 {
+        let mut status = lock(status);
+        status.dropped_frames = status.dropped_frames.saturating_add(drops);
+        status.state = CaptureState::Recovering;
+        status.message = "Capture frames lost; waiting for decoder recovery".into();
+    }
+}
+
+fn read_drops(device: &mut dyn Device, stats_failed: &mut bool) -> Option<u32> {
+    match device.dropped_packets() {
+        Ok(Some(drops)) => {
+            *stats_failed = false;
+            Some(drops)
+        }
+        Ok(None) => None,
+        Err(error) => {
+            if !*stats_failed {
+                // CaptureError has fixed descriptions; never log native text or adapter IDs.
+                tracing::warn!(error = %error, "Capture drop statistics unavailable");
+            }
+            *stats_failed = true;
+            None
+        }
+    }
+}
+
+const ADAPTER_SILENCE: Duration = Duration::from_secs(5);
+const SWITCH_GRACE: Duration = Duration::from_secs(1);
+const SWITCH_GUARD_WINDOW: Duration = Duration::from_secs(1);
+const CANDIDATE_DRAIN_BUDGET: usize = 8;
 
 pub struct CaptureHandle {
     pub frames: Receiver<RawFrame>,
@@ -130,6 +166,19 @@ where
     B: Backend + 'static,
     F: FnOnce() -> Result<B, CaptureError> + Send + 'static,
 {
+    start_with_clock(config, factory, Instant::now)
+}
+
+fn start_with_clock<B, F, C>(
+    config: CaptureConfig,
+    factory: F,
+    now: C,
+) -> Result<CaptureHandle, CaptureError>
+where
+    B: Backend + 'static,
+    F: FnOnce() -> Result<B, CaptureError> + Send + 'static,
+    C: Fn() -> Instant + Send + 'static,
+{
     if config.capacity == 0
         || config
             .adapter_id
@@ -157,7 +206,9 @@ where
             struct Pending(Arc<Mutex<Option<Result<(), CaptureError>>>>);
             impl Drop for Pending {
                 fn drop(&mut self) {
-                    self.0.lock().unwrap_or_else(|p| p.into_inner())
+                    self.0
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
                         .get_or_insert(Err(CaptureError::OpenFailed));
                 }
             }
@@ -198,7 +249,9 @@ where
                             .unwrap_or(CaptureError::OpenFailed)
                     });
                 }
-                worker_readiness.lock().unwrap_or_else(|p| p.into_inner())
+                worker_readiness
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
                     .get_or_insert(if worker_stop.load(Ordering::Acquire) {
                         Err(CaptureError::Stopped)
                     } else {
@@ -206,63 +259,179 @@ where
                     });
                 let mut selected = false;
                 let mut index = 0u64;
+                let mut previous_drops = None;
+                let mut stats_failed = false;
+                let mut stats_at = now();
+                let mut silence_since = None;
+                let mut last_delivered = None;
+                let mut guard_started = None;
+                let mut last_delivered_at = now();
+                let mut activity = vec![None; devices.len()];
                 while !worker_stop.load(Ordering::Acquire) {
-                    let mut winner = None;
-                    let mut i = 0;
-                    while i < devices.len() {
-                        if worker_stop.load(Ordering::Acquire) {
-                            break;
-                        }
-                        let polled = match devices[i].poll() {
-                            Ok(frame) => frame,
-                            Err(error) if !selected => {
-                                // CaptureError has fixed descriptions; no native error text or adapter IDs.
-                                tracing::warn!(error = %error, "Discarding capture candidate after polling failure");
-                                errors.push(error);
-                                devices.remove(i);
-                                if devices.is_empty() {
-                                    return Err(error);
+                    let mut polled = None;
+                    let mut selected_error = None;
+                    if !selected {
+                        let mut i = 0;
+                        while i < devices.len() {
+                            if worker_stop.load(Ordering::Acquire) {
+                                break;
+                            }
+                            match devices[i].poll() {
+                                Ok(Some(frame)) if matches!(parse_frame(&frame), Ok(Some(_))) => {
+                                    devices.swap(0, i);
+                                    activity.swap(0, i);
+                                    previous_drops =
+                                        read_drops(devices[0].as_mut(), &mut stats_failed);
+                                    stats_at = now();
+                                    selected = true;
+                                    polled = Some(frame);
+                                    break;
                                 }
-                                continue;
+                                Ok(_) => i += 1,
+                                Err(error) => {
+                                    tracing::warn!(
+                                        "Discarding capture candidate after polling failure"
+                                    );
+                                    devices.remove(i);
+                                    activity.remove(i);
+                                    if devices.is_empty() {
+                                        return Err(error);
+                                    }
+                                }
                             }
-                            Err(error) => return Err(error),
-                        };
-                        if let Some(mut frame) = polled {
-                            // BPF selects traffic; parser confirms the adapter before locking in.
-                            if !selected && !matches!(parse_frame(&frame), Ok(Some(_))) {
-                                i += 1;
-                                continue;
+                        }
+                    } else {
+                        match devices[0].poll() {
+                            Ok(frame) => polled = frame,
+                            Err(error) => selected_error = Some(error),
+                        }
+                        if now().duration_since(stats_at) >= Duration::from_millis(250) {
+                            stats_at = now();
+                            if let Some(current) =
+                                read_drops(devices[0].as_mut(), &mut stats_failed)
+                            {
+                                if let Some(previous) = previous_drops {
+                                    let delta = current.wrapping_sub(previous);
+                                    index = index
+                                        .checked_add(u64::from(delta))
+                                        .ok_or(CaptureError::OpenFailed)?;
+                                    record_loss(&worker_status, delta);
+                                }
+                                previous_drops = Some(current);
                             }
+                        }
+                    }
+                    let had_frame = polled.is_some();
+                    if let Some(mut frame) = polled {
+                        silence_since = None;
+                        let guarded = guard_started.is_some_and(|started| {
+                            now().duration_since(started) < SWITCH_GUARD_WINDOW
+                        });
+                        // Rejected initial copies are already covered by the switch gap.
+                        if !guarded || last_delivered.is_none_or(|at| frame.at > at) {
+                            guard_started = None;
+                            last_delivered_at = now();
+                            last_delivered = Some(frame.at);
                             frame.index = index;
                             index = index.checked_add(1).ok_or(CaptureError::OpenFailed)?;
                             let drops = send_latest(&tx, &eviction, frame)
                                 .map_err(|_| CaptureError::Stopped)?;
-                            if drops > 0 {
-                                let mut status = lock(&worker_status);
-                                status.dropped_frames = status.dropped_frames.saturating_add(drops);
-                                status.state = CaptureState::Recovering;
-                                status.message =
-                                    "Capture frames lost; waiting for decoder recovery".into();
-                            }
-                            winner = Some(i);
-                            break;
+                            record_loss(&worker_status, drops);
                         }
-                        i += 1;
+                    } else if selected {
+                        silence_since.get_or_insert_with(&now);
                     }
-                    if let Some(winner) = winner {
-                        if !selected {
-                            let device = devices.swap_remove(winner);
-                            devices.clear();
-                            devices.push(device);
-                            selected = true;
+                    if selected && config.adapter_id.is_none() {
+                        let mut winner = None;
+                        let mut i = 1;
+                        // Drain even while the selected handle is busy. Each candidate
+                        // gets bounded work; drained frames are NEVER forwarded.
+                        while i < devices.len() {
+                            let mut failed = false;
+                            let mut drained = false;
+                            let mut saw_game = false;
+                            for _ in 0..CANDIDATE_DRAIN_BUDGET {
+                                if worker_stop.load(Ordering::Acquire) {
+                                    break;
+                                }
+                                match devices[i].poll() {
+                                    Ok(Some(frame)) => {
+                                        if matches!(parse_frame(&frame), Ok(Some(_))) {
+                                            activity[i] = Some(now());
+                                            saw_game = true;
+                                        }
+                                    }
+                                    Ok(None) => {
+                                        drained = true;
+                                        break;
+                                    }
+                                    Err(_) => {
+                                        failed = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if failed {
+                                tracing::warn!(
+                                    "Discarding capture candidate after polling failure"
+                                );
+                                devices.remove(i);
+                                activity.remove(i);
+                                continue;
+                            }
+                            // A failed selected handle needs only game evidence from
+                            // this bounded pass; grace protects a still-working handle.
+                            // Normal switches wait for the candidate backlog to drain.
+                            let eligible = if selected_error.is_some() {
+                                saw_game
+                            } else {
+                                drained
+                                    && silence_since.is_some_and(|since| {
+                                        now().duration_since(since) >= ADAPTER_SILENCE
+                                            && activity[i].is_some_and(|observed| {
+                                                observed >= since
+                                                    && observed >= last_delivered_at + SWITCH_GRACE
+                                            })
+                                    })
+                            };
+                            if winner.is_none() && eligible {
+                                winner = Some(i);
+                            }
+                            i += 1;
                         }
-                    } else {
+                        if let Some(winner) = winner {
+                            devices.swap(0, winner);
+                            activity.fill(None);
+                            stats_failed = false;
+                            previous_drops = read_drops(devices[0].as_mut(), &mut stats_failed);
+                            stats_at = now();
+                            silence_since = None;
+                            guard_started = Some(now());
+                            // One synthetic loss marks uncertain continuity, not a
+                            // measurement of how many packets the switch actually lost.
+                            index = index.checked_add(1).ok_or(CaptureError::OpenFailed)?;
+                            record_loss(&worker_status, 1);
+                            tracing::info!(
+                                "Switching automatic capture adapter after traffic interruption"
+                            );
+                            selected_error = None;
+                        }
+                    }
+                    // On selected failure, allow this bounded drain pass to find
+                    // fresh evidence. Without it, preserve the terminal error;
+                    // do not wait indefinitely for candidate traffic.
+                    if let Some(error) = selected_error {
+                        return Err(error);
+                    }
+                    if !had_frame {
                         thread::park_timeout(Duration::from_millis(5));
                     }
                 }
                 Ok(())
             })();
-            worker_readiness.lock().unwrap_or_else(|p| p.into_inner())
+            worker_readiness
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
                 .get_or_insert(Err(result.err().unwrap_or(CaptureError::Stopped)));
             match result {
                 Ok(()) => set_error(&worker_status, CaptureError::Stopped),
@@ -319,3 +488,11 @@ mod readiness_tests {
         assert_eq!(handle.readiness(), Some(Err(CaptureError::OpenFailed)));
     }
 }
+
+#[cfg(test)]
+#[path = "stats_tests.rs"]
+mod stats_tests;
+
+#[cfg(test)]
+#[path = "reselection_tests.rs"]
+mod reselection_tests;

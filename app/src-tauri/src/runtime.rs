@@ -61,6 +61,9 @@ struct Shared {
     after_character_calculation: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     home: Arc<home::HomeReads>,
     status: Mutex<CaptureStatus>,
+    status_delivery: Mutex<()>,
+    #[cfg(test)]
+    on_status_delivery_contention: Mutex<Option<Sender<()>>>,
     failed: AtomicBool,
     bridge_failed: AtomicBool,
     views: Arc<Views>,
@@ -97,6 +100,18 @@ fn sanitize(state: &CaptureState) -> &'static str {
     }
 }
 
+// Mark failure before releasing delivery ownership during unwinding, even when
+// the status lock was already released. Do not swallow the original panic.
+struct StatusDeliveryFailure<'a>(&'a AtomicBool);
+
+impl Drop for StatusDeliveryFailure<'_> {
+    fn drop(&mut self) {
+        if thread::panicking() {
+            self.0.store(true, Ordering::Release);
+        }
+    }
+}
+
 impl Shared {
     fn stopped_status(&self) -> CaptureStatus {
         CaptureStatus {
@@ -107,6 +122,9 @@ impl Shared {
     }
 
     fn status(&self) -> CaptureStatus {
+        if self.status_delivery.is_poisoned() {
+            self.failed.store(true, Ordering::Release);
+        }
         if self.bridge_failed.load(Ordering::Acquire) {
             return CaptureStatus {
                 message: crate::bridge::DELIVERY_FAILED.into(),
@@ -123,6 +141,23 @@ impl Shared {
     }
 
     fn publish(&self, mut status: CaptureStatus, sink: &StatusSink) {
+        // Lock order: delivery -> status; release status before character/wake/sink.
+        // Readers take only status. Keep delivery through the sink so updates and
+        // publications stay ordered, including the final Stopped after worker join.
+        #[cfg(test)]
+        if matches!(
+            self.status_delivery.try_lock(),
+            Err(std::sync::TryLockError::WouldBlock)
+        ) {
+            if let Some(waiting) = self.on_status_delivery_contention.lock().unwrap().take() {
+                let _ = waiting.try_send(());
+            }
+        }
+        let _delivery = self.status_delivery.lock().unwrap_or_else(|poison| {
+            self.failed.store(true, Ordering::Release);
+            poison.into_inner()
+        });
+        let _failure = StatusDeliveryFailure(&self.failed);
         let mut current = self.status.lock().unwrap_or_else(|poison| {
             self.failed.store(true, Ordering::Release);
             poison.into_inner()
@@ -149,13 +184,13 @@ impl Shared {
             status.message.clear();
             status.message.push_str(message);
             *current = status.clone();
+            drop(current);
             self.views
                 .character
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .capture_changed(status.state.clone());
             self.views.alert_wake.signal();
-            // Serialize delivery with snapshot updates and final Stopped publication.
             sink(status);
         }
     }

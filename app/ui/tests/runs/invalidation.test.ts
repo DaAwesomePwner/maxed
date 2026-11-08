@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import type { EngineEvent } from '../../src/lib/bindings/EngineEvent';
 import type { EventEnvelope } from '../../src/lib/bindings/EventEnvelope';
 import type { Route } from '../../src/lib/navigation/routes';
-import { invalidatesRunHistory } from '../../src/lib/runs/invalidation';
+import { invalidatesRunHistory, runInvalidationRoute } from '../../src/lib/runs/invalidation';
 import { invalidatesSavedHistory } from '../../src/lib/shell/history-invalidation';
 import { fight, run } from './fixtures';
 
@@ -42,5 +42,15 @@ it.each(['run-1', 'other', null])('matches fight player notices to its run (%s)'
     expect(invalidatesRunHistory({ kind: 'player', fightId: 'fight-1', objectId: 7, runId: 'run-1' }, envelope(event))).toBe(runId === 'run-1');
     expect(invalidatesRunHistory({ kind: 'player', fightId: 'fight-1', objectId: 7 }, envelope(event))).toBe(false);
     expect(invalidatesRunHistory({ kind: 'home' }, envelope(event))).toBe(false);
+  }
+});
+
+it.each(['run-1', 'other', null])('uses only the matching validated fight relationship (%s)', runId => {
+  const standalone: Route = { kind: 'player', fightId: 'fight-1', objectId: 7 };
+  for (const event of notices(runId)) {
+    expect(invalidatesRunHistory(runInvalidationRoute(standalone, { fightId: 'fight-1', runId: 'run-1' }), envelope(event))).toBe(runId === 'run-1');
+    expect(invalidatesRunHistory(runInvalidationRoute(standalone, { fightId: 'other-fight', runId: 'run-1' }), envelope(event))).toBe(false);
+    expect(invalidatesRunHistory(runInvalidationRoute(standalone, null), envelope(event))).toBe(false);
+    expect(invalidatesRunHistory(runInvalidationRoute({ ...standalone, runId: 'run-1' }, { fightId: 'fight-1', runId: 'other' }), envelope(event))).toBe(runId === 'run-1');
   }
 });

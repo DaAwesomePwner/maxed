@@ -235,8 +235,15 @@ async fn report_interactive_rail(
 }
 
 #[tauri::command]
-fn get_capture_status(runtime: tauri::State<'_, Arc<CaptureRuntime>>) -> CaptureStatus {
-    runtime.status()
+async fn get_capture_status(app: tauri::AppHandle) -> CaptureStatus {
+    let runtime = app.state::<Arc<CaptureRuntime>>().inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.status())
+        .await
+        .unwrap_or_else(|_| CaptureStatus {
+            state: maxed_types::CaptureState::Failed,
+            message: "Capture status worker failed; restart Maxed".into(),
+            ..Default::default()
+        })
 }
 
 #[tauri::command]
@@ -352,8 +359,17 @@ fn unsubscribe_live_payload(
 }
 
 #[tauri::command]
-fn get_store_status(runtime: tauri::State<'_, Arc<CaptureRuntime>>) -> StoreStatus {
-    runtime.store_status()
+async fn get_store_status(app: tauri::AppHandle) -> StoreStatus {
+    let runtime = app.state::<Arc<CaptureRuntime>>().inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.store_status())
+        .await
+        .unwrap_or_else(|_| StoreStatus {
+            state: maxed_types::StoreState::Failed,
+            queued: 0,
+            durable: None,
+            stream_id: None,
+            message: "Store status worker failed; restart Maxed".into(),
+        })
 }
 
 #[tauri::command]
@@ -1118,6 +1134,42 @@ fn run_measurement_loops(handle: &tauri::AppHandle, service: &SetupService, loop
     }
 }
 
+fn report_startup_failure() -> i32 {
+    use std::sync::atomic::AtomicBool;
+
+    const MESSAGE: &str =
+        "Maxed could not start. Please restart Maxed. If the problem continues, reinstall Maxed.";
+    static DIALOG_SHOWN: AtomicBool = AtomicBool::new(false);
+    let failure = exit::startup_failure(&DIALOG_SHOWN, |name| std::env::var_os(name).is_some());
+    eprintln!("{MESSAGE}");
+    #[cfg(windows)]
+    if failure.show_dialog {
+        show_startup_error(MESSAGE);
+    }
+    failure.exit_code
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn show_startup_error(message: &str) {
+    use windows::core::{w, PCWSTR};
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+
+    let message: Vec<u16> = message.encode_utf16().chain(Some(0)).collect();
+    // SAFETY: Both strings are NUL-terminated and live throughout this blocking
+    // call. The dialog deliberately has no owner, so it can also run on the
+    // startup worker without marshaling to or blocking the Tauri event loop.
+    // No pointer is retained by MessageBoxW.
+    unsafe {
+        let _ = MessageBoxW(
+            None,
+            PCWSTR(message.as_ptr()),
+            w!("Maxed"),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -1150,126 +1202,140 @@ pub fn run() {
             std::env::var("MAXED_MEASURE_STARTUP").ok().as_deref(),
         ))
         .setup(|app| {
-            let root = app
-                .path()
-                .app_data_dir()
-                .map_err(|_| std::io::Error::other("Local app data is unavailable"))?;
-            let lifecycle = Arc::new(setup::NativeLifecycle {
-                runtime: app.state::<Arc<CaptureRuntime>>().inner().clone(),
-                app: app.handle().clone(),
-                app_data: root.clone(),
-            });
-            let service = SetupService::new(
-                root.clone(),
-                Arc::new(setup::NativeCapture),
-                lifecycle,
-                Arc::new(assets_bridge::AssetBridge::default()),
-            )
-            .map_err(std::io::Error::other)?
-            .with_launcher_root(if gui_smoke::enabled() {
-                None
-            } else {
-                app.path().local_data_dir().ok()
-            });
-            let service = Arc::new(service);
-            let weak_setup = Arc::downgrade(&service);
-            service
-                .updates
-                .configure_installer(Arc::new(move |updater| {
-                    let setup = weak_setup.upgrade().ok_or(updater::Error::Shutdown)?;
-                    let installer = setup.install_update(updater)?;
-                    installer.wait()
-                }));
-            app.manage(service.updates.clone());
-            app.state::<Arc<CaptureRuntime>>()
-                .configure_alert_settings(service.settings.clone())?;
-            let storage_notices = app.handle().clone();
-            app.state::<Arc<CaptureRuntime>>()
-                .set_storage_notice_sink(Arc::new(move |notice| {
-                    let _ = storage_notices.emit("storage-maintenance-changed", notice);
-                }));
-            // Account-history notices also apply before capture has ever started.
-            app.state::<Arc<CaptureRuntime>>()
-                .publisher(app.handle().clone())
-                .map_err(std::io::Error::other)?;
-            app.state::<Arc<CaptureRuntime>>()
-                .initialize_home(root)
-                .map_err(std::io::Error::other)?;
-            app.state::<Arc<CaptureRuntime>>()
-                .inner()
-                .start_alert_delivery(app.handle().clone())?;
-            app.manage(service.clone());
-            let handle = app.handle().clone();
-            let window = app
-                .config()
-                .app
-                .windows
-                .iter()
-                .find(|window| window.label == "main")
-                .cloned()
-                .ok_or_else(|| std::io::Error::other("Main window configuration missing"))?;
-            // Read local settings off the UI thread before creating the first WebView.
-            // Invalid settings still open the repair UI, using the low-memory default.
-            tauri::async_runtime::spawn_blocking(move || {
-                let _ = service.initialize_updates();
-                let acceleration = service
-                    .settings
-                    .get()
-                    .unwrap_or_default()
-                    .hardware_acceleration;
-                let result = tauri::WebviewWindowBuilder::from_config(&handle, &window)
-                    .map(|builder| {
-                        builder.additional_browser_args(&window_policy::browser_args(acceleration))
-                    })
-                    .and_then(|builder| builder.build());
-                if result.is_err() {
-                    eprintln!("Maxed window could not start");
-                    handle
-                        .state::<Arc<ExitControl>>()
-                        .startup_failed
-                        .store(true, Ordering::Release);
-                    handle.exit(1);
-                    return;
-                }
-                // Smoke always wins over inherited measurement/demo flags.
-                if gui_smoke::enabled() {
-                    return;
-                }
-                #[cfg(feature = "perf-live")]
-                if runtime::perf::enabled() {
-                    std::thread::sleep(std::time::Duration::from_secs(5));
-                    if handle
-                        .state::<Arc<CaptureRuntime>>()
-                        .inner()
-                        .performance_realm(handle.clone())
-                        .is_err()
-                    {
-                        eprintln!("PERF_LIVE failed");
+            let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+                let root = app
+                    .path()
+                    .app_data_dir()
+                    .map_err(|_| std::io::Error::other("Local app data is unavailable"))?;
+                let lifecycle = Arc::new(setup::NativeLifecycle {
+                    runtime: app.state::<Arc<CaptureRuntime>>().inner().clone(),
+                    app: app.handle().clone(),
+                    app_data: root.clone(),
+                });
+                let service = SetupService::new(
+                    root.clone(),
+                    Arc::new(setup::NativeCapture),
+                    lifecycle,
+                    Arc::new(assets_bridge::AssetBridge::default()),
+                )
+                .map_err(std::io::Error::other)?
+                .with_launcher_root(if gui_smoke::enabled() {
+                    None
+                } else {
+                    app.path().local_data_dir().ok()
+                });
+                let service = Arc::new(service);
+                let weak_setup = Arc::downgrade(&service);
+                service
+                    .updates
+                    .configure_installer(Arc::new(move |updater| {
+                        let setup = weak_setup.upgrade().ok_or(updater::Error::Shutdown)?;
+                        let installer = setup.install_update(updater)?;
+                        installer.wait()
+                    }));
+                app.manage(service.updates.clone());
+                app.state::<Arc<CaptureRuntime>>()
+                    .configure_alert_settings(service.settings.clone())?;
+                let storage_notices = app.handle().clone();
+                app.state::<Arc<CaptureRuntime>>()
+                    .set_storage_notice_sink(Arc::new(move |notice| {
+                        let _ = storage_notices.emit("storage-maintenance-changed", notice);
+                    }));
+                // Account-history notices also apply before capture has ever started.
+                app.state::<Arc<CaptureRuntime>>()
+                    .publisher(app.handle().clone())
+                    .map_err(std::io::Error::other)?;
+                app.state::<Arc<CaptureRuntime>>()
+                    .initialize_home(root)
+                    .map_err(std::io::Error::other)?;
+                app.state::<Arc<CaptureRuntime>>()
+                    .inner()
+                    .start_alert_delivery(app.handle().clone())?;
+                app.manage(service.clone());
+                let handle = app.handle().clone();
+                let window = app
+                    .config()
+                    .app
+                    .windows
+                    .iter()
+                    .find(|window| window.label == "main")
+                    .cloned()
+                    .ok_or_else(|| std::io::Error::other("Main window configuration missing"))?;
+                // Read local settings off the UI thread before creating the first WebView.
+                // Invalid settings still open the repair UI, using the low-memory default.
+                tauri::async_runtime::spawn_blocking(move || {
+                    let _ = service.initialize_updates();
+                    let acceleration = service
+                        .settings
+                        .get()
+                        .unwrap_or_default()
+                        .hardware_acceleration;
+                    let result = tauri::WebviewWindowBuilder::from_config(&handle, &window)
+                        .map(|builder| {
+                            builder
+                                .additional_browser_args(&window_policy::browser_args(acceleration))
+                        })
+                        .and_then(|builder| builder.build());
+                    if result.is_err() {
+                        // The ownerless modal blocks only this worker. Request exit after
+                        // dismissal; the event loop remains free to process shutdown.
+                        handle
+                            .state::<Arc<ExitControl>>()
+                            .startup_failed
+                            .store(true, Ordering::Release);
+                        let code = report_startup_failure();
+                        handle.exit(code);
+                        return;
                     }
-                    return;
-                }
-                // Release-enabled measurement seam; same lifecycle as the Settings command.
-                let demo = std::env::var("MAXED_MEASURE_DEMO").ok();
-                let loops = window_policy::measurement_demo_loops(
-                    demo.as_deref(),
-                    std::env::var("MAXED_MEASURE_DEMO_LOOPS").ok().as_deref(),
-                );
-                if !window_policy::measurement_demo(demo.as_deref()) {
-                    return;
-                }
-                if service.set_demo(true).is_err() {
-                    eprintln!("Measurement demo could not start");
-                    handle
-                        .state::<Arc<ExitControl>>()
-                        .startup_failed
-                        .store(true, Ordering::Release);
-                    handle.exit(1);
-                    return;
-                }
-                if let Some(loops) = loops {
-                    run_measurement_loops(&handle, &service, loops);
-                }
-            });
+                    // Smoke always wins over inherited measurement/demo flags.
+                    if gui_smoke::enabled() {
+                        return;
+                    }
+                    #[cfg(feature = "perf-live")]
+                    if runtime::perf::enabled() {
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                        if handle
+                            .state::<Arc<CaptureRuntime>>()
+                            .inner()
+                            .performance_realm(handle.clone())
+                            .is_err()
+                        {
+                            eprintln!("PERF_LIVE failed");
+                        }
+                        return;
+                    }
+                    // Release-enabled measurement seam; same lifecycle as the Settings command.
+                    let demo = std::env::var("MAXED_MEASURE_DEMO").ok();
+                    let loops = window_policy::measurement_demo_loops(
+                        demo.as_deref(),
+                        std::env::var("MAXED_MEASURE_DEMO_LOOPS").ok().as_deref(),
+                    );
+                    if !window_policy::measurement_demo(demo.as_deref()) {
+                        return;
+                    }
+                    if service.set_demo(true).is_err() {
+                        handle
+                            .state::<Arc<ExitControl>>()
+                            .startup_failed
+                            .store(true, Ordering::Release);
+                        let code = report_startup_failure();
+                        handle.exit(code);
+                        return;
+                    }
+                    if let Some(loops) = loops {
+                        run_measurement_loops(&handle, &service, loops);
+                    }
+                });
+                Ok(())
+            })();
+            if result.is_err() {
+                let code = report_startup_failure();
+                let exit = app.state::<Arc<ExitControl>>();
+                exit.setup_failed();
+                // Tauri queues this request until Ready completes. Do not return
+                // the error to Tauri: its setup error path panics.
+                app.handle().exit(code);
+            }
             Ok(())
         })
         .register_asynchronous_uri_scheme_protocol("maxed-sprite", |context, request, responder| {
@@ -1390,8 +1456,7 @@ pub fn run() {
         ])
         .build(tauri::generate_context!());
     let Ok(app) = app else {
-        eprintln!("Maxed window could not start");
-        return;
+        std::process::exit(report_startup_failure());
     };
     app.run(move |app, event| {
         let exit = app.state::<Arc<ExitControl>>().inner().clone();
