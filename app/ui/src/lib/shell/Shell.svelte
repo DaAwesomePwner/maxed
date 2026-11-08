@@ -116,6 +116,7 @@
   };
   const dungeonMute = createDungeonMute(alerts, () => mounted && !preview && nativeDemo === false);
   setContext(DUNGEON_MUTE, dungeonMute);
+  // Read the current relationship so run-scoped notices invalidate standalone fight-player routes.
   const cache = untrack(() => historyCache) ?? createHistoryCache({ invalidates: invalidatesSavedHistory, route: () => runInvalidationRoute(router?.route, relationship) });
   setContext<ShellConnection>(SHELL_CONNECTION, { character: characterController, capture: sharedCapture, snapshot: sharedSnapshot, historyCache: cache,
     onEvent: receive => { eventObservers.add(receive); return () => { eventObservers.delete(receive); }; },

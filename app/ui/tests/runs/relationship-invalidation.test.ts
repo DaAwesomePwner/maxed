@@ -1,7 +1,7 @@
 import { cleanup } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { EngineEvent } from '../../src/lib/bindings/EngineEvent';
-import { advance, fight, flush, main, mountRuns, player, ready, saved } from './fixtures';
+import { advance, fight, flush, follow, main, mountRuns, player, ready, saved } from './fixtures';
 
 beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => {
@@ -47,4 +47,32 @@ it.each(['player_observed', 'scope_timeline_updated'] as const)(
     page.event({ fight_updated: fight() }, '14');
     page.setStore(saved('14')); await advance();
     expect(main().getByTitle('Invented Archer')).toBeTruthy();
+  });
+
+it.each(['player_observed', 'scope_timeline_updated'] as const)(
+  'clears the previous relationship before handling %s on navigation', async kind => {
+    const nextPlayer = player({ object_id: 8, player_id: 'player-2', name: 'Next Archer', is_local: false });
+    const page = mountRuns({ hash: '#/fights/fight-1/players/8', queries: {
+      getFight: async () => ready(fight({ players: [player(), nextPlayer] })),
+      getPlayerBreakdown: async (_, objectId) => ready(objectId === 8 ? nextPlayer : player()),
+    } });
+    await flush();
+    expect(main().getByTitle('Next Archer')).toBeTruthy();
+    await follow('#/runs/run-1/fights/fight-1/players/7');
+    expect(main().getByTitle('Invented Archer')).toBeTruthy();
+
+    page.browser.adapter.go(-1);
+    // Deliver before the new component can report its own relationship. Using the
+    // same fight catches a stale relationship even with the fight-ID guard.
+    page.event(notice(kind, 'run-1'), '13');
+    await flush();
+    expect(page.browser.adapter.hash).toBe('#/fights/fight-1/players/8');
+    // Storage is still at 12: an inherited run scope would block this route at 13.
+    expect(main().getByTitle('Next Archer')).toBeTruthy();
+
+    const revised = { ...nextPlayer, name: 'Refreshed Next Archer' };
+    page.queries.getPlayerBreakdown.mockResolvedValue(ready(revised));
+    page.event(notice(kind, 'run-1'), '14');
+    page.setStore(saved('14')); await advance();
+    expect(main().getByTitle('Refreshed Next Archer')).toBeTruthy();
   });
