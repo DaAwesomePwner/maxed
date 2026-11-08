@@ -162,7 +162,7 @@ fn second_adapter_wins_and_live_requires_decode() {
     assert_eq!(received.index, 0);
     assert_eq!(received.at, Timestamp(123));
     assert_eq!(handle.status().state, CaptureState::WaitingForGame);
-    wait_until(|| closes.load(Ordering::SeqCst) == 1);
+    assert_eq!(closes.load(Ordering::SeqCst), 0);
     handle.report_decode(true, u32::MAX, u32::MAX);
     handle.report_decode(true, 1, 1);
     assert_eq!(handle.status().state, CaptureState::Live);

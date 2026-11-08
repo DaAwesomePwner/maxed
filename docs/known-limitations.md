@@ -210,6 +210,14 @@ is recorded.
 - The “Runs list newest” 50 ms release gate fails on the development Mac at the
   task base too; this is a pre-existing performance limitation.
 
+## Automatic capture adapters
+
+Automatic selection keeps candidate handles drained and can re-select after five
+seconds without frames when another adapter has fresh game traffic. Only adapters
+opened at capture start are eligible; newly created adapters require restarting
+capture. Switching marks uncertain continuity and discards candidate observations,
+so decoding may need recovery. Live Windows/Npcap switching remains unverified.
+
 ## Passive TCP loss recovery
 
 Missing TCP bytes trigger a directional gap after 32 buffered segments, one
