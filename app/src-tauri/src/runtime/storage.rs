@@ -226,8 +226,35 @@ fn identity_key(root: &Path) -> Result<[u8; 32], String> {
 }
 
 fn publish_identity_key(staging: &Path, path: &Path) -> std::io::Result<()> {
+    publish_identity_key_with(staging, path, |from, to| fs::hard_link(from, to))
+}
+
+fn publish_identity_key_with(
+    staging: &Path,
+    path: &Path,
+    link: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
+) -> std::io::Result<()> {
     // Unlike rename on Windows, hard_link never replaces an existing key.
-    fs::hard_link(staging, path)?;
+    if let Err(error) = link(staging, path) {
+        if error.kind() != std::io::ErrorKind::Unsupported
+            && !(cfg!(windows) && matches!(error.raw_os_error(), Some(1 | 50)))
+        {
+            return Err(error);
+        }
+        // Redirected app data may live on a filesystem without hard links.
+        // The caller still holds the identity lease. Fail closed on read errors
+        // and use create_new to protect against a destination appearing later.
+        match File::open(path) {
+            Ok(_) => return Err(std::io::ErrorKind::AlreadyExists.into()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        let key = fs::read(staging)?;
+        let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
+        file.write_all(&key)?;
+        file.sync_all()?;
+        return fs::remove_file(staging);
+    }
     // Flush the published file before removing the staging name. On failure,
     // leave the complete published key intact so the next attempt reuses it.
     OpenOptions::new().write(true).open(path)?.sync_all()?;

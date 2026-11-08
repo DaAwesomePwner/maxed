@@ -1,5 +1,73 @@
-use super::{identity_key, publish_identity_key};
-use std::{fs, path::Path};
+use super::{identity_key, publish_identity_key, publish_identity_key_with};
+use std::{fs, io, path::Path};
+
+fn unsupported_link_errors() -> Vec<io::Error> {
+    let errors = vec![io::ErrorKind::Unsupported.into()];
+    #[cfg(windows)]
+    let errors = {
+        let mut errors = errors;
+        errors.extend([
+            io::Error::from_raw_os_error(1),
+            io::Error::from_raw_os_error(50),
+        ]);
+        errors
+    };
+    errors
+}
+
+#[test]
+fn identity_key_unsupported_link_creates_and_reuses_key() {
+    for error in unsupported_link_errors() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("identity.key");
+        let staging = root.path().join("identity.key.pending");
+        fs::write(&staging, [7; 32]).unwrap();
+        publish_identity_key_with(&staging, &path, |_, _| Err(error)).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), [7; 32]);
+        assert!(!staging.exists());
+        assert_eq!(identity_key(root.path()).unwrap(), [7; 32]);
+    }
+}
+
+#[test]
+fn identity_key_unsupported_link_preserves_destination_appearing_during_link() {
+    for len in [0, 1, 32, 33] {
+        for error in unsupported_link_errors() {
+            let root = tempfile::tempdir().unwrap();
+            let path = root.path().join("identity.key");
+            let staging = root.path().join("identity.key.pending");
+            let original = vec![42; len];
+            fs::write(&staging, [7; 32]).unwrap();
+            let result = publish_identity_key_with(&staging, &path, |_, to| {
+                fs::write(to, &original).unwrap();
+                Err(error)
+            });
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::AlreadyExists);
+            assert_eq!(fs::read(&path).unwrap(), original);
+            assert_eq!(fs::read(&staging).unwrap(), [7; 32]);
+        }
+    }
+}
+
+#[test]
+fn identity_key_other_link_errors_do_not_fall_back() {
+    for kind in [
+        io::ErrorKind::AlreadyExists,
+        io::ErrorKind::PermissionDenied,
+        io::ErrorKind::NotFound,
+        io::ErrorKind::Other,
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("identity.key");
+        let staging = root.path().join("identity.key.pending");
+        fs::write(&staging, [7; 32]).unwrap();
+        let error =
+            publish_identity_key_with(&staging, &path, |_, _| Err(kind.into())).unwrap_err();
+        assert_eq!(error.kind(), kind);
+        assert!(!path.exists());
+        assert_eq!(fs::read(&staging).unwrap(), [7; 32]);
+    }
+}
 
 fn assert_created(root: &Path) {
     let key = identity_key(root).unwrap();
