@@ -14,7 +14,10 @@ pub(crate) struct StartupFailure {
 }
 
 /// Presence alone suppresses a modal, including empty or non-Unicode values.
-pub(crate) fn startup_failure(mut env_is_set: impl FnMut(&str) -> bool) -> StartupFailure {
+pub(crate) fn startup_failure(
+    dialog_shown: &AtomicBool,
+    mut env_is_set: impl FnMut(&str) -> bool,
+) -> StartupFailure {
     StartupFailure {
         exit_code: STARTUP_FAILURE_EXIT_CODE,
         show_dialog: ![
@@ -23,7 +26,8 @@ pub(crate) fn startup_failure(mut env_is_set: impl FnMut(&str) -> bool) -> Start
             "MAXED_MEASURE_DEMO",
         ]
         .into_iter()
-        .any(&mut env_is_set),
+        .any(&mut env_is_set)
+            && !dialog_shown.swap(true, Ordering::AcqRel),
     }
 }
 

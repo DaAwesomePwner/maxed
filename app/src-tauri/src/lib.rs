@@ -1135,9 +1135,12 @@ fn run_measurement_loops(handle: &tauri::AppHandle, service: &SetupService, loop
 }
 
 fn report_startup_failure() -> i32 {
+    use std::sync::atomic::AtomicBool;
+
     const MESSAGE: &str =
         "Maxed could not start. Please restart Maxed. If the problem continues, reinstall Maxed.";
-    let failure = exit::startup_failure(|name| std::env::var_os(name).is_some());
+    static DIALOG_SHOWN: AtomicBool = AtomicBool::new(false);
+    let failure = exit::startup_failure(&DIALOG_SHOWN, |name| std::env::var_os(name).is_some());
     eprintln!("{MESSAGE}");
     #[cfg(windows)]
     if failure.show_dialog {
@@ -1154,7 +1157,9 @@ fn show_startup_error(message: &str) {
 
     let message: Vec<u16> = message.encode_utf16().chain(Some(0)).collect();
     // SAFETY: Both strings are NUL-terminated and live throughout this blocking
-    // call. No owner window exists yet; no pointer is retained by MessageBoxW.
+    // call. The dialog deliberately has no owner, so it can also run on the
+    // startup worker without marshaling to or blocking the Tauri event loop.
+    // No pointer is retained by MessageBoxW.
     unsafe {
         let _ = MessageBoxW(
             None,
@@ -1272,12 +1277,14 @@ pub fn run() {
                         })
                         .and_then(|builder| builder.build());
                     if result.is_err() {
-                        eprintln!("Maxed window could not start");
+                        // The ownerless modal blocks only this worker. Request exit after
+                        // dismissal; the event loop remains free to process shutdown.
                         handle
                             .state::<Arc<ExitControl>>()
                             .startup_failed
                             .store(true, Ordering::Release);
-                        handle.exit(1);
+                        let code = report_startup_failure();
+                        handle.exit(code);
                         return;
                     }
                     // Smoke always wins over inherited measurement/demo flags.
@@ -1307,12 +1314,12 @@ pub fn run() {
                         return;
                     }
                     if service.set_demo(true).is_err() {
-                        eprintln!("Measurement demo could not start");
                         handle
                             .state::<Arc<ExitControl>>()
                             .startup_failed
                             .store(true, Ordering::Release);
-                        handle.exit(1);
+                        let code = report_startup_failure();
+                        handle.exit(code);
                         return;
                     }
                     if let Some(loops) = loops {
