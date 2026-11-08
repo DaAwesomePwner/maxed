@@ -11,7 +11,7 @@ afterEach(() => { cleanup(); vi.clearAllTimers(); vi.unstubAllGlobals(); vi.useR
 it('normalizes legacy and malformed story presentation values without storing rows', () => {
   expect(emptyListState().storyPosition).toBeNull(); expect(normalizeListState({}).storyPosition).toBeNull();
   const value = normalizeListState({ storyPosition: { allFights: true, otherTargets: true,
-    timelinePointId: '\u0000' } });
+    timelineWindow: -1, fightWindow: 2, lootWindow: 1.2, otherFightWindow: 0, timelinePointId: '\u0000' } });
   expect(value.storyPosition).toEqual({ selectedTab: null, allFights: true, otherTargets: true, timelinePointId: null });
   expect(normalizeListState(JSON.parse(JSON.stringify(value)))).toEqual(value);
 });
