@@ -60,11 +60,7 @@ pub(crate) fn equipment(entity: Option<&Entity>) -> Vec<EquipmentView> {
 
 impl Engine {
     pub(crate) fn maxed(&self, class: Option<u16>, stat: impl Fn(u8) -> Option<i32>) -> Option<u8> {
-        let class = self
-            .catalog
-            .classes
-            .iter()
-            .find(|c| Some(c.object_type) == class)?;
+        let class = &self.catalog.classes[*self.class_index.get(&class?)?];
         // Entity.calculateBaseStats: base = observed value - observed boost.
         // Missing boosts/caps never imply zero boosts or an 8/8 character.
         let mut count = 0;
@@ -81,11 +77,9 @@ impl Engine {
         class: Option<u16>,
         stat: impl Fn(u8) -> Option<i32>,
     ) -> Vec<u8> {
-        let Some(class) = self
-            .catalog
-            .classes
-            .iter()
-            .find(|c| Some(c.object_type) == class)
+        let Some(class) = class
+            .and_then(|ty| self.class_index.get(&ty))
+            .map(|&i| &self.catalog.classes[i])
         else {
             return vec![];
         };

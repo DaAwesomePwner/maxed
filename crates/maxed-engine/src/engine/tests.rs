@@ -1896,3 +1896,49 @@ fn target_refresh_visits_only_changed_classification_inputs() {
     assert_eq!(e.target_refreshes, 3);
     assert!(!e.snapshot().fights[0].is_current_quest);
 }
+
+#[test]
+fn clearing_entities_invalidates_character_on_next_remote_merge() {
+    let mut e = engine();
+    setup(&mut e);
+    let builds = e.character_rebuilds;
+    assert!(e.character.as_ref().unwrap().identity_verified);
+    e.clear_entities();
+    let events = apply(&mut e, 3000, tick(vec![status(2, vec![])]));
+    assert_eq!(e.character_rebuilds, builds + 1);
+    assert!(!e.character.as_ref().unwrap().identity_verified);
+    assert!(e.character.as_ref().unwrap().class_id.is_none());
+    assert!(events.iter().any(|event| matches!(event,
+        EngineEvent::CharacterUpdated(c) if !c.identity_verified)));
+    apply(&mut e, 4000, tick(vec![status(2, vec![])]));
+    assert_eq!(e.character_rebuilds, builds + 1);
+}
+
+#[test]
+fn forgetting_local_entity_invalidates_character_on_next_remote_merge() {
+    let mut e = engine();
+    setup(&mut e);
+    let builds = e.character_rebuilds;
+    e.forget_entity(1, &mut Vec::new());
+    let events = apply(&mut e, 3000, tick(vec![status(2, vec![])]));
+    assert_eq!(e.character_rebuilds, builds + 1);
+    assert!(!e.character.as_ref().unwrap().identity_verified);
+    assert!(e.character.as_ref().unwrap().class_id.is_none());
+    assert!(events.iter().any(|event| matches!(event,
+        EngineEvent::CharacterUpdated(c) if !c.identity_verified)));
+    apply(&mut e, 4000, tick(vec![status(2, vec![])]));
+    assert_eq!(e.character_rebuilds, builds + 1);
+}
+
+#[test]
+fn local_presence_and_identical_fields_do_not_rebuild_character() {
+    let mut e = engine();
+    setup(&mut e);
+    let builds = e.character_rebuilds;
+    let before = e.character.clone();
+    e.remove_entity(1, &mut Vec::new());
+    apply(&mut e, 3000, tick(vec![player().status]));
+    assert!(e.entities[&1].present);
+    assert_eq!(e.character_rebuilds, builds);
+    assert_eq!(e.character, before);
+}

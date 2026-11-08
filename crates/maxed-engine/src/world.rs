@@ -210,18 +210,7 @@ impl Engine {
     ) {
         let id = status.objectId;
         let is_local = self.local.as_ref().is_some_and(|l| l.object == id);
-        let previous_character_inputs = is_local.then(|| {
-            self.entities.get(&id).map(|e| {
-                (
-                    e.object_type,
-                    e.present,
-                    e.account,
-                    e.name.clone(),
-                    e.stats.clone(),
-                    e.enchants.clone(),
-                )
-            })
-        });
+        let mut character_changed = !self.entities.contains_key(&id);
 
         if let Some(ty) = ty {
             // Map-scoped and bounded by the u16 object-type space, even after eviction.
@@ -266,13 +255,14 @@ impl Engine {
         entity.present = true;
         entity.last_seen = self.now;
         if let Some(t) = ty {
+            character_changed |= entity.object_type != Some(t);
             entity.object_type = Some(t);
             // A typed re-entry replaces combat state, unlike incremental NEWTICK.
             // Only secondary condition (96) has fixture evidence for omitted zero.
-            for id in [21, 29, 96] {
-                entity.stats.remove(&id);
+            for id in [21, 29] {
+                character_changed |= entity.stats.remove(&id).is_some();
             }
-            entity.stats.insert(96, 0);
+            character_changed |= entity.stats.insert(96, 0) != Some(0);
         }
         if status.pos.x.is_finite() && status.pos.y.is_finite() {
             entity.pos = (status.pos.x, status.pos.y);
@@ -296,19 +286,25 @@ impl Engine {
                 && entity.stat(stat.statTypeNum) != Some(stat.statValue)
             {
                 if let Some(enchant) = entity.enchants.get_mut(usize::from(stat.statTypeNum - 8)) {
-                    *enchant = crate::parse_enchant(None);
+                    let next = crate::parse_enchant(None);
+                    character_changed |= *enchant != next;
+                    *enchant = next;
                 }
             }
             match stat.statTypeNum {
                 31 => {
-                    entity.name = stat.stringStatValue.filter(|s| s.len() <= 256);
+                    let name = stat.stringStatValue.filter(|s| s.len() <= 256);
+                    character_changed |= entity.name != name;
+                    entity.name = name;
                 }
                 38 => {
-                    entity.account = stat
+                    let account = stat
                         .stringStatValue
                         .as_deref()
                         .filter(|s| !s.is_empty())
                         .map(|s| identity::account(&self.config.identity_key, s));
+                    character_changed |= entity.account != account;
+                    entity.account = account;
                 }
                 62 if is_player => {
                     entity.guild =
@@ -324,7 +320,7 @@ impl Engine {
                             });
                 }
                 80 => {
-                    entity.enchants = crate::enchants::slots(
+                    let enchants = crate::enchants::slots(
                         stat.stringStatValue.as_deref(),
                         if is_bag || entity.object_type.is_none() {
                             8
@@ -332,6 +328,8 @@ impl Engine {
                             4
                         },
                     );
+                    character_changed |= entity.enchants != enchants;
+                    entity.enchants = enchants;
                 }
                 128 | 155 => {
                     let multiplier = stat.stringStatValue.as_deref().and_then(|s| {
@@ -354,7 +352,8 @@ impl Engine {
                     }
                 }
                 _ if stat.stringStatValue.is_none() => {
-                    entity.stats.insert(stat.statTypeNum, stat.statValue);
+                    character_changed |= entity.stats.insert(stat.statTypeNum, stat.statValue)
+                        != Some(stat.statValue);
                 }
                 _ => {} // Never retain arbitrary string stats, chat, or account data.
             }
@@ -425,24 +424,7 @@ impl Engine {
                 self.dirty_fights.insert((id, generation));
             }
         }
-        let character_changed = previous_character_inputs.is_some_and(|previous| {
-            previous
-                .as_ref()
-                .map(|(ty, present, account, name, stats, enchants)| {
-                    (ty, present, account, name, stats, enchants)
-                })
-                != self.entities.get(&id).map(|e| {
-                    (
-                        &e.object_type,
-                        &e.present,
-                        &e.account,
-                        &e.name,
-                        &e.stats,
-                        &e.enchants,
-                    )
-                })
-        });
-        if character_changed || self.character_dirty {
+        if (is_local && character_changed) || self.character_dirty {
             self.refresh_character(events);
         } else {
             self.refresh_character_context(events);
