@@ -235,8 +235,15 @@ async fn report_interactive_rail(
 }
 
 #[tauri::command]
-fn get_capture_status(runtime: tauri::State<'_, Arc<CaptureRuntime>>) -> CaptureStatus {
-    runtime.status()
+async fn get_capture_status(app: tauri::AppHandle) -> CaptureStatus {
+    let runtime = app.state::<Arc<CaptureRuntime>>().inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.status())
+        .await
+        .unwrap_or_else(|_| CaptureStatus {
+            state: maxed_types::CaptureState::Failed,
+            message: "Capture status worker failed; restart Maxed".into(),
+            ..Default::default()
+        })
 }
 
 #[tauri::command]
@@ -352,8 +359,17 @@ fn unsubscribe_live_payload(
 }
 
 #[tauri::command]
-fn get_store_status(runtime: tauri::State<'_, Arc<CaptureRuntime>>) -> StoreStatus {
-    runtime.store_status()
+async fn get_store_status(app: tauri::AppHandle) -> StoreStatus {
+    let runtime = app.state::<Arc<CaptureRuntime>>().inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.store_status())
+        .await
+        .unwrap_or_else(|_| StoreStatus {
+            state: maxed_types::StoreState::Failed,
+            queued: 0,
+            durable: None,
+            stream_id: None,
+            message: "Store status worker failed; restart Maxed".into(),
+        })
 }
 
 #[tauri::command]
