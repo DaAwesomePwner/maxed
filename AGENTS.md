@@ -15,7 +15,7 @@ Maxed is a Windows companion for Realm of the Mad God. Read [README.md](README.m
 
 Branch from `main` and target pull requests at `main`. Keep changes focused and describe validation and unresolved risks. Follow `.editorconfig`, `rustfmt.toml` and surrounding style.
 
-Use `npm ci` and Cargo `--locked`; add dependencies only when needed. Run the [development checks](docs/development/testing.md). On macOS, source `scripts/mac/env.sh` first; use `scripts/mac/check.sh quick` while iterating and `scripts/mac/check.sh full` before review. Lint for the Windows target. Native `maxed-app` tests, capture and installer behavior require Windows.
+Use `npm ci` and Cargo `--locked`; add dependencies only when needed. Run the [development checks](docs/development/testing.md). On macOS, source `scripts/mac/env.sh` first; use `scripts/mac/check.sh quick` while iterating and `scripts/mac/check.sh full` before review. Lint for the Windows target. Native `maxed-app` tests, capture and installer behavior require Windows. On Windows, use [local UI review](docs/development/windows-ui-review.md) to build and drive the desktop app.
 
 Regenerate bindings with `cargo test --locked -p maxed-types --test export_bindings`; never edit generated DTOs by hand. Review generated diffs. Maintain dependency notices through their generator and update inventory hashes only with reviewed payload changes.
 
