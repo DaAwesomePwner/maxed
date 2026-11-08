@@ -1035,3 +1035,87 @@ fn bridge_failure_is_visible_in_capture_queries_and_publications() {
     assert_eq!(status.message, crate::bridge::DELIVERY_FAILED);
     assert_eq!(shared.status(), status);
 }
+
+#[test]
+fn status_read_returns_while_capture_sink_is_blocked() {
+    let shared = Arc::new(Shared::default());
+    let (entered, waiting) = bounded(1);
+    let (release, gate) = bounded(1);
+    let sink: StatusSink = Arc::new(move |_| {
+        entered.send(()).unwrap();
+        gate.recv().unwrap();
+    });
+    let publisher = shared.clone();
+    let publishing = thread::spawn(move || {
+        publisher.publish(
+            CaptureStatus {
+                state: CaptureState::Live,
+                ..Default::default()
+            },
+            &sink,
+        );
+    });
+    let entered = waiting.recv_timeout(Duration::from_secs(5));
+    let (read, result) = bounded(1);
+    let reader = thread::spawn(move || {
+        read.send(shared.status()).unwrap();
+    });
+    let status = result.recv_timeout(Duration::from_secs(5));
+    // Release and join even when the read times out, so a regression cannot hang cleanup.
+    release.send(()).unwrap();
+    publishing.join().unwrap();
+    reader.join().unwrap();
+    entered.unwrap();
+    assert_eq!(status.unwrap().state, CaptureState::Live);
+}
+
+#[test]
+fn concurrent_capture_publications_preserve_status_order_and_stopped_last() {
+    let shared = Arc::new(Shared::default());
+    let (entered, waiting) = bounded(1);
+    let (release, gate) = bounded(1);
+    let (delivered, events) = crossbeam_channel::unbounded();
+    let observed = Arc::downgrade(&shared);
+    let sink: StatusSink = Arc::new(move |status| {
+        let shared = observed.upgrade().unwrap();
+        if status.state == CaptureState::Live {
+            // Delivery owns serialization even though status readers are free.
+            entered
+                .send(shared.status_delivery.try_lock().is_err())
+                .unwrap();
+            gate.recv().unwrap();
+        }
+        let current = shared.status();
+        delivered.send((status.state, current.state)).unwrap();
+    });
+    let first_shared = shared.clone();
+    let first_sink = sink.clone();
+    let first = thread::spawn(move || {
+        first_shared.publish(
+            CaptureStatus {
+                state: CaptureState::Live,
+                ..Default::default()
+            },
+            &first_sink,
+        );
+    });
+    let serialized = waiting.recv_timeout(Duration::from_secs(5));
+    let (started, attempting) = bounded(0);
+    let last = thread::spawn(move || {
+        started.send(()).unwrap();
+        shared.publish(CaptureStatus::default(), &sink);
+    });
+    let attempted = attempting.recv_timeout(Duration::from_secs(5));
+    release.send(()).unwrap();
+    first.join().unwrap();
+    last.join().unwrap();
+    assert!(serialized.unwrap());
+    attempted.unwrap();
+    assert_eq!(
+        events.try_iter().collect::<Vec<_>>(),
+        vec![
+            (CaptureState::Live, CaptureState::Live),
+            (CaptureState::Stopped, CaptureState::Stopped),
+        ]
+    );
+}

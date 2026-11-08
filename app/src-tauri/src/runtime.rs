@@ -61,6 +61,7 @@ struct Shared {
     after_character_calculation: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     home: Arc<home::HomeReads>,
     status: Mutex<CaptureStatus>,
+    status_delivery: Mutex<()>,
     failed: AtomicBool,
     bridge_failed: AtomicBool,
     views: Arc<Views>,
@@ -123,6 +124,13 @@ impl Shared {
     }
 
     fn publish(&self, mut status: CaptureStatus, sink: &StatusSink) {
+        // Lock order: delivery -> status; release status before character/wake/sink.
+        // Readers take only status. Keep delivery through the sink so updates and
+        // publications stay ordered, including the final Stopped after worker join.
+        let _delivery = self.status_delivery.lock().unwrap_or_else(|poison| {
+            self.failed.store(true, Ordering::Release);
+            poison.into_inner()
+        });
         let mut current = self.status.lock().unwrap_or_else(|poison| {
             self.failed.store(true, Ordering::Release);
             poison.into_inner()
@@ -149,13 +157,13 @@ impl Shared {
             status.message.clear();
             status.message.push_str(message);
             *current = status.clone();
+            drop(current);
             self.views
                 .character
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .capture_changed(status.state.clone());
             self.views.alert_wake.signal();
-            // Serialize delivery with snapshot updates and final Stopped publication.
             sink(status);
         }
     }

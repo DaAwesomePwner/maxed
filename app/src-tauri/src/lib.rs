@@ -234,7 +234,7 @@ async fn report_interactive_rail(
         .report(window.label() == "main", std::io::stdout().lock())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_capture_status(runtime: tauri::State<'_, Arc<CaptureRuntime>>) -> CaptureStatus {
     runtime.status()
 }
@@ -351,7 +351,7 @@ fn unsubscribe_live_payload(
     payloads.unsubscribe(webview.label(), id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_store_status(runtime: tauri::State<'_, Arc<CaptureRuntime>>) -> StoreStatus {
     runtime.store_status()
 }
