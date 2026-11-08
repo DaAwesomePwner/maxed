@@ -104,6 +104,7 @@ impl Engine {
         }
         self.kill_detector = Default::default();
         self.observed_kills.clear();
+        self.character_dirty = true;
         self.entities.clear();
         self.inactive_entities.clear();
         self.referenced_entities.clear();
@@ -154,6 +155,7 @@ impl Engine {
     pub(crate) fn forget_entity(&mut self, id: i32, events: &mut Vec<EngineEvent>) {
         self.remove_entity(id, events);
         if let Some(e) = self.entities.remove(&id) {
+            self.character_dirty |= self.local.as_ref().is_some_and(|l| l.object == id);
             self.inactive_entities.remove(&(e.last_seen, id));
             self.referenced_entities.remove(&id);
             if e.fight_retired || e.bag_retired {
@@ -207,6 +209,20 @@ impl Engine {
         events: &mut Vec<EngineEvent>,
     ) {
         let id = status.objectId;
+        let is_local = self.local.as_ref().is_some_and(|l| l.object == id);
+        let previous_character_inputs = is_local.then(|| {
+            self.entities.get(&id).map(|e| {
+                (
+                    e.object_type,
+                    e.present,
+                    e.account,
+                    e.name.clone(),
+                    e.stats.clone(),
+                    e.enchants.clone(),
+                )
+            })
+        });
+
         if let Some(ty) = ty {
             // Map-scoped and bounded by the u16 object-type space, even after eviction.
             self.notices.observed_types.insert(ty);
@@ -387,6 +403,9 @@ impl Engine {
                 self.dirty_fights.insert((id, generation));
             }
             f.base.target_hp = target_hp;
+            if f.base.target_type != target_type {
+                self.target_dirty.insert((id, generation));
+            }
             f.base.target_type = target_type;
             f.base.boss_type = target_type.filter(|t| {
                 self.object_index
@@ -406,7 +425,28 @@ impl Engine {
                 self.dirty_fights.insert((id, generation));
             }
         }
-        self.refresh_character(events);
+        let character_changed = previous_character_inputs.is_some_and(|previous| {
+            previous
+                .as_ref()
+                .map(|(ty, present, account, name, stats, enchants)| {
+                    (ty, present, account, name, stats, enchants)
+                })
+                != self.entities.get(&id).map(|e| {
+                    (
+                        &e.object_type,
+                        &e.present,
+                        &e.account,
+                        &e.name,
+                        &e.stats,
+                        &e.enchants,
+                    )
+                })
+        });
+        if character_changed || self.character_dirty {
+            self.refresh_character(events);
+        } else {
+            self.refresh_character_context(events);
+        }
         if is_player {
             self.player_presence(id, true, events);
         }

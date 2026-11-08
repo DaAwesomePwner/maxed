@@ -74,6 +74,14 @@ pub struct Engine {
     pub(crate) catalog: Arc<Catalog>,
     pub(crate) object_index: BTreeMap<u16, usize>,
     pub(crate) object_name_index: BTreeMap<String, Option<u16>>,
+    pub(crate) character_dirty: bool,
+    pub(crate) class_index: BTreeMap<u16, usize>,
+    #[cfg(test)]
+    pub(crate) character_rebuilds: usize,
+    #[cfg(test)]
+    pub(crate) target_refreshes: usize,
+    pub(crate) target_dirty: BTreeSet<crate::fights::FightKey>,
+    pub(crate) refreshed_quest: Option<crate::fights::FightKey>,
     pub(crate) item_index: BTreeMap<u16, usize>,
     pub(crate) enchant_index: BTreeMap<i32, usize>,
     pub(crate) reconstruction: crate::reconstruction::ReconstructionCoverage,
@@ -171,6 +179,12 @@ impl Engine {
                 })
                 .or_insert(Some(object.object_type));
         }
+        let class_index = catalog
+            .classes
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.object_type, i))
+            .collect();
         let item_index = catalog
             .items
             .iter()
@@ -189,6 +203,14 @@ impl Engine {
             object_index,
             object_name_index,
             item_index,
+            class_index,
+            character_dirty: false,
+            #[cfg(test)]
+            character_rebuilds: 0,
+            #[cfg(test)]
+            target_refreshes: 0,
+            target_dirty: BTreeSet::new(),
+            refreshed_quest: None,
             enchant_index,
             reconstruction: Default::default(),
             removed_shots: BTreeMap::new(),
