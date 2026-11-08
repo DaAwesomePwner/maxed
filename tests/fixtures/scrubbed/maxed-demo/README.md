@@ -149,5 +149,5 @@ SHA-256 above was rechecked. Derived-output SHA-256 changed from
 Gate P (#37/#38) regeneration through `replay_engine` changes only the 24 `split_evidence` placements from
 `provisional_inside_boost` to `verified_inside_boost`, drops their `unverified_placement` reason, and sets the three
 `breakdown_provisional` flags to `false`. `cap_eligible` stays `false` with `missing_exalt` and `missing_operands`,
-because this story still observes no exalt levels. All 37 events, other values, ordering, sequence numbers, pcap
+because this story still observes no exalt levels. All 43 events, other values, ordering, sequence numbers, pcap
 bytes, catalog and prior provenance are unchanged.
