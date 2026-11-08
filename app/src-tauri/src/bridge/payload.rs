@@ -10,8 +10,15 @@ impl SnapshotEncoder {
         let result = match &self.previous {
             Some(previous)
                 if previous.stream_id == snapshot.stream_id
-                    && previous.revision.unwrap_or(previous.sequence).0
-                        < snapshot.revision.unwrap_or(snapshot.sequence).0 =>
+                    && match (previous.revision, snapshot.revision) {
+                        // A gap means an intervening materialization may have
+                        // reached a direct reader. Its base differs from ours.
+                        (Some(before), Some(after)) => {
+                            before.0 .0.checked_add(1) == Some(after.0 .0)
+                        }
+                        (None, None) => previous.sequence.0 < snapshot.sequence.0,
+                        _ => false,
+                    } =>
             {
                 let mut changes = snapshot.clone();
                 let fights: BTreeMap<_, _> =
@@ -136,6 +143,25 @@ mod tests {
         assert_eq!(delta.base_revision, Some(Sequence(Timestamp(1))));
         assert_eq!(delta.snapshot.revision, snapshot.revision);
         assert_eq!(delta.snapshot.map, snapshot.map);
+    }
+
+    #[test]
+    fn queried_revision_gap_forces_full_then_resumes_deltas() {
+        let mut encoder = SnapshotEncoder::default();
+        let mut snapshot = maxed_types::demo::demo_snapshot();
+        snapshot.revision = Some(Sequence(Timestamp(10)));
+        encoder.encode(snapshot.clone());
+        // A direct reader got revision 11; a later transaction materialized 12.
+        snapshot.revision = Some(Sequence(Timestamp(12)));
+        assert!(matches!(
+            encoder.encode(snapshot.clone()),
+            LiveSnapshotUpdate::Full(_)
+        ));
+        snapshot.revision = Some(Sequence(Timestamp(13)));
+        let LiveSnapshotUpdate::Delta(delta) = encoder.encode(snapshot) else {
+            panic!("consecutive publications should resume deltas");
+        };
+        assert_eq!(delta.base_revision, Some(Sequence(Timestamp(12))));
     }
 
     #[test]

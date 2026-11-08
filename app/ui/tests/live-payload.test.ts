@@ -300,3 +300,36 @@ test('a same-watermark missed delta cannot be satisfied by an older query revisi
     expect(querySnapshot).toHaveBeenCalledTimes(3);
   } finally { connection.dispose(); vi.useRealTimers(); }
 });
+
+test('queried realm score followed by full publication and deltas needs no recovery query', async () => {
+  const { realmSnapshot } = await import('./home-v2/fixtures');
+  const source = realmSnapshot();
+  const score = (revision: string, current: number): LiveSnapshot => ({
+    ...source, revision,
+    instance: { ...source.instance!, realm_score: { current, max: 300000 } },
+  });
+  // Published 10 had score 100; the direct query materialized 11 with score 120.
+  const queried = score('11', 120);
+  const transport = createFixtureTransport(queried);
+  const querySnapshot = vi.fn().mockResolvedValue(queried);
+  const queryStore = vi.fn().mockResolvedValue({
+    state: 'ready', stream_id: source.stream_id, durable: source.sequence, queued: 0, message: '',
+  });
+  const historyBaseline = vi.fn(), seen: LiveSnapshot[] = [];
+  const connection = subscribeLive({ ...createClient(transport), querySnapshot, queryStore },
+    { snapshot: value => seen.push(value), historyBaseline });
+  try {
+    await settle();
+    const stores = queryStore.mock.calls.length;
+    // Native encoder sends full across the unpublished revision 11.
+    transport.publishSnapshotUpdate(score('12', 150));
+    transport.publishSnapshotUpdate({ base_sequence: source.sequence, base_revision: '12',
+      snapshot: { ...score('13', 180), fights: [], drops: [] }, removed_fights: [], removed_drops: [] });
+    await settle();
+    expect(seen.map(value => value.instance?.realm_score?.current)).toEqual([120, 150, 180]);
+    expect(seen.every(value => value.sequence === source.sequence)).toBe(true);
+    expect(querySnapshot).toHaveBeenCalledTimes(1);
+    expect(historyBaseline).toHaveBeenCalledTimes(1);
+    expect(queryStore).toHaveBeenCalledTimes(stores);
+  } finally { connection.dispose(); }
+});

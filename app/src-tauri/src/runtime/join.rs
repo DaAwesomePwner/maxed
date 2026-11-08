@@ -1232,3 +1232,7 @@ mod hidden_snapshot_tests;
 #[cfg(test)]
 #[path = "account_adapter_tests.rs"]
 mod account_adapter_tests;
+
+#[cfg(test)]
+#[path = "join_publication_tests.rs"]
+mod publication_tests;

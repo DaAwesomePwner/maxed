@@ -403,3 +403,9 @@ Reconnect and query races also compare revisions, so same-sequence metadata
 updates are accepted. Event cursors, projection coverage and history durability
 continue to use sequence. Legacy/offline snapshots without a revision use their
 sequence for compatibility; native adapter snapshots always supply a revision.
+
+The encoder sends a full snapshot across a gap in presentation revisions:
+an intervening direct read may have given the UI a different baseline than the
+last publication. Consecutive published revisions resume deltas. If publication
+reuses the queried revision unchanged, the UI deduplicates it and the encoder
+still advances its base, avoiding an unnecessary recovery query in both cases.
