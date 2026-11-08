@@ -31,7 +31,7 @@ fn shape(bytes: &[u8]) -> String {
 }
 
 // Diagnostic recognition only, not snapshot admission or field semantics.
-// Both observed 18- and 25-byte suffixes fit these conservative growth bounds.
+// Bound parsing before applying the explicit field-count/layout allowlist.
 fn extension_fields(tail: &[u8]) -> Option<usize> {
     if tail.is_empty() || tail.len() > 64 {
         return None;
@@ -78,6 +78,7 @@ pub(super) fn shape_with_trust(bytes: &[u8], alignment_verified: bool) -> String
     let nonzero = flag != 0;
     let _ = write!(out, " flag@0:width=4:present={nonzero}:leU32={flag} bitmapWidth=16 bitmapBitOrder=lsb0-per-byte");
     let mut unknown = false;
+    let mut presence_count = 0;
     if nonzero {
         let Ok(mask) = reader.take(16) else {
             let _ = write!(
@@ -90,6 +91,7 @@ pub(super) fn shape_with_trust(bytes: &[u8], alignment_verified: bool) -> String
         };
         let present = |id: u8| mask[usize::from(id / 8)] & (1 << (id % 8)) != 0;
         let bits: Vec<_> = (0..128).filter(|&id| present(id)).collect();
+        presence_count = bits.len();
         let unsupported: Vec<_> = bits
             .iter()
             .copied()
@@ -132,10 +134,14 @@ pub(super) fn shape_with_trust(bytes: &[u8], alignment_verified: bool) -> String
         reader.position(),
         reader.remaining()
     );
-    // Only a fully decoded, supported presence section can precede an extension.
-    // Discard values and expose only its bounded shape, even in opt-in reports.
-    if nonzero && !unknown {
-        if let Some(fields) = extension_fields(&data[reader.position()..]) {
+    // The sanitized evidence gives 67 supported bits, not their exact mask.
+    // Pin that count rather than inventing a live mask from the synthetic test.
+    // 16 suffix fields is issue #41's estimate; 18 is the historical synthetic
+    // 25-byte regression's 11 single-byte + 7 two-byte integers. Replay must
+    // confirm these shapes. Other counts fail safe, even if all varints parse.
+    let tail_fields = extension_fields(&data[reader.position()..]);
+    if presence_count == 67 && !unknown {
+        if let Some(fields @ (16 | 18)) = tail_fields {
             let _ = write!(
                 out,
                 " extension=unmodeled_varints:bytes={}:fields={fields} divergence=none",
@@ -173,6 +179,9 @@ pub(super) fn shape_with_trust(bytes: &[u8], alignment_verified: bool) -> String
             }
         }
         let _ = write!(out, "] unclassifiedRemaining={}", reader.remaining());
+    }
+    if let Some(fields) = tail_fields {
+        let _ = write!(out, " tailVarintFields={fields}");
     }
     out
 }
@@ -240,11 +249,49 @@ mod tests {
     }
 
     #[test]
+    fn shifted_counter_layout_stays_a_divergence() {
+        let mut data = current_snapshot();
+        data.extend([2; 14]);
+        data.extend([0x82, 1, 0x83, 1]);
+        // Insert three bytes after the first varint, simulating a wire-layout
+        // shift that still lets every supported presence field decode.
+        data.splice(22..22, [0, 0, 0]);
+        let text = shape(encode(&data).as_bytes());
+        assert!(text.contains("trailing=21 divergence=trailing@112"));
+        assert!(!text.contains("extension="));
+        assert!(text.contains("tailVarintFields=19"));
+    }
+
+    #[test]
+    fn only_allowlisted_field_counts_and_full_presence_are_recognized() {
+        for count in [1, 15, 17, 19, 32] {
+            let mut data = current_snapshot();
+            data.extend(vec![1; count]);
+            let text = shape(encode(&data).as_bytes());
+            assert!(text.contains("divergence=trailing@112"));
+            assert!(!text.contains("extension="));
+        }
+        for count in [16, 18] {
+            // Varint values may grow without changing the field-count pin.
+            let mut data = current_snapshot();
+            data.extend([0x81, 1].repeat(count));
+            assert!(shape(encode(&data).as_bytes()).contains("divergence=none"));
+            // A sparse bitmap is not evidence for the full snapshot layout.
+            let mut sparse = vec![0; 20];
+            sparse[0] = 1;
+            sparse[7] = 1;
+            sparse.push(1);
+            sparse.extend(vec![1; count]);
+            assert!(shape(encode(&sparse).as_bytes()).contains("divergence=trailing@21"));
+        }
+    }
+
+    #[test]
     fn extension_bounds_are_inclusive() {
         let mut data = current_snapshot();
-        data.extend([0x81, 1].repeat(32));
+        data.extend([0x80, 0x80, 0x80, 1].repeat(16));
         assert!(shape(encode(&data).as_bytes())
-            .contains("extension=unmodeled_varints:bytes=64:fields=32 divergence=none"));
+            .contains("extension=unmodeled_varints:bytes=64:fields=16 divergence=none"));
     }
 
     #[test]
@@ -325,7 +372,7 @@ mod tests {
         let text = shape(encode(&data).as_bytes());
         assert!(text.contains("leU32=16909060"));
         assert!(text.contains("tag=24@20:varintWidth=1:value=-1;"));
-        assert!(text.contains("extension=unmodeled_varints:bytes=2:fields=1 divergence=none"));
+        assert!(text.contains("divergence=trailing@21 tailHex=a55a"));
         assert!(!crate::privacy::character_stats(&encode(&data)));
     }
 
@@ -353,10 +400,7 @@ mod tests {
 
     #[test]
     fn repeatable_varint_tail_is_not_promoted_to_a_complete_counter_snapshot() {
-        let mut data = vec![0; 20];
-        data[0] = 1;
-        data[7] = 1; // only shots_fired is present in this synthetic snapshot
-        data.push(1);
+        let mut data = current_snapshot();
         let complete = encode(&data);
         assert!(crate::privacy::character_stats(&complete));
         assert!(shape(complete.as_bytes()).contains("divergence=none"));
@@ -370,7 +414,7 @@ mod tests {
         let extended = encode(&data);
         assert!(!crate::privacy::character_stats(&extended));
         let text = shape(extended.as_bytes());
-        assert!(text.contains("consumed=21 trailing=25 extension=unmodeled_varints:bytes=25:fields=18 divergence=none"));
+        assert!(text.contains("consumed=112 trailing=25 extension=unmodeled_varints:bytes=25:fields=18 divergence=none"));
         assert!(!text.contains("tailHex="));
         assert!(!text.contains(&extended));
     }
