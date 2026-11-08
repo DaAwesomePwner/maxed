@@ -4,7 +4,7 @@
   import SpriteImage from '../../components/SpriteImage.svelte';
   import { itemHover } from '../../components/item-hover';
   import type { HomeVisuals } from '../visuals';
-  import { overflow, potionNames, potionStat, rankText, sessionClock, signedPercent, WHITE_BAG_TYPE } from './hud';
+  import { overflow, potionNames, rankText, sessionClock, signedPercent, WHITE_BAG_TYPE } from './hud';
 
   let { hud, sessionStarted, sessionEnded = null, nowMs, visuals, resolveSpriteUrl, lootHref }: {
     hud: HomeHud | null; sessionStarted: string | null; sessionEnded?: string | null; nowMs: number;
@@ -47,7 +47,7 @@
   </dd></div>
   <div data-hud="pots"><dt>Pots</dt><dd><a href={lootHref}>
     {#each pots.shown as potion (potion.stat)}
-      {@const visual = visuals.objects.find(object => object.sprite && potionStat(object.name) === potion.stat)}
+      {@const visual = visuals.objects.find(object => object.object_type === potion.object_type)}
       <span class="potion">
         {#if visual?.sprite}<SpriteImage sprite={visual.sprite} sheetUrl={resolveSpriteUrl(visual.sprite)} alt={potionNames[potion.stat]} fit={20} />
         {:else}<span>{potionNames[potion.stat]}</span>{/if}

@@ -6,9 +6,7 @@ use crate::{
 };
 use maxed_assets::CachedCatalog;
 use maxed_capture::{CaptureConfig, CaptureError, CaptureHandle};
-use maxed_types::{
-    AdapterInfo, AppSettings, CaptureAccess, CaptureState, NpcapCheck, PotionStat, SetupStatus,
-};
+use maxed_types::{AdapterInfo, AppSettings, CaptureAccess, CaptureState, NpcapCheck, SetupStatus};
 use std::{
     fs::File,
     io::Read,
@@ -176,35 +174,17 @@ impl SetupService {
         }
     }
 
-    pub fn scope_loot_tiers(&self) -> Vec<(u16, Option<String>)> {
+    pub fn catalog_query_data(&self) -> maxed_store::CatalogQueryData {
         if self.demo.load(Ordering::Acquire) {
-            demo_catalog()
-                .map(|catalog| {
-                    catalog
-                        .items
-                        .into_iter()
-                        .map(|item| (item.object_type, item.tier))
-                        .collect()
-                })
-                .unwrap_or_default()
+            static DEMO: std::sync::LazyLock<maxed_store::CatalogQueryData> =
+                std::sync::LazyLock::new(|| {
+                    demo_catalog()
+                        .map(|catalog| maxed_store::CatalogQueryData::from_catalog(&catalog))
+                        .unwrap_or_default()
+                });
+            DEMO.clone()
         } else {
-            self.assets.scope_loot_tiers()
-        }
-    }
-
-    pub fn potion_stats(&self) -> Vec<(u16, PotionStat)> {
-        if self.demo.load(Ordering::Acquire) {
-            demo_catalog()
-                .map(|catalog| {
-                    catalog
-                        .items
-                        .into_iter()
-                        .filter_map(|item| item.potion_stat.map(|stat| (item.object_type, stat)))
-                        .collect()
-                })
-                .unwrap_or_default()
-        } else {
-            self.assets.potion_stats()
+            self.assets.catalog_query_data()
         }
     }
 
@@ -1178,6 +1158,57 @@ mod gui_smoke_tests {
         fn demo(&self, _: bool) -> Result<(), String> {
             panic!("smoke started demo")
         }
+    }
+
+    #[test]
+    fn demo_history_uses_shared_demo_classifications() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = SetupService::with_discovery_roots(
+            temp.path().to_owned(),
+            Arc::new(NoCapture),
+            Arc::new(NoLifecycle),
+            Arc::new(AssetBridge::default()),
+            Vec::new(),
+        )
+        .unwrap();
+        let live = service.catalog_query_data();
+        service.demo.store(true, Ordering::Release);
+        let data = service.catalog_query_data();
+        let catalog = demo_catalog().unwrap();
+        assert_eq!(
+            data.chase_types(),
+            catalog
+                .items
+                .iter()
+                .filter_map(|item| matches!(item.tier.as_deref(), Some("UT" | "ST"))
+                    .then_some(item.object_type))
+                .collect::<Vec<_>>()
+        );
+        use maxed_types::PotionStat;
+        for stat in [
+            PotionStat::Life,
+            PotionStat::Mana,
+            PotionStat::Attack,
+            PotionStat::Defense,
+            PotionStat::Speed,
+            PotionStat::Dexterity,
+            PotionStat::Vitality,
+            PotionStat::Wisdom,
+        ] {
+            assert_eq!(
+                data.potion_type(stat),
+                catalog
+                    .items
+                    .iter()
+                    .filter(|item| item.potion_stat == Some(stat))
+                    .map(|item| item.object_type)
+                    .min()
+            );
+        }
+        assert!(data.shares_instance(&service.catalog_query_data()));
+        assert_ne!(live.identity(), data.identity());
+        service.demo.store(false, Ordering::Release);
+        assert!(live.shares_instance(&service.catalog_query_data()));
     }
 
     #[test]

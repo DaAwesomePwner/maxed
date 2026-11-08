@@ -35,7 +35,7 @@
   import { createDungeonPortal, createHomeVisuals, emptyHomeVisuals, homeVisualTypes, type HomeVisuals } from '../lib/home/visuals';
   import SessionHud from '../lib/home/v4/SessionHud.svelte';
   import { createHomeV4Reads, type HomeV4ReadState } from '../lib/home/v4/reads';
-  import { potionNames, potionStat, WHITE_BAG_TYPE } from '../lib/home/v4/hud';
+  import { WHITE_BAG_TYPE } from '../lib/home/v4/hud';
   import { spriteUrl } from '../lib/bridge/visuals';
   import { productionFeatures, routeHref } from '../lib/navigation/routes';
   import { bossOnly } from '../lib/home/v3/screen-data';
@@ -203,27 +203,6 @@
       bossTypes: fights.filter(snapshot?.area_kind === 'realm' ? isBossFight : bossOnly).map(fight => fight.target_type!), nowMicros: hudNowMs * 1000 };
     untrack(() => instance.update(input));
   });
-  let potionTypes = $state.raw<number[]>([]);
-  $effect(() => {
-    const owner = v4Client;
-    potionTypes = [];
-    if (!owner) return;
-    let disposed = false, revision = 0;
-    const refresh = async () => {
-      const request = ++revision;
-      try {
-        // Native search accepts at most 25 hits. Query each stat so unrelated
-        // consumables cannot crowd a representative potion out of the results.
-        const items = (await Promise.all(Object.values(potionNames).map(name =>
-          owner.searchItems(`Potion of ${name}`, 1).catch(() => [])))).flat();
-        if (!disposed && request === revision) potionTypes = items.filter(item => potionStat(item.name)).map(item => item.object_type);
-      } catch { if (!disposed && request === revision) potionTypes = []; }
-    };
-    const release = owner.onVisualsChanged(() => { potionTypes = []; void refresh(); });
-    void refresh();
-    return () => { disposed = true; release(); };
-  });
-
   let receivedHistory = $state(false);
   let visuals = $state.raw<HomeVisuals>(emptyHomeVisuals());
   let visualController = $state.raw<ReturnType<typeof createHomeVisuals> | null>(null);
@@ -319,7 +298,7 @@
   const visualKey = $derived([...homeVisualTypes(mode.mode !== 'nexus' ? displayed : null,
     mode.mode === 'nexus' ? history.summary : null, scopedWindow),
   ...(mode.mode === 'nexus' ? scopeLoot?.items.map(item => item.item_type) ?? [] : []),
-  ...(redesign ? [WHITE_BAG_TYPE, ...(v4State?.hud?.ut_st ?? []), ...potionTypes,
+  ...(redesign ? [WHITE_BAG_TYPE, ...(v4State?.hud?.ut_st ?? []), ...(v4State?.hud?.potions ?? []).flatMap(potion => potion.object_type === null ? [] : [potion.object_type]),
     ...(!v4State?.errors.profile ? v4State?.profile?.bosses.map(boss => boss.target_type) ?? [] : [])] : []),
   ...(redesign && mode.mode === 'realm' ? scopedFights(displayed, scopedWindow)
     .flatMap(fight => fight.boss_type === null ? [] : [fight.boss_type]) : []),

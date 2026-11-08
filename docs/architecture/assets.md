@@ -147,6 +147,20 @@ Catalog format stays at 1. Rebuild errors preserve the prior publication; native
 errors with an unavailable catalog and missing-assets coverage (`app/src-tauri/src/runtime/storage.rs:101–110`).
 This extraction change does not alter that fallback or claim live capture verification.
 
+## History classification metadata
+
+The asset bridge retains one immutable, shared `CatalogQueryData` per published
+catalog fingerprint. It prepares normalized tier/potion SQL parameters, the UT/ST
+item set and representative potion item types once. Requests clone its Arc-backed
+handle; their history keys contain only a process-local generation identity and
+validation status. Replacing the catalog changes every catalog-dependent history
+key, including run recap. Failed selections retain the previous metadata alongside
+the last-good catalog. Synthetic demo mode uses its own shared metadata instance.
+
+`PotionCount.object_type` supplies the HUD sprite lookup directly. Missing
+classification remains `None`; Home does not search item names or duplicate potion
+classification rules. Counts and stat grouping still come from the native catalog.
+
 ## Cache and cancellation
 
 Generations live at `<app_data>/assets/v1/<fingerprint>/`. Fingerprints cover

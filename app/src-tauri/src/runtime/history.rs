@@ -1,5 +1,6 @@
 //! One native history scheduler, shared by Home and every drill-down.
 use super::{home::*, CaptureRuntime};
+use maxed_store::{CatalogQueryData, CatalogQueryIdentity};
 use maxed_types::*;
 use std::{
     collections::VecDeque,
@@ -46,18 +47,14 @@ pub(super) enum HistoryKey {
     StatsExport(StatsExportRequest),
     Home(HomeScope),
     HomeDungeonStreak(HomeDungeonStreakRequest),
-    RunRecap(RunRecapRequest),
+    RunRecap(RunRecapRequest, CatalogQueryIdentity),
     VisitRecap(VisitRecapRequest),
-    HomeHud(
-        HomeScope,
-        Vec<(u16, Option<String>)>,
-        Vec<(u16, PotionStat)>,
-    ),
-    ScopeLoot(HomeScope, Option<String>, u16, Vec<(u16, Option<String>)>),
+    HomeHud(HomeScope, CatalogQueryIdentity),
+    ScopeLoot(HomeScope, Option<String>, u16, CatalogQueryIdentity),
     DungeonBests,
     Runs(RunFilter),
     Drops(DropFilter),
-    DropSummary(DropSummaryRequest, Vec<(u16, Option<String>)>),
+    DropSummary(DropSummaryRequest, CatalogQueryIdentity),
     Chat(ChatFilter, Vec<String>, Vec<String>),
     ChatOverview(ChatOverviewRequest),
     ChatSender(ChatSenderRequest),
@@ -66,7 +63,7 @@ pub(super) enum HistoryKey {
     EventSummary(EventSummaryRequest),
     ItemHistory(ItemHistoryRequest),
     LootStats(LootStatsFilter),
-    Collection(CollectionRequest, Vec<(u16, Option<String>)>),
+    Collection(CollectionRequest, CatalogQueryIdentity),
     Alerts(AlertFilter),
     AlertSummary(AlertSummaryRequest),
     Run(String),
@@ -239,14 +236,17 @@ impl HistoryKey {
             }
             Self::Home(scope) => validate_scope(scope),
             Self::HomeDungeonStreak(request) => identifier(&request.dungeon),
-            Self::RunRecap(request) => identifier(&request.run_id),
-            Self::VisitRecap(request) => identifier(&request.visit_id),
-            Self::HomeHud(scope, tiers, potions) => {
-                validate_scope(scope)?;
-                maxed_store::validate_loot_catalog(tiers, potions).map_err(|_| INVALID.into())
+            Self::RunRecap(request, catalog) => {
+                catalog.validate().map_err(|_| INVALID.to_owned())?;
+                identifier(&request.run_id)
             }
-            Self::ScopeLoot(scope, cursor, limit, tiers) => {
-                maxed_store::validate_loot_catalog(tiers, &[]).map_err(|_| INVALID.to_owned())?;
+            Self::VisitRecap(request) => identifier(&request.visit_id),
+            Self::HomeHud(scope, catalog) => {
+                validate_scope(scope)?;
+                catalog.validate().map_err(|_| INVALID.into())
+            }
+            Self::ScopeLoot(scope, cursor, limit, catalog) => {
+                catalog.validate().map_err(|_| INVALID.to_owned())?;
                 maxed_store::validate_scope_loot(scope, cursor.as_deref(), *limit)
                     .map_err(|_| INVALID.into())
             }
@@ -259,13 +259,9 @@ impl HistoryKey {
                 }
                 Ok(())
             }
-            Self::DropSummary(request, tiers) => {
-                if request.days.len() > 8
-                    || tiers.len() > 65_536
-                    || tiers
-                        .iter()
-                        .any(|(_, tier)| tier.as_ref().is_some_and(|s| s.len() > 16))
-                {
+            Self::DropSummary(request, catalog) => {
+                catalog.validate().map_err(|_| INVALID.to_owned())?;
+                if request.days.len() > 8 {
                     return Err(INVALID.into());
                 }
                 validate_loot_range(request.filter.range.as_ref())?;
@@ -281,13 +277,9 @@ impl HistoryKey {
                 validate_loot_page(request.limit, request.cursor.as_ref())
             }
             Self::LootStats(filter) => validate_loot_range(filter.range.as_ref()),
-            Self::Collection(request, tiers) => {
-                if request.chase.len() > MAX_CHASE_ITEMS
-                    || tiers.len() > 65_536
-                    || tiers
-                        .iter()
-                        .any(|(_, tier)| tier.as_ref().is_some_and(|s| s.len() > 16))
-                {
+            Self::Collection(request, catalog) => {
+                catalog.validate().map_err(|_| INVALID.to_owned())?;
+                if request.chase.len() > MAX_CHASE_ITEMS {
                     return Err(INVALID.into());
                 }
                 if let Some(dungeon) = &request.dungeon {
@@ -1033,12 +1025,13 @@ impl CaptureRuntime {
         scope: HomeScope,
         cursor: Option<String>,
         limit: u16,
-        tiers: Vec<(u16, Option<String>)>,
+        catalog: impl Into<CatalogQueryData>,
     ) -> Result<HistoryReply<ScopeLootPage>, String> {
+        let catalog = catalog.into();
         let runtime = self.clone();
         self.submit_history(
             HistoryCaller::MainWindow,
-            HistoryKey::ScopeLoot(scope.clone(), cursor.clone(), limit, tiers.clone()),
+            HistoryKey::ScopeLoot(scope.clone(), cursor.clone(), limit, catalog.identity()),
             move |job| {
                 runtime.read_account_history(
                     job,
@@ -1047,7 +1040,9 @@ impl CaptureRuntime {
                         next: None,
                         total_bags: 0,
                     },
-                    |reader, account| reader.scope_loot(scope, account, cursor, limit, &tiers),
+                    |reader, account| {
+                        reader.scope_loot_catalog(scope, account, cursor, limit, &catalog)
+                    },
                 )
             },
         )
@@ -1244,12 +1239,13 @@ impl CaptureRuntime {
     pub async fn get_drop_summary(
         self: &Arc<Self>,
         request: DropSummaryRequest,
-        tiers: Vec<(u16, Option<String>)>,
+        catalog: impl Into<CatalogQueryData>,
     ) -> Result<HistoryReply<DropSummary>, String> {
+        let catalog = catalog.into();
         let runtime = self.clone();
         self.submit_history(
             HistoryCaller::MainWindow,
-            HistoryKey::DropSummary(request.clone(), tiers.clone()),
+            HistoryKey::DropSummary(request.clone(), catalog.identity()),
             move |job| {
                 let day_count = request.days.len();
                 let empty = DropTotals {
@@ -1267,7 +1263,7 @@ impl CaptureRuntime {
                         totals: empty.clone(),
                         days: vec![empty; day_count],
                     },
-                    |reader| reader.drop_summary(request, &tiers),
+                    |reader| reader.drop_summary_catalog(request, &catalog),
                 )
             },
         )
@@ -1337,12 +1333,13 @@ impl CaptureRuntime {
     pub async fn get_collection(
         self: &Arc<Self>,
         request: CollectionRequest,
-        tiers: Vec<(u16, Option<String>)>,
+        catalog: impl Into<CatalogQueryData>,
     ) -> Result<HistoryReply<Collection>, String> {
+        let catalog = catalog.into();
         let runtime = self.clone();
         self.submit_history(
             HistoryCaller::MainWindow,
-            HistoryKey::Collection(request.clone(), tiers.clone()),
+            HistoryKey::Collection(request.clone(), catalog.identity()),
             move |job| {
                 let empty_request = request.clone();
                 runtime.read_history(
@@ -1361,7 +1358,7 @@ impl CaptureRuntime {
                         grid_dungeon: empty_request.dungeon,
                         grid: vec![],
                     },
-                    |reader| reader.collection(request, &tiers),
+                    |reader| reader.collection_catalog(request, &catalog),
                 )
             },
         )
