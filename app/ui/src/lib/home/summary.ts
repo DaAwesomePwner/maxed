@@ -41,27 +41,27 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
   let failed = false;
   let initialRead = true;
   let control: 'superseded' | 'busy' | null = null;
-  let automaticRetryUsed = false;
+  let automaticRetryUsed = false, backingOff = false;
   let failureMessage = 'Saved history could not be loaded. Retry to refresh it.';
   let emitted: HomeHistoryState | undefined;
-  const emit = (phase: HomeHistoryState['phase'], message = '', retryAvailable = phase !== 'loading' && phase !== 'superseded') => {
+  const emit = (phase: HomeHistoryState['phase'], message = '', retryAvailable = phase !== 'loading') => {
     if (disposed || (emitted?.phase === phase && emitted.message === message && emitted.summary === summary && emitted.retryAvailable === retryAvailable)) return;
     emitted = { phase, summary, message, retryAvailable };
     receive(emitted);
   };
   const waiting = historyWaiting;
   function pump(retryInitial = false) {
-    if (disposed || !input || !isPresentationVisible()) return;
+    if (disposed || !input || !isPresentationVisible() || backingOff) return;
     if (!input.scope) { emit('unavailable', 'No session captured. Choose Today to view saved observations.'); return; }
     if (input.mode !== 'nexus') { emit('stale', 'Saved history refresh is paused while a live area is visible.'); return; }
     if (failed && attempted === generation) { emit('error', failureMessage); return; }
     if (control && attempted === generation) {
-      emit(control, control === 'superseded' ? 'Refreshing saved history.' : 'Saved history is busy. Retry to refresh it.'); return;
+      emit(control, 'Saved history is busy. Retry to refresh it.'); return;
     }
     const reason = waiting(input);
     // A known, matching store may supply an initial saved preview while its
     // writer lags. It cannot establish readiness for the snapshot checkpoint.
-    const readAhead = reason !== null && (initialRead || retryInitial) && input.initial === true && input.store?.state === 'ready'
+    const readAhead = reason !== null && (initialRead || retryInitial) && input.initial === true && (input.store?.state === 'ready' || (retryInitial && input.store?.state === 'backpressured'))
       && input.store.stream_id === input.streamId && input.store.durable !== null;
     if (reason && !readAhead) { emit('stale', reason); return; }
     if (completed === generation) { emit('ready'); return; }
@@ -78,15 +78,15 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
         if (request !== generation) return;
         const policy = historyControl(result.status, automaticRetryUsed);
         if (policy.retry) {
-          automaticRetryUsed = true; retryBusy = true;
+          automaticRetryUsed = true; retryBusy = true; backingOff = true;
           emit('busy', policy.message, policy.retryAvailable);
         } else {
-          control = result.status;
+          control = 'busy';
           emit(control, policy.message, policy.retryAvailable);
         }
         return;
       }
-      summary = result.value; completed = request;
+      automaticRetryUsed = false; summary = result.value; completed = request;
       const stale = readAhead || request !== generation || waiting(input) !== null;
       emit(stale ? 'stale' : 'ready', stale ? waiting(input) ?? 'Refreshing saved observations.' : '');
     }).catch((error: unknown) => {
@@ -94,8 +94,9 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
       failed = true;
       failureMessage = historyFailure(error);
       emit('error', failureMessage);
-    }).finally(() => {
-      active = false;
+    }).finally(async () => {
+      if (retryBusy) await new Promise(resolve => setTimeout(resolve, 2000));
+      active = false; backingOff = false;
       if (!disposed && (request !== generation || retryBusy)) pump(retryBusy && readAhead && request === generation);
     });
   }
@@ -113,7 +114,7 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
       identity = nextIdentity; key = nextKey; blocked = nextBlocked; input = next;
       pump();
     },
-    retry() { if (!disposed && input && control !== 'superseded') { generation++; namespace++; failed = false; control = null; automaticRetryUsed = false; pump(); } },
+    retry() { if (!disposed && input && !active) { generation++; namespace++; failed = false; control = null; automaticRetryUsed = false; pump(); } },
     dispose() { releaseVisibility(); disposed = true; generation++; input = null; summary = null; emitted = undefined; },
   };
 }

@@ -104,7 +104,7 @@ it('retry_reads_on_fresh_hit', async () => {
 
 it('non_ready_replies_are_not_cached', async () => {
   const h = harness(); h.controller.update(h.input); await flush();
-  h.pending[0].resolve({ status: 'busy' }); await flush();
+  h.pending[0].resolve({ status: 'busy' }); await flush(); await vi.advanceTimersByTimeAsync(1000);
   h.pending[1].resolve({ status: 'busy' }); await flush();
   expect(h.cache.get(h.key)).toBeUndefined();
   h.controller.retry(); await flush(); h.pending[2].reject(new Error('synthetic')); await flush();

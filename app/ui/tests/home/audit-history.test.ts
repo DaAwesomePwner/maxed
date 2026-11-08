@@ -74,7 +74,7 @@ it('Shell establishes the initial snapshot checkpoint before the writer catches 
   expect(client.queryHome).toHaveBeenCalledTimes(2);
 });
 
-it('Superseded during initial read-ahead stays inert until the checkpoint catches up', async () => {
+it('Superseded during initial read-ahead backs off before retrying the checkpoint', async () => {
   const queryHome = vi.fn<Client['queryHome']>().mockResolvedValueOnce({ status: 'superseded' })
     .mockResolvedValue(ready(homeSummary({ runs: 2 })));
   const states: HomeHistoryState[] = [];
@@ -84,11 +84,12 @@ it('Superseded during initial read-ahead stays inert until the checkpoint catche
     streamId: 'live-synthetic-home', required: '12', initial: true, store: saved('11') };
   controller.update(input); await flush();
   expect(queryHome).toHaveBeenCalledOnce();
-  expect(states.at(-1)).toMatchObject({ phase: 'superseded', retryAvailable: false, summary: null });
+  expect(states.at(-1)).toMatchObject({ phase: 'busy', retryAvailable: false, summary: null });
   controller.update(input); controller.retry(); await flush();
+  await vi.advanceTimersByTimeAsync(1999);
   expect(queryHome).toHaveBeenCalledOnce();
-  expect(states.at(-1)).toMatchObject({ phase: 'superseded', retryAvailable: false });
-  controller.update({ ...input, store: saved('12') }); await flush();
+  expect(states.at(-1)).toMatchObject({ phase: 'busy', retryAvailable: false });
+  controller.update({ ...input, store: saved('12') }); await vi.advanceTimersByTimeAsync(1); await flush();
   expect(queryHome).toHaveBeenCalledTimes(2);
   expect(states.at(-1)).toMatchObject({ phase: 'ready', summary: { runs: 2 }, retryAvailable: true });
 });
@@ -102,13 +103,13 @@ it.each(['ready', 'busy'] as const)('initial read-ahead retries Busy once while 
   disposals.push(controller.dispose);
   const input = { mode: 'nexus' as const, scope: { session: { id: 'demo-session' } },
     streamId: 'live-synthetic-home', required: '12', initial: true, store: saved('11') };
-  controller.update(input); await flush();
+  controller.update(input); await flush(); await vi.advanceTimersByTimeAsync(2000);
   expect(queryHome).toHaveBeenCalledTimes(2);
   expect(states.some(state => state.phase === 'busy' && !state.retryAvailable)).toBe(true);
   expect(states.at(-1)).toMatchObject(second === 'busy'
     ? { phase: 'busy', retryAvailable: true, summary: null }
     : { phase: 'stale', summary: { runs: 0 } });
-  controller.update(input); await flush();
+  controller.update(input); await flush(); await vi.advanceTimersByTimeAsync(2000);
   expect(queryHome).toHaveBeenCalledTimes(2);
   controller.update({ ...input, store: saved('12') }); await flush();
   expect(queryHome).toHaveBeenCalledTimes(3);

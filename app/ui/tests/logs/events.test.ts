@@ -194,7 +194,7 @@ it.each([
   render(EventsView, { client, runId: 'run-1', savedState: { ...emptyListState(), logsPosition: { ...defaultLogsPosition(), range: scope === 'reuse' ? null : { start: '0', end: '10' } } } });
   await flush(); await vi.advanceTimersByTimeAsync(0); await flush();
   expect(client.getRun).not.toHaveBeenCalled();
-  await vi.advanceTimersByTimeAsync(150); await flush();
+  await vi.advanceTimersByTimeAsync(failure === 'busy' ? 2150 : 150); await flush();
   const summaries = scope === 'reuse' ? ['all'] : ['range', 'all'];
   const expected = summaries.flatMap(key => failure === 'busy' && (scope === 'reuse' || key === scope) ? [key, key] : [key]);
   expect(order).toEqual([...expected, 'run', 'chat']);

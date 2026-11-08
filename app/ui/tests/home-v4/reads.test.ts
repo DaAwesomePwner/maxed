@@ -603,21 +603,21 @@ it('superseded_reply_does_not_spin_or_discard_previous_value', async () => {
   const h = harness(); h.controller.update(h.input); await settle();
   h.calls.hud.mockResolvedValue({ status: 'superseded' });
   h.controller.onEvent(drop()); await vi.advanceTimersByTimeAsync(500);
-  expect(h.calls.hud).toHaveBeenCalledTimes(3);
-  await vi.advanceTimersByTimeAsync(24); expect(h.calls.hud).toHaveBeenCalledTimes(3);
-  await vi.advanceTimersByTimeAsync(1); expect(h.calls.hud).toHaveBeenCalledTimes(4);
+  expect(h.calls.hud).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1999); expect(h.calls.hud).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1); expect(h.calls.hud).toHaveBeenCalledTimes(3);
   expect(h.last().hud).toEqual(hud); expect(h.last().errors.hud).toBe(false);
   h.controller.dispose(); await vi.advanceTimersByTimeAsync(1000);
-  expect(h.calls.hud).toHaveBeenCalledTimes(4); expect(vi.getTimerCount()).toBe(0);
+  expect(h.calls.hud).toHaveBeenCalledTimes(3); expect(vi.getTimerCount()).toBe(0);
 });
 
 it.each(['hud', 'streak', 'profile', 'usual'] as const)('%s_reissues_superseded_inputs_without_errors', async read => {
   const h = harness();
   h.calls[read].mockResolvedValueOnce({ status: 'superseded' }).mockResolvedValueOnce({ status: 'superseded' });
   h.controller.update(h.input); await settle();
-  expect(h.calls[read]).toHaveBeenCalledTimes(2);
+  expect(h.calls[read]).toHaveBeenCalledTimes(1);
   h.controller.update({ ...h.input, nowMicros: h.input.nowMicros + 1000 });
-  await vi.advanceTimersByTimeAsync(25);
+  await vi.advanceTimersByTimeAsync(4000);
   expect(h.calls[read]).toHaveBeenCalledTimes(3);
   expect(h.calls[read].mock.calls[1]).toEqual(h.calls[read].mock.calls[0]);
   expect(h.calls[read].mock.calls[2]).toEqual(h.calls[read].mock.calls[0]);

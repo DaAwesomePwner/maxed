@@ -149,6 +149,12 @@ Live uses `live.sqlite3` and a fresh stream per capture. Exclusive Windows names
 
 History reads run on one lazily started `history-reader` thread, which keeps a query-only SQLite connection between successful reads of the same database and generation. Every reuse checks the schema version; errors, panics, namespace retirement, shutdown and 60 seconds of idle time close the connection. Idle connections hold no transaction, so writer checkpoints remain unaffected. Lifecycle waits track both active work and idle kept connections: after `invalidate_and_wait` or `shutdown_reads` returns, no reader remains open, including before Windows playback file cleanup and update installation. Application shutdown closes the idle reader before the writer.
 
+Saved-history scheduling retains one active read, at most eight pending page
+queries and the existing eight-entry storage FIFO. Only an identical query key
+(including account revision) coalesces a pending page request; unrelated queries
+retain FIFO order. A full queue returns Busy without displacing another reader.
+The existing 32-attempts-per-second admission limit remains in force.
+
 Receipt maintenance uses the same storage owner as capture. Accepted events,
 retry, flush, shutdown and retained unsaved work take priority. Default units admit
 at most 1,000 receipts and 1 MiB serialized input with a cooperative 10 ms target;

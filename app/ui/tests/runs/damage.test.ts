@@ -263,7 +263,7 @@ it.each(['superseded', 'busy'] as const)('player_context_unwraps_control_before_
   const page = mountRuns({ hash: '#/fights/fight-1/players/7', queries: { getFight: async () => ({ status }) } }); await flush();
   await advance(2000);
   expect(page.queries.getPlayerBreakdown).not.toHaveBeenCalled();
-  expect(page.queries.getFight).toHaveBeenCalledTimes(status === 'busy' ? 2 : 1);
+  expect(page.queries.getFight).toHaveBeenCalledTimes(2);
   page.queries.getFight.mockResolvedValue(ready(fight({ run_id: null })));
   if (status === 'busy') await click(/Retry/i);
   else { page.event({ fight_updated: fight({ run_id: null }) }, '13'); page.setStore(saved('13')); await advance(); }

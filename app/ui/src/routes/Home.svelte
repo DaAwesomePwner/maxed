@@ -147,7 +147,7 @@
   let recapOwner: Client | undefined;
   let recapRevision = -1;
   $effect(() => {
-    const owner = v4Client, revision = accountRevision;
+    const owner = v4Client ? homeReads?.client : undefined, revision = accountRevision;
     untrack(() => {
       if (owner === recapOwner && revision === recapRevision) return;
       recapRevision = revision;
@@ -162,7 +162,7 @@
   });
   onDestroy(() => recapReads?.dispose());
   $effect(() => {
-    const owner = v4Client, revision = accountRevision;
+    const owner = v4Client ? homeReads?.client : undefined, revision = accountRevision;
     untrack(() => {
       if (owner === v4Owner && revision === v4Revision) return;
       v4Revision = revision;

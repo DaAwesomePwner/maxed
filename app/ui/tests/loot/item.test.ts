@@ -136,7 +136,7 @@ it('waits for item rows before releasing rows-ready', async () => {
   expect(page.onRowsReady).toHaveBeenCalledExactlyOnceWith('item-entry');
 });
 it('renders busy retry and errors without reporting a zero state', async () => {
-  const busy = mount({ busy: true }); await flush();
+  const busy = mount({ busy: true }); await flush(); await vi.advanceTimersByTimeAsync(1000); await flush();
   expect(screen.getByRole('heading', { name: 'Loot history busy' })).toBeTruthy();
   const retry = within(screen.getByRole('alert')).getByRole('button', { name: 'Retry' });
   expect(screen.getByRole('alert').textContent).toContain("Couldn't load bags.");
@@ -229,7 +229,7 @@ it.each(['error', 'busy'] as const)('hides a retained zero summary when a refres
   if (phase === 'error') read.mockRejectedValue(new Error('synthetic refresh failure'));
   else read.mockResolvedValue({ status: 'busy' });
   await page.rerender({ required: '2', store: { state: 'ready', durable: '2', stream_id: 'synthetic-stream', queued: 0, message: '' } }); await flush();
-  await vi.advanceTimersByTimeAsync(1000); await flush();
+  await vi.advanceTimersByTimeAsync(2000); await flush();
   expect(screen.getByRole('heading', { name: phase === 'error' ? 'Loot Error' : 'Loot history busy' })).toBeTruthy();
   expect(screen.queryByText(/^Seen 0/)).toBeNull();
   expect(screen.queryByText('Not seen yet')).toBeNull();

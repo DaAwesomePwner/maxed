@@ -70,7 +70,7 @@
     let days: string[] = [], requestedFilterKey = '';
     const instance = createRunHistory(owner, next => {
       summaryRetryAvailable = next.retryAvailable && (next.phase === 'error' || next.phase === 'busy');
-      if (next.phase === 'error' || next.phase === 'superseded' || (next.phase === 'busy' && next.retryAvailable)) { summary = null; summaryDays = []; }
+      if (next.phase === 'error' || (next.phase === 'busy' && next.retryAvailable && loadedSummaryFilterKey !== requestedFilterKey)) { summary = null; summaryDays = []; }
       if (next.phase === 'ready' && next.value?.kind === 'drop-summary') { summary = next.value.summary; summaryDays = days; loadedSummaryFilterKey = requestedFilterKey; }
     }, { cache: connection?.historyCache });
     summaryController = { ...instance, update(input) { if (input.query.kind === 'drop-summary') { days = input.query.request.days.map(day => day.start); requestedFilterKey = filterKey(input.query.request.filter); } instance.update(input); } };

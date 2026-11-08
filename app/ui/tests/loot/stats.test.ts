@@ -158,7 +158,7 @@ it('waits for stats before releasing rows-ready once', async () => {
   expect(page.onRowsReady).toHaveBeenCalledExactlyOnceWith('stats-entry');
 });
 it('keeps a busy read distinct from empty data and offers Retry', async () => {
-  const page = mount({ busy: true }); await flush();
+  const page = mount({ busy: true }); await flush(); await vi.advanceTimersByTimeAsync(1000); await flush();
   expect(screen.getByRole('heading', { name: 'Loot history busy' })).toBeTruthy();
   expect(screen.queryByText('No bags yet')).toBeNull();
   expect(screen.getByRole('button', { name: 'Retry' }).hasAttribute('disabled')).toBe(false);
@@ -205,7 +205,7 @@ it.each(['error', 'busy'] as const)('does not show a retained empty state after 
   expect(screen.getByRole('heading', { name: 'No bags yet' })).toBeTruthy();
   if (phase === 'error') page.read.mockRejectedValue(new Error('synthetic refresh failure'));
   else page.read.mockResolvedValue({ status: 'busy' });
-  await fireEvent.click(screen.getByRole('button', { name: 'Today' })); await flush();
+  await fireEvent.click(screen.getByRole('button', { name: 'Today' })); await flush(); await vi.advanceTimersByTimeAsync(1000); await flush();
   expect(screen.getByRole('heading', { name: phase === 'error' ? "Couldn't load bags." : 'Loot history busy' })).toBeTruthy();
   expect(screen.queryByRole('heading', { name: /^No bags/ })).toBeNull();
 });

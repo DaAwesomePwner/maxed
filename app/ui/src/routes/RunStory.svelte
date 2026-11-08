@@ -85,21 +85,32 @@
   const fightHref = (id: string) => routeHref({ kind: 'fight', id, runId });
 
   $effect(() => {
-    const owner = client;
+    const owner = client; scopeKey; streamId;
     if (!owner || !enabled) { controller = undefined; return; }
-    let current = true;
+    let current = true, revision = 0, bestsKey = '';
+    bests = null;
     // One sequential request owns the history scheduler; PB failure must not hide a saved run.
     // No cache: this wrapper also fills component-local personal bests.
     const instance = createRunHistory({ ...owner, getRun: async id => {
       const reply = await owner.getRun(id);
-      if (reply.status === 'ready' && reply.value) {
-        try { const best = await owner.queryDungeonBests(); if (current) bests = best.status === 'ready' ? best.value : null; }
-        catch { if (current) bests = null; }
+      if (reply.status === 'ready' && reply.value && bestsKey !== id) {
+        const attempt = revision;
+        try {
+          const best = await owner.queryDungeonBests();
+          if (current && attempt === revision && best.status === 'ready') { bests = best.value; bestsKey = id; }
+        }
+        catch { /* Keep the last saved PBs while history is unavailable. */ }
       }
       return current ? reply : { status: 'superseded' };
     } }, next => { history = next; });
     controller = instance;
-    return () => { current = false; instance.dispose(); };
+    let release: (() => void) | undefined;
+    void owner.onAccountHistoryChanged(notice => {
+      revision++; bestsKey = '';
+      if (notice.reason === 'account_switched') bests = null;
+      instance.retry(true);
+    }).then(stop => { if (current) release = stop; else stop(); }).catch(() => {});
+    return () => { current = false; release?.(); instance.dispose(); };
   });
   $effect(() => {
     const instance = controller, input = { query: { kind: 'run' as const, id: runId }, scopeKey, streamId, required, store };

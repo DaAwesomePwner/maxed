@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { createNexusHistory, type NexusHistory } from '../../src/lib/home/v3/nexus-history';
 import type { HomeHistoryInput } from '../../src/lib/home/summary';
 import { deferred, flush, homeSummary, saved } from '../home/fixtures';
@@ -6,10 +6,13 @@ import type { HistoryReply } from '../../src/lib/bindings/HistoryReply';
 import type { ScopeLootPage } from '../../src/lib/bindings/ScopeLootPage';
 import { historyWaiting } from '../../src/lib/runs/policy';
 
+afterEach(() => { vi.useRealTimers(); });
+
 const input: HomeHistoryInput = { mode: 'nexus', scope: { session: { id: 's' } }, streamId: 'live-synthetic-home', required: '12', store: saved() };
 const page = (id: number, next: string | null = null): ScopeLootPage => ({ items: [{ item_type: id, tier: null, count: 5000, best_enchant: null, last_at: '100' }], next, total_bags: 5000 });
 
 it.each(['in flight', 'queued behind loot'] as const)('keeps a summary %s valid when the blocked reason changes', async position => {
+  vi.useFakeTimers();
   const summaryGate = deferred<HistoryReply<ReturnType<typeof homeSummary>>>();
   const lootGate = deferred<HistoryReply<ScopeLootPage>>();
   const refreshed = homeSummary({ runs: 42 });
@@ -43,6 +46,7 @@ it.each(['in flight', 'queued behind loot'] as const)('keeps a summary %s valid 
   } else {
     // Native replacement must still retry the current read-ahead request.
     summaryGate.resolve({ status: 'superseded' });
+    await flush(); await vi.advanceTimersByTimeAsync(2000);
   }
   await flush(); await flush();
   expect(queryHome).toHaveBeenCalledTimes(2);
@@ -82,12 +86,14 @@ it('keeps summary ready during loot loading and pages without re-querying summar
   history.dispose();
 });
 it.each(['busy', 'error'] as const)('keeps a ready summary when loot is %s', async status => {
+  vi.useFakeTimers();
   const queryScopeLoot = status === 'error' ? vi.fn().mockRejectedValue(new Error('failed loot'))
     : vi.fn().mockResolvedValue({ status });
   const client = { queryHome: vi.fn().mockResolvedValue({ status: 'ready', value: homeSummary() }), queryScopeLoot, queryScopeLootPage: vi.fn() };
   const states: NexusHistory[] = [];
   const history = createNexusHistory(client, state => states.push(state));
   history.update(input); await flush(); await flush(); await flush();
+  if (status === 'busy') await vi.advanceTimersByTimeAsync(2000);
   expect(states.at(-1)?.summary.phase).toBe('ready');
   expect(states.at(-1)?.summary.summary).not.toBeNull();
   expect(states.at(-1)?.loot.phase).toBe(status);
@@ -120,6 +126,7 @@ it('discards retired scopes and serializes queued reads without publishing after
 });
 
 it('reissues superseded summary and loot reads serially without an input change', async () => {
+  vi.useFakeTimers();
   const summaryGate = deferred<HistoryReply<ReturnType<typeof homeSummary>>>();
   const lootGate = deferred<HistoryReply<ScopeLootPage>>();
   const client = {
@@ -129,14 +136,14 @@ it('reissues superseded summary and loot reads serially without an input change'
   };
   const states: NexusHistory[] = [];
   const history = createNexusHistory(client, state => states.push(state));
-  history.update(input); await flush(); await flush();
+  history.update(input); await flush(); await flush(); await vi.advanceTimersByTimeAsync(2000);
   expect(client.queryHome).toHaveBeenCalledTimes(2);
   expect(client.queryScopeLoot).not.toHaveBeenCalled();
-  summaryGate.resolve({ status: 'ready', value: homeSummary() }); await flush(); await flush();
+  summaryGate.resolve({ status: 'ready', value: homeSummary() }); await flush(); await flush(); await vi.advanceTimersByTimeAsync(2000);
   expect(client.queryScopeLoot).toHaveBeenCalledTimes(2);
   expect(states.at(-1)?.summary.phase).toBe('ready');
   lootGate.resolve({ status: 'ready', value: page(1, 'next') }); await flush();
-  history.next(); await flush(); await flush();
+  history.next(); await flush(); await flush(); await vi.advanceTimersByTimeAsync(2000);
   expect(client.queryScopeLootPage).toHaveBeenCalledTimes(2);
   expect(states.at(-1)?.loot.value?.items[0].item_type).toBe(2);
   expect(states.at(-1)?.page).toBe(2);

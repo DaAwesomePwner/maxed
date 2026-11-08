@@ -1,9 +1,11 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import type { DungeonBest } from '../../src/lib/bindings/DungeonBest';
 import type { HistoryReply } from '../../src/lib/bindings/HistoryReply';
 import type { StoreStatus } from '../../src/lib/bindings/StoreStatus';
 import { createDungeonBests, createHomeReads, pbBaseline } from '../../src/lib/home/v3/dungeon-bests';
 import { homeSnapshot } from '../home/fixtures';
+
+afterEach(() => { vi.useRealTimers(); });
 
 const storeAt = (durable: string, stream_id = homeSnapshot().stream_id, state: StoreStatus['state'] = 'ready'): StoreStatus =>
   ({ state, queued: 0, durable, stream_id, message: '' });
@@ -88,15 +90,20 @@ it.each(['busy', 'error'])('keeps the last baseline after %s without polling', a
 });
 
 it('reissues superseded PB reads without waiting for a new snapshot', async () => {
+  vi.useFakeTimers();
   const saved = [{ dungeon: 'all time', best_clear_micros: 1000000 }];
   const queryDungeonBests = vi.fn().mockResolvedValueOnce({ status: 'superseded' })
     .mockResolvedValueOnce({ status: 'superseded' }).mockResolvedValue({ status: 'ready', value: saved });
   const publish = vi.fn(), controller = createDungeonBests({ queryDungeonBests }, publish);
-  await vi.waitFor(() => expect(publish).toHaveBeenCalledWith(saved));
+  await vi.advanceTimersByTimeAsync(3999);
+  expect(queryDungeonBests).toHaveBeenCalledTimes(2);
+  expect(publish).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(publish).toHaveBeenCalledWith(saved);
   expect(queryDungeonBests).toHaveBeenCalledTimes(3);
   controller.dispose();
 });
-it('serializes summary, scope loot and PB reads and reissues a superseded read in place', async () => {
+it('serializes summary, scope loot and PB reads and returns supersession to the retrying owner', async () => {
   const calls: string[] = [];
   let release!: (reply: HistoryReply<never[]>) => void;
   const queryHome = vi.fn(() => { calls.push('summary'); return new Promise<HistoryReply<never[]>>(done => release = done); });
@@ -110,7 +117,8 @@ it('serializes summary, scope loot and PB reads and reissues a superseded read i
   await vi.waitFor(() => expect(calls).toEqual(['summary']));
   release({ status: 'ready', value: [] });
   await Promise.all([summary, loot, bests]);
-  expect(calls).toEqual(['summary', 'loot', 'loot', 'bests']);
+  expect(calls).toEqual(['summary', 'loot', 'bests']);
+  expect(await loot).toEqual({ status: 'superseded' });
   reads.dispose();
 });
 

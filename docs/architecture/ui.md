@@ -378,3 +378,13 @@ Confirmed account switches clear the rail's retained character; map-change
 loss/provisional identities retain the existing recovery policy.
 `HomeSummary.unattributed_history` shows one short Home notice, dismissible for
 the shell session. False or absent values show nothing.
+
+Saved-history page controllers retry Busy or Superseded once after at least one
+second, then expose manual retry while retaining saved values. A successful read
+renews the automatic retry allowance. Home uses one serial queue across summary, loot, PB, v4 cards and recap commands. Its summary
+and loot readers retry once after two seconds; supplemental readers allow two
+two-second supersession retries (and one Busy retry for v4/recap). Exhaustion
+remains explicit through the owning card's error/retry state; PB baselines retain
+their last value. Recap SQL and its save timeout pause while hidden. Party's
+saved-run view continues its throttled durability checks until the store catches
+up. A failed store or changed stream stops polling and offers manual retry.
