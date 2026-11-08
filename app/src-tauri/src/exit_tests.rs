@@ -3,6 +3,7 @@ use std::cell::{Cell, RefCell};
 #[derive(Default)]
 struct Fake {
     installing: bool,
+    delivery_failed: Cell<bool>,
     update_error: bool,
     unsaved: Cell<bool>,
     shutdown_error: bool,
@@ -27,6 +28,9 @@ impl ExitHost for Fake {
     fn resume(&self) {
         self.calls.borrow_mut().push("resume");
     }
+    fn delivery_failed(&self) -> bool {
+        self.delivery_failed.get()
+    }
     fn unsaved(&self) -> bool {
         self.unsaved.get()
     }
@@ -42,8 +46,12 @@ impl ExitHost for Fake {
         self.calls.borrow_mut().push("discard");
         self.unsaved.set(false);
     }
-    fn warn(&self) {
-        self.calls.borrow_mut().push("warn");
+    fn warn(&self, native_fallback: bool) {
+        self.calls.borrow_mut().push(if native_fallback {
+            "native-warn"
+        } else {
+            "warn"
+        });
     }
     fn exit(&self, code: i32) {
         self.code.set(Some(code));
@@ -114,4 +122,39 @@ fn discard_requires_prior_warning() {
     assert!(run(&control, &host, true).is_err());
     assert!(host.unsaved.get());
     assert!(!host.calls.borrow().contains(&"discard"));
+}
+
+#[test]
+fn dead_presentation_requires_native_warning_then_second_close() {
+    let control = ExitControl::default();
+    let host = Fake {
+        unsaved: Cell::new(true),
+        shutdown_error: true,
+        ..Default::default()
+    };
+    // A prior UI-only warning does not authorize a later native discard.
+    assert!(run(&control, &host, false).is_err());
+    host.delivery_failed.set(true);
+    assert!(run(&control, &host, false).is_err());
+    assert!(host.unsaved.get());
+    assert_eq!(host.calls.borrow().last(), Some(&"native-warn"));
+    run(&control, &host, false).unwrap();
+    assert!(!host.unsaved.get());
+    assert!(control.exiting.load(Ordering::Acquire));
+    assert_eq!(host.code.get(), Some(0));
+}
+#[test]
+fn recovered_presentation_does_not_discard_on_second_close() {
+    let control = ExitControl::default();
+    let host = Fake {
+        unsaved: Cell::new(true),
+        shutdown_error: true,
+        delivery_failed: Cell::new(true),
+        ..Default::default()
+    };
+    assert!(run(&control, &host, false).is_err());
+    host.delivery_failed.set(false);
+    assert!(run(&control, &host, false).is_err());
+    assert!(host.unsaved.get());
+    assert!(!control.native_warned.load(Ordering::Acquire));
 }

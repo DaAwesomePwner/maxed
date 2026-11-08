@@ -30,9 +30,40 @@ it('unsaved close stays open until the user explicitly confirms discard', async 
   render(Shell, { client, historyAdapter: fakeHistory('#/').adapter });
   await waitFor(() => expect(client.onUnsavedClose).toHaveBeenCalledOnce());
   warn();
+  const dialog = await screen.findByRole('alertdialog', { name: 'Unsaved changes' });
+  await waitFor(() => expect(document.activeElement).toBe(dialog));
   await fireEvent.click(await screen.findByRole('button', { name: 'Keep Maxed open' }));
   expect(client.exitWithoutSaving).not.toHaveBeenCalled();
   warn();
   await fireEvent.click(await screen.findByRole('button', { name: 'Exit without saving' }));
   expect(client.exitWithoutSaving).toHaveBeenCalledOnce();
+});
+
+it('offers retry saving when capture refuses pending summaries before status catches up', async () => {
+  const { client } = setupFixture();
+  let pending = true;
+  client.startCapture = vi.fn(async () => {
+    if (pending) throw new Error('Pending summaries are not saved; retry storage before starting capture');
+  });
+  client.retryStore = vi.fn(async () => { pending = false; });
+  render(Shell, { client, historyAdapter: fakeHistory('#/').adapter });
+  const start = await screen.findByRole('button', { name: 'Start Capture' });
+  await waitFor(() => expect(start.getAttribute('aria-disabled')).not.toBe('true'));
+  expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull();
+  await fireEvent.click(start);
+  await fireEvent.click(await screen.findByRole('button', { name: 'Retry saving' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull());
+  await fireEvent.click(start);
+  expect(client.startCapture).toHaveBeenCalledTimes(2);
+  expect(client.retryStore).toHaveBeenCalledOnce();
+  expect(pending).toBe(false);
+});
+
+it('does not offer saving retry for storage that failed to open without pending summaries', async () => {
+  const { client } = setupFixture();
+  const ready = await client.queryStore();
+  client.queryStore = vi.fn(async () => ({ ...ready, state: 'failed' as const, queued: 0 }));
+  render(Shell, { client, historyAdapter: fakeHistory('#/').adapter });
+  await screen.findByText('Storage could not open. Retry Capture to try again.');
+  expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull();
 });

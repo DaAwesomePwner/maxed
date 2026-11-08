@@ -167,19 +167,20 @@ fn presentation_failure_allows_capture_update_and_reconnect() {
     let runtime = CaptureRuntime::default();
     let failing = Arc::new(AtomicBool::new(true));
     let emit_failure = failing.clone();
-    let shared = runtime.shared.clone();
-    let publisher = Publisher::new(
-        move |_| {
-            if emit_failure.load(Ordering::Acquire) {
-                Err(())
-            } else {
-                Ok(())
-            }
-        },
-        Arc::new(move || shared.bridge_failed.store(true, Ordering::Release)),
-    )
-    .unwrap();
-    *runtime.publisher.lock().unwrap() = Some(publisher.clone());
+    let publisher = runtime
+        .publisher_with(|failed| {
+            Publisher::new(
+                move |_| {
+                    if emit_failure.load(Ordering::Acquire) {
+                        Err(())
+                    } else {
+                        Ok(())
+                    }
+                },
+                failed,
+            )
+        })
+        .unwrap();
     publisher.publish(Publication::Capture(CaptureStatus::default()));
     assert!(publisher.flush().is_err());
     assert!(!runtime.shared.failed.load(Ordering::Acquire));
@@ -191,4 +192,15 @@ fn presentation_failure_allows_capture_update_and_reconnect() {
     assert!(!runtime.shared.bridge_failed.load(Ordering::Acquire));
     publisher.flush().unwrap();
     assert_ne!(runtime.status().state, CaptureState::Failed);
+}
+
+#[test]
+fn retry_without_pending_storage_keeps_capture_running() {
+    let runtime = CaptureRuntime::default();
+    let (_send, closes) = start_fake(&runtime, Arc::new(|_| {}));
+    wait_until(|| runtime.status().state == CaptureState::WaitingForGame);
+    runtime.retry_store().unwrap();
+    assert!(runtime.is_running());
+    assert_eq!(closes.load(Ordering::Acquire), 0);
+    runtime.stop().unwrap();
 }

@@ -6,6 +6,7 @@ pub(crate) struct ExitControl {
     pub exiting: AtomicBool,
     pub finished: AtomicBool,
     pub warned: AtomicBool,
+    pub native_warned: AtomicBool,
     pub startup_failed: AtomicBool,
 }
 impl ExitControl {
@@ -20,9 +21,10 @@ pub(crate) trait ExitHost {
     fn prepare(&self);
     fn resume(&self);
     fn unsaved(&self) -> bool;
+    fn delivery_failed(&self) -> bool;
     fn shutdown(&self) -> Result<(), String>;
     fn discard(&self);
-    fn warn(&self);
+    fn warn(&self, native_fallback: bool);
     fn exit(&self, code: i32);
 }
 
@@ -47,7 +49,11 @@ fn attempt(control: &ExitControl, host: &impl ExitHost, discard: bool) -> Result
     }
     host.stop_updates()?;
     host.prepare();
-    let code = if discard && control.warned.load(Ordering::Acquire) && host.unsaved() {
+    let native_discard = host.delivery_failed() && control.native_warned.load(Ordering::Acquire);
+    let code = if (discard || native_discard)
+        && control.warned.load(Ordering::Acquire)
+        && host.unsaved()
+    {
         host.discard();
         control.exit_code()
     } else if host.shutdown().is_ok() {
@@ -57,7 +63,11 @@ fn attempt(control: &ExitControl, host: &impl ExitHost, discard: bool) -> Result
     } else {
         host.resume();
         control.warned.store(true, Ordering::Release);
-        host.warn();
+        let native_fallback = host.delivery_failed();
+        control
+            .native_warned
+            .store(native_fallback, Ordering::Release);
+        host.warn(native_fallback);
         return Err("Changes are not saved; retry storage or exit without saving".into());
     };
     control.finished.store(true, Ordering::Release);
