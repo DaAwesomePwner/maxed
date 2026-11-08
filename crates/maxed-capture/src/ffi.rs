@@ -35,6 +35,18 @@ pub struct PcapIf {
     pub addresses: *mut c_void,
     pub flags: u32,
 }
+// Windows pcap_stat includes the WinPcap remote-capture extension fields.
+#[repr(C)]
+#[derive(Default)]
+struct PcapStat {
+    ps_recv: u32,
+    ps_drop: u32,
+    ps_ifdrop: u32,
+    ps_capt: u32,
+    ps_sent: u32,
+    ps_netdrop: u32,
+}
+type Stats = unsafe extern "C" fn(*mut c_void, *mut PcapStat) -> c_int;
 type FindAll = unsafe extern "C" fn(*mut *mut PcapIf, *mut c_char) -> c_int;
 type FreeAll = unsafe extern "C" fn(*mut PcapIf);
 type OpenLive =
@@ -50,7 +62,7 @@ type Datalink = unsafe extern "C" fn(*mut c_void) -> c_int;
 type SetNonblock = unsafe extern "C" fn(*mut c_void, c_int, *mut c_char) -> c_int;
 
 #[cfg(any(windows, test))]
-const SYMBOLS: [&[u8]; 11] = [
+const SYMBOLS: [&[u8]; 12] = [
     b"pcap_findalldevs\0",
     b"pcap_freealldevs\0",
     b"pcap_open_live\0",
@@ -58,6 +70,7 @@ const SYMBOLS: [&[u8]; 11] = [
     b"pcap_setfilter\0",
     b"pcap_freecode\0",
     b"pcap_next_ex\0",
+    b"pcap_stats\0",
     b"pcap_close\0",
     b"pcap_geterr\0",
     b"pcap_datalink\0",
@@ -102,6 +115,7 @@ pub(crate) struct Api {
     set_filter: SetFilter,
     free_code: FreeCode,
     next_ex: NextEx,
+    stats: Stats,
     close: Close,
     get_err: GetErr,
     datalink: Datalink,
@@ -150,6 +164,7 @@ impl Api {
                 set_filter: symbol!("pcap_setfilter", SetFilter),
                 free_code: symbol!("pcap_freecode", FreeCode),
                 next_ex: symbol!("pcap_next_ex", NextEx),
+                stats: symbol!("pcap_stats", Stats),
                 close: symbol!("pcap_close", Close),
                 get_err: symbol!("pcap_geterr", GetErr),
                 datalink: symbol!("pcap_datalink", Datalink),
@@ -317,6 +332,17 @@ impl Drop for NativeDevice {
     }
 }
 impl Device for NativeDevice {
+    fn dropped_packets(&mut self) -> Result<Option<u32>, CaptureError> {
+        let mut stats = PcapStat::default();
+        // SAFETY: Live handle belongs to this thread/API; output has the Windows pcap_stat layout.
+        if unsafe { (self.api.stats)(self.handle, &mut stats) } != 0 {
+            return Err(CaptureError::OpenFailed);
+        }
+        // ps_ifdrop is not consistently available and may cover unfiltered interface traffic.
+        // Count the per-handle kernel-buffer loss (ps_drop), not interface-wide estimates.
+        Ok(Some(stats.ps_drop))
+    }
+
     fn poll(&mut self) -> Result<Option<RawFrame>, CaptureError> {
         let mut header = std::ptr::null();
         let mut bytes = std::ptr::null();
@@ -369,6 +395,9 @@ mod tests {
     use super::*;
     #[test]
     fn windows_pcap_layout() {
+        assert_eq!(std::mem::size_of::<PcapStat>(), 24);
+        assert_eq!(std::mem::offset_of!(PcapStat, ps_drop), 4);
+        assert_eq!(std::mem::offset_of!(PcapStat, ps_netdrop), 20);
         assert_eq!(std::mem::size_of::<Timeval>(), 8);
         assert_eq!(std::mem::size_of::<PcapHeader>(), 16);
         assert_eq!(std::mem::offset_of!(PcapHeader, caplen), 8);
