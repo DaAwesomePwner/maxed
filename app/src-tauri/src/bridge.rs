@@ -415,8 +415,9 @@ impl Publisher {
                         // Still actionable when IPC itself is unavailable. These
                         // UI calls stay on this worker, including failure paths.
                         if let Some(window) = app.get_webview_window("main") {
-                            let _ =
-                                window.set_title("Maxed - Live updates interrupted; restart Maxed");
+                            let _ = window.set_title(
+                                "Maxed - Live updates interrupted; reconnect or restart Maxed",
+                            );
                         }
                     }
                 }

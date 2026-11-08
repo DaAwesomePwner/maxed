@@ -312,10 +312,22 @@ fn subscribe_live_payload(
 ) -> Result<u32, String> {
     if event == "party-changed" {
         // Preset picks and annotations can change before capture ever starts.
-        runtime.publisher(app)?;
+        runtime.publisher(app.clone())?;
     }
     let id = payloads.subscribe(webview.label(), event, channel)?;
-    runtime.reconnect_presentation()?;
+    if let Err(error) = runtime.reconnect_presentation() {
+        let _ = payloads.unsubscribe(webview.label(), id);
+        return Err(error);
+    }
+    if !app
+        .state::<Arc<ExitControl>>()
+        .warned
+        .load(Ordering::Acquire)
+    {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_title("Maxed");
+        }
+    }
     Ok(id)
 }
 
