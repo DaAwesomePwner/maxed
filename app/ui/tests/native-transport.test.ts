@@ -12,6 +12,7 @@ import { flushHomeRender } from './home/shell-fixture';
 const mocks = vi.hoisted(() => ({ listen: vi.fn(), invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke, Channel: class { onmessage = (_value: ArrayBuffer) => {}; } }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: mocks.listen }));
+import { readFileSync } from 'node:fs';
 import { nativeTransport } from '../src/lib/bridge/native';
 
 test.each(['live-snapshot', 'party-changed'] as const)('native %s subscriptions decode byte channels and release native ownership', async event => {
@@ -33,13 +34,13 @@ test.each(['live-snapshot', 'party-changed'] as const)('native %s subscriptions 
   expect(receive).toHaveBeenCalledTimes(1);
 });
 
-test('account-history-changed listens directly without a live-payload channel subscription', async () => {
+test.each(['account-history-changed', 'storage-maintenance-changed', 'capture-status', 'presentation-visible'] as const)('%s listens directly without a live-payload channel subscription', async event => {
   mocks.invoke.mockReset();
   let callback!: (message: { payload: unknown }) => void;
   const release = vi.fn();
   mocks.listen.mockImplementationOnce((_event, receive) => { callback = receive; return Promise.resolve(release); });
   const receive = vi.fn();
-  const stop = await nativeTransport.listen('account-history-changed', receive);
+  const stop = await nativeTransport.listen(event, receive);
   expect(mocks.invoke).not.toHaveBeenCalledWith('subscribe_live_payload', expect.anything());
   const payload = { revision: 2, reason: 'account_switched' };
   callback({ payload });
@@ -127,4 +128,17 @@ test('forwards the typed Character command and preserves native rejection withou
   await expect(nativeTransport.invoke('get_character_calculation', { request })).rejects.toBe(failure);
   expect(mocks.invoke).toHaveBeenCalledExactlyOnceWith('get_character_calculation', { request });
   expect(mocks.listen).not.toHaveBeenCalled();
+});
+
+test('channel subscriptions match the native subscribe allowlist', async () => {
+  const nativeChannels = readFileSync('../src-tauri/src/bridge/channels.rs', 'utf8');
+  const match = nativeChannels.match(/if !matches!\(\s*event\.as_str\(\),([\s\S]*?)\)\s*\{/);
+  expect(match).not.toBeNull();
+  const nativeEvents = [...match![1].matchAll(/"([^"]+)"/g)].map(value => value[1]).sort();
+  expect(nativeEvents.length).toBeGreaterThan(0);
+  const source = await import('../src/lib/bridge/native.ts?raw');
+  const tsMatch = source.default.match(/const LIVE_PAYLOAD_EVENTS[^=]*= new Set[^\(]*\(\[([\s\S]*?)\]\)/);
+  expect(tsMatch).not.toBeNull();
+  const tsEvents = [...tsMatch![1].matchAll(/'([^']+)'/g)].map(value => value[1]).sort();
+  expect(tsEvents).toEqual(nativeEvents);
 });

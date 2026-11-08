@@ -54,6 +54,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
   let disposed = false, registered = false, transitioning = false;
   let visible = isPresentationVisible();
   let visibilityRequest = 0;
+  let transitionEpoch = 0;
   let generation = 0, registration = 0, captureRevision = 0;
   let releases: (() => void)[] = [];
   let stream: string | undefined;
@@ -475,11 +476,13 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     if (disposed) return;
     invalidate(); // Invalidate old completions before awaiting native lifecycle I/O.
     transitioning = true;
-    const token = generation;
+    // Visibility invalidates queries, but cannot cancel lifecycle ownership.
+    const token = ++transitionEpoch;
     try {
       await action();
-      if (disposed || token !== generation) return;
+      if (disposed || token !== transitionEpoch) return;
       transitioning = false;
+      if (phase === 'failed') return;
       if (!registered) {
         releaseListeners();
         await register();
@@ -487,9 +490,9 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
         requestSync();
       }
     } catch {
-      if (!disposed && token === generation) {
+      if (!disposed && token === transitionEpoch) {
         transitioning = false;
-        fail('Capture failed. Reconnect.');
+        if (phase !== 'failed') fail('Capture failed. Reconnect.');
       }
     }
   }
@@ -521,6 +524,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     dispose() {
       if (disposed) return;
       disposed = true;
+      transitionEpoch++;
       releaseVisibility();
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', syncDocumentVisibility);
       generation++;
@@ -531,6 +535,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     },
     reconnect() {
       if (disposed) return;
+      transitionEpoch++;
       invalidate();
       transitioning = false;
       releaseListeners();

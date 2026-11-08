@@ -428,3 +428,38 @@ test('throwing side-effect observers do not cut off a batch or later observers a
     expect(log).toHaveBeenCalledExactlyOnceWith('[maxed:shell] Live event observer failed', expect.any(Error));
   } finally { log.mockRestore(); setDebugMode(false); }
 });
+
+test.each(['resolve', 'reject'] as const)('a superseded transition cannot settle the current owner on %s', async completion => {
+  const old = deferred<void>(), current = deferred<void>();
+  const query = vi.fn(async () => snapshot());
+  const h = setup({ querySnapshot: query }); await settle();
+  const first = h.control.transition(() => old.promise);
+  const second = h.control.transition(() => current.promise);
+  if (completion === 'resolve') old.resolve(); else old.reject(new Error('private'));
+  await first; await settle();
+  expect(query).toHaveBeenCalledOnce();
+  expect(h.states.at(-1)?.phase).toBe('connecting');
+  current.resolve(); await second; await settle();
+  expect(query).toHaveBeenCalledTimes(2);
+  expect(h.states.at(-1)?.phase).toBe('live');
+});
+
+test.each(['reconnect', 'dispose'] as const)('a late transition rejection cannot override %s', async action => {
+  const pending = deferred<void>();
+  const h = setup(); await settle();
+  const transition = h.control.transition(() => pending.promise);
+  h.control[action](); await settle();
+  const count = h.states.length;
+  pending.reject(new Error('private')); await transition; await settle();
+  expect(h.states).toHaveLength(count);
+});
+
+test.each(['resolve', 'reject'] as const)('a transition settling with %s preserves native delivery failure', async completion => {
+  const pending = deferred<void>();
+  const h = setup(); await settle();
+  const transition = h.control.transition(() => pending.promise);
+  h.transport.publishCapture({ ...fixture.capture, state: 'Failed', message: 'Live updates interrupted; reconnect or restart Maxed' });
+  if (completion === 'resolve') pending.resolve(); else pending.reject(new Error('private'));
+  await transition; await settle();
+  expect(h.states.at(-1)).toMatchObject({ phase: 'failed', message: 'Restart Maxed.' });
+});
