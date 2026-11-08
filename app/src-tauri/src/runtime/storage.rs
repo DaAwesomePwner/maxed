@@ -176,11 +176,15 @@ fn identity_key(root: &Path) -> Result<[u8; 32], String> {
     let _lease = exclusive(&root.join("identity.lock"))?;
     let path = root.join("identity.key");
     let mut key = [0; 32];
-    if path.exists() {
-        let mut file = File::open(&path).map_err(|_| "Could not read local identity key")?;
+    let existing = match File::open(&path) {
+        Ok(file) => Some(file),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(_) => return Err("Could not read local identity key".into()),
+    };
+    if let Some(mut file) = existing {
         let len = file
             .metadata()
-            .map_err(|_| "Could not validate local identity key")?
+            .map_err(|_| "Could not read local identity key")?
             .len();
         if len == 32 {
             file.read_exact(&mut key)
@@ -212,13 +216,22 @@ fn identity_key(root: &Path) -> Result<[u8; 32], String> {
             .map_err(|_| "Could not save local identity key")?;
         drop(file);
         // Publish only a complete, synced key while holding the identity lease.
-        fs::rename(&staging, &path).map_err(|_| "Could not save local identity key")
+        publish_identity_key(&staging, &path).map_err(|_| "Could not save local identity key")
     })();
     if result.is_err() {
         let _ = fs::remove_file(staging);
     }
     result?;
     Ok(key)
+}
+
+fn publish_identity_key(staging: &Path, path: &Path) -> std::io::Result<()> {
+    // Unlike rename on Windows, hard_link never replaces an existing key.
+    fs::hard_link(staging, path)?;
+    // Flush the published file before removing the staging name. On failure,
+    // leave the complete published key intact so the next attempt reuses it.
+    OpenOptions::new().write(true).open(path)?.sync_all()?;
+    fs::remove_file(staging)
 }
 
 #[cfg(test)]
