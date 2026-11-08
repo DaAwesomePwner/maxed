@@ -209,3 +209,13 @@ is recorded.
   not establish live game or WebView2 behavior.
 - The “Runs list newest” 50 ms release gate fails on the development Mac at the
   task base too; this is a pre-existing performance limitation.
+
+## Passive TCP loss recovery
+
+Missing TCP bytes trigger a directional gap after 32 buffered segments, one
+second of capture time checked on subsequent frames, or the existing 2 MiB
+budget. Buffered bytes are retained for delivery after the gap, but RC4 alignment
+may prevent decoding until the existing recovery search succeeds. Quiet holes
+are reported at the next frame or close, not by a wall-clock timer. Partial
+protocol frames at close report loss. Malformed frames with insufficient flow
+identity cannot be attributed; they do not reset unrelated connections.
