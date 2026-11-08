@@ -19,12 +19,13 @@ use std::{
 };
 
 const CATALOG_LIMIT: u64 = 32 * 1024 * 1024;
-const CACHE_VERSION: u32 = 12;
+const CACHE_VERSION: u32 = 13;
 // Reviewed retirement layouts: v9 has catalog/atlases without a tile pack;
 // v10 adds the pack, v11 changes localization only, and v12 adds optional catalog
-// metadata. All retain Catalog v1 and the same manifest/hash integrity rules.
+// metadata; v13 adds subattack projectile references. All retain Catalog v1
+// and the same manifest/hash integrity rules.
 // On the next cache bump, review its layout before extending this explicit range.
-const RETIRABLE_VERSIONS: std::ops::RangeInclusive<u32> = 9..=12;
+const RETIRABLE_VERSIONS: std::ops::RangeInclusive<u32> = 9..=13;
 static NEXT: AtomicU64 = AtomicU64::new(0);
 type Leases = BTreeMap<PathBuf, Weak<Catalog>>;
 static LEASES: OnceLock<Mutex<Leases>> = OnceLock::new();
@@ -1050,8 +1051,8 @@ mod tests {
     }
 
     #[test]
-    fn character_metadata_invalidates_version_eleven_fingerprints() {
-        assert_eq!(CACHE_VERSION, 12);
+    fn subattack_metadata_invalidates_version_twelve_fingerprints() {
+        assert_eq!(CACHE_VERSION, 13);
         assert_ne!(
             fingerprint_prefix(
                 CACHE_VERSION,
@@ -1060,7 +1061,7 @@ mod tests {
             )
             .finalize(),
             fingerprint_prefix(
-                11,
+                12,
                 include_bytes!("rules.rs"),
                 include_bytes!("../../maxed-types/src/dungeon_meta.rs")
             )

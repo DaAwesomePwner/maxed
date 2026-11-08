@@ -33,6 +33,7 @@ fn inputs() -> CharacterInputs {
         lifetime_millis: None,
     }];
     weapon.weapon_firing = Some(WeaponFiringDef {
+        subattack_projectile_indices: None,
         support: CatalogSupport::Supported,
         omitted_projectile_indices: vec![],
         reasons: vec![],

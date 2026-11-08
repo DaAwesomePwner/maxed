@@ -221,14 +221,21 @@ impl Engine {
                     .get(&p.weaponId)
                     .map(|&i| self.catalog.items[i].clone());
                 let projectile = item.as_ref().and_then(|i| {
-                    i.projectiles.iter().find(|pdef| {
-                        pdef.index
-                            == if p.projectileId == -1 {
-                                0
-                            } else {
-                                i16::from(p.projectileId)
-                            }
-                    })
+                    let subattacks = i
+                        .weapon_firing
+                        .as_ref()
+                        .and_then(|f| f.subattack_projectile_indices.as_ref())
+                        .filter(|indices| !indices.is_empty());
+                    let index = if let Some(indices) = subattacks {
+                        *indices
+                            .get(usize::try_from(p.projectileId).ok()?)?
+                            .as_ref()?
+                    } else if p.projectileId == -1 {
+                        0
+                    } else {
+                        i16::from(p.projectileId)
+                    };
+                    i.projectiles.iter().find(|pdef| pdef.index == index)
                 });
                 if projectile.is_none() || self.rng.is_none() {
                     self.rng_valid = false;
@@ -242,6 +249,9 @@ impl Engine {
                 });
                 let mut assumptions = vec![];
                 // RealmShark Projectile(RNG,...): exclusive maximum, no roll when equal.
+                // Each received PlayerShoot consumes its own roll in packet order, including
+                // subattacks. Mapping only selects the bounds; it does not expand a volley
+                // or reorder rolls. Missing definitions still invalidate RNG continuity.
                 if let (Some(pdef), Some(rng)) = (projectile, self.rng.as_mut()) {
                     let base = if pdef.min_damage == pdef.max_damage {
                         pdef.min_damage

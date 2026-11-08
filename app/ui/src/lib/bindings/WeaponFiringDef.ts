@@ -2,4 +2,10 @@
 import type { CatalogSupport } from "./CatalogSupport";
 import type { WeaponAttackGroup } from "./WeaponAttackGroup";
 
-export type WeaponFiringDef = { support: CatalogSupport, groups: Array<WeaponAttackGroup>, omitted_projectile_indices: Array<number>, reasons: Array<string>, };
+export type WeaponFiringDef = { 
+/**
+ * XML-order Subattack references, independent of supported firing schedules.
+ * None means legacy metadata; an empty list means no explicit subattacks.
+ * Null entries retain unresolved references without shifting wire indices.
+ */
+subattack_projectile_indices?: Array<number | null> | null, support: CatalogSupport, groups: Array<WeaponAttackGroup>, omitted_projectile_indices: Array<number>, reasons: Array<string>, };

@@ -198,6 +198,12 @@ pub enum WeaponSchedule {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct WeaponFiringDef {
+    /// XML-order Subattack references, independent of supported firing schedules.
+    /// None means legacy metadata; an empty list means no explicit subattacks.
+    /// Null entries retain unresolved references without shifting wire indices.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub subattack_projectile_indices: Option<Vec<Option<i16>>>,
     pub support: CatalogSupport,
     pub groups: Vec<WeaponAttackGroup>,
     pub omitted_projectile_indices: Vec<i16>,
