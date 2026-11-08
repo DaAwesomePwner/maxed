@@ -177,30 +177,54 @@ fn identity_key(root: &Path) -> Result<[u8; 32], String> {
     let path = root.join("identity.key");
     let mut key = [0; 32];
     if path.exists() {
-        let mut file = File::open(path).map_err(|_| "Could not read local identity key")?;
-        if file
+        let mut file = File::open(&path).map_err(|_| "Could not read local identity key")?;
+        let len = file
             .metadata()
             .map_err(|_| "Could not validate local identity key")?
-            .len()
-            != 32
-        {
+            .len();
+        if len == 32 {
+            file.read_exact(&mut key)
+                .map_err(|_| "Could not read local identity key")?;
+            return Ok(key);
+        }
+        if len != 0 {
             return Err("Local identity key is invalid".into());
         }
-        file.read_exact(&mut key)
-            .map_err(|_| "Could not read local identity key")?;
-    } else {
-        getrandom::fill(&mut key).map_err(|_| "Could not create local identity key")?;
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .map_err(|_| "Could not save local identity key")?;
+        // An empty key could never have been used to hash account history.
+        drop(file);
+        fs::remove_file(&path).map_err(|_| "Could not save local identity key")?;
+    }
+    getrandom::fill(&mut key).map_err(|_| "Could not create local identity key")?;
+    let staging = root.join("identity.key.pending");
+    match fs::remove_file(&staging) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err("Could not save local identity key".into()),
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&staging)
+        .map_err(|_| "Could not save local identity key")?;
+    let result = (|| {
         file.write_all(&key)
             .and_then(|_| file.sync_all())
             .map_err(|_| "Could not save local identity key")?;
+        drop(file);
+        // Publish only a complete, synced key while holding the identity lease.
+        fs::rename(&staging, &path).map_err(|_| "Could not save local identity key")
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(staging);
     }
+    result?;
     Ok(key)
 }
+
+#[cfg(test)]
+#[path = "identity_key_tests.rs"]
+mod identity_key_tests;
+
 pub(super) fn random_id() -> Result<String, String> {
     let mut bytes = [0; 16];
     getrandom::fill(&mut bytes).map_err(|_| "Could not create capture stream identity")?;
