@@ -637,7 +637,12 @@ impl Fixture {
                 comparison_sql().replace("?1", "'Synthetic Sanctum'").replace("?2", &START.to_string()).replace("?3", &format!("'{RUN}'")),
             ],
             "fight" => vec![format!("SELECT length(CAST(json AS BLOB)),json FROM fights WHERE id='{FIGHT}'")],
-            "player" => vec![format!("SELECT length(CAST(json AS BLOB)),json FROM fight_players WHERE fight_id='{FIGHT}' AND object_id=1 LIMIT 2")],
+            "player" => vec![format!("SELECT length(CAST(payload AS BLOB)),payload FROM (
+                SELECT json_set(fight_players.json,'$.share',
+                    CASE WHEN json_extract(f.json,'$.total_damage')>0
+                    THEN damage/json_extract(f.json,'$.total_damage') END) AS payload
+                FROM fight_players JOIN fights f ON f.id=fight_id
+                WHERE fight_id='{FIGHT}' AND object_id=1 LIMIT 2)")],
             _ => {
                 let key = match label {
                     "duration-ascending" => "coalesce((CASE WHEN ended>=started THEN ended-started END),9223372036854775807)",

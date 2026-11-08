@@ -64,7 +64,7 @@ WITH /*home_scope*/, scoped_runs AS MATERIALIZED (
         EXISTS(SELECT 1 FROM json_each(f.json,'$.issues') WHERE value='missing_identity') AS ambiguous,
         count(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN 1 END) AS locals,
         max(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN p.damage END) AS local_damage,
-        max(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN json_extract(p.json,'$.share') END) AS supplied_share,
+        max(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN CASE WHEN json_extract(f.json,'$.total_damage')>0 THEN p.damage/json_extract(f.json,'$.total_damage') END END) AS supplied_share,
         EXISTS(SELECT 1 FROM fight_players fp, json_each(fp.json,'$.sources') src
             WHERE fp.fight_id=f.id AND ((json_extract(src.value,'$.estimated')=1
                 AND json_array_length(src.value,'$.reasons')=0)

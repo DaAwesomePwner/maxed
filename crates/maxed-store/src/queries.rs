@@ -362,9 +362,19 @@ impl StoreReader {
         object_id: i32,
     ) -> Result<Option<PlayerDamage>, StoreError> {
         identifier(fight_id)?;
-        let mut players = rows(&self.conn,
-            "SELECT length(CAST(json AS BLOB)),json FROM fight_players WHERE fight_id=?1 AND object_id=?2 LIMIT 2",
-            params![fight_id, object_id], 2, &mut 0, MAX_PLAYER_BYTES)?;
+        let mut players = rows(
+            &self.conn,
+            "SELECT length(CAST(payload AS BLOB)),payload FROM (
+                SELECT json_set(fight_players.json,'$.share',
+                    CASE WHEN json_extract(f.json,'$.total_damage')>0
+                    THEN damage/json_extract(f.json,'$.total_damage') END) AS payload
+                FROM fight_players JOIN fights f ON f.id=fight_id
+                WHERE fight_id=?1 AND object_id=?2 LIMIT 2)",
+            params![fight_id, object_id],
+            2,
+            &mut 0,
+            MAX_PLAYER_BYTES,
+        )?;
         bounded(
             if players.len() == 1 {
                 players.pop()
@@ -382,8 +392,17 @@ impl StoreReader {
     ) -> Result<Option<PlayerDamage>, StoreError> {
         identifier(fight_id)?;
         identifier(player_id)?;
-        one(&self.conn, "SELECT length(CAST(json AS BLOB)),json FROM fight_players WHERE fight_id=?1 AND player_id=?2",
-            params![fight_id, player_id], MAX_PLAYER_BYTES)
+        one(
+            &self.conn,
+            "SELECT length(CAST(payload AS BLOB)),payload FROM (
+                SELECT json_set(fight_players.json,'$.share',
+                    CASE WHEN json_extract(f.json,'$.total_damage')>0
+                    THEN damage/json_extract(f.json,'$.total_damage') END) AS payload
+                FROM fight_players JOIN fights f ON f.id=fight_id
+                WHERE fight_id=?1 AND player_id=?2)",
+            params![fight_id, player_id],
+            MAX_PLAYER_BYTES,
+        )
     }
 
     pub fn bag_count_since(&self, bag_type: u16, time: TimeRange) -> Result<u32, StoreError> {

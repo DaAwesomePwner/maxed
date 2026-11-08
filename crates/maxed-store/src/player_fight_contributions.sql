@@ -7,7 +7,7 @@ SELECT length(CAST(payload AS BLOB)), payload FROM (
         )=1 THEN p.object_id END,
         'damage', p.damage, 'dps', json_extract(p.json,'$.dps'),
         'rank', json_extract(p.json,'$.rank'),
-        'share', json_extract(p.json,'$.share'),
+        'share', CASE WHEN json_extract(s.json,'$.total_damage')>0 THEN p.damage/json_extract(s.json,'$.total_damage') END,
         'deaths', json_extract(p.json,'$.deaths')) AS payload
     FROM fight_summaries s JOIN fight_players p ON p.fight_id=s.fight_id
     WHERE s.run_id=?1 AND p.player_id=?2

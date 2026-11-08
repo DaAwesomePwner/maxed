@@ -9,7 +9,7 @@
 ), player_inputs AS MATERIALIZED (
     SELECT f.id,f.run_id,f.complete_capture,f.total_damage,f.issue_count,f.ambiguous,
         json_extract(p.json,'$.is_local') AS is_local,p.damage,
-        json_extract(p.json,'$.share') AS share,
+        CASE WHEN f.total_damage>0 THEN p.damage/f.total_damage END AS share,
         EXISTS(SELECT 1 FROM json_each(p.json,'$.sources') src
             WHERE (json_extract(src.value,'$.estimated')=1
                 AND json_array_length(src.value,'$.reasons')=0)

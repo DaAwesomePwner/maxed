@@ -1247,10 +1247,16 @@ fn stored_provenance_normalizes_all_profile_reads_without_upgrading_replay() {
 }
 
 #[test]
-fn fight_revisions_match_full_replacement_and_only_write_changed_sources() {
+fn fight_revisions_match_full_replacement_and_only_write_changed_players_and_sources() {
     fn rows(db: &Connection, table: &str) -> Vec<Vec<rusqlite::types::Value>> {
+        // Legacy unchanged rows may retain a share; it is not stored player data.
+        let columns_sql = if table == "fight_players" {
+            "fight_id,player_id,object_id,damage,dps,rank,json_remove(json,'$.share')"
+        } else {
+            "*"
+        };
         let mut statement = db
-            .prepare(&format!("SELECT * FROM {table} ORDER BY 1,2,3"))
+            .prepare(&format!("SELECT {columns_sql} FROM {table} ORDER BY 1,2,3"))
             .unwrap();
         let columns = statement.column_count();
         statement
@@ -1291,6 +1297,16 @@ fn fight_revisions_match_full_replacement_and_only_write_changed_sources() {
     for revision in 0..7 {
         match revision {
             1 => {
+                // First update of an old database must also avoid share-only writes.
+                for p in &fight.players {
+                    actual
+                        .execute(
+                            "UPDATE fight_players SET json=json_set(json,'$.share',?1)
+                        WHERE fight_id=?2 AND player_id=?3",
+                            params![p.share, fight.id, p.player_id],
+                        )
+                        .unwrap();
+                }
                 fight.players[0].sources[0].damage += 1.;
                 fight.players[0].sources[0].hits += 1;
             }
@@ -1358,13 +1374,13 @@ fn fight_revisions_match_full_replacement_and_only_write_changed_sources() {
                 .filter(|(table, _)| table == "source")
                 .collect();
             assert_eq!(source_writes, [&("source".into(), "update".into())]);
-            // fight_players share churn is a known, separately tracked follow-up.
+            // Only the hit player changed; the other 39 derived shares do not write rows.
             assert_eq!(
                 writes
                     .iter()
                     .filter(|(table, operation)| table == "player" && operation == "update")
                     .count(),
-                40
+                1
             );
             assert_eq!(count(&actual, "pd_player_contributions"), 40);
             assert_eq!(count(&actual, "pd_run_players"), 40);
@@ -1379,5 +1395,112 @@ fn fight_revisions_match_full_replacement_and_only_write_changed_sources() {
         apply_batch(&mut actual, std::slice::from_ref(&repeat)).unwrap();
         apply_batch(&mut replacement, &[repeat]).unwrap();
         assert_eq!(count(&actual, "writes"), 0);
+    }
+}
+
+#[test]
+fn every_share_reader_ignores_legacy_player_share() {
+    use crate::common::account_scope_fixture::{attribute, ACCOUNT};
+    for total in [700., 0.] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("shares.sqlite");
+        let mut db = Connection::open(&path).unwrap();
+        migrate(&mut db).unwrap();
+        apply_batch(&mut db, &story_events()).unwrap();
+        let mut fight = demo::demo_snapshot().fights.remove(0);
+        fight.issues.clear();
+        fight.total_damage = total;
+        let template = fight.players[0].clone();
+        fight.players = (0..3)
+            .map(|i| {
+                let mut p = template.clone();
+                p.player_id = format!("share-player-{i}");
+                p.object_id = i;
+                p.is_local = i == 0;
+                p.damage = if total > 0. {
+                    (i + 1) as f64 * 100.
+                } else {
+                    0.
+                };
+                p.share = maxed_engine::share(p.damage, total);
+                p
+            })
+            .collect();
+        apply_batch(
+            &mut db,
+            &[envelope(8, EngineEvent::FightUpdated(fight.clone()))],
+        )
+        .unwrap();
+        attribute(&db);
+        let reader = open_reader(&path).unwrap();
+        let snapshot = || {
+            let players: Vec<_> = fight
+                .players
+                .iter()
+                .map(|p| {
+                    let by_id = reader
+                        .get_player_by_id(&fight.id, &p.player_id)
+                        .unwrap()
+                        .unwrap();
+                    let by_object = reader
+                        .get_player_breakdown(&fight.id, p.object_id)
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(by_id.share, p.share);
+                    assert_eq!(by_object.share, p.share);
+                    let strip = reader
+                        .run_fight_strip("demo-run", Some(&p.player_id))
+                        .unwrap();
+                    assert!(!strip.is_empty());
+                    assert_eq!(strip[0].share, p.share);
+                    let run = reader
+                        .get_run_player("demo-run", &p.player_id)
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(run.fights[0].share, p.share);
+                    json!([by_id, by_object, strip, run])
+                })
+                .collect();
+            json!([
+                players,
+                reader
+                    .list_runs(crate::common::filter(RunSort::Newest, 30))
+                    .unwrap(),
+                reader
+                    .home_summary(
+                        HomeScope::Session {
+                            id: "demo-session".into()
+                        },
+                        Some(ACCOUNT)
+                    )
+                    .unwrap(),
+                reader.get_party_run("demo-run").unwrap(),
+                reader.get_run("demo-run").unwrap(),
+                reader.run_fight_strip("demo-run", None).unwrap()
+            ])
+        };
+        // Model old databases, including the zero-total NULL share.
+        for p in &fight.players {
+            db.execute(
+                "UPDATE fight_players SET json=json_set(json,'$.share',?1)
+                WHERE fight_id=?2 AND player_id=?3",
+                params![p.share, fight.id, p.player_id],
+            )
+            .unwrap();
+        }
+        let legacy = snapshot();
+        // Deliberately stale shares must never affect any read surface.
+        db.execute(
+            "UPDATE fight_players SET json=json_set(json,'$.share',0.99)",
+            [],
+        )
+        .unwrap();
+        assert_eq!(snapshot(), legacy);
+        db.execute(
+            "UPDATE fight_players SET json=json_remove(json,'$.share')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(snapshot(), legacy);
     }
 }
