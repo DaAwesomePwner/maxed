@@ -10,6 +10,7 @@ import { classifySequence, subscribeLive } from '../src/lib/bridge/live';
 import type { LiveState } from '../src/lib/bridge/live';
 import fixture from './fixtures/t0-live';
 import { notifyEventObserver } from '../src/lib/shell/event-observers';
+import { setNativePresentationVisible } from '../src/lib/bridge/visibility';
 import { setDebugMode } from '../src/lib/debug/debug';
 
 function deferred<T>() {
@@ -462,4 +463,34 @@ test.each(['resolve', 'reject'] as const)('a transition settling with %s preserv
   if (completion === 'resolve') pending.resolve(); else pending.reject(new Error('private'));
   await transition; await settle();
   expect(h.states.at(-1)).toMatchObject({ phase: 'failed', message: 'Restart Maxed.' });
+});
+
+test('same-watermark snapshots and reconnect baselines advance by revision only', async () => {
+  const baseline = { ...snapshot(), revision: '9007199254740992' };
+  const h = setup({ querySnapshot: vi.fn().mockResolvedValueOnce(baseline)
+    .mockResolvedValue({ ...baseline, revision: '9007199254740994', map: 'reconnected' }) });
+  await settle();
+  h.transport.publishSnapshotUpdate({ ...baseline, revision: '9007199254740993', map: 'silent update' });
+  expect(h.seen.at(-1)?.map).toBe('silent update');
+  h.transport.publishSnapshotUpdate({ ...baseline, map: 'obsolete' });
+  expect(h.seen.at(-1)?.map).toBe('silent update');
+  h.control.reconnect();
+  await settle();
+  expect(h.seen.at(-1)?.map).toBe('reconnected');
+  expect(h.seen.at(-1)?.sequence).toBe('10');
+  // Revision is not a durability watermark.
+  expect(h.histories.at(-1)?.durable).toBe('10');
+});
+
+test('visibility restore rejects an older revision at the same watermark', async () => {
+  const initial = { ...snapshot(), revision: '100' };
+  const h = setup({ querySnapshot: vi.fn().mockResolvedValueOnce(initial)
+    .mockResolvedValue({ ...initial, revision: '99', map: 'obsolete' }) });
+  await settle();
+  setNativePresentationVisible(false);
+  setNativePresentationVisible(true);
+  await settle();
+  expect(h.seen).toEqual([initial]);
+  h.transport.publishSnapshotUpdate({ ...initial, revision: '101', map: 'fresh' });
+  expect(h.seen.at(-1)?.map).toBe('fresh');
 });

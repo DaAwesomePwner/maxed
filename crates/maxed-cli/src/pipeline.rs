@@ -1,77 +1,116 @@
 use maxed_capture::{parse_frame, ParseError};
-use maxed_protocol::{DecodeEvent, Decoder};
-use maxed_stream::Reassembler;
-use maxed_types::{GapReason, RawFrame, StreamEvent, Timestamp};
+use maxed_protocol::{DecodeEvent, Decoder, Diagnostic};
+use maxed_stream::driver::{Codec, FrameDriver, ParsedFrame, TrustChange};
+use maxed_types::{ConnId, Direction, GapReason, RawFrame, StreamEvent, Timestamp};
 
-#[derive(Default)]
-pub struct Pipeline {
-    streams: Reassembler,
-    decoder: Decoder,
-    next_index: u64,
-    last_at: u64,
-    unsupported_frames: u64,
+pub struct ProtocolCodec(Decoder);
+impl Codec for ProtocolCodec {
+    type Event = DecodeEvent;
+    fn parse(frame: &RawFrame) -> ParsedFrame {
+        match parse_frame(frame) {
+            Ok(Some(s)) => ParsedFrame::Segment(s),
+            Ok(None) => ParsedFrame::Ignored,
+            Err(ParseError::UnsupportedLink) => ParsedFrame::Unsupported,
+            Err(e) => ParsedFrame::Gap {
+                flow: e.affected_flow(frame),
+                reason: if matches!(e, ParseError::Truncated) {
+                    GapReason::Truncated
+                } else {
+                    GapReason::InvalidFrame
+                },
+            },
+        }
+    }
+    fn decode(&mut self, event: StreamEvent) -> Vec<DecodeEvent> {
+        self.0.push(event)
+    }
+    fn trust(event: &DecodeEvent) -> TrustChange {
+        match event {
+            DecodeEvent::Packet(p) => TrustChange::Packet {
+                conn: p.conn,
+                dir: p.dir,
+                verified: p.alignment_verified,
+            },
+            DecodeEvent::Diagnostic {
+                conn, dir, kind, ..
+            } => match kind {
+                Diagnostic::Closed | Diagnostic::Cancelled => TrustChange::Closed {
+                    conn: *conn,
+                    dir: *dir,
+                },
+                Diagnostic::Recovering | Diagnostic::Recovered => TrustChange::Reset {
+                    conn: *conn,
+                    dir: *dir,
+                },
+                _ => TrustChange::None,
+            },
+        }
+    }
+    fn is_teardown(event: &DecodeEvent) -> bool {
+        matches!(
+            event,
+            DecodeEvent::Diagnostic {
+                kind: Diagnostic::Closed | Diagnostic::Cancelled,
+                ..
+            }
+        )
+    }
+    fn cancelled(conn: ConnId, dir: Direction, at: Timestamp) -> DecodeEvent {
+        DecodeEvent::Diagnostic {
+            conn,
+            dir,
+            at,
+            kind: Diagnostic::Cancelled,
+        }
+    }
+    fn clear(&mut self) {
+        // CLI decoding is never cancelled; Closed already releases stream buffers.
+        // Preserve structural explanations until the exporter drains them.
+    }
+}
+pub struct Pipeline(FrameDriver<ProtocolCodec>);
+impl Default for Pipeline {
+    fn default() -> Self {
+        Self(FrameDriver::new(ProtocolCodec(Decoder::default())))
+    }
+}
+fn decoded(events: Vec<maxed_stream::driver::PipelineEvent<DecodeEvent>>) -> Vec<DecodeEvent> {
+    events
+        .into_iter()
+        .filter_map(|e| match e {
+            maxed_stream::driver::PipelineEvent::Decoded(e) => Some(e),
+            _ => None,
+        })
+        .collect()
+}
+pub struct FrameOutput {
+    pub events: Vec<DecodeEvent>,
+    pub trusted_traffic: bool,
 }
 impl Pipeline {
     pub fn explain_failures(&mut self, enabled: bool) {
-        self.decoder.explain_failures(enabled);
+        self.0.codec.0.explain_failures(enabled);
     }
     pub fn take_failures(&mut self) -> Vec<maxed_protocol::explanation::StructuralFailure> {
-        self.decoder.take_failures()
+        self.0.codec.0.take_failures()
     }
     pub fn unsupported_frames(&self) -> u64 {
-        self.unsupported_frames
+        self.0.unsupported_frames
     }
-    fn decode(&mut self, events: Vec<StreamEvent>) -> Vec<DecodeEvent> {
-        events
-            .into_iter()
-            .flat_map(|event| self.decoder.push(event))
-            .collect()
+    pub fn push_frame(&mut self, frame: RawFrame) -> FrameOutput {
+        let output = self.0.push_frame(frame);
+        FrameOutput {
+            events: decoded(output.events),
+            trusted_traffic: output.trusted_traffic,
+        }
     }
     pub fn push(&mut self, frame: RawFrame) -> Vec<DecodeEvent> {
-        let mut events = self.streams.expire(frame.at);
-        self.last_at = frame.at.0;
-        if frame.index != self.next_index {
-            events.extend(self.streams.gap_all(frame.at, GapReason::CaptureDrop));
-        }
-        self.next_index = frame.index.saturating_add(1);
-        match parse_frame(&frame) {
-            Ok(Some(segment)) => events.extend(self.streams.push(segment)),
-            Ok(None) => {}
-            Err(ParseError::UnsupportedLink) => {
-                self.unsupported_frames = self.unsupported_frames.saturating_add(1);
-            }
-            Err(error) => {
-                let reason = match error {
-                    ParseError::Truncated => GapReason::Truncated,
-                    _ => GapReason::InvalidFrame,
-                };
-                if let Some((flow, dir)) = error.affected_flow(&frame) {
-                    events.extend(self.streams.gap_flow(flow, dir, frame.at, reason));
-                } else {
-                    // Without trustworthy flow identity, every active direction
-                    // remains a candidate for the missing observation.
-                    events.extend(self.streams.gap_all(frame.at, reason));
-                }
-            }
-        }
-        self.decode(events)
+        self.push_frame(frame).events
     }
     pub fn finish(&mut self) -> Vec<DecodeEvent> {
-        let events = self.streams.close_all(Timestamp(self.last_at));
-        let mut decoded = self.decode(events);
-        // EOF/teardown is not a captured TCP interruption. Keep this distinction
-        // at the pipeline boundary for demo, domain export and packet replay.
-        for event in &mut decoded {
-            if let DecodeEvent::Diagnostic { kind, .. } = event {
-                if *kind == maxed_protocol::Diagnostic::Closed {
-                    *kind = maxed_protocol::Diagnostic::Cancelled;
-                }
-            }
-        }
-        decoded
+        decoded(self.0.finish())
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,6 +137,161 @@ mod tests {
             original_len: bytes.len() as u32,
             bytes,
         }
+    }
+
+    #[test]
+    fn live_and_cli_classify_recovery_and_teardown_identically() {
+        let conn = ConnId(7);
+        let dir = Direction::ServerToClient;
+        for kind in [
+            Diagnostic::Recovering,
+            Diagnostic::Recovered,
+            Diagnostic::Closed,
+            Diagnostic::Cancelled,
+            Diagnostic::BadFrame,
+            Diagnostic::UnknownId,
+        ] {
+            let event = DecodeEvent::Diagnostic {
+                conn,
+                dir,
+                at: Timestamp(42),
+                kind,
+            };
+            let expected = match kind {
+                Diagnostic::Recovering | Diagnostic::Recovered => TrustChange::Reset { conn, dir },
+                Diagnostic::Closed | Diagnostic::Cancelled => TrustChange::Closed { conn, dir },
+                _ => TrustChange::None,
+            };
+            assert_eq!(ProtocolCodec::trust(&event), expected);
+            assert_eq!(live_pipeline::ProtocolCodec::trust(&event), expected);
+            let teardown = matches!(kind, Diagnostic::Closed | Diagnostic::Cancelled);
+            assert_eq!(ProtocolCodec::is_teardown(&event), teardown);
+            assert_eq!(live_pipeline::ProtocolCodec::is_teardown(&event), teardown);
+        }
+    }
+
+    fn event_keys(events: &[DecodeEvent]) -> Vec<String> {
+        events
+            .iter()
+            .map(|event| match event {
+                DecodeEvent::Packet(p) => format!(
+                    "{}:{}:{}:{}:{}",
+                    p.conn.0,
+                    p.at.0,
+                    p.id,
+                    p.alignment_verified,
+                    serde_json::to_string(
+                        &maxed_protocol::canonical::canonical_line(0, p).unwrap()
+                    )
+                    .unwrap()
+                ),
+                DecodeEvent::Diagnostic {
+                    conn,
+                    dir,
+                    at,
+                    kind,
+                } => format!("{conn:?}:{dir:?}:{at:?}:{kind:?}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn live_and_offline_recording_have_identical_events_and_sessions() {
+        use maxed_engine::{Engine, EngineConfig};
+        use maxed_recording::{PcapReader, PcapWriter};
+        use maxed_types::{Catalog, FightEnd};
+        use std::sync::{atomic::AtomicBool, Arc};
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/scrubbed/maxed-demo");
+        let catalog: Catalog =
+            serde_json::from_slice(&std::fs::read(root.join("catalog.json")).unwrap()).unwrap();
+        let config = EngineConfig::default();
+        let mut live_engine = Engine::new(config.clone(), Arc::new(catalog.clone())).unwrap();
+        let mut offline_engine = Engine::new(config, Arc::new(catalog)).unwrap();
+        let mut writer = PcapWriter::new(Vec::new()).unwrap();
+        // Unverified midstream garbage must not create a session before the story.
+        writer
+            .write_frame(&frame(0, 50002, 10, false, &[0, 0, 0, 5, 105]))
+            .unwrap();
+        let mut story =
+            PcapReader::new(std::fs::File::open(root.join("story.pcap")).unwrap()).unwrap();
+        while let Some(mut frame) = story.next_frame().unwrap() {
+            frame.at.0 += 10_000_000;
+            writer.write_frame(&frame).unwrap();
+        }
+        let bytes = writer.finish().unwrap();
+        let mut reader = PcapReader::new(bytes.as_slice()).unwrap();
+        let mut live = live_pipeline::Pipeline::new(Arc::new(AtomicBool::new(false)));
+        let mut offline = Pipeline::default();
+        let mut live_events = Vec::new();
+        let mut offline_events = Vec::new();
+        let mut at = Timestamp(0);
+        while let Some(frame) = reader.next_frame().unwrap() {
+            at = frame.at;
+            let first = frame.index == 0;
+            let a = live.push_frame(frame.clone());
+            let b = offline.push_frame(frame);
+            assert_eq!(a.trusted_traffic, b.trusted_traffic);
+            if first {
+                assert!(!a.trusted_traffic);
+            }
+            if a.trusted_traffic {
+                live_events.extend(live_engine.observe_live_traffic(at));
+                offline_events.extend(offline_engine.observe_traffic(at));
+            }
+            let a = decoded(a.events);
+            assert_eq!(event_keys(&a), event_keys(&b.events));
+            for (engine, output, events) in [
+                (&mut live_engine, &mut live_events, a),
+                (&mut offline_engine, &mut offline_events, b.events),
+            ] {
+                for event in events {
+                    output.extend(match event {
+                        DecodeEvent::Packet(p) => engine.apply_observed(p),
+                        DecodeEvent::Diagnostic {
+                            conn,
+                            dir,
+                            at,
+                            kind,
+                        } => engine.diagnostic(conn, dir, at, kind),
+                    });
+                }
+            }
+        }
+        let a = decoded(live.finish());
+        let b = offline.finish();
+        assert_eq!(event_keys(&a), event_keys(&b));
+        for (engine, output, events) in [
+            (&mut live_engine, &mut live_events, a),
+            (&mut offline_engine, &mut offline_events, b),
+        ] {
+            for event in events {
+                if let DecodeEvent::Diagnostic {
+                    conn,
+                    dir,
+                    at,
+                    kind,
+                } = event
+                {
+                    output.extend(engine.diagnostic(conn, dir, at, kind));
+                }
+            }
+            output.extend(engine.finish(at, FightEnd::CaptureStopped));
+        }
+        let sessions: Vec<_> = live_events
+            .iter()
+            .filter_map(|e| match e {
+                maxed_types::EngineEvent::SessionUpdated(session) => Some(session),
+                _ => None,
+            })
+            .collect();
+        assert!(!sessions.is_empty());
+        assert!(sessions.iter().all(|s| s.started.0 >= 10_000_000));
+        assert!(sessions.last().unwrap().ended.is_some());
+        assert_eq!(
+            serde_json::to_value(live_events).unwrap(),
+            serde_json::to_value(offline_events).unwrap()
+        );
     }
 
     #[test]
@@ -159,3 +353,9 @@ mod tests {
         )));
     }
 }
+
+// Compile the actual live codec adapter against the same synthetic recording.
+#[cfg(test)]
+#[allow(dead_code)] // The imported runtime adapter also exposes shutdown/test helpers.
+#[path = "../../../app/src-tauri/src/runtime/pipeline.rs"]
+mod live_pipeline;

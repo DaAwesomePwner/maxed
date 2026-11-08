@@ -388,3 +388,24 @@ remains explicit through the owning card's error/retry state; PB baselines retai
 their last value. Recap SQL and its save timeout pause while hidden. Party's
 saved-run view continues its throttled durability checks until the store catches
 up. A failed store or changed stream stops polling and offers manual retry.
+
+### Snapshot revisions
+
+Live snapshots carry a monotonically increasing presentation `revision` within
+each stream, independent of the event `sequence`. Metadata-only transactions
+dirty scheduled publication even when they emit no domain events; the existing
+250 ms active / one second idle cadence still applies. Direct reads materialize
+a new revision when dirty and reuse it while clean, without consuming publication.
+
+The UI orders and deduplicates snapshots by revision. Deltas identify both the
+base revision and its event watermark; a mismatched base triggers a full query.
+Reconnect and query races also compare revisions, so same-sequence metadata
+updates are accepted. Event cursors, projection coverage and history durability
+continue to use sequence. Legacy/offline snapshots without a revision use their
+sequence for compatibility; native adapter snapshots always supply a revision.
+
+The encoder sends a full snapshot across a gap in presentation revisions:
+an intervening direct read may have given the UI a different baseline than the
+last publication. Consecutive published revisions resume deltas. If publication
+reuses the queried revision unchanged, the UI deduplicates it and the encoder
+still advances its base, avoiding an unnecessary recovery query in both cases.

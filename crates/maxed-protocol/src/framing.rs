@@ -28,7 +28,9 @@ impl Framer {
     }
 
     pub fn reset(&mut self) {
-        self.buffer.clear();
+        // A junk header may have reserved MAX_FRAME before any body arrived.
+        // Recovery must not retain that peak allocation in an idle stream.
+        self.buffer = Vec::new();
     }
     /// Incrementally buffer at most one bounded frame, even for huge input chunks.
     pub fn push(&mut self, mut bytes: &[u8]) -> FramerOutput {
@@ -79,5 +81,29 @@ impl Framer {
             frames,
             error: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reset_releases_reserved_frame_capacity() {
+        let mut framer = Framer::default();
+        for _ in 0..2 {
+            let output = framer.push(&(MAX_FRAME as u32).to_be_bytes());
+            assert!(output.frames.is_empty());
+            assert!(output.error.is_none());
+            assert!(framer.has_pending());
+            assert!(framer.buffer.capacity() >= MAX_FRAME);
+            framer.reset();
+            assert!(!framer.has_pending());
+            assert_eq!(framer.buffer.capacity(), 0);
+        }
+        let packet = [0, 0, 0, 5, 105];
+        let output = framer.push(&packet);
+        assert!(output.error.is_none());
+        assert_eq!(output.frames, vec![packet.to_vec()]);
     }
 }

@@ -360,6 +360,7 @@ impl Engine {
         run_totals: Option<RunTotals>,
     ) -> LiveSnapshot {
         LiveSnapshot {
+            revision: None,
             instance: self.instance.context.as_ref().map(|context| InstanceLive {
                 context: context.into(),
                 population: self.instance.population(),

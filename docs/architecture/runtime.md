@@ -4,6 +4,8 @@ The native application joins capture, decoding, interpretation, storage and pres
 
 ## Capture and clocks
 
+All modes share frame processing and directional traffic trust. Live idle timing uses monotonic arrivals; offline timing uses recording timestamps.
+
 The capture worker owns TCP reassembly and directional decode, then passes owned packets and diagnostics to one engine. Parsed game TCP payload counts as traffic; UI timers and unrelated frames do not. Unverified cipher alignment cannot establish game facts. A 250 ms tick handles idle expiry and dirty presentation even before the first game frame. Queued frames take priority. Quiet periods longer than five seconds advance a conservative wall-clock estimate with a five-second buffer for delayed capture batches.
 
 A stream owns an immutable validated catalog and the installation's random 32-byte identity key. Account strings are immediately HMAC-SHA256 hashed with domain separation; only opaque character IDs leave the engine. Remote damage attribution is bound to observed object generations. Party separately merges roster rows and links history by the normalized display-name key. `observe_live_traffic` and `apply_observed` separate traffic timing from decoded packets; offline adapters use replay timestamps. Thirty minutes without game traffic ends a session.
@@ -275,8 +277,9 @@ baselines, and retry superseded requests for its current view.
 
 A directional sequence hole waits for at most 32 distinct buffered segments or
 one second of capture timestamp age, checked whenever another frame arrives
-against each flow's highest observed capture timestamp. Regressing timestamps
-cannot lower that expiry watermark.
+against each flow's capture-time watermark. Small timestamp reorders retain that
+watermark; backward clock steps larger than one second re-baseline it as
+described below.
 The 2 MiB pending-byte cap can trigger recovery earlier. Recovery emits
 `ReorderLimit` before advancing to the earliest buffered sequence and delivering
 available bytes in sequence order; it does not discard the buffered tail.
@@ -319,14 +322,21 @@ reassembly delivery 1→0, retransmission history 1→1, framing 1→1, RC4 1→
 Payload-buffer allocations have the same 7→5 / 6→4 reduction; the framer now
 uses one allocation when the header is available, instead of header allocation
 plus subsequent growth reallocations. Split headers need an initial small
-allocation and at most one further reservation. Event/origin containers and
+allocation and at most one further reservation. Reset releases the buffer, including
+any up-front reservation from an incomplete large frame. Event/origin containers and
 packet-specific field allocations are outside this count. Prefix overlap still
 moves the remaining bytes within the allocation. These are structural counts,
 not measured throughput or live Npcap performance claims.
 
 Hole expiry retains the capture-time watermark for small timestamp reorders.
 A backward step larger than the one-second age budget re-baselines the watermark
-and pending timestamps, preserving elapsed age where representable. Saturation
+and pending timestamps, preserving elapsed age where representable. That step
+remains reversible until a different capture timestamp arrives: returning within
+one second behind the old watermark (inclusive), or beyond it, restores pending
+timestamps before checking age, so a lone backward outlier cannot mass-expire
+holes. Continued timestamps more than one second behind the old watermark
+commit the new baseline. Repeated expiry calls at the same timestamp do not
+commit the step. Saturation
 near timestamp zero can discard less than one age budget of elapsed time; renewed
 clock progress still expires the hole within one second. The 32-segment bound
 also applies when capture timestamps stall or repeatedly move backward. The

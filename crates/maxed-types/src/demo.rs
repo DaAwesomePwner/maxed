@@ -159,6 +159,7 @@ pub fn demo_snapshot() -> LiveSnapshot {
         issues: vec![],
     };
     LiveSnapshot {
+        revision: None,
         instance: None,
         run_totals: None,
         at: Timestamp(5_000_000),

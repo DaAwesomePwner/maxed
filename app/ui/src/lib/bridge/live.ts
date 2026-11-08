@@ -38,6 +38,8 @@ export interface LiveObserver {
   historyBaseline?: (snapshot: LiveSnapshot) => void;
 }
 
+// Legacy fixture/offline snapshots predate presentation revisions.
+const revision = (snapshot: LiveSnapshot) => BigInt(snapshot.revision ?? snapshot.sequence);
 const LIMIT = 512;
 // Match the eight-batch native queue, independently of a single transaction.
 const BUFFER_LIMIT = 8 * BATCH_LIMIT;
@@ -67,6 +69,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     if (retired.size > LIMIT) retired.delete(retired.values().next().value!);
   }
   let cursor = 0n, projected = -1n, displayed = -1n;
+  let redisplay = false;
   let buffered: EventEnvelope[] = [];
   const bufferedKeys = new Set<string>();
   let bufferedMessages = 0, messageBuffered = false;
@@ -79,7 +82,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
   }
   let pendingSnapshot: LiveSnapshot | undefined;
   let wireSnapshot: LiveSnapshot | undefined;
-  let requiredSnapshot: { stream: string; sequence: bigint } | undefined;
+  let requiredSnapshot: { stream: string; revision: bigint } | undefined;
   const handled = new Set<string>();
   let queryRunning = false, requested = false, syncing = true, attempts = 0;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -192,8 +195,11 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
   }
   function show(snapshot: LiveSnapshot) {
     const seq = BigInt(snapshot.sequence);
-    if (snapshot.stream_id !== stream || seq <= displayed || seq < projected) return;
-    displayed = seq;
+    const nextRevision = revision(snapshot);
+    if (snapshot.stream_id !== stream || nextRevision < displayed
+      || (nextRevision === displayed && !redisplay) || seq < projected) return;
+    displayed = nextRevision;
+    redisplay = false;
     projected = seq;
     observer.snapshot(snapshot);
   }
@@ -284,14 +290,14 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
   function receiveUpdate(update: LiveSnapshotUpdate) {
     const snapshot = 'base_sequence' in update ? update.snapshot : update;
     if (disposed || phase === 'failed' || retired.has(snapshot.stream_id)) return;
-    if (wireSnapshot?.stream_id === snapshot.stream_id && BigInt(snapshot.sequence) <= BigInt(wireSnapshot.sequence)) return;
+    if (wireSnapshot?.stream_id === snapshot.stream_id && revision(snapshot) <= revision(wireSnapshot)) return;
     if ('base_sequence' in update) {
-      if (!wireSnapshot || wireSnapshot.stream_id !== snapshot.stream_id || wireSnapshot.sequence !== update.base_sequence) {
+      if (!wireSnapshot || wireSnapshot.stream_id !== snapshot.stream_id || wireSnapshot.sequence !== update.base_sequence || revision(wireSnapshot) !== BigInt(update.base_revision ?? update.base_sequence)) {
         observeStream(snapshot.stream_id);
         wireSnapshot = undefined;
-        const sequence = BigInt(snapshot.sequence);
-        if (requiredSnapshot?.stream !== snapshot.stream_id || sequence > requiredSnapshot.sequence) {
-          requiredSnapshot = { stream: snapshot.stream_id, sequence };
+        const nextRevision = revision(snapshot);
+        if (requiredSnapshot?.stream !== snapshot.stream_id || nextRevision > requiredSnapshot.revision) {
+          requiredSnapshot = { stream: snapshot.stream_id, revision: nextRevision };
         }
         // Missing numeric deltas do not imply lost ordered visit events.
         // Preserve their window while replacing the numeric baseline.
@@ -315,11 +321,11 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     if (disposed || phase === 'failed' || retired.has(snapshot.stream_id)) return;
     if (syncing || transitioning || stream === undefined || snapshot.stream_id !== stream) {
       observeStream(snapshot.stream_id);
-      if (!pendingSnapshot || pendingSnapshot.stream_id !== snapshot.stream_id || BigInt(snapshot.sequence) > BigInt(pendingSnapshot.sequence)) pendingSnapshot = snapshot;
+      if (!pendingSnapshot || pendingSnapshot.stream_id !== snapshot.stream_id || revision(snapshot) > revision(pendingSnapshot)) pendingSnapshot = snapshot;
       if (!transitioning && snapshot.stream_id !== stream) requestSync();
       return;
     }
-    // Coalescing may skip any number of snapshot sequences, without event loss.
+    // Coalescing may skip snapshot revisions without losing ordered events.
     show(snapshot);
     scheduleStore();
   }
@@ -365,16 +371,18 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
         retire(requiredSnapshot.stream); requiredSnapshot = undefined;
       }
       const previous = cursor;
-      const baseline = pendingSnapshot && pendingSnapshot.stream_id === stream && BigInt(pendingSnapshot.sequence) > BigInt(snapshot.sequence)
-        ? pendingSnapshot : snapshot;
-      wireSnapshot = baseline;
-      if (requiredSnapshot && BigInt(baseline.sequence) < requiredSnapshot.sequence) {
+      let baseline = snapshot;
+      for (const received of [pendingSnapshot, wireSnapshot]) {
+        if (received && received.stream_id === stream && revision(received) > revision(baseline)) baseline = received;
+      }
+      if (requiredSnapshot && revision(baseline) < requiredSnapshot.revision) {
         // A delta can overtake an in-flight query. Keep its required watermark
         // even when no further tick arrives (for example, after leaving a map).
         scheduleRetry(phase === 'live');
         return;
       }
       requiredSnapshot = undefined;
+      wireSnapshot = baseline;
       show(baseline);
       observer.historyBaseline?.(baseline);
       pendingSnapshot = undefined;
@@ -397,7 +405,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
         }
       });
       if (buffered.length) bufferedMessages = 1;
-      stale(displayed > cursor ? displayed : cursor);
+      stale(projected > cursor ? projected : cursor);
       if (buffered.length) {
         stale(BigInt(buffered[buffered.length - 1].sequence));
         scheduleRetry();
@@ -506,8 +514,9 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     if (visible && phase !== 'failed') {
       // Ordered events continue while hidden. Only numeric snapshots need a
       // fresh baseline, including when no sequence advanced while hidden.
-      // Re-show the same sequence, but never regress behind hidden events.
-      displayed = -1n;
+      // Re-show an unchanged revision, without admitting an older revision or
+      // regressing behind hidden events.
+      redisplay = true;
       requestSync(phase === 'live');
     }
   });

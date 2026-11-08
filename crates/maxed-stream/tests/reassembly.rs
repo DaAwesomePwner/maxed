@@ -667,3 +667,94 @@ fn capture_time_regression_cannot_postpone_an_already_aged_hole() {
     assert_eq!(data(events), b"tail");
     assert_eq!(data(stream.push(segment(16, false, b"next"))), b"next");
 }
+
+#[test]
+fn single_backward_outlier_does_not_age_holes_on_return_to_normal_time() {
+    let mut stream = Reassembler::default();
+    for port in [50000, 50001] {
+        for dir in [Direction::ClientToServer, Direction::ServerToClient] {
+            for (seq, bytes) in [(9, &b""[..]), (12, &b"tail"[..])] {
+                let mut s = segment(seq, seq == 9, bytes);
+                s.flow.client.port = port;
+                s.dir = dir;
+                s.at = Timestamp(99_900_000);
+                stream.push(s);
+            }
+        }
+    }
+    assert!(stream.expire(Timestamp(100_000_000)).is_empty());
+    // Pipelines can expire a frame before push expires the same timestamp again.
+    for _ in 0..2 {
+        let mut outlier = segment(10, false, b"");
+        outlier.at = Timestamp(50_000_000);
+        assert!(stream.expire(outlier.at).is_empty());
+        assert!(stream.push(outlier).is_empty());
+    }
+    assert!(stream.expire(Timestamp(100_010_000)).is_empty());
+    for port in [50000, 50001] {
+        for dir in [Direction::ClientToServer, Direction::ServerToClient] {
+            let mut s = segment(10, false, b"ok");
+            s.flow.client.port = port;
+            s.dir = dir;
+            s.at = Timestamp(100_010_000);
+            let events = stream.push(s);
+            assert!(events.iter().all(|e| matches!(e, StreamEvent::Data(_))));
+            assert_eq!(data(events), b"oktail");
+        }
+    }
+}
+
+#[test]
+fn first_microsecond_beyond_age_budget_rebaselines_and_still_expires() {
+    for dir in [Direction::ClientToServer, Direction::ServerToClient] {
+        let mut stream = Reassembler::default();
+        let mut syn = segment(9, true, b"");
+        syn.dir = dir;
+        syn.at = Timestamp(2_000_002);
+        stream.push(syn);
+        let mut ahead = segment(12, false, b"tail");
+        ahead.dir = dir;
+        ahead.at = Timestamp(1_000_001);
+        assert!(stream.push(ahead).is_empty());
+        // Stay outside the old reorder window to commit the new baseline.
+        assert!(stream.expire(Timestamp(1_000_000)).is_empty());
+        assert!(stream.expire(Timestamp(2_000_000)).is_empty());
+        let events = stream.expire(Timestamp(2_000_001));
+        assert!(matches!(events.first(), Some(StreamEvent::Gap { .. })));
+        assert_eq!(data(events), b"tail");
+    }
+}
+
+#[test]
+fn backward_outlier_is_undone_within_old_watermarks_reorder_window() {
+    for returned_at in [99_950_000, 99_000_000] {
+        for dir in [Direction::ClientToServer, Direction::ServerToClient] {
+            let mut stream = Reassembler::default();
+            for (seq, bytes) in [(9, &b""[..]), (12, &b"tail"[..])] {
+                let mut s = segment(seq, seq == 9, bytes);
+                s.dir = dir;
+                s.at = Timestamp(99_900_000);
+                stream.push(s);
+            }
+            assert!(stream.expire(Timestamp(100_000_000)).is_empty());
+            assert!(stream.expire(Timestamp(50_000_000)).is_empty());
+            // Return below the old watermark, including its exact reorder boundary.
+            let mut returning = segment(10, false, b"");
+            returning.dir = dir;
+            returning.at = Timestamp(returned_at);
+            assert!(stream.expire(returning.at).is_empty());
+            assert!(stream.push(returning).is_empty());
+            // The original pending age is restored, not reset or prematurely expired.
+            assert!(stream.expire(Timestamp(100_899_999)).is_empty());
+            let events = stream.expire(Timestamp(100_900_000));
+            assert!(matches!(
+                events.first(),
+                Some(StreamEvent::Gap {
+                    reason: GapReason::ReorderLimit,
+                    ..
+                })
+            ));
+            assert_eq!(data(events), b"tail");
+        }
+    }
+}
