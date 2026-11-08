@@ -63,12 +63,19 @@ fn record_loss(status: &Mutex<CaptureStatus>, drops: u32) {
     }
 }
 
-fn read_drops(device: &mut dyn Device) -> Option<u32> {
+fn read_drops(device: &mut dyn Device, stats_failed: &mut bool) -> Option<u32> {
     match device.dropped_packets() {
-        Ok(drops) => drops,
+        Ok(Some(drops)) => {
+            *stats_failed = false;
+            Some(drops)
+        }
+        Ok(None) => None,
         Err(error) => {
-            // CaptureError has fixed descriptions; never log native text or adapter IDs.
-            tracing::warn!(error = %error, "Capture drop statistics unavailable");
+            if !*stats_failed {
+                // CaptureError has fixed descriptions; never log native text or adapter IDs.
+                tracing::warn!(error = %error, "Capture drop statistics unavailable");
+            }
+            *stats_failed = true;
             None
         }
     }
@@ -231,6 +238,7 @@ where
                 let mut selected = false;
                 let mut index = 0u64;
                 let mut previous_drops = None;
+                let mut stats_failed = false;
                 let mut stats_at = Instant::now();
                 while !worker_stop.load(Ordering::Acquire) {
                     let mut winner = None;
@@ -256,9 +264,11 @@ where
                         // Check on both busy and idle polls, bounded to four calls per second.
                         if selected && stats_at.elapsed() >= Duration::from_millis(250) {
                             stats_at = Instant::now();
-                            if let Some(current) = read_drops(devices[i].as_mut()) {
+                            if let Some(current) = read_drops(devices[i].as_mut(), &mut stats_failed) {
                                 if let Some(previous) = previous_drops {
                                     let delta = current.wrapping_sub(previous);
+                                    // Buffered frames may predate the loss: invalidate early,
+                                    // accepting extra resync rather than trusting uncertain data.
                                     index = index.checked_add(u64::from(delta))
                                         .ok_or(CaptureError::OpenFailed)?;
                                     record_loss(&worker_status, delta);
@@ -287,7 +297,7 @@ where
                             let mut device = devices.swap_remove(winner);
                             // Ignore all loss before selection. If unavailable, the first
                             // successful sample becomes the baseline rather than guessing.
-                            previous_drops = read_drops(device.as_mut());
+                            previous_drops = read_drops(device.as_mut(), &mut stats_failed);
                             stats_at = Instant::now();
                             devices.clear();
                             devices.push(device);
@@ -356,3 +366,7 @@ mod readiness_tests {
         assert_eq!(handle.readiness(), Some(Err(CaptureError::OpenFailed)));
     }
 }
+
+#[cfg(test)]
+#[path = "stats_tests.rs"]
+mod stats_tests;

@@ -15,6 +15,7 @@ struct StatsDevice {
     drops: Arc<AtomicU32>,
     fail: Arc<AtomicBool>,
     calls: Arc<AtomicUsize>,
+    failures: Arc<AtomicUsize>,
 }
 impl Device for StatsDevice {
     fn poll(&mut self) -> Result<Option<RawFrame>, CaptureError> {
@@ -22,6 +23,7 @@ impl Device for StatsDevice {
     }
     fn dropped_packets(&mut self) -> Result<Option<u32>, CaptureError> {
         let result = if self.fail.load(Ordering::SeqCst) {
+            self.failures.fetch_add(1, Ordering::SeqCst);
             Err(CaptureError::OpenFailed)
         } else {
             Ok(Some(self.drops.load(Ordering::SeqCst)))
@@ -76,11 +78,13 @@ fn exercise(initial: u32, next: u32, expected: u64, failed_poll: bool) {
     let drops = Arc::new(AtomicU32::new(initial));
     let fail = Arc::new(AtomicBool::new(false));
     let calls = Arc::new(AtomicUsize::new(0));
+    let failures = Arc::new(AtomicUsize::new(0));
     let device = StatsDevice {
         frames,
         drops: drops.clone(),
         fail: fail.clone(),
         calls: calls.clone(),
+        failures: failures.clone(),
     };
     let handle =
         start_with_backend(CaptureConfig::default(), || Ok(FakeBackend(vec![device]))).unwrap();
@@ -101,12 +105,17 @@ fn exercise(initial: u32, next: u32, expected: u64, failed_poll: bool) {
     );
     if failed_poll {
         fail.store(true, Ordering::SeqCst);
-        let before = calls.load(Ordering::SeqCst);
-        wait(|| calls.load(Ordering::SeqCst) > before);
+        wait(|| failures.load(Ordering::SeqCst) >= 1);
+        // Change the counter only after the worker has entered the failure window.
+        drops.store(next, Ordering::SeqCst);
+        let before = failures.load(Ordering::SeqCst);
+        wait(|| failures.load(Ordering::SeqCst) > before);
+        assert_eq!(handle.status().dropped_frames, 0);
         assert_eq!(handle.status().state, CaptureState::WaitingForGame);
         fail.store(false, Ordering::SeqCst);
+    } else {
+        drops.store(next, Ordering::SeqCst);
     }
-    drops.store(next, Ordering::SeqCst);
     let before = calls.load(Ordering::SeqCst);
     wait(|| calls.load(Ordering::SeqCst) > before);
     wait(|| u64::from(handle.status().dropped_frames) == expected);
@@ -118,6 +127,9 @@ fn exercise(initial: u32, next: u32, expected: u64, failed_poll: bool) {
             CaptureState::Recovering
         }
     );
+    let before = calls.load(Ordering::SeqCst);
+    wait(|| calls.load(Ordering::SeqCst) > before + 1);
+    assert_eq!(u64::from(handle.status().dropped_frames), expected);
     tx.send(frame()).unwrap();
     assert_eq!(
         handle
@@ -158,12 +170,14 @@ fn unselected_candidates_are_not_sampled() {
             drops: Arc::new(AtomicU32::new(900)),
             fail: Arc::new(AtomicBool::new(false)),
             calls: quiet_calls.clone(),
+            failures: Arc::new(AtomicUsize::new(0)),
         },
         StatsDevice {
             frames,
             drops: Arc::new(AtomicU32::new(100)),
             fail: Arc::new(AtomicBool::new(false)),
             calls: selected_calls.clone(),
+            failures: Arc::new(AtomicUsize::new(0)),
         },
     ]);
     let handle = start_with_backend(CaptureConfig::default(), || Ok(fake)).unwrap();
