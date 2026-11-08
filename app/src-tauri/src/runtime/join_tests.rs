@@ -897,3 +897,52 @@ fn default_adapter_discard_preserves_database() {
     adapter.discard();
     assert!(path.exists());
 }
+
+#[test]
+fn partial_frame_and_pending_hole_at_teardown_do_not_mark_run_loss() {
+    for hole in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut adapter, _, _) = adapter(&dir.path().join("partial-teardown"), 1024);
+        let mut pipeline = feed(&mut adapter, 6_020_000);
+        let mut raw = frames()
+            .into_iter()
+            .rfind(|f| f.at <= Timestamp(6_020_000))
+            .unwrap();
+        let segment = maxed_capture::parse_frame(&raw).unwrap().unwrap();
+        let seq = segment
+            .seq
+            .wrapping_add(segment.bytes.len() as u32)
+            .wrapping_add(u32::from(segment.syn))
+            .wrapping_add(if hole { 2 } else { 0 });
+        let tcp = 14 + usize::from(raw.bytes[14] & 15) * 4;
+        raw.bytes[tcp + 4..tcp + 8].copy_from_slice(&seq.to_be_bytes());
+        raw.bytes[tcp + 13] = 0x10;
+        raw.bytes.truncate(segment.origin.offset);
+        raw.bytes
+            .extend_from_slice(if hole { &[0, 0, 0, 5, 105] } else { &[0, 0] });
+        let ip_len = (raw.bytes.len() - 14) as u16;
+        raw.bytes[16..18].copy_from_slice(&ip_len.to_be_bytes());
+        raw.original_len = raw.bytes.len() as u32;
+        raw.index += 1;
+        raw.at = Timestamp(6_030_000);
+        assert!(pipeline.push(raw).is_empty());
+        let events = pipeline.finish_at(Timestamp(8_000_000));
+        assert!(events.iter().all(|e| matches!(
+            e,
+            PipelineEvent::Decoded(DecodeEvent::Diagnostic {
+                kind: Diagnostic::BadFrame | Diagnostic::Cancelled,
+                ..
+            })
+        )));
+        for event in events {
+            adapter.decoded(event).unwrap();
+        }
+        let snapshot = adapter.engine.snapshot();
+        assert!(!snapshot.issues.contains(&CoverageIssue::StreamGap));
+        assert!(snapshot.run.unwrap().complete_capture);
+        adapter
+            .finish(adapter.at(), FightEnd::CaptureStopped)
+            .unwrap();
+        adapter.close().unwrap();
+    }
+}

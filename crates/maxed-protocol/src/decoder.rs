@@ -198,7 +198,7 @@ impl Decoder {
                     vec![diagnostic(Diagnostic::Recovering)]
                 }
             }
-            StreamEvent::Closed { .. } => {
+            StreamEvent::Closed { reason, .. } => {
                 if self.explain {
                     self.failures.push(StructuralReport::Stream {
                         context: context(
@@ -209,11 +209,22 @@ impl Decoder {
                         event: StreamReportEvent::Closed,
                     });
                 }
-                self.streams.remove(&(conn, dir));
+                let partial = self
+                    .streams
+                    .remove(&(conn, dir))
+                    .is_some_and(|s| s.framer.has_pending());
                 if !self.streams.keys().any(|(id, _)| *id == conn) {
                     self.last_newticks.remove(&conn);
                 }
-                vec![diagnostic(Diagnostic::Closed)]
+                let mut out = Vec::new();
+                if partial {
+                    out.push(diagnostic(Diagnostic::BadFrame));
+                    if reason != maxed_types::CloseReason::Stopped {
+                        out.push(diagnostic(Diagnostic::Recovering));
+                    }
+                }
+                out.push(diagnostic(Diagnostic::Closed));
+                out
             }
             StreamEvent::Gap { .. } => {
                 if let Some(s) = self.streams.get_mut(&(conn, dir)) {

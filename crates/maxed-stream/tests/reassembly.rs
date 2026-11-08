@@ -218,17 +218,17 @@ fn contradictory_delivered_and_pending_overlap_require_recovery() {
 fn pending_limits_drop_invalidation_and_stop_are_bounded() {
     let mut stream = Reassembler::default();
     stream.push(segment(0, true, b""));
-    for seq in 2..258 {
+    for seq in 2..33 {
         assert!(stream.push(segment(seq, false, b"x")).is_empty());
     }
     assert!(matches!(
-        stream.push(segment(258, false, b"x")).as_slice(),
-        [StreamEvent::Gap {
+        stream.push(segment(33, false, b"x")).first(),
+        Some(StreamEvent::Gap {
             reason: GapReason::ReorderLimit,
             ..
-        }]
+        })
     ));
-    assert_eq!(data(stream.push(segment(500, false, b"y"))), b"y");
+    assert_eq!(data(stream.push(segment(34, false, b"y"))), b"y");
     assert_eq!(
         stream.gap_all(Timestamp(7), GapReason::CaptureDrop).len(),
         1
@@ -291,19 +291,19 @@ fn active_and_retired_generations_are_bounded() {
 fn pending_byte_budget_and_every_open_direction_are_invalidated() {
     let mut stream = Reassembler::default();
     stream.push(segment(0, true, b""));
-    for i in 0..32 {
+    for i in 0..16 {
         assert!(stream
-            .push(segment(2 + i * 65_535, false, &vec![0; 65_535]))
+            .push(segment(2 + i * 131_071, false, &vec![0; 131_071]))
             .is_empty());
     }
     assert!(matches!(
         stream
-            .push(segment(2 + 32 * 65_535, false, &[0; 33]))
-            .as_slice(),
-        [StreamEvent::Gap {
+            .push(segment(2 + 16 * 131_071, false, &[0; 33]))
+            .first(),
+        Some(StreamEvent::Gap {
             reason: GapReason::ReorderLimit,
             ..
-        }]
+        })
     ));
     let mut opposite = segment(5, true, b"");
     opposite.dir = Direction::ServerToClient;
@@ -420,4 +420,134 @@ fn connection_replacement_without_rst_resets_only_the_observed_direction() {
             ));
         }
     }
+}
+
+#[test]
+fn hole_budget_delivers_all_buffered_bytes_after_gap() {
+    for start in [0, u32::MAX - 16] {
+        let mut stream = Reassembler::default();
+        stream.push(segment(start, true, b""));
+        for offset in 2..33 {
+            assert!(stream
+                .push(segment(start.wrapping_add(offset), false, b"x"))
+                .is_empty());
+        }
+        let events = stream.push(segment(start.wrapping_add(33), false, b"x"));
+        assert!(matches!(events.first(), Some(StreamEvent::Gap { .. })));
+        assert_eq!(data(events), vec![b'x'; 32]);
+        assert_eq!(
+            data(stream.push(segment(start.wrapping_add(34), false, b"y"))),
+            b"y"
+        );
+    }
+}
+
+#[test]
+fn short_holes_expire_or_flush_at_wire_reset_with_data_after_gap() {
+    for close in [false, true] {
+        let mut stream = Reassembler::default();
+        stream.push(segment(9, true, b""));
+        stream.push(segment(12, false, b"tail"));
+        assert!(stream.expire(Timestamp(1_000_000)).is_empty());
+        let events = if close {
+            {
+                let mut rst = segment(10, false, b"");
+                rst.rst = true;
+                rst.at = Timestamp(2);
+                stream.push(rst)
+            }
+        } else {
+            stream.expire(Timestamp(1_000_001))
+        };
+        assert!(matches!(events.first(), Some(StreamEvent::Gap { .. })));
+        assert_eq!(data(events), b"tail");
+    }
+}
+
+#[test]
+fn flow_gap_leaves_other_flow_and_opposite_direction_contiguous() {
+    let mut stream = Reassembler::default();
+    let first = segment(9, true, b"");
+    let mut other = first.clone();
+    other.flow.client.port += 1;
+    let mut opposite = first.clone();
+    opposite.dir = Direction::ServerToClient;
+    stream.push(first.clone());
+    stream.push(other.clone());
+    stream.push(opposite.clone());
+    let events = stream.gap_flow(first.flow, first.dir, Timestamp(2), GapReason::InvalidFrame);
+    assert!(matches!(
+        events.as_slice(),
+        [StreamEvent::Gap {
+            conn: ConnId(1),
+            dir: Direction::ClientToServer,
+            ..
+        }]
+    ));
+    for mut s in [other, opposite] {
+        s.syn = false;
+        s.seq = 10;
+        s.bytes = b"ok".to_vec();
+        s.origin.len = 2;
+        let events = stream.push(s);
+        assert!(matches!(events.as_slice(), [StreamEvent::Data(_)]));
+        assert_eq!(data(events), b"ok");
+    }
+}
+
+#[test]
+fn forced_far_ahead_hole_invalidates_without_pinning_the_cursor() {
+    for budget in [false, true] {
+        let mut stream = Reassembler::default();
+        stream.push(segment(9, true, b""));
+        stream.push(segment(10 + 0x4000_0000, false, b"stray"));
+        assert_eq!(data(stream.push(segment(10, false, b"ok"))), b"ok");
+        let events = if budget {
+            for offset in 1..31 {
+                assert!(stream
+                    .push(segment(10 + 0x4000_0000 + offset * 5, false, b"stray"))
+                    .is_empty());
+            }
+            stream.push(segment(10 + 0x4000_0000 + 31 * 5, false, b"stray"))
+        } else {
+            stream.expire(Timestamp(1_000_001))
+        };
+        assert!(matches!(
+            events.as_slice(),
+            [StreamEvent::Gap {
+                reason: GapReason::ReorderLimit,
+                ..
+            }]
+        ));
+        assert_eq!(data(stream.push(segment(12, false, b"next"))), b"next");
+    }
+}
+
+#[test]
+fn teardown_discards_pending_holes_without_gap_or_data() {
+    let mut stream = Reassembler::default();
+    stream.push(segment(9, true, b""));
+    stream.push(segment(12, false, b"tail"));
+    let events = stream.close_all(Timestamp(2_000_000));
+    assert!(events.iter().all(|e| matches!(
+        e,
+        StreamEvent::Closed {
+            reason: CloseReason::Stopped,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn capture_time_regression_cannot_postpone_an_already_aged_hole() {
+    let mut stream = Reassembler::default();
+    let mut syn = segment(9, true, b"");
+    syn.at = Timestamp(2_000_001);
+    stream.push(syn);
+    let mut late = segment(12, false, b"tail");
+    late.at = Timestamp(1);
+    let events = stream.push(late);
+    assert!(matches!(events.first(), Some(StreamEvent::Gap { .. })));
+    assert_eq!(data(events), b"tail");
+    assert_eq!(data(stream.push(segment(16, false, b"next"))), b"next");
 }

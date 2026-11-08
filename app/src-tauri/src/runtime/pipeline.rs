@@ -51,7 +51,7 @@ impl Pipeline {
     }
 
     pub(super) fn push(&mut self, frame: RawFrame) -> Vec<PipelineEvent> {
-        let mut events = Vec::new();
+        let mut events = self.streams.expire(frame.at);
         self.last_at = frame.at;
         if frame.index != self.next_index {
             events.extend(self.streams.gap_all(frame.at, GapReason::CaptureDrop));
@@ -60,13 +60,19 @@ impl Pipeline {
         match parse_frame(&frame) {
             Ok(Some(segment)) => events.extend(self.streams.push(segment)),
             Ok(None) | Err(ParseError::UnsupportedLink) => {}
-            Err(error) => events.extend(self.streams.gap_all(
-                frame.at,
-                match error {
+            Err(error) => {
+                let reason = match error {
                     ParseError::Truncated => GapReason::Truncated,
                     _ => GapReason::InvalidFrame,
-                },
-            )),
+                };
+                if let Some((flow, dir)) = error.affected_flow(&frame) {
+                    events.extend(self.streams.gap_flow(flow, dir, frame.at, reason));
+                } else {
+                    // Without trustworthy flow identity, every active direction
+                    // remains a candidate for the missing observation.
+                    events.extend(self.streams.gap_all(frame.at, reason));
+                }
+            }
         }
         self.decode(events)
     }
@@ -79,22 +85,35 @@ impl Pipeline {
         // Runtime timers may already have advanced beyond the last frame. The
         // synthetic shutdown close occurs now, not at an older packet receipt.
         let events = self.streams.close_all(at.max(self.last_at));
-        // Drop buffers even when decoder cancellation suppresses diagnostics.
-        // Teardown is not an observed TCP close, for live and replay callers alike.
-        self.decoder = Decoder::default();
-        events
-            .into_iter()
-            .filter_map(|event| match event {
-                StreamEvent::Closed { conn, dir, at, .. } => {
-                    Some(PipelineEvent::Decoded(DecodeEvent::Diagnostic {
-                        conn,
-                        dir,
-                        at,
-                        kind: maxed_protocol::Diagnostic::Cancelled,
-                    }))
-                }
+        let mut decoded = Vec::new();
+        for event in events {
+            let close = match &event {
+                StreamEvent::Closed { conn, dir, at, .. } => Some((*conn, *dir, *at)),
                 _ => None,
-            })
-            .collect()
+            };
+            // Stopped streams discard pending holes and report partial framing
+            // only as BadFrame. Synthesize each teardown even if cancelled.
+            decoded.extend(self.decode(vec![event]).into_iter().filter(|event| {
+                !matches!(
+                    event,
+                    PipelineEvent::Decoded(DecodeEvent::Diagnostic {
+                        kind: maxed_protocol::Diagnostic::Closed
+                            | maxed_protocol::Diagnostic::Cancelled,
+                        ..
+                    })
+                )
+            }));
+            if let Some((conn, dir, at)) = close {
+                decoded.push(PipelineEvent::Decoded(DecodeEvent::Diagnostic {
+                    conn,
+                    dir,
+                    at,
+                    kind: maxed_protocol::Diagnostic::Cancelled,
+                }));
+            }
+        }
+        // Drop buffers even when decoder cancellation suppresses diagnostics.
+        self.decoder = Decoder::default();
+        decoded
     }
 }

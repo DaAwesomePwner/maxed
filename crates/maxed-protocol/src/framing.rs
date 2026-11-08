@@ -23,6 +23,10 @@ pub struct FramerOutput {
 }
 
 impl Framer {
+    pub fn has_pending(&self) -> bool {
+        !self.buffer.is_empty()
+    }
+
     pub fn reset(&mut self) {
         self.buffer.clear();
     }
