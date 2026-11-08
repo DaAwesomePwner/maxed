@@ -1,14 +1,17 @@
 -- Shared by page details and the first-page summary. `selected` is already scoped.
-, all_time_clears AS MATERIALIZED (
-    SELECT r.id,r.dungeon,/*account:run:r.id*/ AS account_id,r.started,r.completed_at-r.started AS clear_micros,
-        row_number() OVER (PARTITION BY r.dungeon,/*account:run:r.id*/
-            ORDER BY r.completed_at-r.started,r.started,r.id) AS ordinal
+, clear_candidates AS MATERIALIZED (
+    SELECT r.id,r.dungeon,/*account:character:r.character_id*/ AS account_id,
+        r.started,r.completed_at-r.started AS clear_micros
     FROM runs r INDEXED BY pd_runs_comparison
     WHERE r.dungeon IN (SELECT dungeon FROM selected)
       AND r.outcome='cleared' AND r.completed_at>r.started
       AND CASE WHEN json_valid(r.json) THEN json_extract(r.json,'$.area_kind') END='dungeon'
       AND EXISTS(SELECT 1 FROM run_evidence e WHERE e.run_id=r.id
           AND e.kind IN ('victory','completion_dialogue'))
+), all_time_clears AS MATERIALIZED (
+    SELECT *,row_number() OVER (PARTITION BY dungeon,account_id
+        ORDER BY clear_micros,started,id) AS ordinal
+    FROM clear_candidates
 ), bests AS MATERIALIZED (
     SELECT id,dungeon,account_id,clear_micros FROM all_time_clears
     WHERE ordinal=1 AND account_id IS NOT NULL

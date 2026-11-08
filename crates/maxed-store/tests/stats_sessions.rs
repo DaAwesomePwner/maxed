@@ -626,3 +626,101 @@ fn death_only_sessions_are_active_and_use_run_character_fallback() {
         assert!(active);
     }
 }
+
+#[test]
+fn ownership_revisions_preserve_legacy_unknown_and_known_fights_and_drops() {
+    for mode in ["legacy", "unknown", "known"] {
+        let (_dir, path, mut db) = database();
+        let mut stream = Stream::new("ownership-revisions");
+        stream.apply(
+            &mut db,
+            vec![
+                session("s", 0, 10 * MIN, None),
+                character(C, "Synthetic", 0),
+                character("other", "Other", 0),
+                map("Realm", AreaKind::Realm, 0),
+            ],
+        );
+        // Set a containing legacy visit independently of the first-event owner.
+        db.execute("UPDATE map_visits SET character_id=?1", [C])
+            .unwrap();
+        let mut fight = demo::demo_snapshot().fights.remove(0);
+        fight.id = "f".into();
+        fight.session_id = "s".into();
+        fight.run_id = None;
+        fight.owner_character_id = (mode == "known").then(|| C.into());
+        fight.players.retain(|p| p.is_local);
+        fight.ended = Some(Timestamp(fight.started.0 + 120_000_000));
+        fight.boss_type = Some(42);
+        fight.target_type = Some(42);
+        fight.players[0].dps = Some(1000.0);
+        let mut drop = observed_bag("d", "s", MIN, Some(80));
+        drop.owner_character_id = fight.owner_character_id.clone();
+        stream.apply(
+            &mut db,
+            vec![
+                EngineEvent::FightUpdated(fight.clone()),
+                EngineEvent::BagDropped(drop.clone()),
+            ],
+        );
+        if mode == "legacy" {
+            // Retain valid saved DTOs but remove ownership to reproduce the pre-017 shape.
+            db.execute("DELETE FROM observation_characters", [])
+                .unwrap();
+        }
+        for revised_owner in [Some("other".to_owned()), None] {
+            fight.owner_character_id = revised_owner.clone();
+            drop.owner_character_id = revised_owner;
+            stream.apply(
+                &mut db,
+                vec![
+                    EngineEvent::FightUpdated(fight.clone()),
+                    EngineEvent::DropUpdated(drop.clone()),
+                ],
+            );
+            for kind in ["fight", "drop"] {
+                let (count, owner): (u32, Option<String>) = db.query_row(
+                    "SELECT count(*),max(character_id) FROM observation_characters WHERE kind=?1",
+                    [kind], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+                assert_eq!(count, u32::from(mode != "legacy"), "{mode}/{kind}");
+                assert_eq!(
+                    owner.as_deref(),
+                    (mode == "known").then_some(C),
+                    "{mode}/{kind}"
+                );
+            }
+            let resolved: Option<String> = db
+                .query_row(
+                    &format!(
+                        "WITH {} SELECT character_id FROM fight_character WHERE fight_id='f'",
+                        include_str!("../src/fight_character.sql")
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(
+                resolved.as_deref(),
+                (mode != "unknown").then_some(C),
+                "{mode}"
+            );
+            let bags: u32 = db
+                .query_row(
+                    include_str!("../src/stats_session_totals.sql"),
+                    ["s", C],
+                    |r| r.get(6),
+                )
+                .unwrap();
+            assert_eq!(bags, u32::from(mode != "unknown"), "{mode}");
+            let history = maxed_store::open_reader(&path)
+                .unwrap()
+                .boss_history(BossHistoryRequest {
+                    range: None,
+                    character_id: Some(C.into()),
+                    target_types: None,
+                })
+                .unwrap();
+            assert_eq!(history.rows.is_empty(), mode == "unknown", "{mode}");
+        }
+    }
+}

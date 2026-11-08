@@ -391,6 +391,10 @@ ownership from `observation_characters`, including flattened `character_aliases`
 A run's character remains the fallback when the observation has no character.
 Containing map visits are used only for legacy observations without an ownership
 record; later visit identity changes cannot reassign recorded observations.
+Revising a pre-017 observation preserves its absent ownership record so this
+legacy fallback remains available. Modern first-event records, including explicit
+unknown owners, remain immutable across revisions. Previously created ambiguous
+NULL-owner records stay unknown; no retrospective recovery is inferred.
 This preserves realm observations when capture begins mid-map without a visit.
 Stats deaths use their explicit character, falling back to the run's character;
 death-only and drop-only activity keeps character-filtered sessions eligible.

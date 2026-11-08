@@ -114,6 +114,12 @@ pub(crate) mod tests {
                     "drop_row",
                     "p",
                     "fp",
+                    "characters",
+                    "character_aliases",
+                    "account_source",
+                    "account_target",
+                    "run_character",
+                    "ch",
                     "run_evidence",
                     "e",
                 ]
@@ -133,6 +139,12 @@ pub(crate) mod tests {
             "drop_row",
             "p",
             "fp",
+            "characters",
+            "character_aliases",
+            "account_source",
+            "account_target",
+            "run_character",
+            "ch",
             "run_evidence",
             "e",
         ] {
@@ -156,9 +168,8 @@ pub(crate) mod tests {
             );
             assert!(!has_child_scan(&explained), "{explained}");
             assert!(
-                explained.contains(
-                    "SEARCH r USING COVERING INDEX pd_runs_comparison (dungeon=? AND outcome=?)"
-                ),
+                explained
+                    .contains("SEARCH r USING INDEX pd_runs_comparison (dungeon=? AND outcome=?)"),
                 "all-time clears must seek the selected dungeons: {explained}"
             );
             assert!(
@@ -188,6 +199,18 @@ pub(crate) mod tests {
         }
     }
 
+    pub(crate) fn seed_identity_history(db: &Connection) {
+        // Keep ownership tables large enough that EXPLAIN tests real lookup costs,
+        // rather than SQLite's deliberate scans of a two-row character fixture.
+        db.execute_batch("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<1000)
+            INSERT INTO characters(id,observed_at,json) SELECT 'history-character-'||i,0,'{}' FROM n;
+            INSERT INTO character_aliases(provisional_id,verified_id)
+                SELECT id,'history-character-1000' FROM characters
+                WHERE id LIKE 'history-character-%' AND id<>'history-character-1000';
+            ANALYZE characters;
+            ANALYZE character_aliases;").unwrap();
+    }
+
     #[test]
     fn fifty_thousand_run_summary_and_page_details_use_child_indexes() {
         use std::{cell::RefCell, time::Instant};
@@ -206,7 +229,9 @@ pub(crate) mod tests {
         let mut db = Connection::open(&path).unwrap();
         crate::migrate(&mut db).unwrap();
         db.execute_batch("INSERT INTO play_sessions(id,started,last_traffic,json) VALUES('synthetic',0,3000060000000,'{}');
-            INSERT INTO characters(id,observed_at,json) VALUES('test-mage',0,'{}'),('demo-ally',0,'{}');").unwrap();
+            INSERT INTO accounts VALUES('synthetic-a'),('synthetic-b');
+            INSERT INTO characters(id,observed_at,json,account_id) VALUES('test-mage',0,'{}','synthetic-a'),('demo-ally',0,'{}','synthetic-b');").unwrap();
+        seed_identity_history(&db);
         // One run each minute over ~35 days, two characters, ten dungeons.
         // Populate children too: an empty child table can hide a bad query plan.
         db.execute("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<50000)
@@ -294,6 +319,15 @@ pub(crate) mod tests {
             assert_eq!(page.summary.as_ref().unwrap().runs, expected);
             assert_eq!(page.rows.len(), 100);
             assert_eq!(page.details.as_ref().unwrap().len(), 100);
+            assert!(page
+                .details
+                .as_ref()
+                .unwrap()
+                .iter()
+                .all(|row| row.best_clear_micros == Some(30_000_000)));
+            if label == "no filter" {
+                assert_eq!(page.summary.as_ref().unwrap().personal_bests, 10);
+            }
             assert!(serde_json::to_vec(&page).unwrap().len() < 1024 * 1024);
             let statements = SQL.with(|sql| std::mem::take(&mut *sql.borrow_mut()));
             assert_eq!(statements.len(), 3);

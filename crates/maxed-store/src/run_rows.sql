@@ -43,8 +43,8 @@
 ), details AS (
     SELECT r.ordinal,json_object(
         'run_id',r.id,
-        'character_name',coalesce(json_extract(r.entry_character_json,'$.name'),json_extract(c.json,'$.name')),
-        'class_id',coalesce(json_extract(r.entry_character_json,'$.class_id'),json_extract(c.json,'$.class_id')),
+        'character_name',coalesce(json_extract(r.entry_character_json,'$.name'),json_extract(run_character.json,'$.name')),
+        'class_id',coalesce(json_extract(r.entry_character_json,'$.class_id'),json_extract(run_character.json,'$.class_id')),
         'local_share',CASE WHEN NOT EXISTS(SELECT 1 FROM detail_issues i
             WHERE i.run_id=r.id AND i.value='missing_identity') THEN sh.local_share END,
         'share_partial',json(CASE WHEN NOT r.complete_capture OR coalesce(sh.partial,0)
@@ -64,7 +64,7 @@
         'is_personal_best',json(CASE WHEN m.is_personal_best THEN 'true' ELSE 'false' END)
     ) AS json
     FROM selected r JOIN metrics m ON m.id=r.id LEFT JOIN shares sh ON sh.run_id=r.id
-    LEFT JOIN characters c ON c.id=r.character_id
+    LEFT JOIN characters run_character ON run_character.id=r.character_id
 ), result AS (
     SELECT json_group_array(json(json)) AS payload FROM (SELECT json FROM details ORDER BY ordinal)
 )

@@ -701,6 +701,7 @@ mod tests {
         }
         for shape in [REALISTIC, WORST] {
             let fixture = build(shape);
+            crate::run_rows::tests::seed_identity_history(&fixture.db);
             let reader = fixture.validate();
             reader.conn.trace_v2(
                 rusqlite::trace::TraceEventCodes::SQLITE_TRACE_STMT,
