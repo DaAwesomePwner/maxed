@@ -19,7 +19,7 @@ it('phase2_navigation_windows_and_bounds', async () => {
   expect(main().getByRole('heading', { name: 'Fight Unavailable' })).toBeTruthy();
   await click('Back', history()); await click('Back', history());
   expect(document.activeElement?.getAttribute('data-row-id')).toBe('run-6');
-  expect(page.browser.adapter.state).toMatchObject({ runsWindow: 0 });
+  expect(page.browser.adapter.state).not.toHaveProperty('runsWindow');
   for (const listener of page.listeners) expect(listener).toHaveBeenCalledTimes(1);
   const reads = page.queries.listRuns.mock.calls.length;
   for (let i = 0; i < 20; i++) page.publish({ ...page.snapshot, at: String(11000000 + i), sequence: String(13 + i) });

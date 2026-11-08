@@ -37,7 +37,7 @@
   import { createHomeV4Reads, type HomeV4ReadState } from '../lib/home/v4/reads';
   import { potionNames, potionStat, WHITE_BAG_TYPE } from '../lib/home/v4/hud';
   import { spriteUrl } from '../lib/bridge/visuals';
-  import { routeHref } from '../lib/navigation/routes';
+  import { productionFeatures, routeHref } from '../lib/navigation/routes';
   import { bossOnly } from '../lib/home/v3/screen-data';
   import { isBossFight, scopedFights } from '../lib/shell/rail';
   import { bestItem } from '../lib/home/v3/loot-rank';
@@ -55,7 +55,7 @@
   import { createRecapReads, type RecapLoad } from '../lib/home/v4/recap-reads';
   import { createWhiteQueue, newWhites, type WhiteBannerItem, type WhiteBannerState } from '../lib/home/v4/white-queue';
 
-  let { snapshot, statsEnabled = false, redesign = false, capture = null, liveState = null, event = null, historyReady = null,
+  let { snapshot, statsEnabled = false, redesign = productionFeatures.homeRedesign, capture = null, liveState = null, event = null, historyReady = null,
     client, store = null, required = null, initial = false, syntheticClock = false, clockReady = true, savedScope = null, onScopeChange, onReady, onClockRetry, entryKey = '', onRowsReady }: {
     snapshot: LiveSnapshot | null; statsEnabled?: boolean; redesign?: boolean; capture?: CaptureStatus | null; liveState?: LiveState | null;
     event?: EventEnvelope | null; historyReady?: StoreStatus | null;

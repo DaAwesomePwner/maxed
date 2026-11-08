@@ -37,18 +37,17 @@ describe('additive saved positions', () => {
       expect(normalizeListState(value)).toEqual(emptyListState());
     }
     const legacy = { filters: { ...defaultFilters(), limit: 100 }, focusedRowId: 'run-a' };
-    expect(normalizeListState(legacy)).toMatchObject({ filters: { limit: 25 }, focusedRowId: 'run-a', alertsPosition: null, runsWindow: 0, fightPosition: null });
+    expect(normalizeListState(legacy)).toMatchObject({ filters: { limit: 25 }, focusedRowId: 'run-a', alertsPosition: null, fightPosition: null });
   });
 
   it('keeps JSON-only alert query fields, normalized literal search and the latest 100 cursors', () => {
     const position = alertPosition();
     position.previous = [null, ...Array.from({ length: 101 }, (_, index) => ({ at: String(index), id: `alert-${index}` }))];
-    const state = normalizeListState({ alertsPosition: { ...position, pages: [{ rows: ['not saved'] }], filter: { ...position.filter, limit: 100, extra: true } }, runsWindow: 3,
-      fightPosition: { playerWindow: 2, sourceWindow: 4, selectedPlayerId: 'player-a', extra: true } });
+    const state = normalizeListState({ alertsPosition: { ...position, pages: [{ rows: ['not saved'] }], filter: { ...position.filter, limit: 100, extra: true } }, fightPosition: { playerWindow: 2, sourceWindow: 4, selectedPlayerId: 'player-a', extra: true } });
     expect(state.alertsPosition).toEqual({ filter: { ...position.filter, limit: 50, query: 'literal %_\\' }, previous: position.previous.slice(-100), window: 2 });
     expect(state.fightPosition).toEqual({ playerWindow: 2, sourceWindow: 4, selectedPlayerId: 'player-a', plotted: null });
     expect(JSON.parse(JSON.stringify(state))).toEqual(state);
-    expect(state.runsWindow).toBe(3);
+    expect(state).not.toHaveProperty('runsWindow');
     expect(position.filter.query).toBe('  literal %_\\  ');
   });
 
@@ -71,9 +70,9 @@ describe('additive saved positions', () => {
 
   it('normalizes each window independently and preserves known zero', () => {
     for (const invalid of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, '2', null]) {
-      const state = normalizeListState({ runsWindow: invalid, alertsPosition: { ...alertPosition(), window: invalid },
+      const state = normalizeListState({ alertsPosition: { ...alertPosition(), window: invalid },
         fightPosition: { playerWindow: invalid, sourceWindow: 0, selectedPlayerId: '\u0000' } });
-      expect(state.runsWindow).toBe(0);
+      expect(state).not.toHaveProperty('runsWindow');
       expect(state.alertsPosition?.window).toBe(0);
       expect(state.fightPosition).toEqual({ playerWindow: 0, sourceWindow: 0, selectedPlayerId: null, plotted: null });
     }
@@ -84,17 +83,17 @@ describe('additive saved positions', () => {
     router.navigate({ kind: 'alerts' }); router.save({ alertsPosition: alertPosition(), focusedRowId: 'alert-a' });
     router.navigate({ kind: 'runs' });
     expect(router.state.entry.alertsPosition).toBeNull();
-    router.save({ runsWindow: 4 });
+    router.save({ scrollTop: 4 });
     router.navigate({ kind: 'fight', id: 'f' });
-    expect(router.state.entry.runsWindow).toBe(0);
+    expect(router.state.entry.scrollTop).toBe(0);
     router.save({ fightPosition: { playerWindow: 1, selectedPlayerId: 'p', sourceWindow: 2 } });
-    router.back(); expect(router.state.entry.runsWindow).toBe(4);
+    router.back(); expect(router.state.entry.scrollTop).toBe(4);
     router.back(); expect(router.state.entry.alertsPosition?.window).toBe(2);
     expect(router.state.entry.fightPosition).toBeNull();
     router.forward(); router.forward();
     expect(router.state.entry.fightPosition?.selectedPlayerId).toBe('p');
     router.setScope('live:b'); browser.adapter.go(-1);
-    expect(router.state.entry).toMatchObject({ alertsPosition: null, runsWindow: 0, fightPosition: null });
+    expect(router.state.entry).toMatchObject({ alertsPosition: null, fightPosition: null });
     router.dispose();
   });
 });

@@ -94,11 +94,10 @@ export interface ListState {
   lootPosition?: LootPosition | null;
   statsPosition?: StatsPosition | null;
   logsPosition?: LogsPosition | null;
-  runsWindow?: number;
   fightPosition?: FightPosition | null;
 }
 export const defaultFilters = (): RunFilter => ({ dungeon: null, outcome: null, character_id: null, range: null, sort: 'newest', cursor: null, limit: 25 });
-export const emptyListState = (): ListState => ({ homeScope: null, filters: defaultFilters(), scrollTop: 0, focusedRowId: null, runsPosition: null, selectedFightId: null, storyPosition: null, alertsPosition: null, lootPosition: null, logsPosition: null, statsPosition: null, runsWindow: 0, fightPosition: null });
+export const emptyListState = (): ListState => ({ homeScope: null, filters: defaultFilters(), scrollTop: 0, focusedRowId: null, runsPosition: null, selectedFightId: null, storyPosition: null, alertsPosition: null, lootPosition: null, logsPosition: null, statsPosition: null, fightPosition: null });
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 const windowIndex = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
@@ -287,7 +286,6 @@ export function normalizeListState(input: unknown): ListState {
     lootPosition: lootPosition(value.lootPosition),
     logsPosition: logsPosition(value.logsPosition),
     statsPosition: statsPosition(value.statsPosition),
-    runsWindow: windowIndex(value.runsWindow),
     fightPosition: record(value.fightPosition) ? {
       playerWindow: windowIndex(value.fightPosition.playerWindow), sourceWindow: windowIndex(value.fightPosition.sourceWindow),
       selectedPlayerId: safeId(value.fightPosition.selectedPlayerId) ? value.fightPosition.selectedPlayerId : null,
