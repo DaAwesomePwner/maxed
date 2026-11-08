@@ -56,7 +56,7 @@ The first cargo-xwin run downloads the MSVC CRT and Windows SDK into `~/Library/
 1. Branch from `main`. Source `scripts/mac/env.sh`, use `scripts/mac/check.sh quick` while iterating and run `scripts/mac/check.sh full` before review.
 2. Open a pull request against `main` with changes, validation and remaining Windows checks.
 3. Run `scripts/mac/build-windows.sh` and transfer the test zip privately to Windows. Check `BUILD-INFO.txt` against the revision under test. The unsigned zip is for testing, not public release distribution.
-4. On Windows, run `cargo test --locked -p maxed-app` and `cargo test --locked -p maxed-assets` as applicable, plus the packaging suites for release-path changes. Use `scripts/build-release.ps1 -Package` for installer acceptance.
+4. On Windows, use [local UI review](windows-ui-review.md) to build and drive the branch, then run `cargo test --locked -p maxed-app` and `cargo test --locked -p maxed-assets` as applicable, plus the packaging suites for release-path changes. Use `scripts/build-release.ps1 -Package` for installer acceptance.
 5. Record the exact revision/artifact hash, steps, expected and observed behavior, and sanitized evidence in the pull request. Fix issues and rerun affected checks.
 
 Windows prerequisites are Rust 1.99.0 (MSVC), Visual Studio 2022 C++ Build Tools and Windows SDK, Node 22.16.0, WebView2, and Npcap without its admin-only restriction. Follow [installation](../release/INSTALL.md) and [fixture policy](fixtures.md). Never attach raw traffic or account data.
