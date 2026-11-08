@@ -11,6 +11,7 @@ pub mod accounts;
 mod alerts;
 pub mod backup;
 mod boss_history;
+mod catalog_query;
 mod chat;
 mod dungeon_profile;
 mod error;
@@ -59,6 +60,7 @@ use common::receipts as receipt_tests;
 pub use alerts::{
     AlertContext, ChatContext, CommittedAlert, ContextualEvent, ContextualShutdownError,
 };
+pub use catalog_query::{CatalogQueryData, CatalogQueryIdentity};
 pub use chat::{
     event_fts_probe_for_tests, event_page_sql_for_tests, maintain_chat_file, ChatMaintenance,
     HiddenLists, CHAT_CLEAR_BATCH, CHAT_PRUNE_BATCH,

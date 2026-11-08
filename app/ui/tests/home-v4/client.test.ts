@@ -135,7 +135,7 @@ it('get_home_hud_invokes_the_command', async () => {
   const value: HomeHud = {
     fame_per_hour: 600, combat: { fights: 2, weighted_dps: 2500, weighted_party_dps: 2000,
       vs_party: 0.25, avg_rank: 2 }, whites: 1, ut_st: [42], ut_st_count: 1,
-    potions: [{ stat: 'life', count: 2 }],
+    potions: [{ stat: 'life', object_type: null, count: 2 }],
   };
   const homeHud = vi.fn((_scope: HomeScope) => value);
   const fixture = createFixtureTransport(snapshot, undefined, undefined, undefined, undefined,

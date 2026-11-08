@@ -70,23 +70,24 @@ impl StoreReader {
         request: DropSummaryRequest,
         tiers: &[(u16, Option<String>)],
     ) -> Result<DropSummary, StoreError> {
+        self.drop_summary_catalog(request, &crate::CatalogQueryData::new(tiers, &[]))
+    }
+
+    pub fn drop_summary_catalog(
+        &self,
+        request: DropSummaryRequest,
+        catalog: &crate::CatalogQueryData,
+    ) -> Result<DropSummary, StoreError> {
         if request.days.len() > 8 {
             return Err(StoreError::InvalidEvent);
         }
-        if tiers.len() > 65_536
-            || tiers
-                .iter()
-                .any(|(_, tier)| tier.as_ref().is_some_and(|s| s.len() > 16))
-        {
-            return Err(StoreError::Limit);
-        }
-        let unique: std::collections::BTreeMap<_, _> = tiers.iter().cloned().collect();
-        let tiers = serde_json::to_string(&unique.into_iter().collect::<Vec<_>>())?;
+        catalog.identity().validate()?;
+        let tiers = catalog.tiers_json();
         for day in &request.days {
             range(day)?;
         }
         let tx = self.conn.unchecked_transaction()?;
-        let totals = self.drop_totals(&request.filter, &tiers, request.include_items)?;
+        let totals = self.drop_totals(&request.filter, tiers, request.include_items)?;
         let mut days = Vec::with_capacity(request.days.len());
         for day in request.days {
             let mut filter = request.filter.clone();
@@ -108,7 +109,7 @@ impl StoreReader {
                 });
             } else {
                 filter.range = Some(intersection);
-                days.push(self.drop_totals(&filter, &tiers, request.include_items)?);
+                days.push(self.drop_totals(&filter, tiers, request.include_items)?);
             }
         }
         let result = bounded(DropSummary { totals, days }, MAX_LOOT_BYTES)?;
@@ -225,6 +226,14 @@ impl StoreReader {
         request: CollectionRequest,
         tiers: &[(u16, Option<String>)],
     ) -> Result<Collection, StoreError> {
+        self.collection_catalog(request, &crate::CatalogQueryData::new(tiers, &[]))
+    }
+
+    pub fn collection_catalog(
+        &self,
+        request: CollectionRequest,
+        catalog: &crate::CatalogQueryData,
+    ) -> Result<Collection, StoreError> {
         if request.chase.len() > MAX_CHASE_ITEMS {
             return Err(StoreError::InvalidEvent);
         }
@@ -242,15 +251,8 @@ impl StoreReader {
             micros(item.pinned_at)?;
         }
         // Match scope_loot's metadata bounds and one-tier-per-type normalization.
-        if tiers.len() > 65_536
-            || tiers
-                .iter()
-                .any(|(_, tier)| tier.as_ref().is_some_and(|s| s.len() > 16))
-        {
-            return Err(StoreError::Limit);
-        }
-        let unique: std::collections::BTreeMap<_, _> = tiers.iter().cloned().collect();
-        let tiers = serde_json::to_string(&unique.into_iter().collect::<Vec<_>>())?;
+        catalog.identity().validate()?;
+        let tiers = catalog.tiers_json();
         let json: Option<String> = self.conn.query_row(
             include_str!("loot_collection.sql"),
             params![

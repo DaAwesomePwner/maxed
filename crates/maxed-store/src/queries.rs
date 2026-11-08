@@ -1,6 +1,6 @@
 use crate::{
     project::{micros, tag},
-    StoreError, StoreReader,
+    CatalogQueryData, StoreError, StoreReader,
 };
 use maxed_types::*;
 use rusqlite::{params, params_from_iter, types::Value, Connection, Params, Transaction};
@@ -530,6 +530,23 @@ impl StoreReader {
         limit: u16,
         tiers: &[(u16, Option<String>)],
     ) -> Result<ScopeLootPage, StoreError> {
+        self.scope_loot_catalog(
+            scope,
+            account,
+            cursor,
+            limit,
+            &CatalogQueryData::new(tiers, &[]),
+        )
+    }
+
+    pub fn scope_loot_catalog(
+        &self,
+        scope: HomeScope,
+        account: Option<&str>,
+        cursor: Option<String>,
+        limit: u16,
+        catalog: &CatalogQueryData,
+    ) -> Result<ScopeLootPage, StoreError> {
         validate_scope_loot(&scope, cursor.as_deref(), limit)?;
         let cursor = loot_cursor(&scope, cursor.as_deref())?;
         let (kind, id, lo, hi) = match &scope {
@@ -540,9 +557,8 @@ impl StoreReader {
             }
         };
         // One tier per u16 type; reject pathological metadata before allocating SQL JSON.
-        validate_loot_catalog(tiers, &[])?;
-        let unique: std::collections::BTreeMap<_, _> = tiers.iter().cloned().collect();
-        let tiers = serde_json::to_string(&unique.into_iter().collect::<Vec<_>>())?;
+        catalog.identity().validate()?;
+        let tiers = catalog.tiers_json();
         let json: Option<String> = self.conn.query_row(
             &crate::account_sql::with_accounts(include_str!("scope_loot.sql")),
             params![

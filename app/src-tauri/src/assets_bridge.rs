@@ -2,7 +2,7 @@
 use maxed_assets::{AssetError, AssetPaths, AssetProgress, CachedCatalog};
 use maxed_types::{
     AssetCheck, Catalog, EnchantInfo, ExtractionStage, ItemDetail, ItemDetailPage, ItemMatch,
-    ObjectVisual, PotionStat, SetupStatus, VisualPage,
+    ObjectVisual, SetupStatus, VisualPage,
 };
 use std::{
     collections::BTreeSet,
@@ -102,6 +102,7 @@ struct State {
     generation: u64,
     cancel: Arc<AtomicBool>,
     cache: Option<CachedCatalog>,
+    query_data: maxed_store::CatalogQueryData,
     status: SetupStatus,
     closed: bool,
 }
@@ -121,30 +122,12 @@ impl Default for AssetBridge {
     }
 }
 impl AssetBridge {
-    pub fn scope_loot_tiers(&self) -> Vec<(u16, Option<String>)> {
-        self.cache()
-            .map(|cache| {
-                cache
-                    .catalog
-                    .items
-                    .iter()
-                    .map(|item| (item.object_type, item.tier.clone()))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    pub fn potion_stats(&self) -> Vec<(u16, PotionStat)> {
-        self.cache()
-            .map(|cache| {
-                cache
-                    .catalog
-                    .items
-                    .iter()
-                    .filter_map(|item| item.potion_stat.map(|stat| (item.object_type, stat)))
-                    .collect()
-            })
-            .unwrap_or_default()
+    pub fn catalog_query_data(&self) -> maxed_store::CatalogQueryData {
+        self.state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .query_data
+            .clone()
     }
 
     pub fn new(loader: Arc<dyn AssetLoader>) -> Self {
@@ -153,6 +136,7 @@ impl AssetBridge {
                 generation: 0,
                 cancel: Arc::new(AtomicBool::new(false)),
                 cache: None,
+                query_data: maxed_store::CatalogQueryData::default(),
                 status: SetupStatus::default(),
                 closed: false,
             }),
@@ -330,6 +314,11 @@ impl AssetBridge {
             return Err(CANCELLED.into());
         }
         persist()?;
+        if state.cache.as_ref().is_none_or(|previous| {
+            previous.catalog.client_fingerprint != cache.catalog.client_fingerprint
+        }) {
+            state.query_data = maxed_store::CatalogQueryData::from_catalog(&cache.catalog);
+        }
         state.cache = Some(cache.clone());
         cache.prune_in_background();
         state.status.assets = AssetCheck::Ready;
@@ -662,7 +651,10 @@ mod tests {
     #[test]
     fn potion_stats_lists_classified_items() {
         let bridge = AssetBridge::default();
-        assert!(bridge.potion_stats().is_empty());
+        assert_eq!(
+            bridge.catalog_query_data().potion_type(PotionStat::Life),
+            None
+        );
 
         let dir = tempfile::tempdir().unwrap();
         let paths = AssetPaths {
@@ -684,9 +676,22 @@ mod tests {
         let op = bridge.begin().unwrap();
         bridge.commit(&op, cache, || Ok(())).unwrap();
 
-        assert_eq!(
-            bridge.potion_stats(),
-            vec![(201, PotionStat::Speed), (202, PotionStat::Life)]
-        );
+        let first = bridge.catalog_query_data();
+        assert_eq!(first.potion_type(PotionStat::Speed), Some(201));
+        assert_eq!(first.potion_type(PotionStat::Life), Some(202));
+        assert!(first.shares_instance(&bridge.catalog_query_data()));
+        let mut cache = bridge.cache().unwrap();
+        let op = bridge.begin().unwrap();
+        bridge.commit(&op, cache.clone(), || Ok(())).unwrap();
+        assert!(first.shares_instance(&bridge.catalog_query_data()));
+        Arc::make_mut(&mut cache.catalog).client_fingerprint = "b".repeat(64);
+        Arc::make_mut(&mut cache.catalog).items[1].potion_stat = Some(PotionStat::Mana);
+        let op = bridge.begin().unwrap();
+        bridge.commit(&op, cache, || Ok(())).unwrap();
+        let second = bridge.catalog_query_data();
+        assert!(!first.shares_instance(&second));
+        assert_ne!(first.identity(), second.identity());
+        assert_eq!(second.potion_type(PotionStat::Mana), Some(201));
+        assert_eq!(first.potion_type(PotionStat::Speed), Some(201));
     }
 }

@@ -349,7 +349,11 @@ pub(super) async fn command(
                 .await?,
         ),
         5 => json(runtime.list_alerts(alert_filter()).await?),
-        6 => json(runtime.scope_loot(scope(), None, 20, vec![]).await?),
+        6 => json(
+            runtime
+                .scope_loot(scope(), None, 20, history_test_catalog())
+                .await?,
+        ),
         7 => json(runtime.dungeon_bests().await?),
         8 => json(
             runtime
@@ -385,7 +389,7 @@ pub(super) async fn command(
                         dungeon: None,
                         chase: vec![],
                     },
-                    vec![],
+                    history_test_catalog(),
                 )
                 .await?,
         ),
@@ -1188,8 +1192,13 @@ fn scope_loot_validates_before_read_and_returns_a_page() {
     let (_dir, runtime) = setup();
     for limit in [0, 101] {
         assert_eq!(
-            tauri::async_runtime::block_on(runtime.scope_loot(scope(), None, limit, vec![]))
-                .unwrap_err(),
+            tauri::async_runtime::block_on(runtime.scope_loot(
+                scope(),
+                None,
+                limit,
+                history_test_catalog()
+            ))
+            .unwrap_err(),
             super::history::INVALID
         );
     }
@@ -1197,7 +1206,7 @@ fn scope_loot_validates_before_read_and_returns_a_page() {
         scope(),
         None,
         20,
-        vec![],
+        history_test_catalog(),
     )));
     assert!(page.items.len() <= 20);
     // This runtime fixture seeds sessions/runs/fights, but deliberately no bags.
@@ -1748,4 +1757,10 @@ fn startup_same_lane_coalesces_before_any_reader_is_dispatched() {
     }
     release.send(()).unwrap();
     ready(tauri::async_runtime::block_on(previous.unwrap()));
+}
+
+fn history_test_catalog() -> maxed_store::CatalogQueryData {
+    static CATALOG: std::sync::LazyLock<maxed_store::CatalogQueryData> =
+        std::sync::LazyLock::new(maxed_store::CatalogQueryData::default);
+    CATALOG.clone()
 }

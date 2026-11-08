@@ -133,11 +133,10 @@ fn history_commands_match_durable_live_story_after_stop() {
             > 0
     );
     assert_eq!(
-        history_ready(tauri::async_runtime::block_on(h.runtime.home_hud(
-            scope,
-            vec![],
-            vec![]
-        ))),
+        history_ready(tauri::async_runtime::block_on(
+            h.runtime
+                .home_hud(scope, maxed_store::CatalogQueryData::new(&[], &[]))
+        )),
         expected
     );
     assert_eq!(h.runtime.store_status(), before);

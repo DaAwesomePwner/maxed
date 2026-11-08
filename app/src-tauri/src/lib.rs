@@ -380,7 +380,7 @@ async fn get_home_hud(
 ) -> Result<maxed_types::HistoryReply<maxed_types::HomeHud>, String> {
     runtime
         .inner()
-        .home_hud(scope, setup.scope_loot_tiers(), setup.potion_stats())
+        .home_hud(scope, setup.catalog_query_data())
         .await
 }
 
@@ -390,14 +390,10 @@ async fn get_run_recap(
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
     setup: tauri::State<'_, Arc<SetupService>>,
 ) -> Result<maxed_types::HistoryReply<Option<maxed_types::RunRecap>>, String> {
-    let chase_types = setup
-        .scope_loot_tiers()
-        .into_iter()
-        .filter_map(|(item_type, tier)| {
-            matches!(tier.as_deref(), Some("UT" | "ST")).then_some(item_type)
-        })
-        .collect();
-    runtime.inner().run_recap(request, chase_types).await
+    runtime
+        .inner()
+        .run_recap(request, setup.catalog_query_data())
+        .await
 }
 
 #[tauri::command]
@@ -416,7 +412,7 @@ async fn get_scope_loot(
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
     setup: tauri::State<'_, Arc<SetupService>>,
 ) -> Result<maxed_types::HistoryReply<maxed_types::ScopeLootPage>, String> {
-    let tiers = setup.scope_loot_tiers();
+    let tiers = setup.catalog_query_data();
     runtime
         .inner()
         .scope_loot(scope, cursor, limit, tiers)
@@ -677,7 +673,7 @@ async fn get_drop_summary(
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
     setup: tauri::State<'_, Arc<SetupService>>,
 ) -> Result<maxed_types::HistoryReply<maxed_types::DropSummary>, String> {
-    let tiers = setup.scope_loot_tiers();
+    let tiers = setup.catalog_query_data();
     runtime.inner().get_drop_summary(request, tiers).await
 }
 
@@ -687,7 +683,7 @@ async fn get_collection(
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
     setup: tauri::State<'_, Arc<SetupService>>,
 ) -> Result<maxed_types::HistoryReply<maxed_types::Collection>, String> {
-    let tiers = setup.scope_loot_tiers();
+    let tiers = setup.catalog_query_data();
     runtime.inner().get_collection(request, tiers).await
 }
 
