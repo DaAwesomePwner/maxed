@@ -1062,10 +1062,12 @@ fn status_read_returns_while_capture_sink_is_blocked() {
     });
     let status = result.recv_timeout(Duration::from_secs(5));
     // Release and join even when the read times out, so a regression cannot hang cleanup.
-    release.send(()).unwrap();
-    publishing.join().unwrap();
-    reader.join().unwrap();
-    entered.unwrap();
+    let _ = release.send(());
+    let published = publishing.join();
+    let read = reader.join();
+    entered.expect("capture sink was never entered");
+    published.unwrap();
+    read.unwrap();
     assert_eq!(status.unwrap().state, CaptureState::Live);
 }
 
@@ -1100,17 +1102,18 @@ fn concurrent_capture_publications_preserve_status_order_and_stopped_last() {
         );
     });
     let serialized = waiting.recv_timeout(Duration::from_secs(5));
-    let (started, attempting) = bounded(0);
+    let (contended, contention) = bounded(1);
+    *shared.on_status_delivery_contention.lock().unwrap() = Some(contended);
     let last = thread::spawn(move || {
-        started.send(()).unwrap();
         shared.publish(CaptureStatus::default(), &sink);
     });
-    let attempted = attempting.recv_timeout(Duration::from_secs(5));
+    // The signal comes from publish only after its try_lock observes WouldBlock.
+    let attempted = contention.recv_timeout(Duration::from_secs(5));
     release.send(()).unwrap();
     first.join().unwrap();
     last.join().unwrap();
     assert!(serialized.unwrap());
-    attempted.unwrap();
+    attempted.expect("second publisher did not contend on delivery");
     assert_eq!(
         events.try_iter().collect::<Vec<_>>(),
         vec![
@@ -1118,4 +1121,37 @@ fn concurrent_capture_publications_preserve_status_order_and_stopped_last() {
             (CaptureState::Stopped, CaptureState::Stopped),
         ]
     );
+}
+
+#[test]
+fn capture_delivery_panic_immediately_marks_status_failed() {
+    let shared = Shared::default();
+    let sink: StatusSink = Arc::new(|_| panic!("synthetic sink failure"));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        shared.publish(
+            CaptureStatus {
+                state: CaptureState::Live,
+                ..Default::default()
+            },
+            &sink,
+        );
+    }));
+    assert!(result.is_err());
+    assert!(shared.failed.load(Ordering::Acquire));
+    assert!(!shared.status.is_poisoned());
+    assert!(shared.status_delivery.is_poisoned());
+    assert_eq!(shared.status(), failed_status());
+}
+
+#[test]
+fn poisoned_delivery_lock_is_visible_without_another_publish() {
+    let shared = Shared::default();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _delivery = shared.status_delivery.lock().unwrap();
+        panic!("synthetic delivery poison");
+    }));
+    assert!(result.is_err());
+    assert!(!shared.failed.load(Ordering::Acquire));
+    assert_eq!(shared.status(), failed_status());
+    assert!(shared.failed.load(Ordering::Acquire));
 }
