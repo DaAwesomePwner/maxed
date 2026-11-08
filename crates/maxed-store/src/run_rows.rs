@@ -10,11 +10,11 @@ use rusqlite::{params_from_iter, types::Value, Connection};
 const METRICS: &str = include_str!("run_metrics.sql");
 
 fn detail_sql() -> String {
-    format!(
+    crate::account_sql::with_accounts(&format!(
         "WITH selected AS MATERIALIZED (SELECT r.*,j.key AS ordinal
         FROM json_each(?1) j CROSS JOIN runs r ON r.id=j.value)\n{METRICS}\n{}",
         include_str!("run_rows.sql")
-    )
+    ))
 }
 
 pub(crate) fn details(
@@ -67,10 +67,10 @@ fn summary_sql(filter: &RunFilter) -> Result<(String, Vec<Value>), StoreError> {
         .replace("/*counts*/", &counts.join(" AND "))
         .replace("/*characters*/", &common.join(" AND "));
     Ok((
-        format!(
+        crate::account_sql::with_accounts(&format!(
             "WITH selected AS MATERIALIZED (SELECT * FROM runs WHERE {})\n{METRICS}\n{tail}",
             selected.join(" AND ")
-        ),
+        )),
         args,
     ))
 }
@@ -114,6 +114,12 @@ pub(crate) mod tests {
                     "drop_row",
                     "p",
                     "fp",
+                    "characters",
+                    "character_aliases",
+                    "account_source",
+                    "account_target",
+                    "run_character",
+                    "ch",
                     "run_evidence",
                     "e",
                 ]
@@ -133,6 +139,12 @@ pub(crate) mod tests {
             "drop_row",
             "p",
             "fp",
+            "characters",
+            "character_aliases",
+            "account_source",
+            "account_target",
+            "run_character",
+            "ch",
             "run_evidence",
             "e",
         ] {
@@ -156,9 +168,8 @@ pub(crate) mod tests {
             );
             assert!(!has_child_scan(&explained), "{explained}");
             assert!(
-                explained.contains(
-                    "SEARCH r USING COVERING INDEX pd_runs_comparison (dungeon=? AND outcome=?)"
-                ),
+                explained
+                    .contains("SEARCH r USING INDEX pd_runs_comparison (dungeon=? AND outcome=?)"),
                 "all-time clears must seek the selected dungeons: {explained}"
             );
             assert!(
@@ -174,7 +185,7 @@ pub(crate) mod tests {
                     "SEARCH fight USING INDEX fights_run",
                     "SEARCH drop_row USING INDEX drops_run",
                     "SEARCH p USING INDEX",
-                    "SEARCH previous_clear USING AUTOMATIC COVERING INDEX (dungeon=?)",
+                    "SEARCH previous_clear USING AUTOMATIC COVERING INDEX (dungeon=? AND account_id=?)",
                 ] {
                     assert!(explained.contains(search), "missing {search}:\n{explained}");
                 }
@@ -186,6 +197,18 @@ pub(crate) mod tests {
                 );
             }
         }
+    }
+
+    pub(crate) fn seed_identity_history(db: &Connection) {
+        // Keep ownership tables large enough that EXPLAIN tests real lookup costs,
+        // rather than SQLite's deliberate scans of a two-row character fixture.
+        db.execute_batch("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<1000)
+            INSERT INTO characters(id,observed_at,json) SELECT 'history-character-'||i,0,'{}' FROM n;
+            INSERT INTO character_aliases(provisional_id,verified_id)
+                SELECT id,'history-character-1000' FROM characters
+                WHERE id LIKE 'history-character-%' AND id<>'history-character-1000';
+            ANALYZE characters;
+            ANALYZE character_aliases;").unwrap();
     }
 
     #[test]
@@ -206,7 +229,9 @@ pub(crate) mod tests {
         let mut db = Connection::open(&path).unwrap();
         crate::migrate(&mut db).unwrap();
         db.execute_batch("INSERT INTO play_sessions(id,started,last_traffic,json) VALUES('synthetic',0,3000060000000,'{}');
-            INSERT INTO characters(id,observed_at,json) VALUES('test-mage',0,'{}'),('demo-ally',0,'{}');").unwrap();
+            INSERT INTO accounts VALUES('synthetic-a'),('synthetic-b');
+            INSERT INTO characters(id,observed_at,json,account_id) VALUES('test-mage',0,'{}','synthetic-a'),('demo-ally',0,'{}','synthetic-b');").unwrap();
+        seed_identity_history(&db);
         // One run each minute over ~35 days, two characters, ten dungeons.
         // Populate children too: an empty child table can hide a bad query plan.
         db.execute("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<50000)
@@ -294,6 +319,15 @@ pub(crate) mod tests {
             assert_eq!(page.summary.as_ref().unwrap().runs, expected);
             assert_eq!(page.rows.len(), 100);
             assert_eq!(page.details.as_ref().unwrap().len(), 100);
+            assert!(page
+                .details
+                .as_ref()
+                .unwrap()
+                .iter()
+                .all(|row| row.best_clear_micros == Some(30_000_000)));
+            if label == "no filter" {
+                assert_eq!(page.summary.as_ref().unwrap().personal_bests, 10);
+            }
             assert!(serde_json::to_vec(&page).unwrap().len() < 1024 * 1024);
             let statements = SQL.with(|sql| std::mem::take(&mut *sql.borrow_mut()));
             assert_eq!(statements.len(), 3);

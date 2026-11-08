@@ -510,10 +510,217 @@ fn session_loot_character_filter_uses_runs_and_containing_visits() {
         ],
     );
     assert_eq!(detail(&path, "s1", None).session.bags, 3);
+    // A recorded unknown owner cannot be replaced by mutable visit identity.
+    assert_eq!(detail(&path, "s1", Some(C)).session.bags, 0);
+    // Exercise the legacy visit fallback with a pre-017 observation.
+    db.execute(
+        "DELETE FROM observation_characters WHERE kind='drop' AND observation_id='realm-bag'",
+        [],
+    )
+    .unwrap();
+
     let mine = detail(&path, "s1", Some(C)).session;
     assert_eq!((mine.bags, mine.notable_bags), (1, 1));
     let other = detail(&path, "s1", Some("synth-other")).session;
     assert_eq!((other.bags, other.notable_bags), (1, 1));
     let absent = detail(&path, "s1", Some("absent")).session;
     assert_eq!((absent.bags, absent.notable_bags), (0, 0));
+}
+
+#[test]
+fn immutable_observation_owners_survive_missing_or_changed_visits() {
+    let (_dir, _path, db) = database();
+    db.execute_batch("INSERT INTO play_sessions VALUES('s',0,100,100,'{}');
+        INSERT INTO characters(id,observed_at,json) VALUES('owner',0,'{}'),('alias',0,'{}'),('later',0,'{}');
+        INSERT INTO character_aliases VALUES('alias','owner');
+        INSERT INTO fights(id,session_id,started,complete_capture,json) VALUES('f','s',10,1,'{}');
+        INSERT INTO drops(id,session_id,at,bag_type,bag_rank,json) VALUES('d','s',10,1,80,'{}');
+        INSERT INTO observation_characters VALUES('fight','f','alias'),('drop','d','alias');").unwrap();
+    let fight_sql = format!(
+        "WITH {} SELECT character_id FROM fight_character WHERE fight_id='f'",
+        include_str!("../src/fight_character.sql")
+    );
+    let totals = include_str!("../src/stats_session_totals.sql");
+    for sql in [&fight_sql, totals] {
+        let mut statement = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
+        let args = vec![rusqlite::types::Value::Null; statement.parameter_count()];
+        let plan = statement
+            .query_map(rusqlite::params_from_iter(args), |r| r.get::<_, String>(3))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .join("\n");
+        for index in [
+            "sqlite_autoindex_observation_characters_1",
+            "sqlite_autoindex_character_aliases_1",
+            "map_visits_session",
+        ] {
+            assert!(plan.contains(index), "{plan}");
+        }
+        for line in plan.lines() {
+            assert!(
+                !["SCAN o", "SCAN a", "SCAN v", "SCAN d", "SCAN r", "SCAN f"]
+                    .iter()
+                    .any(|scan| line == *scan || line.starts_with(&format!("{scan} "))),
+                "{plan}"
+            );
+        }
+    }
+    let check = |expected: &str| {
+        assert_eq!(
+            db.query_row(&fight_sql, [], |r| r.get::<_, String>(0))
+                .unwrap(),
+            expected
+        );
+        let (active, bags): (bool, u32) = db
+            .query_row(totals, ["s", expected], |r| Ok((r.get(5)?, r.get(6)?)))
+            .unwrap();
+        assert!(active);
+        assert_eq!(bags, 1);
+    };
+    check("owner");
+    db.execute_batch("INSERT INTO map_visits(id,stream_id,session_id,character_id,map,kind,started,ended,source,json)
+        VALUES('v','s','s','later','Realm','realm',0,100,'live','{}');").unwrap();
+    check("owner");
+    // Only absence of the first-event record enables the pre-017 visit fallback.
+    db.execute_batch("DELETE FROM observation_characters;")
+        .unwrap();
+    check("later");
+    db.execute_batch(
+        "INSERT INTO observation_characters VALUES('fight','f',NULL),('drop','d',NULL);",
+    )
+    .unwrap();
+    assert_eq!(
+        db.query_row(&fight_sql, [], |r| r.get::<_, Option<String>>(0))
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        db.query_row(totals, ["s", "later"], |r| r.get::<_, u32>(6))
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn death_only_sessions_are_active_and_use_run_character_fallback() {
+    let (_dir, _path, db) = database();
+    db.execute_batch(
+        "INSERT INTO play_sessions VALUES('s',0,100,100,'{}'),('run-session',0,100,100,'{}');
+        INSERT INTO characters(id,observed_at,json) VALUES('owner',0,'{}'),('other',0,'{}');
+        INSERT INTO runs(id,session_id,character_id,dungeon,started,complete_capture,json)
+            VALUES('r','run-session','owner','Synthetic',0,1,'{}');
+        INSERT INTO deaths(stream_id,sequence,character_id,run_id,at,session_id)
+            VALUES('s',1,NULL,'r',10,'s'),('s',2,'other','r',20,'s');",
+    )
+    .unwrap();
+    for character in ["owner", "other"] {
+        let (deaths, active): (u32, bool) = db
+            .query_row(
+                include_str!("../src/stats_session_totals.sql"),
+                ["s", character],
+                |r| Ok((r.get(4)?, r.get(5)?)),
+            )
+            .unwrap();
+        assert_eq!(deaths, 1);
+        assert!(active);
+    }
+}
+
+#[test]
+fn ownership_revisions_preserve_legacy_unknown_and_known_fights_and_drops() {
+    for mode in ["legacy", "unknown", "known"] {
+        let (_dir, path, mut db) = database();
+        let mut stream = Stream::new("ownership-revisions");
+        stream.apply(
+            &mut db,
+            vec![
+                session("s", 0, 10 * MIN, None),
+                character(C, "Synthetic", 0),
+                character("other", "Other", 0),
+                map("Realm", AreaKind::Realm, 0),
+            ],
+        );
+        // Set a containing legacy visit independently of the first-event owner.
+        db.execute("UPDATE map_visits SET character_id=?1", [C])
+            .unwrap();
+        let mut fight = demo::demo_snapshot().fights.remove(0);
+        fight.id = "f".into();
+        fight.session_id = "s".into();
+        fight.run_id = None;
+        fight.owner_character_id = (mode == "known").then(|| C.into());
+        fight.players.retain(|p| p.is_local);
+        fight.ended = Some(Timestamp(fight.started.0 + 120_000_000));
+        fight.boss_type = Some(42);
+        fight.target_type = Some(42);
+        fight.players[0].dps = Some(1000.0);
+        let mut drop = observed_bag("d", "s", MIN, Some(80));
+        drop.owner_character_id = fight.owner_character_id.clone();
+        stream.apply(
+            &mut db,
+            vec![
+                EngineEvent::FightUpdated(fight.clone()),
+                EngineEvent::BagDropped(drop.clone()),
+            ],
+        );
+        if mode == "legacy" {
+            // Retain valid saved DTOs but remove ownership to reproduce the pre-017 shape.
+            db.execute("DELETE FROM observation_characters", [])
+                .unwrap();
+        }
+        for revised_owner in [Some("other".to_owned()), None] {
+            fight.owner_character_id = revised_owner.clone();
+            drop.owner_character_id = revised_owner;
+            stream.apply(
+                &mut db,
+                vec![
+                    EngineEvent::FightUpdated(fight.clone()),
+                    EngineEvent::DropUpdated(drop.clone()),
+                ],
+            );
+            for kind in ["fight", "drop"] {
+                let (count, owner): (u32, Option<String>) = db.query_row(
+                    "SELECT count(*),max(character_id) FROM observation_characters WHERE kind=?1",
+                    [kind], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+                assert_eq!(count, u32::from(mode != "legacy"), "{mode}/{kind}");
+                assert_eq!(
+                    owner.as_deref(),
+                    (mode == "known").then_some(C),
+                    "{mode}/{kind}"
+                );
+            }
+            let resolved: Option<String> = db
+                .query_row(
+                    &format!(
+                        "WITH {} SELECT character_id FROM fight_character WHERE fight_id='f'",
+                        include_str!("../src/fight_character.sql")
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(
+                resolved.as_deref(),
+                (mode != "unknown").then_some(C),
+                "{mode}"
+            );
+            let bags: u32 = db
+                .query_row(
+                    include_str!("../src/stats_session_totals.sql"),
+                    ["s", C],
+                    |r| r.get(6),
+                )
+                .unwrap();
+            assert_eq!(bags, u32::from(mode != "unknown"), "{mode}");
+            let history = maxed_store::open_reader(&path)
+                .unwrap()
+                .boss_history(BossHistoryRequest {
+                    range: None,
+                    character_id: Some(C.into()),
+                    target_types: None,
+                })
+                .unwrap();
+            assert_eq!(history.rows.is_empty(), mode == "unknown", "{mode}");
+        }
+    }
 }

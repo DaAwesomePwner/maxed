@@ -790,3 +790,143 @@ fn inferred_weapon_labels_do_not_make_saved_damage_partial() {
         );
     }
 }
+
+#[test]
+fn personal_bests_use_each_runs_account_without_hiding_legacy_runs() {
+    let (_dir, path, db) = database();
+    db.execute_batch(
+        "INSERT INTO accounts VALUES('synthetic-b');
+        UPDATE characters SET account_id='synthetic-b' WHERE id='other-character';
+        UPDATE runs SET dungeon='Synthetic Sanctum',started=500000,completed_at=1500000,
+            character_id='other-character' WHERE id='other';
+        UPDATE runs SET character_id=NULL,completed_at=started+1,outcome='cleared' WHERE id='left';
+        INSERT INTO run_evidence VALUES('left',0,30000001,'victory','{}');",
+    )
+    .unwrap();
+    let reader = maxed_store::open_reader(&path).unwrap();
+    let result = page(&reader, filter(RunSort::Oldest, 100));
+    assert_eq!(result["rows"].as_array().unwrap().len(), 6);
+    assert_eq!(result["summary"]["personal_bests"], 2);
+    let details = result["details"].as_array().unwrap();
+    for (id, best, previous, pb) in [
+        ("demo-run", Some(2_000_000), None, false),
+        ("fast", Some(2_000_000), Some(4_000_000), true),
+        ("other", Some(1_000_000), None, true),
+        ("left", None, None, false),
+    ] {
+        let row = details.iter().find(|d| d["run_id"] == id).unwrap();
+        assert_eq!(row["best_clear_micros"], json!(best), "{id}");
+        assert_eq!(row["previous_best_clear_micros"], json!(previous), "{id}");
+        assert_eq!(row["is_personal_best"], pb, "{id}");
+    }
+    // Unattributed clear timing is still observed, but cannot seed or beat a PB.
+    assert_eq!(
+        details.iter().find(|d| d["run_id"] == "left").unwrap()["clear_micros"],
+        1
+    );
+    for (account, best) in [(ACCOUNT, 2_000_000), ("synthetic-b", 1_000_000)] {
+        assert_eq!(
+            reader.dungeon_bests(Some(account)).unwrap()[0].best_clear_micros,
+            best
+        );
+    }
+}
+
+#[test]
+fn account_scoped_rows_comparison_and_recap_agree() {
+    let (_dir, path, mut db) = database();
+    db.execute_batch(
+        "INSERT INTO accounts VALUES('synthetic-b');
+        UPDATE characters SET account_id='synthetic-b' WHERE id='other-character';",
+    )
+    .unwrap();
+    let mut events = Vec::new();
+    for (owner, prefix, duration) in [
+        (Some("demo-character"), "a", 4_000_000),
+        (Some("other-character"), "b", 1_000_000),
+        (None, "legacy", 1),
+    ] {
+        for i in 0..3 {
+            let mut run = demo::demo_run_story().run;
+            run.id = format!("{prefix}-{i}");
+            run.character_id = owner.map(Into::into);
+            run.started = Timestamp(2_000_000 + i * 1_000_000);
+            run.completed_at = Some(Timestamp(run.started.0 + duration));
+            run.ended = run.completed_at;
+            run.evidence = vec![EvidenceAt {
+                at: run.completed_at.unwrap(),
+                evidence: Evidence::Victory,
+            }];
+            events.push(run);
+        }
+    }
+    let mut current = demo::demo_run_story().run;
+    current.id = "b-current".into();
+    current.character_id = Some("other-character".into());
+    current.started = Timestamp(12_000_000);
+    current.completed_at = Some(Timestamp(12_500_000));
+    current.ended = current.completed_at;
+    current.evidence = vec![EvidenceAt {
+        at: current.completed_at.unwrap(),
+        evidence: Evidence::Victory,
+    }];
+    events.push(current);
+    maxed_store::apply_batch(
+        &mut db,
+        &events
+            .into_iter()
+            .enumerate()
+            .map(|(i, run)| envelope(14 + i as u64, EngineEvent::RunStarted(run)))
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    let reader = maxed_store::open_reader(&path).unwrap();
+    let rows = reader
+        .list_runs(filter(RunSort::Newest, 100))
+        .unwrap()
+        .details
+        .unwrap();
+    for (id, account, best, previous, count) in [
+        ("fast", ACCOUNT, 2_000_000, 4_000_000, 4),
+        ("b-current", "synthetic-b", 500_000, 1_000_000, 3),
+    ] {
+        let row = rows.iter().find(|r| r.run_id == id).unwrap();
+        assert_eq!(row.best_clear_micros, Some(best));
+        assert_eq!(row.previous_best_clear_micros, Some(previous));
+        assert!(row.is_personal_best);
+        let comparison = reader.get_run(id).unwrap().unwrap().comparison.unwrap();
+        assert_eq!(comparison.previous_clears, count);
+        assert_eq!(comparison.mean_micros, previous as f64);
+        let pb = reader
+            .run_recap(&RunRecapRequest { run_id: id.into() }, &[])
+            .unwrap()
+            .unwrap()
+            .pb_clear
+            .unwrap();
+        assert_eq!((pb.clear_micros, pb.previous_best_micros), (best, previous));
+        let dungeon = reader
+            .dungeon_bests(Some(account))
+            .unwrap()
+            .into_iter()
+            .find(|d| d.dungeon == "Synthetic Sanctum")
+            .unwrap();
+        assert_eq!(dungeon.best_clear_micros, best);
+    }
+    assert!(reader
+        .get_run("legacy-2")
+        .unwrap()
+        .unwrap()
+        .comparison
+        .is_none());
+    assert!(reader
+        .run_recap(
+            &RunRecapRequest {
+                run_id: "legacy-2".into()
+            },
+            &[]
+        )
+        .unwrap()
+        .unwrap()
+        .pb_clear
+        .is_none());
+}

@@ -103,3 +103,10 @@ repair uses eligible current-basis stored fights only, not missing historical ro
 
 No in-game verification is claimed. Release testing must verify both DPS and clear-time
 PB alerts with the actual catalog and capture running before character selection.
+
+Saved Runs history computes each clear-time PB within the run's own account,
+resolved through character aliases. The Runs page still lists all accounts and
+legacy rows: accountless runs retain observed clear timing but neither establish
+nor beat a PB, and have no previous-best baseline. Best and previous-best values,
+list summary PB counts, comparisons, recaps and dungeon bests use this same scope.
+Equal clear times choose the earliest start, then run ID, for the Runs PB marker.
