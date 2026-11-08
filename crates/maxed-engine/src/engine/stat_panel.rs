@@ -36,7 +36,7 @@ pub(crate) fn panel(
     equipment: [Option<&[(u8, i32)]>; 4],
 ) -> Panel {
     let gear_known = equipment.iter().all(Option::is_some);
-    let lines = [
+    let lines: Vec<StatLine> = [
         (0, 46, 111),
         (3, 47, 112),
         (20, 48, 105),
@@ -99,10 +99,18 @@ pub(crate) fn panel(
             confirmed,
         })
         .collect();
+    let breakdown_provisional = lines.iter().any(|line| {
+        !line.split_evidence.as_ref().is_some_and(|evidence| {
+            matches!(
+                evidence.placement,
+                ExaltPlacement::VerifiedInsideBase | ExaltPlacement::VerifiedInsideBoost
+            )
+        })
+    });
     Panel {
         lines,
         conditions,
-        breakdown_provisional: true,
+        breakdown_provisional,
     }
 }
 // Missing gear does not erase independently known base or exalt. A demonstrated
@@ -423,7 +431,7 @@ mod tests {
             (Some(70), None, None, None, None)
         );
         assert_eq!(p.lines[0].current, Some(650));
-        assert!(p.breakdown_provisional);
+        assert!(!p.breakdown_provisional);
         let p = panel(
             &stats,
             &BTreeMap::new(),

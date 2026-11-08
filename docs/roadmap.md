@@ -187,11 +187,11 @@ These appear in one or both tools but break Maxed's rules (passive capture, no u
 
 | Date | Decision |
 | --- | --- |
+| 2026-11-08 | Gate P resolved from sanitized owner evidence (#37/#38): exalt inside boost; HP/MP fields carry bonus amounts. Nonzero exalt permits cap/maxed decisions with observed operands and catalog caps. Exalt damage remains deferred |
 | 2026-11-07 | #4: Home follows the current account, with no selector. Legacy attribution uses local recomputation; unmatched history stays stored and is excluded from totals, records and bests with a notice. Windows account-switch acceptance remains pending |
 | 2026-11-06 | Observed-only Daily Quests (Tinkerer) and Pets are in scope, built from passive capture with no token. Each needs its own spec before it is built; neither is scheduled yet |
 | 2026-11-06 | Opt-in account sync stays deferred until DECA has been asked about the exact design in [Later: opt-in account sync](#later-opt-in-account-sync) |
 | 2026-11-06 | No candidate features are scheduled for now |
-| 2026-11-08 | Gate P resolved from sanitized owner evidence (#37/#38): exalt inside boost; HP/MP fields carry bonus amounts. Nonzero exalt permits cap/maxed decisions with observed operands and catalog caps. Exalt damage remains deferred |
 | 2026-11-06 | Owner acceptance from use: Home redesign phase 2 (live recap, chains, Discord paste, sprite copy), Character weapon/regen values, 100%/150% scaling and keyboard behavior, the shared chat cue, boss closure, departures, realm return and personal-best alerts. Clean install/update/uninstall worked. Gate P stays open and exalt damage stays deferred |
 | 2026-10-20 | Character: the owner approved the production `character` flag before Task 11. Windows live weapon/regen values, state transitions, scaling and keyboard behavior are being verified in use; Gate P remains open and exalt damage remains deferred |
 | 2026-10-16 | Home recap no longer takes over Nexus: show a compact banner for 15 seconds of visible Home time, paused on hover/focus, hidden on dungeon/realm entry. Last recap retains the latest finished run/visit in memory until replacement or stream reset; Back returns to the current live area |

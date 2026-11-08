@@ -26,7 +26,8 @@ fn character_stat_panel_uses_known_equipment_and_leaves_exalt_unknown() {
         )]),
     );
     let p = e.snapshot().character.unwrap().stat_panel.unwrap();
-    assert!(p.breakdown_provisional);
+    // Placement is verified even when some split operands remain unknown.
+    assert!(!p.breakdown_provisional);
     let line = p.lines.iter().find(|s| s.stat_id == 20).unwrap();
     assert_eq!(
         (line.base, line.cap, line.gear, line.other, line.exalt),

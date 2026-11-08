@@ -302,3 +302,17 @@ it('does not reread class metadata for unrelated live updates', async () => {
   await waitFor(() => expect(p.main.getByRole('region', { name: 'Character' }).textContent).toContain('Level 19'));
   expect(visuals).not.toHaveBeenCalled();
 });
+
+it('shows a reported split after placement verification while retaining missing-value caveats', async () => {
+  const s = observation(), panel = s.character!.stat_panel!;
+  panel.breakdown_provisional = false;
+  for (const line of panel.lines) {
+    line.split_evidence = { placement: 'verified_inside_boost', cap_eligible: true, reasons: [] };
+  }
+  const p = await mount({ snapshot: s });
+  const section = p.main.getByRole('region', { name: 'Stats' });
+  expect(section.textContent).toContain('reported split');
+  expect(section.textContent).toContain('missing or inconsistent values remain unavailable');
+  expect(section.textContent).not.toContain('provisional split');
+  expect(section.textContent).not.toContain('exalt placement requires verified evidence');
+});

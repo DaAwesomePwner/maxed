@@ -324,5 +324,8 @@ eight cap decisions, CharacterView.maxed and local PlayerProfileView.maxed/maxed
 Its signed synthetic gear reconciles SPD/DEX boosts; it does not identify the
 owner's equipment. Missing caps remain unknown, and contradictory negative Other
 still invalidates the split. No database, raw capture or identity is committed.
+The earlier Shaitan SPD counter-case (boost 0, exalt bonus 2, synthetic gear 0)
+still produces `NegativeOther` and remains unresolved; the regression preserves
+its unknown base/cap rather than treating Gate P as evidence for missing gear or effects.
 This resolves placement only: stat 113 damage remains deferred, and Task 11,
 controlled equipment transitions and broader Windows UI acceptance remain separate.
