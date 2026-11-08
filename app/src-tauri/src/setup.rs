@@ -1184,6 +1184,14 @@ mod gui_smoke_tests {
                     .then_some(item.object_type))
                 .collect::<Vec<_>>()
         );
+        // Pin the actual embedded demo contract: no potion classifications.
+        // Checking every stat below also catches accidental live-data leakage.
+        let demo_potions: Vec<_> = catalog
+            .items
+            .iter()
+            .filter_map(|item| item.potion_stat.map(|stat| (item.object_type, stat)))
+            .collect();
+        assert_eq!(demo_potions, vec![]);
         use maxed_types::PotionStat;
         for stat in [
             PotionStat::Life,
@@ -1195,15 +1203,7 @@ mod gui_smoke_tests {
             PotionStat::Vitality,
             PotionStat::Wisdom,
         ] {
-            assert_eq!(
-                data.potion_type(stat),
-                catalog
-                    .items
-                    .iter()
-                    .filter(|item| item.potion_stat == Some(stat))
-                    .map(|item| item.object_type)
-                    .min()
-            );
+            assert_eq!(data.potion_type(stat), None);
         }
         assert!(data.shares_instance(&service.catalog_query_data()));
         assert_ne!(live.identity(), data.identity());

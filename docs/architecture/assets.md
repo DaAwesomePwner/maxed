@@ -154,10 +154,14 @@ catalog fingerprint. It prepares normalized tier/potion SQL parameters, the UT/S
 item set and representative potion item types once. Requests clone its Arc-backed
 handle; their history keys contain only a process-local generation identity and
 validation status. Replacing the catalog changes every catalog-dependent history
-key, including run recap. Failed selections retain the previous metadata alongside
+key, including run recap. Recap only consumes UT/ST membership and retains its
+previous behavior for unrelated tier values exceeding loot/HUD metadata limits.
+Failed selections retain the previous metadata alongside
 the last-good catalog. Synthetic demo mode uses its own shared metadata instance.
 
-`PotionCount.object_type` supplies the HUD sprite lookup directly. Missing
+`PotionCount.object_type` supplies the HUD sprite lookup directly. Representatives
+prefer the exact base potion name for the classified stat, then the lowest object
+type; ties between base definitions also use the lowest type. Missing
 classification remains `None`; Home does not search item names or duplicate potion
 classification rules. Counts and stat grouping still come from the native catalog.
 

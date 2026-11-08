@@ -236,10 +236,8 @@ impl HistoryKey {
             }
             Self::Home(scope) => validate_scope(scope),
             Self::HomeDungeonStreak(request) => identifier(&request.dungeon),
-            Self::RunRecap(request, catalog) => {
-                catalog.validate().map_err(|_| INVALID.to_owned())?;
-                identifier(&request.run_id)
-            }
+            // Recap only consumes UT/ST membership, not bounded tier SQL metadata.
+            Self::RunRecap(request, _) => identifier(&request.run_id),
             Self::VisitRecap(request) => identifier(&request.visit_id),
             Self::HomeHud(scope, catalog) => {
                 validate_scope(scope)?;

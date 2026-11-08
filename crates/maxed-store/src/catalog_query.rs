@@ -14,7 +14,7 @@ struct CatalogQueryInner {
     representatives: Vec<(PotionStat, u16)>,
 }
 
-/// Constant-size identity; invalid metadata is rejected before scheduler admission.
+/// Constant-size identity; loot/HUD metadata limits are checked before admission.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CatalogQueryIdentity {
     generation: u64,
@@ -54,18 +54,21 @@ impl CatalogQueryData {
             identity: CatalogQueryIdentity { generation, valid },
             tiers: "[]".into(),
             potions: "[]".into(),
-            chase: vec![],
+            // Recap historically accepted catalog tiers of any length. Build its
+            // membership independently of the limits used by loot/HUD SQL.
+            chase: tiers
+                .iter()
+                .filter_map(|(kind, tier)| {
+                    matches!(tier.as_deref(), Some("UT" | "ST")).then_some(*kind)
+                })
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect(),
             representatives: vec![],
         };
         if valid {
             let tiers: std::collections::BTreeMap<_, _> = tiers.iter().cloned().collect();
             let potions: std::collections::BTreeMap<_, _> = potions.iter().copied().collect();
-            inner.chase = tiers
-                .iter()
-                .filter_map(|(kind, tier)| {
-                    matches!(tier.as_deref(), Some("UT" | "ST")).then_some(*kind)
-                })
-                .collect();
             for (kind, stat) in &potions {
                 if !inner
                     .representatives
@@ -83,7 +86,7 @@ impl CatalogQueryData {
         Self(std::sync::Arc::new(inner))
     }
     pub fn from_catalog(catalog: &Catalog) -> Self {
-        Self::new(
+        let mut data = Self::new(
             &catalog
                 .items
                 .iter()
@@ -94,7 +97,32 @@ impl CatalogQueryData {
                 .iter()
                 .filter_map(|item| item.potion_stat.map(|stat| (item.object_type, stat)))
                 .collect::<Vec<_>>(),
-        )
+        );
+        let inner = std::sync::Arc::get_mut(&mut data.0).expect("unpublished catalog data");
+        for (stat, kind) in &mut inner.representatives {
+            let base = match stat {
+                PotionStat::Life => "Potion of Life",
+                PotionStat::Mana => "Potion of Mana",
+                PotionStat::Attack => "Potion of Attack",
+                PotionStat::Defense => "Potion of Defense",
+                PotionStat::Speed => "Potion of Speed",
+                PotionStat::Dexterity => "Potion of Dexterity",
+                PotionStat::Vitality => "Potion of Vitality",
+                PotionStat::Wisdom => "Potion of Wisdom",
+            };
+            // Match the old HUD's base-potion search hit. Catalog classification
+            // remains authoritative; names only choose the representative sprite.
+            if let Some(base_type) = catalog
+                .items
+                .iter()
+                .filter(|item| item.potion_stat == Some(*stat) && item.name == base)
+                .map(|item| item.object_type)
+                .min()
+            {
+                *kind = base_type;
+            }
+        }
+        data
     }
     pub fn identity(&self) -> CatalogQueryIdentity {
         self.0.identity
@@ -123,6 +151,50 @@ impl CatalogQueryData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn recap_membership_survives_unrelated_tier_limits() {
+        let data = CatalogQueryData::new(
+            &[
+                (1, Some("x".repeat(17))),
+                (2, Some("UT".into())),
+                (3, Some("ST".into())),
+            ],
+            &[],
+        );
+        assert!(data.identity().validate().is_err());
+        assert_eq!(data.chase_types(), &[2, 3]);
+    }
+
+    #[test]
+    fn potion_representative_prefers_base_then_lowest_type() {
+        let mut catalog = maxed_types::demo::demo_catalog();
+        let template = catalog.items[0].clone();
+        catalog.items = [
+            (1, "Greater Potion of Life", PotionStat::Life),
+            (2, "Potion of Life (SB)", PotionStat::Life),
+            (9, "Potion of Life", PotionStat::Life),
+            (8, "Potion of Life", PotionStat::Life),
+            (4, "Greater Potion of Mana", PotionStat::Mana),
+            (3, "Potion of Mana (SB)", PotionStat::Mana),
+        ]
+        .into_iter()
+        .map(|(object_type, name, stat)| {
+            let mut item = template.clone();
+            item.object_type = object_type;
+            item.name = name.into();
+            item.potion_stat = Some(stat);
+            item
+        })
+        .collect();
+        for _ in 0..2 {
+            let data = CatalogQueryData::from_catalog(&catalog);
+            assert_eq!(data.potion_type(PotionStat::Life), Some(8));
+            assert_eq!(data.potion_type(PotionStat::Mana), Some(3));
+            assert_eq!(data.potion_type(PotionStat::Attack), None);
+            catalog.items.reverse();
+        }
+    }
+
     #[test]
     fn normalized_classifications_are_shared_and_generation_specific() {
         let data = CatalogQueryData::new(

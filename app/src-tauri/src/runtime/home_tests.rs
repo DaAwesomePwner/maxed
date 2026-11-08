@@ -52,6 +52,35 @@ fn run_recap_validates_id() {
 }
 
 #[test]
+fn run_recap_ignores_unrelated_catalog_tier_limits() {
+    use super::history::HistoryKey;
+    let catalog = maxed_store::CatalogQueryData::new(
+        &[
+            (1, Some("x".repeat(17))),
+            (2, Some("UT".into())),
+            (3, Some("ST".into())),
+        ],
+        &[],
+    );
+    assert!(catalog.identity().validate().is_err());
+    assert_eq!(catalog.chase_types(), &[2, 3]);
+    let request = maxed_types::RunRecapRequest {
+        run_id: "synthetic-run".into(),
+    };
+    assert!(HistoryKey::RunRecap(request.clone(), catalog.identity())
+        .validate_for_tests()
+        .is_ok());
+    let root = tempfile::tempdir().unwrap();
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    assert_eq!(
+        tauri::async_runtime::block_on(runtime.run_recap(request, catalog)).unwrap(),
+        HistoryReply::Ready { value: None }
+    );
+}
+
+#[test]
 fn visit_recap_validates_id() {
     use super::history::HistoryKey;
     use maxed_types::VisitRecapRequest;
