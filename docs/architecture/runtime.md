@@ -279,6 +279,6 @@ A protocol close with a partial header/body emits `BadFrame` and `Recovering`
 before `Closed`, preserving loss coverage. Teardown preserves these diagnostics
 while translating closes to cancellation. Malformed frames with a readable IPv4
 address/port prefix invalidate only that flow's observed direction. Unattributable
-frames (including noninitial fragments) cannot safely reset any flow and are
-ignored by the pipeline; later sequence holes expose attributable byte loss.
+frames (including noninitial fragments) retain global invalidation and emit
+recovery diagnostics for every active direction: any may have lost data.
 Assigned frame-index discontinuities still invalidate all active directions.

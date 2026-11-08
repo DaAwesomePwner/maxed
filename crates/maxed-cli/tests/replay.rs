@@ -151,21 +151,57 @@ fn unsupported_frames_are_counted_without_interrupting_ipv4_decode() {
 }
 
 #[test]
-fn fragmented_or_invalid_ipv4_still_invalidates_streams() {
-    for (offset, value) in [(14, 0x44), (20, 0x20)] {
+fn malformed_frames_report_loss_to_the_attributed_flow_or_all_candidates() {
+    use maxed_types::{ConnId, Direction};
+    for failure in 0..5 {
         let mut pipeline = Pipeline::default();
         pipeline.push(frame(0, 9, true, b""));
-        let mut malformed = frame(1, 10, false, &[0, 0, 0, 5, 105]);
-        malformed.bytes[offset] = value;
+        let mut other = frame(1, 9, true, b"");
+        other.bytes[34..36].copy_from_slice(&50001u16.to_be_bytes());
+        pipeline.push(other);
+        let mut malformed = frame(2, 10, false, &[0, 0, 0, 5, 105]);
+        match failure {
+            0 => malformed.bytes[20] = 0x20, // first fragment: readable ports
+            1 => {
+                malformed.bytes.pop();
+            } // truncated body: readable ports
+            2 => malformed.bytes[14] = 0x44, // invalid IHL: unknown TCP offset
+            3 => malformed.bytes.truncate(15), // no addresses or ports
+            _ => malformed.bytes[21] = 1,    // noninitial fragment: no TCP header
+        }
         let events = pipeline.push(malformed);
-        assert!(events.iter().any(|e| matches!(
-            e,
-            DecodeEvent::Diagnostic {
-                kind: Diagnostic::Recovering,
-                ..
+        let affected: Vec<_> = events
+            .iter()
+            .map(|event| match event {
+                DecodeEvent::Diagnostic {
+                    conn,
+                    dir: Direction::ClientToServer,
+                    kind: Diagnostic::Recovering,
+                    ..
+                } => *conn,
+                _ => panic!("expected only visible loss diagnostics"),
+            })
+            .collect();
+        assert_eq!(
+            affected,
+            if failure < 2 {
+                vec![ConnId(1)]
+            } else {
+                vec![ConnId(1), ConnId(2)]
             }
-        )));
-        assert!(!events.iter().any(|e| matches!(e, DecodeEvent::Packet(_))));
+        );
         assert_eq!(pipeline.unsupported_frames(), 0);
+        let mut follow = frame(3, 10, false, &[0, 0, 0, 5, 105]);
+        follow.bytes[34..36].copy_from_slice(&50001u16.to_be_bytes());
+        let events = pipeline.push(follow);
+        if failure < 2 {
+            assert!(matches!(events.first(), Some(DecodeEvent::Packet(packet))
+                if packet.conn == ConnId(2) && packet.alignment_verified));
+        } else {
+            assert!(
+                events.is_empty(),
+                "candidate stream must reestablish alignment"
+            );
+        }
     }
 }

@@ -61,16 +61,16 @@ impl Pipeline {
             Ok(Some(segment)) => events.extend(self.streams.push(segment)),
             Ok(None) | Err(ParseError::UnsupportedLink) => {}
             Err(error) => {
+                let reason = match error {
+                    ParseError::Truncated => GapReason::Truncated,
+                    _ => GapReason::InvalidFrame,
+                };
                 if let Some((flow, dir)) = error.affected_flow(&frame) {
-                    events.extend(self.streams.gap_flow(
-                        flow,
-                        dir,
-                        frame.at,
-                        match error {
-                            ParseError::Truncated => GapReason::Truncated,
-                            _ => GapReason::InvalidFrame,
-                        },
-                    ));
+                    events.extend(self.streams.gap_flow(flow, dir, frame.at, reason));
+                } else {
+                    // Without trustworthy flow identity, every active direction
+                    // remains a candidate for the missing observation.
+                    events.extend(self.streams.gap_all(frame.at, reason));
                 }
             }
         }
@@ -85,17 +85,35 @@ impl Pipeline {
         // Runtime timers may already have advanced beyond the last frame. The
         // synthetic shutdown close occurs now, not at an older packet receipt.
         let events = self.streams.close_all(at.max(self.last_at));
-        let mut decoded = self.decode(events);
-        // Drop buffers even when decoder cancellation suppresses diagnostics.
-        self.decoder = Decoder::default();
-        // Preserve loss diagnostics and recovered buffered data at teardown.
-        for event in &mut decoded {
-            if let PipelineEvent::Decoded(DecodeEvent::Diagnostic { kind, .. }) = event {
-                if *kind == maxed_protocol::Diagnostic::Closed {
-                    *kind = maxed_protocol::Diagnostic::Cancelled;
-                }
+        let mut decoded = Vec::new();
+        for event in events {
+            let close = match &event {
+                StreamEvent::Closed { conn, dir, at, .. } => Some((*conn, *dir, *at)),
+                _ => None,
+            };
+            // Preserve loss diagnostics and buffered data, but synthesize each
+            // teardown even when cancellation has made the decoder terminal.
+            decoded.extend(self.decode(vec![event]).into_iter().filter(|event| {
+                !matches!(
+                    event,
+                    PipelineEvent::Decoded(DecodeEvent::Diagnostic {
+                        kind: maxed_protocol::Diagnostic::Closed
+                            | maxed_protocol::Diagnostic::Cancelled,
+                        ..
+                    })
+                )
+            }));
+            if let Some((conn, dir, at)) = close {
+                decoded.push(PipelineEvent::Decoded(DecodeEvent::Diagnostic {
+                    conn,
+                    dir,
+                    at,
+                    kind: maxed_protocol::Diagnostic::Cancelled,
+                }));
             }
         }
+        // Drop buffers even when decoder cancellation suppresses diagnostics.
+        self.decoder = Decoder::default();
         decoded
     }
 }

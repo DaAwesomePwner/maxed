@@ -41,16 +41,16 @@ impl Pipeline {
                 self.unsupported_frames = self.unsupported_frames.saturating_add(1);
             }
             Err(error) => {
+                let reason = match error {
+                    ParseError::Truncated => GapReason::Truncated,
+                    _ => GapReason::InvalidFrame,
+                };
                 if let Some((flow, dir)) = error.affected_flow(&frame) {
-                    events.extend(self.streams.gap_flow(
-                        flow,
-                        dir,
-                        frame.at,
-                        match error {
-                            ParseError::Truncated => GapReason::Truncated,
-                            _ => GapReason::InvalidFrame,
-                        },
-                    ));
+                    events.extend(self.streams.gap_flow(flow, dir, frame.at, reason));
+                } else {
+                    // Without trustworthy flow identity, every active direction
+                    // remains a candidate for the missing observation.
+                    events.extend(self.streams.gap_all(frame.at, reason));
                 }
             }
         }
@@ -101,8 +101,8 @@ mod tests {
     }
 
     #[test]
-    fn bad_frame_does_not_reset_other_flow_decoder() {
-        for failure in 0..4 {
+    fn attributable_bad_frame_does_not_reset_other_flow_decoder() {
+        for failure in 0..3 {
             let mut p = Pipeline::default();
             p.push(frame(0, 50000, 9, true, &[]));
             p.push(frame(1, 50001, 9, true, &[]));
@@ -112,23 +112,18 @@ mod tests {
                     bad.bytes.pop();
                 }
                 1 => bad.bytes[20] = 0x20,
-                2 => bad.bytes[46] = 0x40,
-                _ => bad.bytes.truncate(15),
+                _ => bad.bytes[46] = 0x40,
             }
             let events = p.push(bad);
-            if failure == 3 {
-                assert!(events.is_empty());
-            } else {
-                assert!(matches!(
-                    events.as_slice(),
-                    [DecodeEvent::Diagnostic {
-                        conn: ConnId(1),
-                        dir: Direction::ClientToServer,
-                        kind: Diagnostic::Recovering,
-                        ..
-                    }]
-                ));
-            }
+            assert!(matches!(
+                events.as_slice(),
+                [DecodeEvent::Diagnostic {
+                    conn: ConnId(1),
+                    dir: Direction::ClientToServer,
+                    kind: Diagnostic::Recovering,
+                    ..
+                }]
+            ));
             let events = p.push(frame(3, 50001, 10, false, &[0, 0, 0, 5, 105]));
             assert!(matches!(events.first(), Some(DecodeEvent::Packet(packet))
                 if packet.conn == ConnId(2) && packet.alignment_verified));

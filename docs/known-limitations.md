@@ -218,4 +218,5 @@ budget. Buffered bytes are retained for delivery after the gap, but RC4 alignmen
 may prevent decoding until the existing recovery search succeeds. Quiet holes
 are reported at the next frame or close, not by a wall-clock timer. Partial
 protocol frames at close report loss. Malformed frames with insufficient flow
-identity cannot be attributed; they do not reset unrelated connections.
+identity retain global invalidation so every candidate stream reports possible
+loss. Frames with readable addresses and ports affect only that flow/direction.
