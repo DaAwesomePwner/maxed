@@ -734,7 +734,14 @@ impl Adapter {
     pub fn live_tick(&mut self, at: Timestamp, quiet: std::time::Duration) -> Result<(), String> {
         self.at = self.at.max(at);
         let events = self.engine.advance_live_to(self.at, quiet);
+        // An event-free clock tick changes nothing presented. Keep the gate's
+        // prior state so idle sessions do not republish at the 1 Hz floor.
+        let gate_dirty = self.gate.dirty;
+        let idle = events.is_empty();
         self.events(events);
+        if idle {
+            self.gate.dirty = gate_dirty;
+        }
         self.drain()
     }
     pub fn capture(&mut self, mut status: CaptureStatus) -> Result<(), String> {

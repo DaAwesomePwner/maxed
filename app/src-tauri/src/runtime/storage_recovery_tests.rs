@@ -231,7 +231,7 @@ fn recovery_scenario(native_close: bool) {
         assert!(!runtime.has_unsaved_summaries());
         let saved = rusqlite::Connection::open(&path).unwrap();
         let ended: i64 = saved.query_row(
-            "SELECT COUNT(*) FROM fight_summaries WHERE json_extract(json, '$.end_reason') = 'app_closed'",
+            "SELECT COUNT(*) FROM fights WHERE json_extract(json, '$.end_reason') = 'app_closed'",
             [], |row| row.get(0),
         ).unwrap();
         assert!(ended > 0, "the close-time summary was committed by retry");
