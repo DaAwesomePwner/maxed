@@ -12,4 +12,4 @@ import type { RunView } from "./RunView";
 import type { Sequence } from "./Sequence";
 import type { Timestamp } from "./Timestamp";
 
-export type LiveSnapshot = { at: Timestamp, stream_id: string, sequence: Sequence, capture: CaptureStatus, session: PlaySessionView | null, character: CharacterView | null, map: string | null, area_kind: AreaKind, run: RunView | null, fights: Array<FightView>, drops: Array<DropView>, issues: Array<CoverageIssue>, instance?: InstanceLive | null, run_totals?: RunTotals | null, };
+export type LiveSnapshot = { revision?: Sequence | null, at: Timestamp, stream_id: string, sequence: Sequence, capture: CaptureStatus, session: PlaySessionView | null, character: CharacterView | null, map: string | null, area_kind: AreaKind, run: RunView | null, fights: Array<FightView>, drops: Array<DropView>, issues: Array<CoverageIssue>, instance?: InstanceLive | null, run_totals?: RunTotals | null, };
