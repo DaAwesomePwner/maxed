@@ -58,6 +58,7 @@
             SELECT min(previous_clear.clear_micros)
             FROM all_time_clears previous_clear
             WHERE previous_clear.dungeon=r.dungeon
+              AND previous_clear.account_id=/*account:character:r.character_id*/
               AND (previous_clear.started<r.started
                 OR (previous_clear.started=r.started AND previous_clear.id<r.id))),
         'is_personal_best',json(CASE WHEN m.is_personal_best THEN 'true' ELSE 'false' END)

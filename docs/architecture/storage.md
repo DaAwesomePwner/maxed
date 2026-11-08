@@ -385,3 +385,12 @@ account can override the pointer after its identity watermark is durable.
 Dungeon clear-time PB alerts compare only runs owned by the triggering run's
 account using the same alias-aware ownership expression as Home. Unknown owners
 neither establish nor beat a PB baseline.
+
+Character-filtered fight history and Stats loot totals resolve first-event
+ownership from `observation_characters`, including flattened `character_aliases`.
+A run's character remains the fallback when the observation has no character.
+Containing map visits are used only for legacy observations without an ownership
+record; later visit identity changes cannot reassign recorded observations.
+This preserves realm observations when capture begins mid-map without a visit.
+Stats deaths use their explicit character, falling back to the run's character;
+death-only and drop-only activity keeps character-filtered sessions eligible.

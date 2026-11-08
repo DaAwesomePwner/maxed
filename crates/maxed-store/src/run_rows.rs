@@ -10,11 +10,11 @@ use rusqlite::{params_from_iter, types::Value, Connection};
 const METRICS: &str = include_str!("run_metrics.sql");
 
 fn detail_sql() -> String {
-    format!(
+    crate::account_sql::with_accounts(&format!(
         "WITH selected AS MATERIALIZED (SELECT r.*,j.key AS ordinal
         FROM json_each(?1) j CROSS JOIN runs r ON r.id=j.value)\n{METRICS}\n{}",
         include_str!("run_rows.sql")
-    )
+    ))
 }
 
 pub(crate) fn details(
@@ -67,10 +67,10 @@ fn summary_sql(filter: &RunFilter) -> Result<(String, Vec<Value>), StoreError> {
         .replace("/*counts*/", &counts.join(" AND "))
         .replace("/*characters*/", &common.join(" AND "));
     Ok((
-        format!(
+        crate::account_sql::with_accounts(&format!(
             "WITH selected AS MATERIALIZED (SELECT * FROM runs WHERE {})\n{METRICS}\n{tail}",
             selected.join(" AND ")
-        ),
+        )),
         args,
     ))
 }
@@ -174,7 +174,7 @@ pub(crate) mod tests {
                     "SEARCH fight USING INDEX fights_run",
                     "SEARCH drop_row USING INDEX drops_run",
                     "SEARCH p USING INDEX",
-                    "SEARCH previous_clear USING AUTOMATIC COVERING INDEX (dungeon=?)",
+                    "SEARCH previous_clear USING AUTOMATIC COVERING INDEX (dungeon=? AND account_id=?)",
                 ] {
                     assert!(explained.contains(search), "missing {search}:\n{explained}");
                 }

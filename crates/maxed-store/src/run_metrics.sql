@@ -1,7 +1,7 @@
 -- Shared by page details and the first-page summary. `selected` is already scoped.
 , all_time_clears AS MATERIALIZED (
-    SELECT r.id,r.dungeon,r.started,r.completed_at-r.started AS clear_micros,
-        row_number() OVER (PARTITION BY r.dungeon
+    SELECT r.id,r.dungeon,/*account:run:r.id*/ AS account_id,r.started,r.completed_at-r.started AS clear_micros,
+        row_number() OVER (PARTITION BY r.dungeon,/*account:run:r.id*/
             ORDER BY r.completed_at-r.started,r.started,r.id) AS ordinal
     FROM runs r INDEXED BY pd_runs_comparison
     WHERE r.dungeon IN (SELECT dungeon FROM selected)
@@ -10,7 +10,8 @@
       AND EXISTS(SELECT 1 FROM run_evidence e WHERE e.run_id=r.id
           AND e.kind IN ('victory','completion_dialogue'))
 ), bests AS MATERIALIZED (
-    SELECT id,dungeon,clear_micros FROM all_time_clears WHERE ordinal=1
+    SELECT id,dungeon,account_id,clear_micros FROM all_time_clears
+    WHERE ordinal=1 AND account_id IS NOT NULL
 ), fame_samples_in_runs AS (
     SELECT r.id,
         first_value(fame) OVER samples AS first_fame,
@@ -29,5 +30,6 @@
         c.clear_micros,
         b.clear_micros AS best_clear_micros,coalesce(b.id=r.id,0) AS is_personal_best
     FROM selected r LEFT JOIN fame f ON f.id=r.id LEFT JOIN bests b ON b.dungeon=r.dungeon
+        AND b.account_id=/*account:character:r.character_id*/
     LEFT JOIN all_time_clears c ON c.id=r.id
 )
