@@ -1,5 +1,55 @@
 use super::*;
 use std::cell::{Cell, RefCell};
+
+#[test]
+fn startup_failure_decision_across_automation_states() {
+    let variables = [
+        "MAXED_GUI_SMOKE",
+        "MAXED_MEASURE_STARTUP",
+        "MAXED_MEASURE_DEMO",
+    ];
+    for mask in 0..8 {
+        let shown = AtomicBool::new(false);
+        let failure = startup_failure(&shown, |name| {
+            variables
+                .iter()
+                .enumerate()
+                .any(|(bit, variable)| name == *variable && mask & (1 << bit) != 0)
+        });
+        assert_eq!(failure.exit_code, 1, "mask {mask}");
+        assert_eq!(failure.show_dialog, mask == 0, "mask {mask}");
+        assert_eq!(shown.load(Ordering::Acquire), mask == 0);
+        // Suppressed reports must not consume the one visible notification.
+        let next = startup_failure(&shown, |_| false);
+        assert_eq!(next.show_dialog, mask != 0);
+        assert_eq!(next.exit_code, 1);
+    }
+}
+
+#[test]
+fn startup_failure_dialog_is_claimed_at_most_once_across_threads() {
+    let shown = AtomicBool::new(false);
+    let barrier = std::sync::Barrier::new(8);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..8)
+            .map(|_| {
+                scope.spawn(|| {
+                    barrier.wait();
+                    startup_failure(&shown, |_| false)
+                })
+            })
+            .collect();
+        let mut dialogs = 0;
+        for worker in workers {
+            let failure = worker.join().unwrap();
+            assert_eq!(failure.exit_code, 1);
+            dialogs += usize::from(failure.show_dialog);
+        }
+        assert_eq!(dialogs, 1);
+    });
+    assert!(!startup_failure(&shown, |_| false).show_dialog);
+}
+
 #[derive(Default)]
 struct Fake {
     installing: bool,
@@ -272,4 +322,18 @@ fn successful_retry_never_discards_even_if_shutdown_fails() {
         &["updates", "prepare", "retry", "shutdown"]
     );
     assert_eq!(host.code.get(), Some(1));
+}
+
+#[test]
+fn setup_failure_allows_exit_without_using_incomplete_services() {
+    let control = ExitControl::default();
+    control.setup_failed();
+    assert!(control.finished.load(Ordering::Acquire));
+    assert!(control.exiting.load(Ordering::Acquire));
+    assert_eq!(control.exit_code(), STARTUP_FAILURE_EXIT_CODE);
+    let host = Fake::default();
+    assert!(run(&control, &host, false).is_err());
+    assert!(host.calls.borrow().is_empty());
+    control.setup_failed();
+    assert_eq!(control.exit_code(), STARTUP_FAILURE_EXIT_CODE);
 }
