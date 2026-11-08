@@ -641,8 +641,8 @@ impl Fixture {
                 SELECT json_set(fight_players.json,'$.share',
                     CASE WHEN json_extract(f.json,'$.total_damage')>0
                     THEN damage/json_extract(f.json,'$.total_damage') END) AS payload
-                FROM fight_players JOIN fights f ON f.id=fight_id
-                WHERE fight_id='{FIGHT}' AND object_id=1 LIMIT 2)")],
+                FROM fight_players JOIN fight_summaries f ON f.fight_id=fight_players.fight_id
+                WHERE fight_players.fight_id='{FIGHT}' AND object_id=1 LIMIT 2)")],
             _ => {
                 let key = match label {
                     "duration-ascending" => "coalesce((CASE WHEN ended>=started THEN ended-started END),9223372036854775807)",

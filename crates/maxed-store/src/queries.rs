@@ -368,8 +368,8 @@ impl StoreReader {
                 SELECT json_set(fight_players.json,'$.share',
                     CASE WHEN json_extract(f.json,'$.total_damage')>0
                     THEN damage/json_extract(f.json,'$.total_damage') END) AS payload
-                FROM fight_players JOIN fights f ON f.id=fight_id
-                WHERE fight_id=?1 AND object_id=?2 LIMIT 2)",
+                FROM fight_players JOIN fight_summaries f ON f.fight_id=fight_players.fight_id
+                WHERE fight_players.fight_id=?1 AND object_id=?2 LIMIT 2)",
             params![fight_id, object_id],
             2,
             &mut 0,
@@ -398,8 +398,8 @@ impl StoreReader {
                 SELECT json_set(fight_players.json,'$.share',
                     CASE WHEN json_extract(f.json,'$.total_damage')>0
                     THEN damage/json_extract(f.json,'$.total_damage') END) AS payload
-                FROM fight_players JOIN fights f ON f.id=fight_id
-                WHERE fight_id=?1 AND player_id=?2)",
+                FROM fight_players JOIN fight_summaries f ON f.fight_id=fight_players.fight_id
+                WHERE fight_players.fight_id=?1 AND player_id=?2)",
             params![fight_id, player_id],
             MAX_PLAYER_BYTES,
         )

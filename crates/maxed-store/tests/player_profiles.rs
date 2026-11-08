@@ -1502,5 +1502,26 @@ fn every_share_reader_ignores_legacy_player_share() {
         )
         .unwrap();
         assert_eq!(snapshot(), legacy);
+        // Player drill-down needs only compact summaries, even if full fight JSON is damaged.
+        db.execute("UPDATE fights SET json='malformed'", [])
+            .unwrap();
+        for p in &fight.players {
+            assert_eq!(
+                reader
+                    .get_player_by_id(&fight.id, &p.player_id)
+                    .unwrap()
+                    .unwrap()
+                    .share,
+                p.share
+            );
+            assert_eq!(
+                reader
+                    .get_player_breakdown(&fight.id, p.object_id)
+                    .unwrap()
+                    .unwrap()
+                    .share,
+                p.share
+            );
+        }
     }
 }
