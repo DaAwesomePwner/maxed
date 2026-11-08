@@ -116,13 +116,14 @@ describe('durable Nexus story in the real Shell', () => {
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
   it('superseded history retries unchanged inputs without a Retry control', async () => {
+    vi.useFakeTimers();
     const page = mountHome(undefined, undefined, '#/', { queryHome: vi.fn().mockResolvedValueOnce({ status: 'superseded' })
       .mockResolvedValue({ status: 'ready', value: homeSummary() }) });
-    await flushHomeRender();
+    await vi.advanceTimersByTimeAsync(2000); await flushHomeRender();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
     expect(screen.getByRole('link', { name: /Synthetic Sanctum/i })).toBeTruthy();
     expect(page.query).toHaveBeenCalledTimes(2);
-    await fireEvent.click(screen.getByRole('button', { name: 'Today' })); await flushHomeRender();
+    await fireEvent.click(screen.getByRole('button', { name: 'Today' })); await vi.advanceTimersByTimeAsync(2000); await flushHomeRender();
     expect(page.query).toHaveBeenCalledTimes(3);
     expect(screen.getByRole('link', { name: /Synthetic Sanctum/i })).toBeTruthy();
   });

@@ -58,14 +58,17 @@ export function createRecapReads(
     return message ?? (input.streamId !== null && input.streamId !== input.recap.source.streamId ? HISTORY_CATCH_UP : null);
   }
   async function read<T>(request: () => Promise<HistoryReply<T>>, attempt: number): Promise<T> {
-    let retryUsed = false;
+    let retryUsed = false, superseded = 0;
     for (;;) {
       if (!current(attempt)) throw new ReadFailure('Recap replaced.');
       if (!await visibility.wait() || !current(attempt)) throw new ReadFailure('Recap replaced.');
       const reply = await request();
       if (!current(attempt)) throw new ReadFailure('Recap replaced.');
       if (reply.status === 'ready') return reply.value;
-      const control = historyControl(reply.status, retryUsed);
+      if (reply.status === 'superseded' && superseded++ < 2) {
+        await delay(RECAP_BUSY_RETRY_MS); continue;
+      }
+      const control = historyControl(reply.status, retryUsed || reply.status === 'superseded');
       if (!control.retry) throw new ReadFailure(control.message);
       // Busy means the attempt window is full; retry once after it drains.
       retryUsed = true; await delay(RECAP_BUSY_RETRY_MS);

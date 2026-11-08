@@ -89,22 +89,29 @@ it('retires changed query and namespace replies, including return to the same ke
   expect(h.last()).toMatchObject({ phase: 'ready', value: { story: { run: { id: 'current' } } } });
 });
 
-it('keeps Superseded inert until a new eligible input and never offers Retry', async () => {
+it('retries Superseded after backoff and offers manual retry after exhaustion', async () => {
   const h = harness(); h.controller.update(h.input); await flush();
   h.pending[0].resolve({ status: 'superseded' }); await flush();
-  h.controller.update(h.input); h.controller.retry();
-  await vi.advanceTimersByTimeAsync(5000); await flush();
+  h.controller.update(h.input);
+  await vi.advanceTimersByTimeAsync(999);
   expect(h.getRun).toHaveBeenCalledOnce();
-  expect(h.last()).toMatchObject({ phase: 'superseded', retryAvailable: false, value: null });
+  await vi.advanceTimersByTimeAsync(1);
+  expect(h.getRun).toHaveBeenCalledTimes(2);
+  h.pending[1].resolve({ status: 'superseded' }); await flush();
+  expect(h.last()).toMatchObject({ phase: 'busy', retryAvailable: true, value: null });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(h.getRun).toHaveBeenCalledTimes(2);
   h.controller.update({ ...h.input, required: '13', store: saved('13') }); await flush();
-  h.pending[1].resolve(ready('accepted')); await flush();
-  expect(h.getRun).toHaveBeenCalledTimes(2); expect(h.last().phase).toBe('ready');
+  h.pending[2].resolve(ready('accepted')); await flush();
+  expect(h.getRun).toHaveBeenCalledTimes(3); expect(h.last().phase).toBe('ready');
 });
 
 it('automatically retries deferred Busy once, then waits for manual Retry', async () => {
   const h = harness(); h.controller.update(h.input); await flush();
   expect(h.getRun).toHaveBeenCalledOnce();
   h.pending[0].resolve({ status: 'busy' }); await flush();
+  expect(h.getRun).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(1000);
   expect(h.getRun).toHaveBeenCalledTimes(2);
   h.pending[1].resolve({ status: 'busy' }); await flush();
   h.controller.update(h.input); await vi.advanceTimersByTimeAsync(2000); await flush();

@@ -149,6 +149,22 @@ Live uses `live.sqlite3` and a fresh stream per capture. Exclusive Windows names
 
 History reads run on one lazily started `history-reader` thread, which keeps a query-only SQLite connection between successful reads of the same database and generation. Every reuse checks the schema version; errors, panics, namespace retirement, shutdown and 60 seconds of idle time close the connection. Idle connections hold no transaction, so writer checkpoints remain unaffected. Lifecycle waits track both active work and idle kept connections: after `invalidate_and_wait` or `shutdown_reads` returns, no reader remains open, including before Windows playback file cleanup and update installation. Application shutdown closes the idle reader before the writer.
 
+Saved-history scheduling retains one active read, at most eight pending page
+queries and the existing eight-entry storage FIFO. Only an identical query key
+(including account revision) coalesces a pending page request; unrelated queries
+retain FIFO order. A full queue returns Busy without displacing another reader.
+The existing 32-attempts-per-second admission limit remains in force.
+Saved-history page controllers retry Busy or Superseded once after at least one
+second, then expose manual retry while retaining saved values. Home uses one
+serial queue across summary, loot, PB, v4 cards and recap commands. Its summary
+and loot readers retry once after two seconds; supplemental readers allow two
+two-second supersession retries (and one Busy retry for v4/recap). Exhaustion
+remains explicit through the owning card's error/retry state; PB baselines retain
+their last value. Recap SQL and its save timeout pause while hidden. Party's
+saved-run view continues its throttled durability checks until the store catches
+up or the view is disposed.
+
+
 Receipt maintenance uses the same storage owner as capture. Accepted events,
 retry, flush, shutdown and retained unsaved work take priority. Default units admit
 at most 1,000 receipts and 1 MiB serialized input with a cooperative 10 ms target;
@@ -262,13 +278,3 @@ identity diagnostics.
 with `account_switched` or `legacy_recovered`, never an account ID. The UI should
 invalidate Home summary, HUD, scope loot, bests, streak, dungeon profile and boss
 baselines, and retry superseded requests for its current view.
-
-
-Saved-history scheduling retains one active read, at most eight pending page
-queries and the existing eight-entry storage FIFO. Only an identical query key
-(including account revision) coalesces a pending page request; unrelated queries
-retain FIFO order. A full queue returns Busy without displacing another reader.
-The existing 32-attempts-per-second admission limit remains in force.
-UI history controllers retry Busy or Superseded once after a delay of at least
-one second, then expose manual retry while retaining saved values. Home uses a
-shared serial queue. Recap SQL and its save timeout pause while hidden.

@@ -118,38 +118,40 @@ describe('bounded durable Home reads', () => {
     }
     expect(h.queryHome).not.toHaveBeenCalled();
   });
-  it('keeps supersession transient without error, retry or a read loop', async () => {
+  it('keeps supersession transient with a delayed retry and retained data', async () => {
+    vi.useFakeTimers();
     const h = harness(); h.history.update(h.input); await flush();
     h.pending[0].resolve(homeSummary()); await flush();
     expect(h.last().phase).toBe('ready'); // Positive control: the same query can publish history.
     h.queryHome.mockResolvedValueOnce({ status: 'superseded' });
     h.history.retry(); await flush();
-    expect(h.last()).toMatchObject({ phase: 'superseded', retryAvailable: false, summary: { runs: 1 } });
+    expect(h.last()).toMatchObject({ phase: 'busy', retryAvailable: false, summary: { runs: 1 } });
     expect(h.last().message).not.toMatch(/error|failed|retry/i);
-    h.history.update(h.input); h.history.retry(); await flush();
+    h.history.update(h.input); await flush();
     expect(h.queryHome).toHaveBeenCalledTimes(2);
     const next = { ...h.input, scope: { today: { range: { start: '0', end: '86400000000' } } } };
-    h.history.update(next); await flush();
+    h.history.update(next); await vi.advanceTimersByTimeAsync(2000); await flush();
     expect(h.queryHome).toHaveBeenCalledTimes(3);
     h.pending[1].resolve(homeSummary({ runs: 2 })); await flush();
     expect(h.last()).toMatchObject({ phase: 'ready', retryAvailable: true, summary: { runs: 2 } });
   });
 
   it('retries Busy once and retains the spent budget across refresh ticks until manual retry', async () => {
+    vi.useFakeTimers();
     const h = harness();
     h.queryHome.mockResolvedValueOnce({ status: 'busy' }).mockResolvedValueOnce({ status: 'busy' });
-    h.history.update(h.input); await flush();
+    h.history.update(h.input); await flush(); await vi.advanceTimersByTimeAsync(2000);
     expect(h.queryHome).toHaveBeenCalledTimes(2);
     expect(h.states.some(state => state.phase === 'busy' && !state.retryAvailable)).toBe(true);
     expect(h.last()).toMatchObject({ phase: 'busy', retryAvailable: true, summary: null });
-    h.history.update(h.input); await flush();
+    h.history.update(h.input); await flush(); await vi.advanceTimersByTimeAsync(2000);
     expect(h.queryHome).toHaveBeenCalledTimes(2);
     h.queryHome.mockResolvedValueOnce({ status: 'busy' });
     h.history.update({ ...h.input, required: '13', store: saved('13') }); await flush();
     expect(h.queryHome).toHaveBeenCalledTimes(3);
     expect(h.last()).toMatchObject({ phase: 'busy', retryAvailable: true });
     h.queryHome.mockResolvedValueOnce({ status: 'busy' }).mockResolvedValueOnce({ status: 'ready', value: homeSummary() });
-    h.history.retry(); await flush();
+    h.history.retry(); await flush(); await vi.advanceTimersByTimeAsync(2000);
     expect(h.queryHome).toHaveBeenCalledTimes(5);
     expect(h.last()).toMatchObject({ phase: 'ready', retryAvailable: true, summary: { runs: 1 } });
   });

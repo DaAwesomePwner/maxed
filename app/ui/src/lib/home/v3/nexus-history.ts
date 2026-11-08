@@ -26,8 +26,10 @@ export function createNexusHistory(
     const result = queue.then(read); queue = result.catch(() => {}); return result;
   }
   async function readCurrent<T>(request: number, read: () => Promise<HistoryReply<T>>): Promise<HistoryReply<T>> {
-    if (!disposed && request === revision && await visibility.wait()) return serial(read);
-    return { status: 'superseded' };
+    return serial(async () => {
+      if (!await visibility.wait() || disposed || request !== revision) return { status: 'superseded' };
+      return read();
+    });
   }
   const emit = () => { if (!disposed) receive({ summary, loot, page }); };
   async function readLoot(nextCursor: string | null, nextPage: number) {

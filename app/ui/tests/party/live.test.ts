@@ -622,3 +622,16 @@ it.each([
   expect(lastGear.textContent).toMatch(new RegExp(` · ${expected}$`));
   if (expected === '—') expect(lastGear.textContent).not.toContain('8/8');
 });
+
+it('keeps waiting beyond three durability checks and refreshes without another event', async () => {
+  const page = await mount(view({ live: false }), true);
+  let durable = '1';
+  page.client.queryStore = async () => ({ state: 'ready', queued: 0, durable, stream_id: 'synth-store', message: '' });
+  page.transport.publishEngineEvent({ stream_id: 'synth-store', sequence: '3', at: '1', event: { run_ended: run({ id: 'synth-run' }) } });
+  await vi.advanceTimersByTimeAsync(6000); await flush();
+  expect(page.queries.getPartyRun).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('Waiting for saved history to catch up.')).toBeTruthy();
+  durable = '3';
+  await vi.advanceTimersByTimeAsync(1000); await flush();
+  expect(page.queries.getPartyRun).toHaveBeenCalledTimes(2);
+});

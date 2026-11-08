@@ -12,18 +12,11 @@ export function createHomeReads(owner: Client) {
   let disposed = false;
   const visibility = createVisibilityPause();
   let tail: Promise<unknown> = Promise.resolve();
-  const latest = new Map<string, symbol>();
-  function read<T>(kind: string, query: () => Promise<HistoryReply<T>>): Promise<HistoryReply<T>> {
-    const token = Symbol(kind);
-    latest.set(kind, token);
+  function read<T>(_kind: string, query: () => Promise<HistoryReply<T>>): Promise<HistoryReply<T>> {
     const result = tail.then(async (): Promise<HistoryReply<T>> => {
-      while (!disposed && latest.get(kind) === token) {
-        if (!await visibility.wait() || disposed || latest.get(kind) !== token) break;
-        const reply = await query();
-        if (disposed || latest.get(kind) !== token) return { status: 'superseded' };
-        return reply;
-      }
-      return { status: 'superseded' };
+      if (!await visibility.wait() || disposed) return { status: 'superseded' };
+      const reply = await query();
+      return disposed ? { status: 'superseded' } : reply;
     });
     tail = result.catch(() => {});
     return result;
@@ -41,7 +34,7 @@ export function createHomeReads(owner: Client) {
     getRunRecap: (...args) => read('recap', () => owner.getRunRecap(...args)),
     getVisitRecap: (...args) => read('visit', () => owner.getVisitRecap(...args)),
   };
-  return { client, dispose() { disposed = true; visibility.dispose(); latest.clear(); } };
+  return { client, dispose() { disposed = true; visibility.dispose(); } };
 }
 
 export function createDungeonBests(client: Pick<Client, 'queryDungeonBests'>,
@@ -55,6 +48,7 @@ export function createDungeonBests(client: Pick<Client, 'queryDungeonBests'>,
     pending = true;
     if (running) return;
     running = true;
+    let retries = 0;
     try {
       while (pending && !disposed) {
         if (!isPresentationVisible() && !await visibility.wait()) break;
@@ -63,8 +57,9 @@ export function createDungeonBests(client: Pick<Client, 'queryDungeonBests'>,
         try {
           const reply = await client.queryDungeonBests();
           if (!disposed && reply.status === 'ready') publish(reply.value);
-          else if (!disposed && reply.status !== 'ready') {
+          else if (!disposed && reply.status !== 'ready' && retries++ < 2) {
             await new Promise(resolve => setTimeout(resolve, 2000));
+            pending = true;
           }
         } catch { /* Keep a saved baseline; an absent one stays PB —. No polling. */ }
       }

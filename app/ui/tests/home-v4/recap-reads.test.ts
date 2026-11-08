@@ -1,3 +1,4 @@
+import { setNativePresentationVisible } from '../../src/lib/bridge/visibility';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Client } from '../../src/lib/bridge/client';
 import type { HistoryReply } from '../../src/lib/bindings/HistoryReply';
@@ -193,7 +194,7 @@ it('superseded_reads_retry_while_the_recap_is_current', async () => {
   h.client.getDungeonProfile.mockResolvedValueOnce({ status: 'superseded' });
   h.client.getHomeBossBaselines.mockResolvedValueOnce({ status: 'superseded' });
   h.client.getHomeDungeonStreak.mockResolvedValueOnce({ status: 'superseded' });
-  h.controller.update(h.input); await vi.advanceTimersByTimeAsync(100);
+  h.controller.update(h.input); await vi.advanceTimersByTimeAsync(12000);
   expect(h.client.getRun).toHaveBeenCalledTimes(3);
   expect(h.last()).toMatchObject({ status: 'saved', data: { kind: 'run', story, recordsUnavailable: false,
     profile: { clears: 1 }, baselines: { rows: [] }, streak: { runs_since_last_white: 2 } } });
@@ -204,6 +205,8 @@ it('busy_after_supersession_waits_for_the_attempt_window_before_its_one_retry', 
   h.client.getRun.mockResolvedValueOnce({ status: 'superseded' }).mockResolvedValueOnce({ status: 'busy' });
   h.client.getHomeDungeonStreak.mockResolvedValueOnce({ status: 'busy' });
   h.controller.update(h.input); await settle();
+  expect(h.client.getRun).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(RECAP_BUSY_RETRY_MS);
   expect(h.client.getRun).toHaveBeenCalledTimes(2);
   await vi.advanceTimersByTimeAsync(RECAP_BUSY_RETRY_MS - 1); expect(h.client.getRun).toHaveBeenCalledTimes(2);
   await vi.advanceTimersByTimeAsync(1); expect(h.client.getRun).toHaveBeenCalledTimes(3);
@@ -221,7 +224,7 @@ it('repeated_supersession_backs_off_to_at_most_200ms', async () => {
 
 it('superseded_visit_read_retries', async () => {
   const h = harness(); h.client.getVisitRecap.mockResolvedValueOnce({ status: 'superseded' });
-  h.controller.update({ ...h.input, recap: visitSource }); await settle();
+  h.controller.update({ ...h.input, recap: visitSource }); await settle(); await vi.advanceTimersByTimeAsync(RECAP_BUSY_RETRY_MS);
   expect(h.client.getVisitRecap).toHaveBeenCalledTimes(2);
   expect(h.last()).toMatchObject({ status: 'saved', data: { kind: 'visit', visit } });
 });
@@ -276,4 +279,44 @@ it.each(['run', 'visit'] as const)('rejected_%s_is_partial_with_a_safe_message',
   const h = harness(); h.client[kind === 'run' ? 'getRun' : 'getVisitRecap'].mockRejectedValue(new Error('synthetic private detail'));
   h.controller.update({ ...h.input, recap: kind === 'run' ? recap : visitSource }); await settle();
   expect(h.last()).toEqual({ status: 'partial', reason: 'failed', message: 'Saved history could not be loaded. Retry to refresh it.' });
+});
+
+it('pauses recap SQL and the save timeout while hidden', async () => {
+  const h = harness();
+  try {
+    h.controller.update({ ...h.input, store: saved('12') });
+    await vi.advanceTimersByTimeAsync(2000);
+    setNativePresentationVisible(false);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(h.last()).toEqual({ status: 'saving' });
+    expect(h.client.getRun).not.toHaveBeenCalled();
+    setNativePresentationVisible(true);
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(h.last()).toEqual({ status: 'saving' });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.last()).toMatchObject({ status: 'partial', reason: 'timeout' });
+    setNativePresentationVisible(false);
+    h.controller.update(h.input);
+    await settle();
+    expect(h.client.getRun).not.toHaveBeenCalled();
+    setNativePresentationVisible(true);
+    await settle();
+    expect(h.last()?.status).toBe('saved');
+  } finally { setNativePresentationVisible(true); }
+});
+
+it('pauses between recap SQL commands and releases a hidden waiter on disposal', async () => {
+  const h = harness();
+  const pending = deferred<HistoryReply<RunStory | null>>();
+  h.client.getRun.mockReturnValueOnce(pending.promise);
+  h.controller.update(h.input); await settle();
+  setNativePresentationVisible(false);
+  try {
+    pending.resolve(ready(story)); await settle();
+    expect(h.client.getRunRecap).not.toHaveBeenCalled();
+    h.controller.dispose();
+    setNativePresentationVisible(true); await settle();
+    expect(h.client.getRunRecap).not.toHaveBeenCalled();
+    expect(h.last()).toBeNull();
+  } finally { setNativePresentationVisible(true); }
 });

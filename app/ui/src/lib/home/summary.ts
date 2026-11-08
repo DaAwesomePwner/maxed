@@ -41,7 +41,7 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
   let failed = false;
   let initialRead = true;
   let control: 'superseded' | 'busy' | null = null;
-  let automaticRetryUsed = false;
+  let automaticRetryUsed = false, backingOff = false;
   let failureMessage = 'Saved history could not be loaded. Retry to refresh it.';
   let emitted: HomeHistoryState | undefined;
   const emit = (phase: HomeHistoryState['phase'], message = '', retryAvailable = phase !== 'loading') => {
@@ -51,7 +51,7 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
   };
   const waiting = historyWaiting;
   function pump(retryInitial = false) {
-    if (disposed || !input || !isPresentationVisible()) return;
+    if (disposed || !input || !isPresentationVisible() || backingOff) return;
     if (!input.scope) { emit('unavailable', 'No session captured. Choose Today to view saved observations.'); return; }
     if (input.mode !== 'nexus') { emit('stale', 'Saved history refresh is paused while a live area is visible.'); return; }
     if (failed && attempted === generation) { emit('error', failureMessage); return; }
@@ -61,7 +61,7 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
     const reason = waiting(input);
     // A known, matching store may supply an initial saved preview while its
     // writer lags. It cannot establish readiness for the snapshot checkpoint.
-    const readAhead = reason !== null && (initialRead || retryInitial) && input.initial === true && input.store?.state === 'ready'
+    const readAhead = reason !== null && (initialRead || retryInitial) && input.initial === true && (input.store?.state === 'ready' || (retryInitial && input.store?.state === 'backpressured'))
       && input.store.stream_id === input.streamId && input.store.durable !== null;
     if (reason && !readAhead) { emit('stale', reason); return; }
     if (completed === generation) { emit('ready'); return; }
@@ -78,7 +78,7 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
         if (request !== generation) return;
         const policy = historyControl(result.status, automaticRetryUsed);
         if (policy.retry) {
-          automaticRetryUsed = true; retryBusy = true;
+          automaticRetryUsed = true; retryBusy = true; backingOff = true;
           emit('busy', policy.message, policy.retryAvailable);
         } else {
           control = result.status;
@@ -96,7 +96,7 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
       emit('error', failureMessage);
     }).finally(async () => {
       if (retryBusy) await new Promise(resolve => setTimeout(resolve, 2000));
-      active = false;
+      active = false; backingOff = false;
       if (!disposed && (request !== generation || retryBusy)) pump(retryBusy && readAhead && request === generation);
     });
   }
@@ -114,7 +114,7 @@ export function createHomeHistory(client: Pick<Client, 'queryHome'>, receive: (s
       identity = nextIdentity; key = nextKey; blocked = nextBlocked; input = next;
       pump();
     },
-    retry() { if (!disposed && input) { generation++; namespace++; failed = false; control = null; automaticRetryUsed = false; pump(); } },
+    retry() { if (!disposed && input && !active) { generation++; namespace++; failed = false; control = null; automaticRetryUsed = false; pump(); } },
     dispose() { releaseVisibility(); disposed = true; generation++; input = null; summary = null; emitted = undefined; },
   };
 }

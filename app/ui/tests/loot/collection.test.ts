@@ -189,7 +189,7 @@ it('rejects invalid searches and ignores replies after the query changes', async
   expect(screen.queryByText('Stale crown')).toBeNull();
 });
 it('releases rows-ready for exhausted busy retries and offers Retry', async () => {
-  const page = mount({ busy: true }); await flush();
+  const page = mount({ busy: true }); await flush(); await vi.advanceTimersByTimeAsync(1000); await flush();
   expect(screen.getByText('Loot history busy')).toBeTruthy();
   expect(page.onRowsReady).toHaveBeenCalledExactlyOnceWith('collection-entry');
   expect(screen.queryByText('Chase an item to track it')).toBeNull();

@@ -32,7 +32,7 @@ describe.each(cases)('logs history $method', ({ query, method, field }) => {
   });
   it('offers manual retry after the bounded automatic busy retry', async () => {
     const h = harness(); const read = vi.spyOn(h.client, method).mockResolvedValue({ status: 'busy' });
-    h.controller.update(h.input(query)); await flush();
+    h.controller.update(h.input(query)); await flush(); await vi.advanceTimersByTimeAsync(1000);
     expect(read).toHaveBeenCalledTimes(2);
     expect(h.last()).toMatchObject({ phase: 'busy', retryAvailable: true, value: null });
     read.mockRestore(); h.controller.retry(); await flush();

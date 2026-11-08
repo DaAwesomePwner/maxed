@@ -118,7 +118,7 @@ it('applying Enchanted only resets the cursor and cursor history', async () => {
   expect(screen.getByRole('button', { name: 'Newer bags' }).getAttribute('aria-disabled')).toBe('true');
 });
 it('offers Retry after busy and shows an error instead of an empty feed after a read failure', async () => {
-  const busy = mount({ busy: true }); await flush();
+  const busy = mount({ busy: true }); await flush(); await vi.advanceTimersByTimeAsync(1000); await flush();
   expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   expect(screen.queryByText('No bags yet')).toBeNull();
   busy.unmount();
@@ -460,10 +460,10 @@ it.each(['error', 'superseded', 'busy'] as const)('clears old filter summary num
   const summary = vi.spyOn(page.client, 'getDropSummary');
   if (failure === 'error') summary.mockRejectedValue(new Error('Synthetic summary failure'));
   else summary.mockResolvedValue({ status: failure });
-  await fireEvent.click(screen.getByRole('button', { name: 'Enchanted only' })); await flush();
+  await fireEvent.click(screen.getByRole('button', { name: 'Enchanted only' })); await flush(); await vi.advanceTimersByTimeAsync(1000); await flush();
   expect([...document.querySelectorAll('[data-kpi] .value')].map(value => value.textContent)).toEqual(Array(5).fill('—'));
   expect(document.querySelector('tr.group')?.textContent).not.toContain('120 bags');
-  if (failure !== 'superseded') {
+  {
     summary.mockResolvedValue({ status: 'ready', value: { totals: reviewTotals, days: [reviewTotals] } });
     summary.mockClear();
     const drops = vi.spyOn(page.client, 'listDrops');
@@ -505,7 +505,7 @@ it('retains summary numbers through one auto-retried Busy followed by ready', as
   const before = [...document.querySelectorAll('[data-kpi] .value')].map(value => value.textContent);
   const pending = deferred<Awaited<ReturnType<typeof page.client.getDropSummary>>>();
   const summary = vi.spyOn(page.client, 'getDropSummary').mockResolvedValueOnce({ status: 'busy' }).mockReturnValueOnce(pending.promise);
-  await fireEvent.click(screen.getByRole('button', { name: 'Enchanted only' })); await flush();
+  await fireEvent.click(screen.getByRole('button', { name: 'Enchanted only' })); await flush(); await vi.advanceTimersByTimeAsync(1000); await flush();
   expect(summary).toHaveBeenCalledTimes(2);
   expect([...document.querySelectorAll('[data-kpi] .value')].map(value => value.textContent)).toEqual(before);
   expect(document.querySelector('tr.group')?.textContent).toContain('120 bags');
@@ -559,7 +559,7 @@ it.each(['error', 'busy'] as const)('hides previous-filter totals when the new d
   const drops = vi.spyOn(page.client, 'listDrops');
   if (failure === 'error') drops.mockRejectedValue(new Error('Synthetic drops failure'));
   else drops.mockResolvedValue({ status: 'busy' });
-  await fireEvent.click(screen.getByRole('button', { name: 'Enchanted only' })); await flush();
+  await fireEvent.click(screen.getByRole('button', { name: 'Enchanted only' })); await flush(); await vi.advanceTimersByTimeAsync(1000); await flush();
   expect(summary).not.toHaveBeenCalled();
   expect([...document.querySelectorAll('[data-kpi] .value')].map(value => value.textContent)).toEqual(Array(5).fill('—'));
   expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();

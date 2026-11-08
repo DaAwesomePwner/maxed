@@ -218,7 +218,7 @@ export function createRunHistory(client: HistoryClient, receive: (state: History
         const state = historyControl(reply.status, retryUsed);
         if (state.retry) {
           retryUsed = true; pending ??= latest;
-          // Native Busy already waited for the active reader to close.
+          // Give the native admission window time to drain.
           lastStart = Date.now();
           emit('busy', state.message, false);
         } else { control = 'busy'; emit('busy', state.message, true); }

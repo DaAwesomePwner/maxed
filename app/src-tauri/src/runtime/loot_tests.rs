@@ -398,14 +398,8 @@ fn loot_reads_share_history_admission() {
         pending(loot.as_mut());
         assert_eq!(
             runtime.shared.home.scheduler.lock().unwrap().counts(),
-            if abuse { (1, 1, 1, 32) } else { (1, 1, 0, 3) }
+            if abuse { (1, 1, 1, 32) } else { (1, 2, 0, 3) }
         );
-        if !abuse {
-            assert_eq!(
-                tauri::async_runtime::block_on(queued.as_mut()).unwrap(),
-                HistoryReply::Superseded
-            );
-        }
         release.send(()).unwrap();
         ready(tauri::async_runtime::block_on(active));
         entered.recv_timeout(Duration::from_secs(5)).unwrap();
@@ -417,6 +411,9 @@ fn loot_reads_share_history_admission() {
             );
             ready(tauri::async_runtime::block_on(queued));
         } else {
+            ready(tauri::async_runtime::block_on(queued));
+            entered.recv_timeout(Duration::from_secs(5)).unwrap();
+            release.send(()).unwrap();
             assert_eq!(ready(tauri::async_runtime::block_on(loot)).rows.len(), 1);
         }
     }

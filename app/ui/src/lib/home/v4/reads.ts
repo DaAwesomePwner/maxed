@@ -75,11 +75,11 @@ export function createHomeV4Reads(
   }
   const range = (): TimeRange => ({ start: String(input!.nowMicros - USUAL_WINDOW_MICROS), end: String(input!.nowMicros) });
 
-  // The native reader shares one pending slot. Serialize attempts, but release
+  // Serialize attempts, but release
   // the queue during retry delays so the other cards can still load.
   function read<T>(request: () => Promise<HistoryReply<T>>, current: () => boolean,
     accept: (value: T) => void, fail: () => void, complete: () => void = () => {}) {
-    let retryUsed = false;
+    let retryUsed = false, superseded = 0;
     const finish = (action: () => void) => { try { action(); } finally { complete(); } };
     function enqueue() {
       const next = queue.then(async () => {
@@ -93,7 +93,8 @@ export function createHomeV4Reads(
         }
         if (disposed || !current()) return;
         if (reply.status === 'ready') finish(() => accept(reply.value));
-        else if (historyControl(reply.status, retryUsed).retry) {
+        else if (reply.status === 'superseded' && superseded++ < 2) later(enqueue, 2000);
+        else if (reply.status === 'busy' && historyControl(reply.status, retryUsed).retry) {
           retryUsed = true; later(enqueue, 2000);
         } else finish(fail);
       });

@@ -924,6 +924,8 @@ impl HomeReads {
             }
         } else if let Some(index) = queue.pending.iter().position(|p| p.key == pending.key) {
             // Coalesce only identical queries, preserving their FIFO position.
+            let mut pending = pending;
+            pending.request = queue.pending[index].request;
             let previous = std::mem::replace(&mut queue.pending[index], pending);
             previous.operation.reject(None);
         } else if queue.pending.len() >= 8 {
