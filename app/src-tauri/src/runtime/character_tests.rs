@@ -1020,3 +1020,68 @@ fn modeled_condition_changes_during_calculation_reject_the_reply() {
         );
     }
 }
+
+#[test]
+fn real_worker_answers_character_queries_across_restart() {
+    use maxed_capture::{
+        backend::{start_with_backend, Backend, Device},
+        AdapterInfo,
+    };
+
+    // Keep the real capture/owner loops alive without opening a native device.
+    struct IdleBackend;
+    struct IdleDevice;
+    impl Device for IdleDevice {
+        fn poll(&mut self) -> Result<Option<RawFrame>, CaptureError> {
+            Ok(None)
+        }
+    }
+    impl Backend for IdleBackend {
+        fn discover(&mut self) -> Result<Vec<AdapterInfo>, CaptureError> {
+            Ok(vec![AdapterInfo {
+                id: "synthetic".into(),
+                description: "synthetic".into(),
+            }])
+        }
+        fn open(&mut self, _: &AdapterInfo) -> Result<Box<dyn Device>, CaptureError> {
+            Ok(Box::new(IdleDevice))
+        }
+    }
+
+    let runtime = CaptureRuntime::default();
+    let timeout = Duration::from_secs(5);
+    let mut previous = None;
+    for _ in 0..2 {
+        runtime
+            .start_with(Arc::new(|_| {}), || {
+                start_with_backend(CaptureConfig::default(), || Ok(IdleBackend))
+            })
+            .unwrap();
+        let requests = runtime
+            .shared
+            .character_requests
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap();
+        // Direct channel replies prove the run_worker branch answered: no cached
+        // fallback can make this pass if the branch is missing or disconnected.
+        for _ in 0..2 {
+            let (reply, response) = bounded(1);
+            requests.send_timeout(reply, timeout).unwrap();
+            let identity = response.recv_timeout(timeout).unwrap();
+            let expected = super::character::CharacterIdentity::from_snapshot(
+                &runtime.shared.views.snapshot.lock().unwrap(),
+            );
+            assert_eq!(identity, expected);
+            if let Some(retired) = &previous {
+                assert_ne!(&identity, retired);
+            }
+        }
+        runtime.stop_and_flush().unwrap();
+        assert!(requests.send_timeout(bounded(1).0, timeout).is_err());
+        previous = Some(super::character::CharacterIdentity::from_snapshot(
+            &runtime.shared.views.snapshot.lock().unwrap(),
+        ));
+    }
+}

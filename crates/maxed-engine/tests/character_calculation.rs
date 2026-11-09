@@ -1107,6 +1107,11 @@ fn revision_and_results_depend_only_on_modeled_condition_bits() {
             .value = 1_i32 << bit;
         let result = run(&character, Some(&catalog), 0);
         if bit == 2 || bit == 18 {
+            assert_eq!(result.weapons[0].applied_primary_mask, Some(1_u32 << bit));
+            assert_ne!(
+                result.weapons[0].applied_primary_mask,
+                baseline.weapons[0].applied_primary_mask
+            );
             assert_ne!(result.revision.input_hash, baseline.revision.input_hash);
             assert_ne!(result.weapons[0].dps_total, baseline.weapons[0].dps_total);
         } else {
@@ -1116,6 +1121,11 @@ fn revision_and_results_depend_only_on_modeled_condition_bits() {
             );
             assert_eq!(result.weapons[0].dps_total, baseline.weapons[0].dps_total);
             assert_eq!(result.regeneration, baseline.regeneration);
+            assert_eq!(
+                result.weapons[0].applied_primary_mask,
+                baseline.weapons[0].applied_primary_mask
+            );
+            assert_eq!(result, baseline);
         }
     }
 }

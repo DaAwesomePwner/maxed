@@ -506,7 +506,7 @@ fn weapon(
         groups: vec![],
         applied_att: observed(character, 20).ok(),
         applied_dex: observed(character, 28).ok(),
-        applied_primary_mask: observed(character, 29).ok().map(|mask| mask as u32),
+        applied_primary_mask: observed(character, 29).ok().map(calculation_conditions),
         rate_factor: value(Err(unavailable), CalculationEvidence::Catalog),
         catalog_range: range(Err(unavailable), CalculationEvidence::Catalog),
         hit_range: range(Err(unavailable), CalculationEvidence::Modeled),

@@ -8,6 +8,7 @@ const STALE: &str = "stale_character_revision";
 const UNAVAILABLE: &str = "character_inputs_unavailable";
 
 /// Only the identity fields needed to validate the owner observation.
+#[cfg_attr(test, derive(Debug, PartialEq, Eq))]
 pub(super) struct CharacterIdentity {
     stream_id: String,
     character_id: Option<String>,
