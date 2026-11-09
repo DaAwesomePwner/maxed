@@ -53,6 +53,58 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe('Character request controller', () => {
+  it('does no character serialization or cloning while unsubscribed and emits the latest input first', async () => {
+    const h = harness(false);
+    const first = snapshot('first');
+    const latest = snapshot('latest', 'new-stream', 'new-character');
+    latest.character!.name = 'Synthetic latest';
+    const stringify = vi.spyOn(JSON, 'stringify');
+    const clone = vi.spyOn(globalThis, 'structuredClone');
+    let stringifyCalls: number, cloneCalls: number;
+    try {
+      h.update(first);
+      h.update(latest);
+      stringifyCalls = stringify.mock.calls.length;
+      cloneCalls = clone.mock.calls.length;
+    } finally {
+      stringify.mockRestore();
+      clone.mockRestore();
+    }
+    expect(stringifyCalls).toBe(0);
+    expect(cloneCalls).toBe(0);
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(0);
+    const changed = vi.fn();
+    const stop = h.controller.state.subscribe(changed);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed.mock.calls[0][0].observed).toEqual(latest.character);
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0].request.expected_revision).toEqual(latest.character!.calculation_revision);
+    stop();
+  });
+
+  it('refreshes a completed matching result after an unmounted reconnect before declaring it live', async () => {
+    const h = harness();
+    h.update(); await vi.runAllTimersAsync(); await h.finish(0);
+    const previous = h.state().calculation;
+    h.stop();
+    h.update(snapshot(), { ...live, phase: 'resyncing' });
+    h.update();
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(1);
+    const changed = vi.fn();
+    const stop = h.controller.state.subscribe(changed);
+    expect(changed.mock.calls[0][0].calculation).toBe(previous);
+    expect(changed.mock.calls[0][0].freshness).toBe('last_seen');
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(2);
+    expect(h.calls[1].request).toEqual(h.calls[0].request);
+    await h.finish(1, { freshness: 'last_seen' });
+    expect(h.state().freshness).toBe('last_seen');
+    stop();
+  });
+
   it('retains observation identity and emits nothing for identical snapshots', async () => {
     const h = harness(); h.update(); await vi.runAllTimersAsync(); await h.finish(0);
     const observed = h.state().observed;

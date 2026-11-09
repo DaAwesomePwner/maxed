@@ -35,14 +35,20 @@ export function createCharacterController(client: Pick<Client, 'getCharacterCalc
   let subscribed = false;
   let published = view;
   let observedKey = 'null';
+  let latest: { snapshot: LiveSnapshot | null; capture: CaptureStatus | null; liveState: LiveState } | null = null;
   // Character is the calculation consumer; Home and the rail use snapshots.
   // The store lifecycle counts all subscribers and refreshes on every remount.
+  // Production get(controller.state) would briefly open the gate and schedule/
+  // cancel a request; production reads should subscribe through the Character view.
   const store = writable(view, () => {
     if (disposed) return;
     subscribed = true;
+    if (latest) syncInput(latest.snapshot, latest.capture, latest.liveState);
     reconcile();
     return () => {
       subscribed = false;
+      // Freshness is not in the revision key. A reconnect while unmounted
+      // can keep the same inputs, so require a fresh reply on reactivation.
       if (!disposed) reconcile();
     };
   });
@@ -117,30 +123,36 @@ export function createCharacterController(client: Pick<Client, 'getCharacterCalc
     publish();
   }
 
+  function syncInput(snapshot: LiveSnapshot | null, capture: CaptureStatus | null, liveState: LiveState) {
+    const character = snapshot?.character ?? null;
+    const nextIdentity = JSON.stringify([snapshot?.stream_id ?? null, character?.id ?? null]);
+    if (nextIdentity !== identity) {
+      identity = nextIdentity;
+      resultKey = '';
+      view = { ...view, calculation: null, comparisons: [], comparisonError: null, error: null };
+    }
+    // Compare the entire JSON DTO, not only the calculation hash: the view
+    // also renders identity, equipment, coverage, stats and observation time.
+    const nextObservedKey = JSON.stringify(character);
+    if (nextObservedKey !== observedKey) {
+      observedKey = nextObservedKey;
+      view = { ...view, observed: character ? structuredClone(character) : null };
+    }
+    const candidate = character?.calculation_revision;
+    revision = candidate && candidate.stream_id === snapshot?.stream_id && candidate.character_id === character?.id
+      ? { ...candidate } : null;
+    unavailable = !character ? 'No character observed. Start capture and enter the game.'
+      : !revision ? 'Character calculation unavailable. Reconnect to obtain an input revision.' : null;
+    active = !!character && character.died_at === null && capture?.state === 'Live' && liveState.phase === 'live';
+  }
+
   return {
     state: { subscribe: store.subscribe } satisfies Readable<CharacterViewState>,
     update(snapshot: LiveSnapshot | null, capture: CaptureStatus | null, liveState: LiveState) {
       if (disposed) return;
-      const character = snapshot?.character ?? null;
-      const nextIdentity = JSON.stringify([snapshot?.stream_id ?? null, character?.id ?? null]);
-      if (nextIdentity !== identity) {
-        identity = nextIdentity;
-        resultKey = '';
-        view = { ...view, calculation: null, comparisons: [], comparisonError: null, error: null };
-      }
-      // Compare the entire JSON DTO, not only the calculation hash: the view
-      // also renders identity, equipment, coverage, stats and observation time.
-      const nextObservedKey = JSON.stringify(character);
-      if (nextObservedKey !== observedKey) {
-        observedKey = nextObservedKey;
-        view = { ...view, observed: character ? structuredClone(character) : null };
-      }
-      const candidate = character?.calculation_revision;
-      revision = candidate && candidate.stream_id === snapshot?.stream_id && candidate.character_id === character?.id
-        ? { ...candidate } : null;
-      unavailable = !character ? 'No character observed. Start capture and enter the game.'
-        : !revision ? 'Character calculation unavailable. Reconnect to obtain an input revision.' : null;
-      active = !!character && character.died_at === null && capture?.state === 'Live' && liveState.phase === 'live';
+      latest = { snapshot, capture, liveState };
+      if (!subscribed) return;
+      syncInput(snapshot, capture, liveState);
       reconcile();
     },
     setDefense(raw: string) {
