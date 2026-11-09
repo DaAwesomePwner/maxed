@@ -165,10 +165,11 @@ is recorded.
 - Gate U was accepted PASS by the owner on 2026-10-17 in
   private-repo PR 176 (archived, not public), with the evidence in
   [Character live acceptance](development/character-live-acceptance.md).
-  Gate P (exalt placement in base versus boost) is still open. The provisional
-  split retains totals/raw boosts; nonzero or unknown exalt keeps at-cap,
-  pots-left and maxed null without placement evidence. Negative Other remains
-  inconsistent evidence, not a named effect. U does not unlock P.
+  Gate P was resolved on 2026-11-08 by nonzero-exalt owner evidence in #37/#38:
+  exalt is inside boost, and HP/MP exalt fields already contain bonus amounts.
+  Known nonzero exalt now permits at-cap, pots-left and maxed decisions. Missing
+  exalt/caps remain unknown; negative Other remains inconsistent evidence, not
+  a named effect. Historical saved rows are not retroactively recomputed.
 - [#3](https://github.com/DaAwesomePwner/maxed/issues/3) tracks expanded rail
   exalt presentation. [#5](https://github.com/DaAwesomePwner/maxed/issues/5)
   adds provenance gating for saved local profiles and Party members. Legacy local

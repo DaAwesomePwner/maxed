@@ -428,3 +428,135 @@ fn realm_local_recency_uses_receipt_time_in_both_pair_orders_and_on_expiry() {
         }
     }
 }
+
+#[test]
+fn subattack_wire_indices_select_projectiles_without_fallback() {
+    use maxed_engine::Engine;
+    use maxed_protocol::Packet;
+    use std::sync::Arc;
+    for (mapping, cases) in [
+        (
+            serde_json::json!([0]),
+            vec![(-1, Some(100.)), (0, Some(100.))],
+        ),
+        (
+            serde_json::json!([2, 0, 1]),
+            vec![
+                (-1, Some(300.)),
+                (0, Some(300.)),
+                (1, Some(100.)),
+                (2, Some(200.)),
+                (3, None),
+            ],
+        ),
+        (
+            serde_json::json!([0, 0, 0, 0, 0]),
+            vec![
+                (0, Some(100.)),
+                (1, Some(100.)),
+                (2, Some(100.)),
+                (3, Some(100.)),
+                (4, Some(100.)),
+                (5, None),
+            ],
+        ),
+        (
+            serde_json::Value::Null,
+            vec![
+                (-1, Some(100.)),
+                (0, Some(100.)),
+                (1, Some(200.)),
+                (2, Some(300.)),
+            ],
+        ),
+        (
+            serde_json::json!([]),
+            vec![(-1, Some(100.)), (2, Some(300.))],
+        ),
+        (
+            serde_json::json!([null, 2]),
+            vec![(-1, None), (0, None), (1, Some(300.))],
+        ),
+    ] {
+        for (wire, expected) in cases {
+            let mut c = catalog();
+            let item = &mut c.items[0];
+            let prototype = item.projectiles[0].clone();
+            item.projectiles = (0..3)
+                .map(|index| maxed_types::ProjectileDef {
+                    index,
+                    min_damage: 100 * (i32::from(index) + 1),
+                    max_damage: 100 * (i32::from(index) + 1),
+                    ..prototype.clone()
+                })
+                .collect();
+            if mapping == serde_json::json!([0, 0, 0, 0, 0]) || mapping == serde_json::json!([0]) {
+                item.projectiles.truncate(1);
+            }
+            item.weapon_firing = Some(
+                serde_json::from_value(serde_json::json!({
+                    "support": "unsupported", "groups": [], "omitted_projectile_indices": [],
+                    "reasons": [], "subattack_projectile_indices": mapping
+                }))
+                .unwrap(),
+            );
+            let mut e = Engine::new(config(), Arc::new(c)).unwrap();
+            setup(&mut e);
+            let Packet::PlayerShoot(mut p) = shoot(1) else {
+                unreachable!()
+            };
+            p.projectileId = wire;
+            apply(&mut e, 3000, Packet::PlayerShoot(p));
+            apply(&mut e, 4000, hit(1));
+            if let Some(damage) = expected {
+                assert_eq!(
+                    e.snapshot().fights[0].total_damage,
+                    damage,
+                    "wire {wire}, mapping {mapping}"
+                );
+            } else {
+                assert_eq!(
+                    e.reconstruction_coverage()["missingProjectileDefinition"],
+                    1
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn subattack_damage_ranges_consume_rng_in_received_shot_order() {
+    use maxed_engine::Engine;
+    use maxed_protocol::Packet;
+    use std::sync::Arc;
+    let mut c = catalog();
+    let item = &mut c.items[0];
+    let prototype = item.projectiles[0].clone();
+    item.projectiles = (0..3)
+        .map(|index| maxed_types::ProjectileDef {
+            index,
+            min_damage: 100 * (i32::from(index) + 1),
+            max_damage: 100 * (i32::from(index) + 1) + if index == 1 { 0 } else { 10 },
+            ..prototype.clone()
+        })
+        .collect();
+    item.weapon_firing = Some(
+        serde_json::from_value(serde_json::json!({
+            "support": "unsupported", "groups": [], "omitted_projectile_indices": [],
+            "reasons": [], "subattack_projectile_indices": [2, 0, 1]
+        }))
+        .unwrap(),
+    );
+    let mut e = Engine::new(config(), Arc::new(c)).unwrap();
+    setup(&mut e);
+    // Seed 1 yields 16807, 282475249, 1622650073. The fixed 200 consumes none.
+    for (bullet, wire, total) in [(1, -1, 307.), (2, 2, 507.), (3, 1, 616.), (4, 0, 919.)] {
+        let Packet::PlayerShoot(mut p) = shoot(bullet) else {
+            unreachable!()
+        };
+        p.projectileId = wire;
+        apply(&mut e, 3000 + bullet as u64 * 100, Packet::PlayerShoot(p));
+        apply(&mut e, 3050 + bullet as u64 * 100, hit(bullet));
+        assert_eq!(e.snapshot().fights[0].total_damage, total);
+    }
+}

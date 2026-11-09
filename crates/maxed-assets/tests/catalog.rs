@@ -581,3 +581,37 @@ fn enriches_dungeons_with_curated_metadata() {
         }
     }
 }
+
+#[test]
+fn subattack_references_preserve_xml_positions_and_legacy_catalogs_decode() {
+    let item = firing(
+        r#"
+        <Subattack projectileId="2"/><Subattack/><Subattack projectileId="0"/>
+        <Subattack projectileId="1"/><Subattack projectileId="invalid"/>
+        <Projectile id="0"><Damage>100</Damage></Projectile>
+        <Projectile id="1"><Damage>200</Damage></Projectile>
+        <Projectile id="2"><Damage>300</Damage></Projectile>"#,
+    );
+    assert_eq!(
+        item.weapon_firing
+            .as_ref()
+            .unwrap()
+            .subattack_projectile_indices,
+        Some(vec![Some(2), None, Some(0), Some(1), None])
+    );
+    let mut old = serde_json::to_value(&item).unwrap();
+    old["weapon_firing"]
+        .as_object_mut()
+        .unwrap()
+        .remove("subattack_projectile_indices");
+    let decoded: maxed_types::ItemDef = serde_json::from_value(old).unwrap();
+    assert_eq!(
+        decoded.weapon_firing.unwrap().subattack_projectile_indices,
+        None
+    );
+    let implicit = firing(r#"<Projectile id="0"><Damage>100</Damage></Projectile>"#);
+    assert_eq!(
+        implicit.weapon_firing.unwrap().subattack_projectile_indices,
+        Some(vec![])
+    );
+}

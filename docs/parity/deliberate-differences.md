@@ -121,7 +121,24 @@ Additional engine rationales appear below. They are not executable suppression I
   119 of 144 decoded bytes. That interpretation uses a four-byte little-endian
   header and a 16-byte (128-bit), least-significant-bit-first-per-byte bitmap.
   These snapshots remain incomplete; completion-counter fallback is unavailable
-  for them. The unexplained tail is not consumed by the production validator.
+  for them. Current issue #41 evidence instead leaves 18 bytes after 112 of
+  130 bytes and 67 present fields. Diagnostic extension recognition is verified
+  **synthetically only**: after exactly 67 supported presence fields decode,
+  a suffix of at most 64 bytes must contain exactly 16 or 18 complete compressed
+  integers. Field count is pinned so counter growth can change byte length
+  without accepting arbitrary layout shifts. The 16-field count for the current
+  18-byte tail is an estimate from issue #41's sanitized summary; 18 fields for
+  the historical 25-byte shape comes from the existing synthetic regression
+  (11 one-byte and seven two-byte integers), not live confirmation. The exact
+  live presence mask is unavailable, so only its supported-bit count is pinned.
+  An owner replay with `maxed-cli decode --explain-failures` on a current
+  recording must confirm the field count before claiming live acceptance.
+  Accepted shapes report extension byte length/field count and `divergence=none`,
+  without tail bytes or values. Other field counts, malformed/oversized tails,
+  sparse snapshots and unsupported-presence cases remain divergences. Bounded
+  valid but rejected tails retain their field count in the diagnostic to make
+  incorrect pins visible. Recognition does not establish field semantics: the
+  production validator and privacy admission still reject extended snapshots.
 - Historical diagnostics establish that Recording A's 37 field failures all
   precede tick recovery on a reset-assumed fresh connection with no decoded
   NEWTICK. These are startup mis-decryptions shared with Java, not evidence for

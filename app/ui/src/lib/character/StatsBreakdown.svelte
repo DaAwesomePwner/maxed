@@ -11,7 +11,8 @@
 <section aria-labelledby="character-stats">
   <h2 id="character-stats">Stats</h2>
   <p>Observed totals and raw boosts are retained. Base / gear / exalt / Other is a
-    {panel?.breakdown_provisional ? 'provisional' : 'reported'} split; exalt placement requires verified evidence.
+    {panel?.breakdown_provisional !== false ? 'provisional' : 'reported'} split.
+    Cap decisions use each stat's placement evidence; missing or inconsistent values remain unavailable.
     Other is an unexplained remainder, not a named effect.</p>
   <table>
     <thead><tr><th>Stat</th><th>Observed total</th><th>Raw boost</th><th>Base</th><th>Gear</th><th>Exalt</th><th>Other</th><th>Cap / pots left</th></tr></thead>

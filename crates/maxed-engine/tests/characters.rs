@@ -117,7 +117,7 @@ fn gear_and_unknown_caps_remain_observation_time_values() {
     );
 }
 #[test]
-fn full_class_caps_require_all_observed_values_boosts_and_zero_exalt() {
+fn full_class_caps_require_all_observed_values_boosts_and_valid_exalt() {
     use maxed_engine::Engine;
     use std::sync::Arc;
     let mut cat = catalog();
@@ -148,9 +148,9 @@ fn full_class_caps_require_all_observed_values_boosts_and_zero_exalt() {
     assert_eq!(e.snapshot().character.unwrap().maxed, Some(8));
     apply(&mut e, 4000, tick(vec![status(1, vec![stat(20, 59)])]));
     assert_eq!(e.snapshot().character.unwrap().maxed, Some(7));
-    for (at, level) in [(5000, 2), (6000, -1)] {
+    for (at, level, expected) in [(5000, 2, Some(7)), (6000, -1, None)] {
         apply(&mut e, at, tick(vec![status(1, vec![stat(105, level)])]));
-        assert_eq!(e.snapshot().character.unwrap().maxed, None);
+        assert_eq!(e.snapshot().character.unwrap().maxed, expected);
     }
     apply(&mut e, 7000, tick(vec![status(1, vec![stat(105, 0)])]));
     assert_eq!(e.snapshot().character.unwrap().maxed, Some(7));

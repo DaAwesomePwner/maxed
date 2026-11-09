@@ -25,7 +25,7 @@ RealmHound that are not yet scheduled.
 | **Loot** | Shipped (private-repo PR 87) | `lootBrowsing`, on | Feed, item pages, statistics, collection and chase list |
 | **Logs** | Shipped (private-repo PR 89) | `logs`, on | Chat, key pops, events, alerts. Chat storage and Settings › Chat are active regardless of the flag |
 | **Stats / Sessions** | Shipped (private-repo PR 94) | `stats`, on | Fame per hour by map, sessions, lifetime dungeon record, CSV export |
-| **Character** | Implemented, accepted in owner use (2026-11-06) | `character`, on | Own-character calculator; Gate P open and exalt damage deferred. See [live acceptance](development/character-live-acceptance.md) |
+| **Character** | Implemented, accepted in owner use (2026-11-06) | `character`, on | Own-character calculator; Gate P resolved (2026-11-08), exalt damage deferred. See [live acceptance](development/character-live-acceptance.md) |
 | **Party / Parse** | Implemented, in owner use | `party`, on | Live roster, saved-run Party, player history with marks/notes and requirement presets; migration 014. See [UI architecture](architecture/ui.md#party) and [preview](development/ui-preview.md#party-preview) |
 
 Not in scope for these tabs: account-synced Daily Quests and Pets, Exalts / account sync (needs the login token and
@@ -187,6 +187,7 @@ These appear in one or both tools but break Maxed's rules (passive capture, no u
 
 | Date | Decision |
 | --- | --- |
+| 2026-11-08 | Gate P resolved from sanitized owner evidence (#37/#38): exalt inside boost; HP/MP fields carry bonus amounts. Nonzero exalt permits cap/maxed decisions with observed operands and catalog caps. Exalt damage remains deferred |
 | 2026-11-07 | #4: Home follows the current account, with no selector. Legacy attribution uses local recomputation; unmatched history stays stored and is excluded from totals, records and bests with a notice. Windows account-switch acceptance remains pending |
 | 2026-11-06 | Observed-only Daily Quests (Tinkerer) and Pets are in scope, built from passive capture with no token. Each needs its own spec before it is built; neither is scheduled yet |
 | 2026-11-06 | Opt-in account sync stays deferred until DECA has been asked about the exact design in [Later: opt-in account sync](#later-opt-in-account-sync) |
