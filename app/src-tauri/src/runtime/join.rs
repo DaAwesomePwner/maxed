@@ -454,7 +454,13 @@ impl Adapter {
                 }
                 _ => {}
             }
-            let presentation = if self.bridge.batch.is_some() {
+            // perf-live "before" mode measures the old full-clone path. The check
+            // lives here because payload.rs is also compiled into maxed-cli tests.
+            #[cfg(feature = "perf-live")]
+            let full_clone = super::perf::before();
+            #[cfg(not(feature = "perf-live"))]
+            let full_clone = false;
+            let presentation = if self.bridge.batch.is_some() && !full_clone {
                 crate::bridge::payload::presentation_copy(&mut envelope)
             } else {
                 // Replay consumers use canonical events as storage inputs.
