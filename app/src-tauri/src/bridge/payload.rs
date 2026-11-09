@@ -61,10 +61,6 @@ impl SnapshotEncoder {
 /// Clone only chart data that presentation retains, restoring the canonical
 /// envelope before returning. The durable owner never observes stripped data.
 pub fn presentation_copy(event: &mut maxed_types::EventEnvelope) -> maxed_types::EventEnvelope {
-    #[cfg(feature = "perf-live")]
-    if crate::runtime::perf::before() {
-        return event.clone();
-    }
     use maxed_types::{EngineEvent, TargetKind};
     let updated = matches!(event.event, EngineEvent::FightUpdated(_));
     match &mut event.event {
