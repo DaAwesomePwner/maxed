@@ -32,7 +32,20 @@ export function createCharacterController(client: Pick<Client, 'getCharacterCalc
   let view: CharacterViewState = { observed: null, calculation: null, freshness: null,
     defenseRaw: '0', defense: 0, defenseError: null, comparisons: [], comparisonError: null,
     loading: false, error: null };
-  const store = writable(view);
+  let subscribed = false;
+  let published = view;
+  let observedKey = 'null';
+  // Character is the calculation consumer; Home and the rail use snapshots.
+  // The store lifecycle counts all subscribers and refreshes on every remount.
+  const store = writable(view, () => {
+    if (disposed) return;
+    subscribed = true;
+    reconcile();
+    return () => {
+      subscribed = false;
+      if (!disposed) reconcile();
+    };
+  });
   let identity = '', desiredKey = '', resultKey = '';
   let revision: CharacterInputRevision | null = null;
   let active = false, disposed = false, inFlight = false, generation = 0;
@@ -44,6 +57,8 @@ export function createCharacterController(client: Pick<Client, 'getCharacterCalc
     view = { ...view, freshness: !view.observed ? null : view.observed.died_at !== null ? 'died'
       : view.calculation && active && resultKey === desiredKey && !view.loading && !view.error
         ? view.calculation.freshness : 'last_seen' };
+    if ((Object.keys(view) as (keyof CharacterViewState)[]).every(key => view[key] === published[key])) return;
+    published = view;
     store.set(view);
   }
 
@@ -84,7 +99,7 @@ export function createCharacterController(client: Pick<Client, 'getCharacterCalc
   }
 
   function reconcile() {
-    const request: CharacterCalculationRequest | null = active && revision ? {
+    const request: CharacterCalculationRequest | null = subscribed && active && revision ? {
       defense: view.defense, comparison_item_types: [...view.comparisons], expected_revision: { ...revision },
     } : null;
     // Native owns the hash of relevant stats/equipment/conditions/identity. Time,
@@ -113,7 +128,13 @@ export function createCharacterController(client: Pick<Client, 'getCharacterCalc
         resultKey = '';
         view = { ...view, calculation: null, comparisons: [], comparisonError: null, error: null };
       }
-      view = { ...view, observed: character ? structuredClone(character) : null };
+      // Compare the entire JSON DTO, not only the calculation hash: the view
+      // also renders identity, equipment, coverage, stats and observation time.
+      const nextObservedKey = JSON.stringify(character);
+      if (nextObservedKey !== observedKey) {
+        observedKey = nextObservedKey;
+        view = { ...view, observed: character ? structuredClone(character) : null };
+      }
       const candidate = character?.calculation_revision;
       revision = candidate && candidate.stream_id === snapshot?.stream_id && candidate.character_id === character?.id
         ? { ...candidate } : null;
