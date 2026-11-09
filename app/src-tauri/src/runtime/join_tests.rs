@@ -950,15 +950,29 @@ fn partial_frame_and_pending_hole_at_teardown_do_not_mark_run_loss() {
 #[test]
 fn unchanged_store_refresh_does_not_lock_or_rewrite_view() {
     let dir = tempfile::tempdir().unwrap();
-    let (mut adapter, views, _) = adapter(&dir.path().join("refresh"), 1024);
+    let (adapter, views, _) = adapter(&dir.path().join("refresh"), 1024);
     adapter.refresh_store();
-    {
-        let status = views.store.lock().unwrap();
-        let message = status.message.as_ptr();
-        // Holding this lock would deadlock if refresh tried to publish again.
+    let status = views.store.lock().unwrap();
+    let message = status.message.as_ptr() as usize;
+    let (done, completed) = crossbeam_channel::bounded(1);
+    let refresh = std::thread::spawn(move || {
         adapter.refresh_store();
-        assert_eq!(status.message.as_ptr(), message);
-    }
+        done.send(()).unwrap();
+        adapter
+    });
+    let returned_without_lock = completed.recv_timeout(Duration::from_secs(5));
+    // Release before joining even on timeout: a regression fails instead of
+    // leaving the refresh thread blocked on a mutex held by this test.
+    drop(status);
+    let mut adapter = refresh.join().unwrap();
+    assert!(
+        returned_without_lock.is_ok(),
+        "unchanged refresh waited for the view lock"
+    );
+    assert_eq!(
+        views.store.lock().unwrap().message.as_ptr() as usize,
+        message
+    );
     adapter.catalog_notice = Some("Synthetic catalog notice");
     adapter.refresh_store();
     assert!(views
@@ -968,4 +982,20 @@ fn unchanged_store_refresh_does_not_lock_or_rewrite_view() {
         .message
         .starts_with("Synthetic catalog notice "));
     adapter.close().unwrap();
+}
+
+#[test]
+fn invalid_policy_rejects_events_that_do_not_use_preferences() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut adapter, views, _) = adapter(&dir.path().join("invalid-policy"), 1024);
+    let event = EngineEvent::CaptureStateChanged(CaptureStatus::default());
+    assert!(!maxed_store::AlertContext::uses_preferences(&event));
+    views.alert_policy.lock().unwrap().volume_percent = 101;
+    adapter.events(vec![event]);
+    assert!(adapter.drain().is_err());
+    assert_eq!(views.store.lock().unwrap().state, StoreState::Failed);
+    let status = adapter.maintenance_writer_for_test().status();
+    assert_eq!(status.queued, 0);
+    assert_eq!(status.durable, None);
+    adapter.discard();
 }

@@ -1081,6 +1081,9 @@ impl Adapter {
         if let Some(notice) = self.catalog_notice {
             status.message = format!("{notice} {}", status.message);
         }
+        // Completed and recovery adapters share this view; a direct write must
+        // not leave a cached refresh claiming that it is still current.
+        self.store_inputs.set(None);
         *self.views.store.lock().unwrap_or_else(|p| p.into_inner()) = status;
         if failed {
             Err("Summary shutdown failed; changes are not saved".into())
@@ -1107,6 +1110,8 @@ impl Adapter {
         self.reclaim_failed_writer();
         self.pending.clear();
         let _ = self.cleanup_playback();
+        // Completed and recovery adapters share the view, including discard writes.
+        self.store_inputs.set(None);
         let mut status = self.views.store.lock().unwrap_or_else(|p| p.into_inner());
         status.state = StoreState::Closed;
         status.queued = 0;

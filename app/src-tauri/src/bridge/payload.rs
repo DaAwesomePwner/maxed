@@ -249,6 +249,10 @@ mod tests {
                 player.points.clear();
             }
         }
+        assert_eq!(
+            presentation_event(presentation_copy(&mut original)),
+            expected
+        );
         assert_eq!(presentation_copy(&mut original), expected);
         assert_eq!(presentation_event(original.clone()), expected);
         assert_eq!(original.event, EngineEvent::ScopeTimelineUpdated(update));
@@ -284,6 +288,10 @@ mod tests {
             fight_chart_omitted: false,
             event: EngineEvent::PlayerObserved(profile),
         };
+        assert_eq!(
+            presentation_event(presentation_copy(&mut original)),
+            original
+        );
         assert_eq!(presentation_copy(&mut original), original);
         assert_eq!(presentation_event(original.clone()), original);
     }
@@ -327,6 +335,10 @@ mod tests {
                     };
                     let bytes = serde_json::to_vec(&original).unwrap();
                     let presented = presentation_event(original.clone());
+                    assert_eq!(
+                        presentation_event(presentation_copy(&mut original)),
+                        presented
+                    );
                     assert_eq!(
                         serde_json::to_vec(&presentation_copy(&mut original)).unwrap(),
                         serde_json::to_vec(&presented).unwrap()
