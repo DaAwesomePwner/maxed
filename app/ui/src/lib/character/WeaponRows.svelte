@@ -23,7 +23,7 @@
         <td>{@render scalar(group.attacks_per_sec)}</td><td>{@render scalar(group.projectiles_per_sec)}</td><td>{@render scalar(group.dps)}</td></tr>
       <tr><td colspan="6"><FormulaDetails {version} inputs={[
         { label: 'ATT', value: observedInput(weapon.applied_att) }, { label: 'DEX', value: observedInput(weapon.applied_dex) },
-        { label: 'Primary condition mask', value: observedInput(weapon.applied_primary_mask) },
+        { label: 'Applied condition bits (Weak, Damaging)', value: observedInput(weapon.applied_primary_mask) },
         { label: 'Applied defense', value: String(defense) }, { label: 'Projectile count', value: String(group.count) },
         { label: 'Rate factor', value: amount(group.rate_factor.value, 2) },
         { label: 'Armor piercing', value: group.armor_piercing === null ? '— · Metadata unavailable' : group.armor_piercing ? 'Yes' : 'No' },
@@ -43,7 +43,7 @@
 <FormulaDetails {version} inputs={[
   { label: 'ATT', value: observedInput(weapon.applied_att) },
   { label: 'DEX', value: observedInput(weapon.applied_dex) },
-  { label: 'Primary condition mask', value: observedInput(weapon.applied_primary_mask) },
+  { label: 'Applied condition bits (Weak, Damaging)', value: observedInput(weapon.applied_primary_mask) },
   { label: 'Applied defense', value: String(defense) },
 ]} values={[
   { label: 'Supported subtotal', value: weapon.dps_subtotal },

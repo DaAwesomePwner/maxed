@@ -1,7 +1,7 @@
 use crate::{
     maintenance::{Control, ControlResult, JobStatus, MaintenanceService, Step},
     migrate::{digest, open_writer},
-    project::{apply_prepared_contexts, json, validate_event},
+    project::{apply_contexts, json, validate_submission},
     receipts::{self, ReceiptDigest},
     StoreError,
 };
@@ -11,7 +11,10 @@ use rusqlite::Connection;
 use std::{
     collections::VecDeque,
     path::PathBuf,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, MutexGuard,
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -57,9 +60,9 @@ struct Pending {
     context: Arc<crate::AlertContext>,
     bytes: usize,
     ticket: u64,
-    hash: ReceiptDigest,
 }
 struct Shared {
+    status_generation: Arc<AtomicU64>,
     path: PathBuf,
     maintenance_blocked: bool,
     maintenance_barriers: usize,
@@ -107,6 +110,7 @@ enum Command {
 /// Own on a background orchestration thread. Explicit shutdown is required to
 /// receive unsaved events on failure; dropping without shutdown logs an error.
 pub struct StoreWriter {
+    status_generation: Arc<AtomicU64>,
     config: WriterConfig,
     shared: Arc<Mutex<Shared>>,
     commands: Sender<Command>,
@@ -207,7 +211,9 @@ pub fn start_writer_with_maintenance(
         })
         .transpose()?;
     let (commit_wake, committed) = bounded(1);
+    let status_generation = Arc::new(AtomicU64::new(0));
     let shared = Arc::new(Mutex::new(Shared {
+        status_generation: status_generation.clone(),
         path: lease.0.clone(),
         maintenance_blocked: lease.has_abandoned_events(),
         maintenance_barriers: 0,
@@ -244,11 +250,13 @@ pub fn start_writer_with_maintenance(
                 let mut shared = lock(&worker_shared);
                 shared.state = StoreState::Failed;
                 shared.failure = Some(StoreError::WorkerFailed { pending: vec![] });
+                shared.status_generation.fetch_add(1, Ordering::Release);
                 tracing::error!("Summary worker panicked; pending summaries remain retained");
             }
         })
         .map_err(|_| StoreError::WorkerFailed { pending: vec![] })?;
     Ok(StoreWriter {
+        status_generation,
         config,
         shared,
         commands,
@@ -362,7 +370,7 @@ impl StoreWriter {
         if event.stream_id != self.config.stream_id {
             return Err(StoreError::InvalidEvent);
         }
-        validate_event(event).map(|_| ())
+        validate_submission(event).map(|_| ())
     }
 
     #[allow(clippy::result_large_err)] // The required API returns ownership of the original event.
@@ -383,13 +391,12 @@ impl StoreWriter {
         if event.stream_id != self.config.stream_id {
             return Err(SubmitError::Invalid(event));
         }
-        let (bytes, hash) = match validate_event(&event) {
-            Ok((bytes, hash)) => (
-                bytes
-                    .saturating_add(context_bytes)
-                    .saturating_add(hash.len()),
-                hash,
-            ),
+        let bytes = match validate_submission(&event) {
+            // Retain the legacy 32-byte receipt allowance even though hashing now
+            // happens on the worker. Queue admission is byte-for-byte unchanged.
+            Ok(bytes) => bytes
+                .saturating_add(context_bytes)
+                .saturating_add(std::mem::size_of::<ReceiptDigest>()),
             Err(_) => return Err(SubmitError::Invalid(event)),
         };
         // Never wait for the worker, another producer, or SQLite on the submit path.
@@ -407,7 +414,10 @@ impl StoreWriter {
         if shared.queue.len() >= self.config.capacity
             || shared.bytes.saturating_add(bytes) > MAX_QUEUED_BYTES
         {
-            shared.state = StoreState::Backpressured;
+            if shared.state != StoreState::Backpressured {
+                shared.state = StoreState::Backpressured;
+                shared.status_generation.fetch_add(1, Ordering::Release);
+            }
             return Err(SubmitError::Full(event));
         }
         let Some(ticket) = shared.last_ticket.checked_add(1) else {
@@ -423,8 +433,8 @@ impl StoreWriter {
             context: Arc::new(context),
             bytes,
             ticket,
-            hash,
         });
+        shared.status_generation.fetch_add(1, Ordering::Release);
         drop(shared);
         let _ = self.wake.try_send(());
         Ok(())
@@ -522,6 +532,13 @@ impl StoreWriter {
             .send(Command::Claim(limit, send))
             .map_err(|_| self.worker_failed())?;
         wait_response(recv, self.worker.as_ref().ok_or(StoreError::Closed)?)
+    }
+
+    /// Changes are published while holding the status mutex, before unlocking.
+    /// Read before status(): a concurrent mutation may cause an extra refresh,
+    /// but cannot be acknowledged without observing its status.
+    pub fn status_generation(&self) -> u64 {
+        self.status_generation.load(Ordering::Acquire)
     }
 
     pub fn status(&self) -> StoreStatus {
@@ -637,6 +654,7 @@ impl StoreWriter {
         shared.accepting = false;
         if shared.failure.is_none() {
             shared.state = StoreState::Closing;
+            shared.status_generation.fetch_add(1, Ordering::Release);
         }
         let ticket = shared.last_ticket;
         drop(shared);
@@ -730,6 +748,7 @@ fn mark_failed(shared: &Mutex<Shared>, error: &StoreError) {
     let mut shared = lock(shared);
     shared.state = StoreState::Failed;
     shared.failure = Some(error.clone());
+    shared.status_generation.fetch_add(1, Ordering::Release);
 }
 
 fn commit_next(
@@ -743,22 +762,17 @@ fn commit_next(
         .iter()
         .take_while(|p| p.ticket <= through)
         .take(config.batch_size)
-        .map(|p| (Arc::clone(&p.event), Arc::clone(&p.context), p.hash))
+        .map(|p| (Arc::clone(&p.event), Arc::clone(&p.context)))
         .collect();
     if events.is_empty() {
         return Ok(false);
     }
-    if let Err(error) = apply_prepared_contexts(
-        conn,
-        events
-            .iter()
-            .map(|(e, c, h)| (e.as_ref(), c.as_ref(), Some(h))),
-    ) {
+    if let Err(error) = apply_contexts(conn, events.iter().map(|(e, c)| (e.as_ref(), c.as_ref()))) {
         mark_failed(shared, &error);
         return Err(error);
     }
     let mut shared = lock(shared);
-    for (event, _, _) in &events {
+    for (event, _) in &events {
         if let Some(pending) = shared.queue.pop_front() {
             shared.bytes -= pending.bytes;
         }
@@ -770,6 +784,7 @@ fn commit_next(
     } else {
         StoreState::Closing
     };
+    shared.status_generation.fetch_add(1, Ordering::Release);
     let _ = shared.committed.try_send(());
     Ok(true)
 }
@@ -873,9 +888,9 @@ fn worker_loop(
                     Command::Panic => panic!("synthetic worker failure"),
                 };
                 if !closing { let mut state=lock(shared); state.maintenance_barriers=state.maintenance_barriers.saturating_sub(1); }
-                if retry { let mut state=lock(shared); state.failure=None; state.state=StoreState::Ready; }
+                if retry { let mut state=lock(shared); state.failure=None; state.state=StoreState::Ready; state.status_generation.fetch_add(1, Ordering::Release); }
                 let result=flush_through(conn,config,shared,through);
-                if closing && result.is_ok() { lock(shared).state=StoreState::Closed; }
+                if closing && result.is_ok() { let mut state=lock(shared); state.state=StoreState::Closed; state.status_generation.fetch_add(1, Ordering::Release); }
                 let _=reply.send(result); last_flush=Instant::now();
                 if closing { break; }
             }
@@ -1294,6 +1309,7 @@ mod tests {
         let (commands, command_rx) = bounded(8);
         let (committed, _) = bounded(1);
         let shared = Mutex::new(Shared {
+            status_generation: Arc::default(),
             path: std::fs::canonicalize(&path).unwrap(),
             maintenance_blocked: false,
             maintenance_barriers: 0,
@@ -1342,7 +1358,6 @@ mod tests {
             context: Arc::default(),
             bytes: 0,
             ticket: 1,
-            hash: [0; 32],
         });
         let shared = Arc::new(shared);
         retain_abandoned(shared.clone());
@@ -1359,7 +1374,7 @@ mod tests {
     }
 
     #[test]
-    fn prepared_receipt_matches_direct_projection_and_duplicate_validation() {
+    fn worker_receipt_matches_direct_projection_and_duplicate_validation() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("prepared.sqlite3");
         let writer = start_writer(
@@ -1371,7 +1386,7 @@ mod tests {
         )
         .unwrap();
         let envelope = event(1);
-        let expected = validate_event(&envelope).unwrap().1;
+        let expected = crate::project::validate_event(&envelope).unwrap().1;
         submit(&writer, envelope.clone());
         writer.flush().unwrap();
         let mut conn = open_writer(&path).unwrap();
@@ -1393,6 +1408,7 @@ mod tests {
         let config = WriterConfig::default();
         let (committed, _) = bounded(1);
         let mut state = Shared {
+            status_generation: Arc::default(),
             path: PathBuf::new(),
             maintenance_blocked: false,
             maintenance_barriers: 0,
@@ -1408,7 +1424,6 @@ mod tests {
         };
         for ticket in 1..=3 {
             state.queue.push_back(Pending {
-                hash: validate_event(&event(ticket)).unwrap().1,
                 event: Arc::new(event(ticket)),
                 context: Arc::new(crate::AlertContext::default()),
                 bytes: 0,
@@ -1799,6 +1814,51 @@ mod tests {
             StoreError::WorkerFailed { pending } => assert_eq!(pending, vec![event(1)]),
             e => panic!("{e}"),
         }
+    }
+
+    #[test]
+    fn status_generation_tracks_queue_failure_retry_and_shutdown() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut writer = start_writer(
+            dir.path().join("generation"),
+            WriterConfig {
+                stream_id: "fault-test".into(),
+                capacity: 1,
+                batch_size: 128,
+                flush_millis: 60_000,
+            },
+        )
+        .unwrap();
+        let initial = writer.status_generation();
+        writer.status();
+        writer.set_maintenance_blocked(true);
+        assert_eq!(writer.status_generation(), initial);
+        submit(&writer, event(1));
+        let queued = writer.status_generation();
+        assert!(queued > initial);
+        assert!(matches!(
+            writer.try_submit(event(2)),
+            Err(SubmitError::Full(_))
+        ));
+        let full = writer.status_generation();
+        assert!(full > queued);
+        assert!(matches!(
+            writer.try_submit(event(2)),
+            Err(SubmitError::Full(_))
+        ));
+        assert_eq!(writer.status_generation(), full);
+        mark_failed(&writer.shared, &StoreError::Full);
+        let failed = writer.status_generation();
+        assert!(failed > full);
+        assert_eq!(writer.status().state, StoreState::Failed);
+        writer.retry().unwrap();
+        let committed = writer.status_generation();
+        assert!(committed >= failed + 2); // retry and durable/queue advance
+        assert_eq!(writer.status().durable, Some(Sequence(Timestamp(1))));
+        assert_eq!(writer.status().queued, 0);
+        writer.stop().unwrap();
+        assert!(writer.status_generation() >= committed + 2); // Closing and Closed
+        assert_eq!(writer.status().state, StoreState::Closed);
     }
 
     #[test]

@@ -42,6 +42,111 @@ impl Write for Limited {
     }
 }
 
+/// Submit-time validation preserves the serialized size and key-based timestamp
+/// rules of validate_event, but never constructs a DOM or computes a receipt.
+/// Keep the bounded buffer local: queue ownership and its byte budget are unchanged.
+pub(crate) fn validate_submission(event: &EventEnvelope) -> Result<usize, StoreError> {
+    if event.stream_id.is_empty() || event.sequence.0 .0 == 0 {
+        return Err(StoreError::InvalidEvent);
+    }
+    let mut bytes = Limited(Vec::new());
+    serde_json::to_writer(&mut bytes, event)?;
+    use serde::de::DeserializeSeed;
+    let mut deserializer = serde_json::Deserializer::from_slice(&bytes.0);
+    TimestampVisitor(false).deserialize(&mut deserializer)?;
+    deserializer.end()?;
+    Ok(bytes.0.len())
+}
+
+// Validate by serialized key rather than typed field so legacy rules (including
+// timestamp-like dynamic map keys) remain identical as DTOs evolve. The JSON
+// deserializer lends strings to these visitors; no per-field values are allocated.
+struct TimestampVisitor(bool);
+impl<'de> serde::de::DeserializeSeed<'de> for TimestampVisitor {
+    type Value = ();
+    fn deserialize<D: serde::Deserializer<'de>>(self, d: D) -> Result<(), D::Error> {
+        d.deserialize_any(self)
+    }
+}
+impl TimestampVisitor {
+    fn scalar<E: serde::de::Error>(&self) -> Result<(), E> {
+        if self.0 {
+            Err(E::custom("invalid timestamp"))
+        } else {
+            Ok(())
+        }
+    }
+}
+impl<'de> serde::de::Visitor<'de> for TimestampVisitor {
+    type Value = ();
+    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("JSON with signed-range timestamp strings")
+    }
+    fn visit_unit<E: serde::de::Error>(self) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_str<E: serde::de::Error>(self, s: &str) -> Result<(), E> {
+        if self.0 && !s.parse::<u64>().is_ok_and(|n| n <= i64::MAX as u64) {
+            return Err(E::custom("invalid timestamp"));
+        }
+        Ok(())
+    }
+    fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<(), E> {
+        self.scalar()
+    }
+    fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<(), E> {
+        self.scalar()
+    }
+    fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<(), E> {
+        self.scalar()
+    }
+    fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<(), E> {
+        self.scalar()
+    }
+    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut a: A) -> Result<(), A::Error> {
+        self.scalar()?;
+        while a.next_element_seed(TimestampVisitor(false))?.is_some() {}
+        Ok(())
+    }
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut a: A) -> Result<(), A::Error> {
+        self.scalar()?;
+        while let Some(value) = a.next_key_seed(TimestampKey)? {
+            a.next_value_seed(value)?;
+        }
+        Ok(())
+    }
+}
+struct TimestampKey;
+impl<'de> serde::de::DeserializeSeed<'de> for TimestampKey {
+    type Value = TimestampVisitor;
+    fn deserialize<D: serde::Deserializer<'de>>(self, d: D) -> Result<Self::Value, D::Error> {
+        d.deserialize_str(self)
+    }
+}
+impl serde::de::Visitor<'_> for TimestampKey {
+    type Value = TimestampVisitor;
+    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("object key")
+    }
+    fn visit_str<E: serde::de::Error>(self, key: &str) -> Result<Self::Value, E> {
+        Ok(TimestampVisitor(matches!(
+            key,
+            "at" | "sequence"
+                | "started"
+                | "ended"
+                | "last_traffic"
+                | "observed_at"
+                | "taken_observed_at"
+                | "completed_at"
+                | "died_at"
+                | "first_hit"
+                | "last_hit"
+                | "from"
+                | "until"
+        )))
+    }
+}
+
 /// Canonical sorted-key JSON, matching the CLI's SHA-256 value hashing.
 pub(crate) fn validate_event(event: &EventEnvelope) -> Result<(usize, ReceiptDigest), StoreError> {
     if event.stream_id.is_empty() || event.sequence.0 .0 == 0 {
@@ -119,36 +224,24 @@ pub(crate) fn apply_contexts<'a>(
     conn: &mut Connection,
     events: impl IntoIterator<Item = (&'a EventEnvelope, &'a crate::AlertContext)>,
 ) -> Result<(), StoreError> {
-    apply_prepared_contexts(conn, events.into_iter().map(|(e, c)| (e, c, None)))
-}
-
-/// The writer supplies a digest only for an immutable envelope already validated
-/// at submission. Direct batch callers still validate inside the transaction.
-pub(crate) fn apply_prepared_contexts<'a>(
-    conn: &mut Connection,
-    events: impl IntoIterator<
-        Item = (
-            &'a EventEnvelope,
-            &'a crate::AlertContext,
-            Option<&'a ReceiptDigest>,
-        ),
-    >,
-) -> Result<(), StoreError> {
     #[cfg(test)]
     fault::check(fault::Point::Begin)?;
     conn.pragma_update(None, "foreign_keys", true)?;
     if conn.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, i64>(0))? != 1 {
         return Err(StoreError::Io);
     }
+    // Validate and prepare receipts for every caller, including direct batches
+    // that bypass submission. Do the DOM and hash work before taking SQLite's
+    // write lock; immutable envelope references keep these digests valid.
+    let prepared = events
+        .into_iter()
+        .map(|(event, context)| validate_event(event).map(|(_, hash)| (event, context, hash)))
+        .collect::<Result<Vec<_>, StoreError>>()?;
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let tables = receipts::Tables::read(&tx)?;
     let mut party_runs = BTreeSet::new();
-    for (event, context, prepared_hash) in events {
+    for (event, context, hash) in prepared {
         context.validate()?;
-        let hash = match prepared_hash {
-            Some(hash) => *hash,
-            None => validate_event(event)?.1,
-        };
         let sequence = micros(event.sequence.0)?;
         if let Some(old) = tables.lookup(&tx, &event.stream_id, sequence)? {
             if old != hash {
@@ -954,3 +1047,7 @@ pub(crate) mod fault {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "project_tests.rs"]
+mod tests;

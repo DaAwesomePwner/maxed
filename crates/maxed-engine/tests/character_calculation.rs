@@ -1093,3 +1093,56 @@ fn regeneration_invalid_request_or_stale_revision_cannot_return_current_totals()
         assert!(result.effects.iter().all(|e| e.total.value.is_none()));
     }
 }
+
+#[test]
+fn revision_and_results_depend_only_on_modeled_condition_bits() {
+    let (mut character, catalog) = fixture(75, 75, 100, 100);
+    let baseline = run(&character, Some(&catalog), 0);
+    for bit in 0..32 {
+        character
+            .stats
+            .iter_mut()
+            .find(|s| s.stat_id == 29)
+            .unwrap()
+            .value = 1_i32 << bit;
+        let result = run(&character, Some(&catalog), 0);
+        if bit == 2 || bit == 18 {
+            assert_eq!(result.weapons[0].applied_primary_mask, Some(1_u32 << bit));
+            assert_ne!(
+                result.weapons[0].applied_primary_mask,
+                baseline.weapons[0].applied_primary_mask
+            );
+            assert_ne!(result.revision.input_hash, baseline.revision.input_hash);
+            assert_ne!(result.weapons[0].dps_total, baseline.weapons[0].dps_total);
+        } else {
+            assert_eq!(
+                result.revision, baseline.revision,
+                "unused condition bit {bit}"
+            );
+            assert_eq!(result.weapons[0].dps_total, baseline.weapons[0].dps_total);
+            assert_eq!(result.regeneration, baseline.regeneration);
+            assert_eq!(
+                result.weapons[0].applied_primary_mask,
+                baseline.weapons[0].applied_primary_mask
+            );
+            assert_eq!(result, baseline);
+        }
+    }
+}
+
+#[test]
+fn masked_conditions_retain_missing_and_ambiguous_input_detection() {
+    let (mut character, catalog) = fixture(75, 75, 100, 100);
+    let baseline = run(&character, Some(&catalog), 0);
+    character.stats.push(StatView {
+        stat_id: 29,
+        value: 0x8000,
+    });
+    let ambiguous = run(&character, Some(&catalog), 0);
+    assert_ne!(ambiguous.revision, baseline.revision);
+    unavailable(&ambiguous.weapons[0].dps_total);
+    character.stats.retain(|s| s.stat_id != 29);
+    let missing = run(&character, Some(&catalog), 0);
+    assert_ne!(missing.revision, baseline.revision);
+    unavailable(&missing.weapons[0].dps_total);
+}

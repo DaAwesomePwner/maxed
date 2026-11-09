@@ -32,7 +32,26 @@ export function createCharacterController(client: Pick<Client, 'getCharacterCalc
   let view: CharacterViewState = { observed: null, calculation: null, freshness: null,
     defenseRaw: '0', defense: 0, defenseError: null, comparisons: [], comparisonError: null,
     loading: false, error: null };
-  const store = writable(view);
+  let subscribed = false;
+  let published = view;
+  let observedKey = 'null';
+  let latest: { snapshot: LiveSnapshot | null; capture: CaptureStatus | null; liveState: LiveState } | null = null;
+  // Character is the calculation consumer; Home and the rail use snapshots.
+  // The store lifecycle counts all subscribers and refreshes on every remount.
+  // Production get(controller.state) would briefly open the gate and schedule/
+  // cancel a request; production reads should subscribe through the Character view.
+  const store = writable(view, () => {
+    if (disposed) return;
+    subscribed = true;
+    if (latest) syncInput(latest.snapshot, latest.capture, latest.liveState);
+    reconcile();
+    return () => {
+      subscribed = false;
+      // Freshness is not in the revision key. A reconnect while unmounted
+      // can keep the same inputs, so require a fresh reply on reactivation.
+      if (!disposed) reconcile();
+    };
+  });
   let identity = '', desiredKey = '', resultKey = '';
   let revision: CharacterInputRevision | null = null;
   let active = false, disposed = false, inFlight = false, generation = 0;
@@ -44,6 +63,8 @@ export function createCharacterController(client: Pick<Client, 'getCharacterCalc
     view = { ...view, freshness: !view.observed ? null : view.observed.died_at !== null ? 'died'
       : view.calculation && active && resultKey === desiredKey && !view.loading && !view.error
         ? view.calculation.freshness : 'last_seen' };
+    if ((Object.keys(view) as (keyof CharacterViewState)[]).every(key => view[key] === published[key])) return;
+    published = view;
     store.set(view);
   }
 
@@ -84,7 +105,7 @@ export function createCharacterController(client: Pick<Client, 'getCharacterCalc
   }
 
   function reconcile() {
-    const request: CharacterCalculationRequest | null = active && revision ? {
+    const request: CharacterCalculationRequest | null = subscribed && active && revision ? {
       defense: view.defense, comparison_item_types: [...view.comparisons], expected_revision: { ...revision },
     } : null;
     // Native owns the hash of relevant stats/equipment/conditions/identity. Time,
@@ -102,24 +123,36 @@ export function createCharacterController(client: Pick<Client, 'getCharacterCalc
     publish();
   }
 
+  function syncInput(snapshot: LiveSnapshot | null, capture: CaptureStatus | null, liveState: LiveState) {
+    const character = snapshot?.character ?? null;
+    const nextIdentity = JSON.stringify([snapshot?.stream_id ?? null, character?.id ?? null]);
+    if (nextIdentity !== identity) {
+      identity = nextIdentity;
+      resultKey = '';
+      view = { ...view, calculation: null, comparisons: [], comparisonError: null, error: null };
+    }
+    // Compare the entire JSON DTO, not only the calculation hash: the view
+    // also renders identity, equipment, coverage, stats and observation time.
+    const nextObservedKey = JSON.stringify(character);
+    if (nextObservedKey !== observedKey) {
+      observedKey = nextObservedKey;
+      view = { ...view, observed: character ? structuredClone(character) : null };
+    }
+    const candidate = character?.calculation_revision;
+    revision = candidate && candidate.stream_id === snapshot?.stream_id && candidate.character_id === character?.id
+      ? { ...candidate } : null;
+    unavailable = !character ? 'No character observed. Start capture and enter the game.'
+      : !revision ? 'Character calculation unavailable. Reconnect to obtain an input revision.' : null;
+    active = !!character && character.died_at === null && capture?.state === 'Live' && liveState.phase === 'live';
+  }
+
   return {
     state: { subscribe: store.subscribe } satisfies Readable<CharacterViewState>,
     update(snapshot: LiveSnapshot | null, capture: CaptureStatus | null, liveState: LiveState) {
       if (disposed) return;
-      const character = snapshot?.character ?? null;
-      const nextIdentity = JSON.stringify([snapshot?.stream_id ?? null, character?.id ?? null]);
-      if (nextIdentity !== identity) {
-        identity = nextIdentity;
-        resultKey = '';
-        view = { ...view, calculation: null, comparisons: [], comparisonError: null, error: null };
-      }
-      view = { ...view, observed: character ? structuredClone(character) : null };
-      const candidate = character?.calculation_revision;
-      revision = candidate && candidate.stream_id === snapshot?.stream_id && candidate.character_id === character?.id
-        ? { ...candidate } : null;
-      unavailable = !character ? 'No character observed. Start capture and enter the game.'
-        : !revision ? 'Character calculation unavailable. Reconnect to obtain an input revision.' : null;
-      active = !!character && character.died_at === null && capture?.state === 'Live' && liveState.phase === 'live';
+      latest = { snapshot, capture, liveState };
+      if (!subscribed) return;
+      syncInput(snapshot, capture, liveState);
       reconcile();
     },
     setDefense(raw: string) {

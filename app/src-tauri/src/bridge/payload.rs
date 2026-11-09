@@ -58,6 +58,52 @@ impl SnapshotEncoder {
     }
 }
 
+/// Clone only chart data that presentation retains, restoring the canonical
+/// envelope before returning. The durable owner never observes stripped data.
+pub fn presentation_copy(event: &mut maxed_types::EventEnvelope) -> maxed_types::EventEnvelope {
+    use maxed_types::{EngineEvent, TargetKind};
+    let updated = matches!(event.event, EngineEvent::FightUpdated(_));
+    match &mut event.event {
+        EngineEvent::FightStarted(fight)
+        | EngineEvent::FightUpdated(fight)
+        | EngineEvent::FightEnded(fight) => {
+            let ordinary = !fight.is_current_quest
+                && matches!(fight.target_kind, None | Some(TargetKind::Ordinary));
+            if ordinary || (updated && fight.ended.is_none()) {
+                let buckets = std::mem::take(&mut fight.buckets);
+                let series = fight.player_series.take();
+                let copy = presentation_event(event.clone());
+                if let EngineEvent::FightStarted(fight)
+                | EngineEvent::FightUpdated(fight)
+                | EngineEvent::FightEnded(fight) = &mut event.event
+                {
+                    fight.buckets = buckets;
+                    fight.player_series = series;
+                }
+                return copy;
+            }
+        }
+        EngineEvent::ScopeTimelineUpdated(timeline) => {
+            let buckets = std::mem::take(&mut timeline.buckets);
+            let points: Vec<_> = timeline
+                .players
+                .iter_mut()
+                .map(|player| std::mem::take(&mut player.points))
+                .collect();
+            let copy = presentation_event(event.clone());
+            if let EngineEvent::ScopeTimelineUpdated(timeline) = &mut event.event {
+                timeline.buckets = buckets;
+                for (player, points) in timeline.players.iter_mut().zip(points) {
+                    player.points = points;
+                }
+            }
+            return copy;
+        }
+        _ => {}
+    }
+    presentation_event(event.clone())
+}
+
 pub fn presentation_event(mut event: maxed_types::EventEnvelope) -> maxed_types::EventEnvelope {
     use maxed_types::{EngineEvent, TargetKind};
     if let EngineEvent::FightUpdated(fight) = &mut event.event {
@@ -185,7 +231,7 @@ mod tests {
             compacted: true,
             disabled: false,
         };
-        let original = EventEnvelope {
+        let mut original = EventEnvelope {
             stream_id: "synthetic-stream".into(),
             sequence: Sequence(Timestamp(1)),
             at: Timestamp(2),
@@ -199,6 +245,11 @@ mod tests {
                 player.points.clear();
             }
         }
+        assert_eq!(
+            presentation_event(presentation_copy(&mut original)),
+            expected
+        );
+        assert_eq!(presentation_copy(&mut original), expected);
         assert_eq!(presentation_event(original.clone()), expected);
         assert_eq!(original.event, EngineEvent::ScopeTimelineUpdated(update));
     }
@@ -226,13 +277,18 @@ mod tests {
             first_seen: Timestamp(1),
             last_seen: Timestamp(2),
         };
-        let original = EventEnvelope {
+        let mut original = EventEnvelope {
             stream_id: "synthetic-stream".into(),
             sequence: Sequence(Timestamp(1)),
             at: Timestamp(2),
             fight_chart_omitted: false,
             event: EngineEvent::PlayerObserved(profile),
         };
+        assert_eq!(
+            presentation_event(presentation_copy(&mut original)),
+            original
+        );
+        assert_eq!(presentation_copy(&mut original), original);
         assert_eq!(presentation_event(original.clone()), original);
     }
 
@@ -266,7 +322,7 @@ mod tests {
                         1 | 3 => EngineEvent::FightUpdated(fight.clone()),
                         _ => EngineEvent::FightEnded(fight.clone()),
                     };
-                    let original = EventEnvelope {
+                    let mut original = EventEnvelope {
                         stream_id: "synthetic".into(),
                         sequence: Sequence(Timestamp(1)),
                         at: Timestamp(50),
@@ -275,6 +331,14 @@ mod tests {
                     };
                     let bytes = serde_json::to_vec(&original).unwrap();
                     let presented = presentation_event(original.clone());
+                    assert_eq!(
+                        presentation_event(presentation_copy(&mut original)),
+                        presented
+                    );
+                    assert_eq!(
+                        serde_json::to_vec(&presentation_copy(&mut original)).unwrap(),
+                        serde_json::to_vec(&presented).unwrap()
+                    );
                     let priority = quest || !matches!(kind, None | Some(TargetKind::Ordinary));
                     let omitted = priority && variant == 1;
                     assert_eq!(presented.fight_chart_omitted, omitted);

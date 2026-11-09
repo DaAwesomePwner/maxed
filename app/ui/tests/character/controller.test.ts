@@ -31,7 +31,7 @@ function reply(request: CharacterCalculationRequest): CharacterCalculation {
       hp_total: unknown, mp_total: unknown, base_vit: unknown, base_mp: unknown },
     exalt_damage: { status: 'deferred', value: null, reason: 'deferred' } };
 }
-function harness() {
+function harness(active = true) {
   const calls: { request: CharacterCalculationRequest; resolve(value: CharacterCalculation): void;
     reject(reason: Error): void }[] = [];
   const transport = createFixtureTransport(seed, undefined, undefined, undefined, undefined, undefined,
@@ -40,18 +40,155 @@ function harness() {
     }) });
   const listen = vi.spyOn(transport, 'listen');
   const controller = createCharacterController(createClient(transport));
+  const stop = active ? controller.state.subscribe(() => {}) : () => {};
   const update = (value = snapshot(), state = live) => controller.update(value, value.capture, state);
   const state = () => get(controller.state);
   const finish = async (index: number, patch: Partial<CharacterCalculation> = {}) => {
     calls[index].resolve({ ...reply(calls[index].request), ...patch });
     await vi.runAllTimersAsync();
   };
-  return { controller, calls, listen, update, state, finish };
+  return { controller, calls, listen, update, state, finish, stop };
 }
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe('Character request controller', () => {
+  it('does no character serialization or cloning while unsubscribed and emits the latest input first', async () => {
+    const h = harness(false);
+    const first = snapshot('first');
+    const latest = snapshot('latest', 'new-stream', 'new-character');
+    latest.character!.name = 'Synthetic latest';
+    const stringify = vi.spyOn(JSON, 'stringify');
+    const clone = vi.spyOn(globalThis, 'structuredClone');
+    let stringifyCalls: number, cloneCalls: number;
+    try {
+      h.update(first);
+      h.update(latest);
+      stringifyCalls = stringify.mock.calls.length;
+      cloneCalls = clone.mock.calls.length;
+    } finally {
+      stringify.mockRestore();
+      clone.mockRestore();
+    }
+    expect(stringifyCalls).toBe(0);
+    expect(cloneCalls).toBe(0);
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(0);
+    const changed = vi.fn();
+    const stop = h.controller.state.subscribe(changed);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed.mock.calls[0][0].observed).toEqual(latest.character);
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0].request.expected_revision).toEqual(latest.character!.calculation_revision);
+    stop();
+  });
+
+  it('refreshes a completed matching result after an unmounted reconnect before declaring it live', async () => {
+    const h = harness();
+    h.update(); await vi.runAllTimersAsync(); await h.finish(0);
+    const previous = h.state().calculation;
+    h.stop();
+    h.update(snapshot(), { ...live, phase: 'resyncing' });
+    h.update();
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(1);
+    const changed = vi.fn();
+    const stop = h.controller.state.subscribe(changed);
+    expect(changed.mock.calls[0][0].calculation).toBe(previous);
+    expect(changed.mock.calls[0][0].freshness).toBe('last_seen');
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(2);
+    expect(h.calls[1].request).toEqual(h.calls[0].request);
+    await h.finish(1, { freshness: 'last_seen' });
+    expect(h.state().freshness).toBe('last_seen');
+    stop();
+  });
+
+  it('retains observation identity and emits nothing for identical snapshots', async () => {
+    const h = harness(); h.update(); await vi.runAllTimersAsync(); await h.finish(0);
+    const observed = h.state().observed;
+    const changed = vi.fn();
+    const stop = h.controller.state.subscribe(changed);
+    changed.mockClear();
+    for (let i = 0; i < 4; i++) h.update(snapshot());
+    await vi.runAllTimersAsync();
+    expect(h.state().observed).toBe(observed);
+    expect(changed).not.toHaveBeenCalled();
+    expect(h.calls).toHaveLength(1);
+    stop();
+  });
+
+  it('publishes rendered fields outside the calculation hash without recalculating', async () => {
+    const h = harness(); h.update(); await vi.runAllTimersAsync(); await h.finish(0);
+    const changed = vi.fn();
+    const stop = h.controller.state.subscribe(changed);
+    changed.mockClear();
+    const next = snapshot();
+    next.character!.name = 'Synthetic renamed';
+    next.character!.observed_at = '900';
+    next.character!.identity_verified = false;
+    h.update(next);
+    await vi.runAllTimersAsync();
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(h.state().observed).toEqual(next.character);
+    expect(h.calls).toHaveLength(1);
+    stop();
+  });
+
+  it('defers IPC while inactive and requests the current input once for multiple subscribers', async () => {
+    const h = harness(false);
+    h.update(); h.update(snapshot('latest'));
+    h.controller.setDefense('25');
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(0);
+    const stop = h.controller.state.subscribe(() => {});
+    const stopSecond = h.controller.state.subscribe(() => {});
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0].request.expected_revision.input_hash).toBe('latest');
+    expect(h.calls[0].request.defense).toBe(25);
+    await h.finish(0);
+    stop();
+    h.update(snapshot('next'));
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(2);
+    await h.finish(1);
+    stopSecond();
+    await vi.runAllTimersAsync();
+    const remount = h.controller.state.subscribe(() => {});
+    expect(h.state().freshness).toBe('last_seen');
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(3);
+    expect(h.calls[2].request.expected_revision.input_hash).toBe('next');
+    await h.finish(2);
+    expect(h.state().freshness).toBe('live');
+    remount();
+  });
+
+  it('cancels queued work and ignores in-flight results after the last consumer leaves', async () => {
+    const h = harness();
+    h.update(); h.stop();
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(0);
+    const stop = h.controller.state.subscribe(() => {});
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(1);
+    stop();
+    h.update(snapshot('b'));
+    await h.finish(0);
+    expect(h.calls).toHaveLength(1);
+    const changed = vi.fn();
+    const remount = h.controller.state.subscribe(changed);
+    expect(h.state().calculation).toBeNull();
+    await vi.runAllTimersAsync();
+    expect(h.calls).toHaveLength(2);
+    expect(h.calls[1].request.expected_revision.input_hash).toBe('b');
+    await h.finish(1);
+    expect(h.state().calculation?.revision.input_hash).toBe('b');
+    remount();
+  });
+
   it('coalesces same-turn updates and replaces pending B with C while A remains the only in-flight request', async () => {
     const h = harness();
     h.update(); h.update(snapshot('a1'));

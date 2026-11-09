@@ -1933,3 +1933,66 @@ fn account_scope_run_pb_ignores_other_accounts_and_unknown_owners() {
     );
     assert_eq!(h.count("alerts"), before + 2);
 }
+
+#[test]
+fn selective_preferences_preserve_alert_results_across_settings_changes() {
+    let baseline = Harness::new();
+    let optimized = Harness::new();
+    let mut events = common::story_events()
+        .into_iter()
+        .map(|e| e.event)
+        .collect::<Vec<_>>();
+    let mut live_fight = fight("selective", 100., "self");
+    live_fight.ended = None;
+    events.push(EngineEvent::FightUpdated(live_fight));
+    events.push(EngineEvent::FightEnded(fight("selective", 100., "self")));
+    events.push(EngineEvent::FightUpdated(fight("selective", 100., "self")));
+    events.push(EngineEvent::BagDropped(drop("selective-bag", Some(255))));
+    events.push(EngineEvent::DropUpdated(drop("selective-bag", Some(255))));
+    events.push(EngineEvent::PlayerDied {
+        at: Timestamp(7_000_000),
+        character_id: Some("self".into()),
+        run_id: None,
+    });
+    for (index, event) in events.into_iter().enumerate() {
+        // Policy changes between observations must still affect eligible events.
+        let level = if index % 2 == 0 {
+            AlertLoudness::Banner
+        } else {
+            AlertLoudness::Off
+        };
+        let full = context(level);
+        let mut selected = full.clone();
+        if !AlertContext::uses_preferences(&event) {
+            selected.preferences = AlertPreferences::disabled();
+        }
+        for (h, context) in [(&baseline, full), (&optimized, selected)] {
+            let mut envelope = common::envelope(index as u64 + 3, event.clone());
+            loop {
+                match h
+                    .writer
+                    .try_submit_with_alert_context(envelope, context.clone())
+                {
+                    Ok(()) => break,
+                    Err(SubmitError::Full(returned)) => {
+                        envelope = returned;
+                        h.writer.flush().unwrap();
+                    }
+                    Err(error) => panic!("{error:?}"),
+                }
+            }
+            h.writer.flush().unwrap();
+        }
+        assert_eq!(baseline.logs(), optimized.logs());
+        assert_eq!(
+            baseline.count("alert_occurrences"),
+            optimized.count("alert_occurrences")
+        );
+        assert_eq!(
+            baseline.count("personal_bests"),
+            optimized.count("personal_bests")
+        );
+    }
+    baseline.writer.shutdown().unwrap();
+    optimized.writer.shutdown().unwrap();
+}
