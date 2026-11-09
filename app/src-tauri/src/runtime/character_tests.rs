@@ -1079,7 +1079,10 @@ fn real_worker_answers_character_queries_across_restart() {
             }
         }
         runtime.stop_and_flush().unwrap();
-        assert!(requests.send_timeout(bounded(1).0, timeout).is_err());
+        assert!(matches!(
+            requests.send_timeout(bounded(1).0, timeout),
+            Err(crossbeam_channel::SendTimeoutError::Disconnected(_))
+        ));
         previous = Some(super::character::CharacterIdentity::from_snapshot(
             &runtime.shared.views.snapshot.lock().unwrap(),
         ));
