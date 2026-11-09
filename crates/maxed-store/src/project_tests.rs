@@ -191,3 +191,70 @@ fn large_fight_worker_persists_reference_receipt_and_rejects_invalid_synchronous
     );
     writer.shutdown().unwrap();
 }
+
+#[test]
+fn bag_and_map_digest_pins() {
+    let bag: DropView = serde_json::from_value(serde_json::json!({
+        "id": "synthetic-bag", "session_id": "synthetic-session", "run_id": null,
+        "at": "600000", "bag_type": 42, "items": [7, 7, 9], "enchant": null,
+        "contents": [], "source_enemy": 123, "source_estimated": true,
+        "source_reason": "synthetic", "contents_known": true, "bag_rank": 2,
+        "issues": [], "capture_scope": "extended", "owner_character_id": "synthetic-player"
+    }))
+    .unwrap();
+    let kinds = [
+        EngineEvent::BagDropped(bag),
+        EngineEvent::MapEntered {
+            realm_instance_key: Some("synthetic-realm".into()),
+            at: Timestamp(600000),
+            name: "Synthetic Realm".into(),
+            kind: AreaKind::Realm,
+        },
+    ];
+    let hashes: Vec<_> = kinds
+        .into_iter()
+        .map(|event| {
+            let event = EventEnvelope {
+                stream_id: "synthetic".into(),
+                sequence: Sequence(Timestamp(2)),
+                at: Timestamp(600000),
+                fight_chart_omitted: false,
+                event,
+            };
+            let (size, hash) = validate_event(&event).unwrap();
+            assert_eq!(validate_submission(&event).unwrap(), size);
+            hash
+        })
+        .collect();
+    // Recorded with the unchanged original DOM/sorted-key algorithm.
+    assert_eq!(
+        hashes,
+        vec![
+            [
+                44, 209, 21, 91, 96, 101, 173, 173, 204, 230, 136, 188, 30, 172, 188, 73, 62, 152,
+                162, 63, 67, 64, 238, 32, 232, 119, 54, 225, 183, 158, 12, 245
+            ],
+            [
+                244, 98, 196, 74, 6, 28, 215, 66, 2, 43, 185, 81, 13, 44, 191, 244, 141, 10, 14,
+                104, 25, 138, 141, 130, 82, 208, 216, 133, 21, 87, 137, 196
+            ],
+        ]
+    );
+}
+
+#[test]
+fn invalid_digest_is_rejected_before_acquiring_sqlite_write_lock() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("locked.sqlite3");
+    let mut conn = crate::migrate::open_writer(&path).unwrap();
+    let mut blocker = crate::migrate::open_writer(&path).unwrap();
+    let _lock = blocker
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .unwrap();
+    let mut event = large_event();
+    event.at = Timestamp(u64::MAX);
+    assert!(matches!(
+        apply_batch(&mut conn, &[event]),
+        Err(StoreError::InvalidEvent)
+    ));
+}

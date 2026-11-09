@@ -230,14 +230,18 @@ pub(crate) fn apply_contexts<'a>(
     if conn.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, i64>(0))? != 1 {
         return Err(StoreError::Io);
     }
+    // Validate and prepare receipts for every caller, including direct batches
+    // that bypass submission. Do the DOM and hash work before taking SQLite's
+    // write lock; immutable envelope references keep these digests valid.
+    let prepared = events
+        .into_iter()
+        .map(|(event, context)| validate_event(event).map(|(_, hash)| (event, context, hash)))
+        .collect::<Result<Vec<_>, StoreError>>()?;
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     let tables = receipts::Tables::read(&tx)?;
     let mut party_runs = BTreeSet::new();
-    for (event, context) in events {
+    for (event, context, hash) in prepared {
         context.validate()?;
-        // The writer owns immutable envelopes; submit-time validation already
-        // checked them. Keep canonical receipt construction on this thread.
-        let hash = validate_event(event)?.1;
         let sequence = micros(event.sequence.0)?;
         if let Some(old) = tables.lookup(&tx, &event.stream_id, sequence)? {
             if old != hash {
@@ -1045,5 +1049,5 @@ pub(crate) mod fault {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/event_validation.rs"]
-mod event_validation_tests;
+#[path = "project_tests.rs"]
+mod tests;
