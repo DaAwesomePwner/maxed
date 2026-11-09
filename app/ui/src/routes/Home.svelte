@@ -233,10 +233,12 @@
     if (!current) return white;
     // Catalog reads may finish after the drop arrives. Resolve names as they
     // load, while retaining the queue's push-time streak and original timer.
-    const drop = scopedWindow?.drops.find(drop => drop.id === current.dropId);
+    const drop = scopedWindow?.drops.find(drop => drop.id === current.dropId) ?? current.drop;
+    const item = drop ? bestItem(drop, visuals) : null;
     const source = objectVisual(visuals.objects, drop?.source_enemy)?.name;
     return { ...white, current: { ...current,
-      itemName: objectVisual(visuals.objects, current.itemType)?.name ?? current.itemName,
+      itemType: item?.itemType ?? null,
+      itemName: objectVisual(visuals.objects, item?.itemType)?.name ?? '—',
       sourceName: source ? `${source}${drop?.source_estimated ? ' (estimated)' : ''}` : current.sourceName } };
   });
   $effect(() => {
@@ -279,9 +281,9 @@
         }
         hasBanneredWhite = true;
         if (generation !== null) v4Reads?.consumeStreak(generation);
-        const item = bestItem(drop, visuals), source = objectVisual(visuals.objects, drop.source_enemy)?.name;
-        whiteQueue.push({ dropId: drop.id, itemType: item?.itemType ?? null,
-          itemName: objectVisual(visuals.objects, item?.itemType)?.name ?? '—', bagType: drop.bag_type,
+        const source = objectVisual(visuals.objects, drop.source_enemy)?.name;
+        whiteQueue.push({ drop, dropId: drop.id, itemType: null,
+          itemName: '—', bagType: drop.bag_type,
           areaName: dungeon ?? displayed?.map ?? 'Realm',
           sourceName: source ? `${source}${drop.source_estimated ? ' (estimated)' : ''}` : null,
           at: drop.at, streak });

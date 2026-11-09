@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import DungeonEvidence from './DungeonEvidence.svelte';
   import { objectVisual } from '../bridge/visual-index';
   import type { LiveSnapshot } from '../bindings/LiveSnapshot';
@@ -87,15 +88,26 @@
     { key: 'fame', label: 'Run fame', value: fame === null ? '—' : `${fame > 0 ? '+' : ''}${formatStat(fame)}`, tone: 'fame', sub: 'this run' },
   ]);
   let markers = $derived(dungeonTimeline(bosses, observations.drops, observations.events));
+  let lootRoot: HTMLDivElement;
+  const arrivalColours = $derived(new Map(observations.drops.map(drop => {
+    const item = bestItem(drop, visuals);
+    const white = objectVisual(visuals.objects, drop.bag_type)?.bag?.is_white;
+    return [drop.id, item?.tier === 'UT' ? 'var(--violet-text)' : item?.tier === 'ST'
+      ? 'var(--bag-orange)' : white ? 'var(--bag-white, #fff)' : 'var(--text-secondary)'];
+  })));
+  $effect(() => {
+    const colours = arrivalColours;
+    void tick().then(() => {
+      for (const node of lootRoot?.querySelectorAll<HTMLElement>('.area-loot [data-drop-id]') ?? []) {
+        node.style.setProperty('--loot-arrival-colour', colours.get(node.dataset.dropId!) ?? 'var(--text-secondary)');
+      }
+    });
+  });
   let feedback = $derived<FeedbackEvent[]>([
     ...observations.drops.map(drop => ({ id: `bag:${drop.id}`, targets: (root: HTMLElement) => {
-      const item = bestItem(drop, visuals);
-      const white = objectVisual(visuals.objects, drop.bag_type)?.bag?.is_white;
-      const color = item?.tier === 'UT' ? 'var(--violet-text)' : item?.tier === 'ST'
-        ? 'var(--bag-orange)' : white ? 'var(--bag-white, #fff)' : 'var(--text-secondary)';
       const node = [...root.querySelectorAll<HTMLElement>('.area-loot [data-drop-id]')]
         .find(row => row.dataset.dropId === drop.id) ?? null;
-      return [{ node, effect: 'glow' as const, color }];
+      return [{ node, effect: 'glow' as const, color: 'var(--loot-arrival-colour)' }];
     } })),
     ...markers.map(marker => ({ id: `marker:${marker.id}`, targets: (root: HTMLElement) => {
       const node = [...root.querySelectorAll<HTMLElement>('[data-marker-members]')]
@@ -110,7 +122,7 @@
   }
 </script>
 
-<div class="area-home dungeon-home" data-stale={stale} use:arrivalFeedback={{ scope: key, events: feedback }}>
+<div bind:this={lootRoot} class="area-home dungeon-home" data-stale={stale} use:arrivalFeedback={{ scope: key, events: feedback }}>
   <header class="area-header run-title">
     <span class="run-icon"><SpriteImage sprite={portal?.sprite ?? null} fit={40}
       sheetUrl={portal?.sprite ? resolveSpriteUrl(portal.sprite) : null} alt={portal?.name ?? 'Dungeon'} /></span>

@@ -10,9 +10,7 @@ import { knownNumber } from '../evidence';
 import type { HomeModeState } from '../mode';
 import type { HomeLiveWindow } from '../v2/contracts';
 import { emptyHomeLiveWindow } from '../v2/live';
-import type { LootItem } from '../v2/loot';
-import { bestItem, rankedDrops } from '../v3/loot-rank';
-import { emptyHomeVisuals } from '../visuals';
+import { rankedDrops } from '../v3/loot-rank';
 import { createRecapPresentation } from './recap-presentation';
 
 export type RecapSource = { kind: 'run'; streamId: string; runId: string }
@@ -25,12 +23,11 @@ export interface RecapSummary {
   completedAt?: string | null;
   localDps: number | null; rank: number | null; players: number | null;
   fights: Pick<FightView, 'id' | 'target_type' | 'kill'>[] | null;
-  best: { drop: DropView; item: LootItem | null } | null; runId: string | null;
+  best: { drop: DropView } | null; runId: string | null;
 }
 export interface RecapState { source: RecapSource; summary: RecapSummary; watermark: string }
 type Remembered = { source: RecapSource; snapshot: LiveSnapshot | null; window: HomeLiveWindow;
   snapshotStale: boolean; run: RunView | null; endedAt: string | null; watermark: string | null };
-const noVisuals = emptyHomeVisuals();
 
 function summarize(last: Remembered): RecapState {
   const { snapshot, window, source, run } = last;
@@ -52,7 +49,7 @@ function summarize(last: Remembered): RecapState {
     localDps: knownNumber(self?.dps), rank: knownNumber(self?.rank),
     players: source.kind === 'run' ? totals?.run_totals?.players.length || null : null,
     fights: window.partial ? null : window.fights.map(({ id, target_type, kill }) => ({ id, target_type, kill })),
-    best: drop ? { drop, item: bestItem(drop, noVisuals) } : null,
+    best: drop ? { drop } : null,
     runId: source.kind === 'run' ? source.runId : null,
   } };
 }

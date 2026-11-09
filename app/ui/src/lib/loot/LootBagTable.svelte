@@ -12,7 +12,8 @@
   import { routeHref } from '../navigation/routes';
   import { runDate } from '../runs/runs-list';
   import { bagLabel, placeLabel, sourceLabel } from './presentation';
-  import { bestItem, tierClass, clockWhen } from './loot-format';
+  import { tierClass, clockWhen } from './loot-format';
+  import { bestItem } from '../home/v3/loot-rank';
   let { rows, visuals, resolveSpriteUrl, now, columns, itemType, groups = null, selectedDropId = null, onSelect, rowHref }: {
     rows: LootDropRow[]; visuals: HomeVisuals; resolveSpriteUrl: (sprite: SpriteRef) => string | null; now: Date;
     columns: 'feed' | 'item'; itemType?: number;
@@ -43,7 +44,7 @@
         {@const items = [...drop.contents].sort((a, b) => a.slot - b.slot)}
         {@const copies = items.filter(item => item.item_type === itemType)}
         {@const others = columns === 'item' ? items.filter(item => item.item_type !== itemType) : items}
-        {@const best = bestItem(items, type => visual(type)?.item_tier ?? null)}
+        {@const best = bestItem(drop, visuals)}
         <tr data-row-id={`drop:${drop.id}`} tabindex="0" aria-current={selectedDropId === drop.id ? 'true' : undefined} class:selected={selectedDropId === drop.id} onclick={event => select(event, row)} onkeydown={event => select(event, row)}>
           <td title={clockWhen(drop.at, now)}>{columns === 'item' ? clockWhen(drop.at, now) : runDate(drop.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</td>
           <td><span class="cell" data-bag-tone={bagTone(bag?.bag ?? null)} class:white={drop.bag_rank === 255}><SpriteImage sprite={bag?.sprite ?? null} sheetUrl={bag?.sprite ? resolveSpriteUrl(bag.sprite) : null} fit={20} alt="" /><span title={bagLabel(drop.bag_rank, bag)}>{bagLabel(drop.bag_rank, bag)}</span></span></td>
@@ -56,7 +57,7 @@
               <a class="tile {tierClass(object?.item_tier)}" class:taken={item.taken_observed_at !== null} use:itemHover={{ type: item.item_type, enchant: item.enchant, name: object?.name ?? `#${item.item_type}`, tier: object?.item_tier, note: item.taken_observed_at !== null ? 'Removal observed' : undefined }} aria-label={object?.name ?? `#${item.item_type}`} href={routeHref({ kind: 'item', type: item.item_type })}><ItemTile sprite={object?.sprite ?? null} {resolveSpriteUrl} fit={24} alt="" enchant={item.enchant} /></a>
             {/each}
             {#if others.length > 6}<small>+{others.length - 6}</small>{/if}
-            {#if columns === 'feed' && best}<span class={tierClass(visual(best.item_type)?.item_tier)} use:itemHover={{ type: best.item_type, enchant: best.enchant, name: visual(best.item_type)?.name ?? `#${best.item_type}`, tier: visual(best.item_type)?.item_tier }}>{visual(best.item_type)?.name ?? `#${best.item_type}`}</span>{/if}
+            {#if columns === 'feed' && best}<span class={tierClass(visual(best.itemType)?.item_tier)} use:itemHover={{ type: best.itemType, enchant: best.enchant, name: visual(best.itemType)?.name ?? `#${best.itemType}`, tier: visual(best.itemType)?.item_tier }}>{visual(best.itemType)?.name ?? `#${best.itemType}`}</span>{/if}
             {#if !drop.contents_known}<small>{items.length ? 'partial' : 'contents not seen'}</small>{:else if !others.length}<small>{columns === 'item' ? '—' : 'Empty bag'}</small>{/if}
           </div></td>
           {#if columns === 'item'}<td>{#each copies as copy}<div title={copy.taken_observed_at !== null ? 'Removal observed; who took the item is unknown.' : undefined}>{copy.taken_observed_at !== null ? 'Taken' : '—'}</div>{:else}—{/each}</td>{/if}
