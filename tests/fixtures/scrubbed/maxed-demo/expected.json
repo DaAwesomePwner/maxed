@@ -108,9 +108,22 @@
   {
     "stream_id": "demo-v1",
     "sequence": "5",
+    "at": "1010000",
+    "event": {
+      "local_identity_changed": {
+        "at": "1010000",
+        "character_id": "demo-v1:provisional:2:1",
+        "account_id": null
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "6",
     "at": "1020000",
     "event": {
       "character_updated": {
+        "account_id": "account-d2ee4c65cfb243f82d59639a9585930cb442c236f48905b786630121be0ebbfd",
         "id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
         "name": "DemoHero",
         "class_id": 100,
@@ -199,11 +212,10 @@
           "lines": [
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -220,11 +232,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -241,11 +252,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -262,11 +272,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -283,11 +292,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -304,11 +312,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -325,11 +332,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -346,11 +352,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -367,14 +372,14 @@
             }
           ],
           "conditions": [],
-          "breakdown_provisional": true
+          "breakdown_provisional": false
         }
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "6",
+    "sequence": "7",
     "at": "1020000",
     "event": {
       "character_merged": {
@@ -385,7 +390,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "7",
+    "sequence": "8",
     "at": "1020000",
     "event": {
       "fame_changed": {
@@ -397,7 +402,19 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "8",
+    "sequence": "9",
+    "at": "1020000",
+    "event": {
+      "local_identity_changed": {
+        "at": "1020000",
+        "character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "account_id": "account-d2ee4c65cfb243f82d59639a9585930cb442c236f48905b786630121be0ebbfd"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "10",
     "at": "2020000",
     "event": {
       "fight_started": {
@@ -480,13 +497,14 @@
             ]
           }
         ],
-        "scope_id": "demo-v1:map:2"
+        "scope_id": "demo-v1:map:2",
+        "owner_character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "9",
+    "sequence": "11",
     "at": "5000000",
     "event": {
       "player_observed": {
@@ -495,6 +513,7 @@
         "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
         "object_id": 1,
         "is_local": true,
+        "maxed_gated": true,
         "name": "DemoHero",
         "class_id": 100,
         "level": 20,
@@ -563,7 +582,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "10",
+    "sequence": "12",
     "at": "5000000",
     "event": {
       "fight_ended": {
@@ -646,13 +665,14 @@
             ]
           }
         ],
-        "scope_id": "demo-v1:map:2"
+        "scope_id": "demo-v1:map:2",
+        "owner_character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "11",
+    "sequence": "13",
     "at": "5000000",
     "event": {
       "scope_timeline_updated": {
@@ -684,7 +704,19 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "12",
+    "sequence": "14",
+    "at": "5000000",
+    "event": {
+      "local_identity_changed": {
+        "at": "5000000",
+        "character_id": null,
+        "account_id": null
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "15",
     "at": "5000000",
     "event": {
       "map_entered": {
@@ -697,7 +729,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "13",
+    "sequence": "16",
     "at": "5000000",
     "event": {
       "run_started": {
@@ -732,7 +764,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "14",
+    "sequence": "17",
     "at": "5010000",
     "event": {
       "character_updated": {
@@ -798,7 +830,19 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "15",
+    "sequence": "18",
+    "at": "5010000",
+    "event": {
+      "local_identity_changed": {
+        "at": "5010000",
+        "character_id": "demo-v1:provisional:3:2",
+        "account_id": null
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "19",
     "at": "5010000",
     "event": {
       "run_updated": {
@@ -833,10 +877,11 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "16",
+    "sequence": "20",
     "at": "5020000",
     "event": {
       "character_updated": {
+        "account_id": "account-d2ee4c65cfb243f82d59639a9585930cb442c236f48905b786630121be0ebbfd",
         "id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
         "name": "DemoHero",
         "class_id": 100,
@@ -925,11 +970,10 @@
           "lines": [
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -946,11 +990,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -967,11 +1010,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -988,11 +1030,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1009,11 +1050,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1030,11 +1070,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1051,11 +1090,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1072,11 +1110,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1093,14 +1130,14 @@
             }
           ],
           "conditions": [],
-          "breakdown_provisional": true
+          "breakdown_provisional": false
         }
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "17",
+    "sequence": "21",
     "at": "5020000",
     "event": {
       "character_merged": {
@@ -1111,7 +1148,19 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "18",
+    "sequence": "22",
+    "at": "5020000",
+    "event": {
+      "local_identity_changed": {
+        "at": "5020000",
+        "character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
+        "account_id": "account-d2ee4c65cfb243f82d59639a9585930cb442c236f48905b786630121be0ebbfd"
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "23",
     "at": "5020000",
     "event": {
       "run_updated": {
@@ -1146,7 +1195,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "19",
+    "sequence": "24",
     "at": "5020000",
     "event": {
       "run_updated": {
@@ -1181,7 +1230,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "20",
+    "sequence": "25",
     "at": "6000000",
     "event": {
       "player_observed": {
@@ -1190,6 +1239,7 @@
         "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
         "object_id": 1,
         "is_local": true,
+        "maxed_gated": true,
         "name": "DemoHero",
         "class_id": 100,
         "level": 20,
@@ -1258,7 +1308,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "21",
+    "sequence": "26",
     "at": "6000000",
     "event": {
       "player_observed": {
@@ -1267,6 +1317,7 @@
         "player_id": "demo-v1:player:3:3:3",
         "object_id": 3,
         "is_local": false,
+        "maxed_gated": false,
         "name": "DemoAlly",
         "class_id": 100,
         "level": 20,
@@ -1335,7 +1386,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "22",
+    "sequence": "27",
     "at": "6020000",
     "event": {
       "fight_started": {
@@ -1418,16 +1469,18 @@
             ]
           }
         ],
-        "scope_id": "demo-v1:run:3"
+        "scope_id": "demo-v1:run:3",
+        "owner_character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "23",
+    "sequence": "28",
     "at": "8000000",
     "event": {
       "character_updated": {
+        "account_id": "account-d2ee4c65cfb243f82d59639a9585930cb442c236f48905b786630121be0ebbfd",
         "id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
         "name": "DemoHero",
         "class_id": 100,
@@ -1516,11 +1569,10 @@
           "lines": [
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1537,11 +1589,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1558,11 +1609,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1579,11 +1629,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1600,11 +1649,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1621,11 +1669,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1642,11 +1689,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1663,11 +1709,10 @@
             },
             {
               "split_evidence": {
-                "placement": "provisional_inside_boost",
+                "placement": "verified_inside_boost",
                 "cap_eligible": false,
                 "reasons": [
                   "missing_exalt",
-                  "unverified_placement",
                   "missing_operands"
                 ]
               },
@@ -1684,14 +1729,14 @@
             }
           ],
           "conditions": [],
-          "breakdown_provisional": true
+          "breakdown_provisional": false
         }
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "24",
+    "sequence": "29",
     "at": "8000000",
     "event": {
       "fame_changed": {
@@ -1703,7 +1748,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "25",
+    "sequence": "30",
     "at": "9000000",
     "event": {
       "fight_updated": {
@@ -1795,13 +1840,14 @@
             ]
           }
         ],
-        "scope_id": "demo-v1:run:3"
+        "scope_id": "demo-v1:run:3",
+        "owner_character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "26",
+    "sequence": "31",
     "at": "9000000",
     "event": {
       "player_observed": {
@@ -1810,6 +1856,7 @@
         "player_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b",
         "object_id": 1,
         "is_local": true,
+        "maxed_gated": true,
         "name": "DemoHero",
         "class_id": 100,
         "level": 20,
@@ -1878,7 +1925,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "27",
+    "sequence": "32",
     "at": "9000000",
     "event": {
       "bag_dropped": {
@@ -1898,13 +1945,14 @@
         "issues": [
           "missing_stats"
         ],
-        "capture_scope": "realm_shark"
+        "capture_scope": "realm_shark",
+        "owner_character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "28",
+    "sequence": "33",
     "at": "9000000",
     "event": {
       "drop_updated": {
@@ -1939,13 +1987,14 @@
         "contents_known": true,
         "bag_rank": 255,
         "issues": [],
-        "capture_scope": "realm_shark"
+        "capture_scope": "realm_shark",
+        "owner_character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "29",
+    "sequence": "34",
     "at": "10000000",
     "event": {
       "scope_timeline_updated": {
@@ -1984,7 +2033,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "30",
+    "sequence": "35",
     "at": "10000000",
     "event": {
       "fight_updated": {
@@ -2080,13 +2129,14 @@
             ]
           }
         ],
-        "scope_id": "demo-v1:run:3"
+        "scope_id": "demo-v1:run:3",
+        "owner_character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "31",
+    "sequence": "36",
     "at": "10000000",
     "event": {
       "run_updated": {
@@ -2126,7 +2176,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "32",
+    "sequence": "37",
     "at": "12000000",
     "event": {
       "fight_updated": {
@@ -2222,13 +2272,14 @@
             ]
           }
         ],
-        "scope_id": "demo-v1:run:3"
+        "scope_id": "demo-v1:run:3",
+        "owner_character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "33",
+    "sequence": "38",
     "at": "12000000",
     "event": {
       "run_ended": {
@@ -2272,7 +2323,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "34",
+    "sequence": "39",
     "at": "12000000",
     "event": {
       "fight_ended": {
@@ -2368,13 +2419,14 @@
             ]
           }
         ],
-        "scope_id": "demo-v1:run:3"
+        "scope_id": "demo-v1:run:3",
+        "owner_character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "35",
+    "sequence": "40",
     "at": "12000000",
     "event": {
       "drop_updated": {
@@ -2409,13 +2461,26 @@
         "contents_known": true,
         "bag_rank": 255,
         "issues": [],
-        "capture_scope": "realm_shark"
+        "capture_scope": "realm_shark",
+        "owner_character_id": "character-933e549a429927557a1320bab73673ba09e83a504d60a2f2e7edcfd79249747b"
       }
     }
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "36",
+    "sequence": "41",
+    "at": "12000000",
+    "event": {
+      "local_identity_changed": {
+        "at": "12000000",
+        "character_id": null,
+        "account_id": null
+      }
+    }
+  },
+  {
+    "stream_id": "demo-v1",
+    "sequence": "42",
     "at": "12000000",
     "event": {
       "map_entered": {
@@ -2428,7 +2493,7 @@
   },
   {
     "stream_id": "demo-v1",
-    "sequence": "37",
+    "sequence": "43",
     "at": "12000000",
     "event": {
       "session_updated": {

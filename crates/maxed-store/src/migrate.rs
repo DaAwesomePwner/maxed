@@ -4,8 +4,14 @@ use sha2::{Digest, Sha256};
 use std::{marker::PhantomData, path::Path, rc::Rc, time::Duration};
 
 /// Latest schema supported by this build, matching SQLite's `user_version`.
-pub const SCHEMA_VERSION: i64 = 16;
+pub const SCHEMA_VERSION: i64 = 19;
 pub(crate) const BUSY_TIMEOUT: Duration = Duration::from_millis(250);
+
+const ATTRIBUTION_NOTICE: &str = include_str!("../migrations/019_attribution_notice.sql");
+
+const ACCOUNT_READS: &str = include_str!("../migrations/018_account_reads.sql");
+
+const ACCOUNTS: &str = include_str!("../migrations/017_accounts.sql");
 
 const MAINTENANCE_RECEIPTS: &str = include_str!("../migrations/016_maintenance_receipts.sql");
 
@@ -96,6 +102,9 @@ pub(crate) fn check_schema(conn: &Connection) -> Result<i64, StoreError> {
             PARTY,
             LOOT_STATS_INDEXES,
             MAINTENANCE_RECEIPTS,
+            ACCOUNTS,
+            ACCOUNT_READS,
+            ATTRIBUTION_NOTICE,
         ]
         .iter()
         .take(version as usize)
@@ -270,6 +279,30 @@ fn migrate_script(conn: &mut Connection, script: &str) -> Result<(), StoreError>
         tx.execute(
             "INSERT INTO schema_migrations VALUES(16,?1)",
             [digest(MAINTENANCE_RECEIPTS.as_bytes())],
+        )?;
+    }
+    if version < 17 {
+        tx.execute_batch(ACCOUNTS)
+            .map_err(|_| StoreError::Migration)?;
+        tx.execute(
+            "INSERT INTO schema_migrations VALUES(17,?1)",
+            [digest(ACCOUNTS.as_bytes())],
+        )?;
+    }
+    if version < 18 {
+        tx.execute_batch(ACCOUNT_READS)
+            .map_err(|_| StoreError::Migration)?;
+        tx.execute(
+            "INSERT INTO schema_migrations VALUES(18,?1)",
+            [digest(ACCOUNT_READS.as_bytes())],
+        )?;
+    }
+    if version < 19 {
+        tx.execute_batch(ATTRIBUTION_NOTICE)
+            .map_err(|_| StoreError::Migration)?;
+        tx.execute(
+            "INSERT INTO schema_migrations VALUES(19,?1)",
+            [digest(ATTRIBUTION_NOTICE.as_bytes())],
         )?;
     }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;

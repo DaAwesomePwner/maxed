@@ -31,14 +31,13 @@ and Node.js 22.16.0. This was an unpackaged release executable, not an installer
 
 ## Commands and isolation
 
-The scratch scripts and local logs were kept under
-`.superpowers/sdd/2026-10-13-home-phase-2/spike/` and are not committed.
-From the repository root, the commands used were:
+The scratch scripts and local logs are private and are not committed.
+The examples below use `<private-spike-directory>` as a placeholder:
 
 ```powershell
 npm.cmd --prefix app/ui ci
-powershell -NoProfile -ExecutionPolicy Bypass -File .superpowers/sdd/2026-10-13-home-phase-2/spike/build.ps1
-powershell -STA -NoProfile -ExecutionPolicy Bypass -File .superpowers/sdd/2026-10-13-home-phase-2/spike/run.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File <private-spike-directory>/build.ps1
+powershell -STA -NoProfile -ExecutionPolicy Bypass -File <private-spike-directory>/run.ps1
 ```
 
 The build script used the absolute-identifier technique from
@@ -47,7 +46,7 @@ Its build operations were:
 
 ```powershell
 $spikeProfile = [IO.Path]::GetFullPath(
-    (Join-Path (Get-Location) '.superpowers/sdd/2026-10-13-home-phase-2/spike/profile')
+    (Join-Path (Get-Location) '<private-spike-directory>/profile')
 )
 $env:TAURI_CONFIG = @{
     identifier = $spikeProfile

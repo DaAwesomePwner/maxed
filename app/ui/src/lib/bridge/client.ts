@@ -1,3 +1,4 @@
+import type { AccountHistoryChanged } from '../bindings/AccountHistoryChanged';
 import type { CharacterCalculation } from '../bindings/CharacterCalculation';
 import type { CharacterCalculationRequest } from '../bindings/CharacterCalculationRequest';
 import type { StorageCommandOutcome } from '../bindings/StorageCommandOutcome';
@@ -154,6 +155,8 @@ export interface Commands {
   get_startup_setup_required: { args: undefined; result: boolean };
   get_catalog_available: { args: undefined; result: boolean };
   get_capture_status: { args: undefined; result: CaptureStatus };
+  retry_store: { args: undefined; result: void };
+  exit_without_saving: { args: undefined; result: void };
   start_capture: { args: undefined; result: void };
   stop_capture: { args: undefined; result: void };
   get_live_snapshot: { args: undefined; result: LiveSnapshot };
@@ -200,8 +203,10 @@ export interface Commands {
 export interface PartyChangedNotice { scope_id: string | null }
 
 export interface Events {
+  'account-history-changed': AccountHistoryChanged;
   'storage-maintenance-changed': StorageMaintenanceChanged;
   'capture-status': CaptureStatus;
+  'unsaved-close': null;
   'presentation-visible': boolean;
   'engine-event': EventEnvelope | EventBatch;
   'live-snapshot': LiveSnapshotUpdate;
@@ -309,6 +314,7 @@ export function createClient(transport: Transport) {
     getHomeDungeonStreak: (request: HomeDungeonStreakRequest) => transport.invoke('get_home_dungeon_streak', { request }),
     getRunRecap: (request: RunRecapRequest) => transport.invoke('get_run_recap', { request }),
     getVisitRecap: (request: VisitRecapRequest) => transport.invoke('get_visit_recap', { request }),
+    onAccountHistoryChanged: (receive: (notice: AccountHistoryChanged) => void) => transport.listen('account-history-changed', receive),
     onSnapshot: (receive: (snapshot: LiveSnapshotUpdate) => void) => transport.listen('live-snapshot', receive),
     onPartyChanged: (receive: (notice: PartyChangedNotice) => void) => transport.listen('party-changed', receive),
     onEngineEvent: (receive: (event: EventEnvelope) => void, batch: (batch: EventBatch) => void) => transport.listen('engine-event', value => {
@@ -320,6 +326,9 @@ export function createClient(transport: Transport) {
     querySetup: (options?: { retry?: boolean }) => transport.invoke('get_setup_status', options),
     querySettings: () => transport.invoke('get_settings', undefined),
     queryStore: () => transport.invoke('get_store_status', undefined),
+    retryStore: () => transport.invoke('retry_store', undefined),
+    exitWithoutSaving: () => transport.invoke('exit_without_saving', undefined),
+    onUnsavedClose: (receive: () => void) => transport.listen('unsaved-close', receive),
     startCapture: () => transport.invoke('start_capture', undefined),
     stopCapture: () => transport.invoke('stop_capture', undefined),
     listAdapters: () => transport.invoke('list_adapters', undefined),

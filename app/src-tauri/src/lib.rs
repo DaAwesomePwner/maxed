@@ -3,7 +3,9 @@
 pub mod assets_bridge;
 pub mod bridge;
 pub mod demo;
+mod exit;
 mod gui_smoke;
+use exit::{ExitControl, ExitHost};
 pub mod interactive_rail;
 pub mod recording;
 pub mod runtime;
@@ -19,55 +21,75 @@ use maxed_types::{
 };
 use runtime::CaptureRuntime;
 use setup::SetupService;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::{atomic::Ordering, Arc};
 use tauri::{Emitter, Manager};
 use updater::service::UpdateService;
 
-#[derive(Default)]
-struct ExitControl {
-    exiting: AtomicBool,
-    finished: AtomicBool,
-    warned: AtomicBool,
-    startup_failed: AtomicBool,
-}
-
-impl ExitControl {
-    fn exit_code(&self) -> i32 {
-        i32::from(self.startup_failed.load(Ordering::Acquire))
-    }
-
-    fn discard_confirmed(&self, unsaved: bool) -> bool {
-        unsaved && self.warned.load(Ordering::Acquire)
-    }
-}
-
-#[tauri::command]
-async fn exit_without_saving(
+struct NativeExit {
     app: tauri::AppHandle,
-    runtime: tauri::State<'_, Arc<CaptureRuntime>>,
-) -> Result<(), String> {
-    let runtime = runtime.inner().clone();
-    runtime.wait_history_preparation().await;
-    let setup = app.state::<Arc<SetupService>>().inner().clone();
-    if setup.updates.installing() {
-        return Err("Update operation is busy.".into());
+    runtime: Arc<CaptureRuntime>,
+    setup: Arc<SetupService>,
+}
+impl ExitHost for NativeExit {
+    fn installing(&self) -> bool {
+        self.setup.updates.installing()
     }
-    let exit = app.state::<Arc<ExitControl>>().inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        setup.updates.shutdown()?;
-        setup.cancel_pending(true);
-        setup.join_pending();
-        runtime.exit_without_saving();
-        let _ = runtime.flush_bridge();
-        exit.finished.store(true, Ordering::Release);
-        app.exit(exit.exit_code());
-        Ok(())
-    })
-    .await
-    .map_err(|_| "Exit worker failed".to_string())?
+    fn stop_updates(&self) -> Result<(), String> {
+        self.setup.updates.shutdown()
+    }
+    fn prepare(&self) {
+        self.setup.cancel_pending(true);
+        self.setup.join_pending();
+        tauri::async_runtime::block_on(self.runtime.wait_history_preparation());
+    }
+    fn resume(&self) {
+        self.setup.resume_after_cancelled_exit();
+    }
+    fn unsaved(&self) -> bool {
+        self.runtime.has_unsaved_summaries()
+    }
+    fn delivery_failed(&self) -> bool {
+        self.runtime.presentation_failed()
+    }
+    fn retry_save(&self) -> Result<(), String> {
+        self.runtime.retry_store()
+    }
+    fn shutdown(&self) -> Result<(), String> {
+        self.runtime.shutdown()
+    }
+    fn discard(&self) {
+        self.runtime.exit_without_saving();
+        let _ = self.runtime.flush_bridge();
+    }
+    fn warn(&self, native_fallback: bool) {
+        let _ = self.app.emit("unsaved-close", ());
+        if let Some(window) = self.app.get_webview_window("main") {
+            let title = if native_fallback {
+                exit::native_warning_title()
+            } else {
+                exit::UNSAVED_TITLE.to_string()
+            };
+            let _ = window.set_title(&title);
+        }
+    }
+    fn exit(&self, code: i32) {
+        self.app.exit(code);
+    }
+}
+fn exit_host(app: &tauri::AppHandle) -> NativeExit {
+    NativeExit {
+        app: app.clone(),
+        runtime: app.state::<Arc<CaptureRuntime>>().inner().clone(),
+        setup: app.state::<Arc<SetupService>>().inner().clone(),
+    }
+}
+#[tauri::command]
+async fn exit_without_saving(app: tauri::AppHandle) -> Result<(), String> {
+    let control = app.state::<Arc<ExitControl>>().inner().clone();
+    let host = exit_host(&app);
+    tauri::async_runtime::spawn_blocking(move || exit::run(&control, &host, true))
+        .await
+        .map_err(|_| "Exit worker failed".to_string())?
 }
 
 #[tauri::command]
@@ -213,8 +235,15 @@ async fn report_interactive_rail(
 }
 
 #[tauri::command]
-fn get_capture_status(runtime: tauri::State<'_, Arc<CaptureRuntime>>) -> CaptureStatus {
-    runtime.status()
+async fn get_capture_status(app: tauri::AppHandle) -> CaptureStatus {
+    let runtime = app.state::<Arc<CaptureRuntime>>().inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.status())
+        .await
+        .unwrap_or_else(|_| CaptureStatus {
+            state: maxed_types::CaptureState::Failed,
+            message: "Capture status worker failed; restart Maxed".into(),
+            ..Default::default()
+        })
 }
 
 #[tauri::command]
@@ -290,7 +319,7 @@ fn update_presentation_visibility(window: &tauri::Window) -> bool {
 }
 
 #[tauri::command]
-fn subscribe_live_payload(
+async fn subscribe_live_payload(
     app: tauri::AppHandle,
     webview: tauri::Webview,
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
@@ -300,9 +329,24 @@ fn subscribe_live_payload(
 ) -> Result<u32, String> {
     if event == "party-changed" {
         // Preset picks and annotations can change before capture ever starts.
-        runtime.publisher(app)?;
+        runtime.publisher(app.clone())?;
     }
-    payloads.subscribe(webview.label(), event, channel)
+    let id = payloads.subscribe(webview.label(), event, channel)?;
+    let runtime = runtime.inner().clone();
+    let reconnected =
+        tauri::async_runtime::spawn_blocking(move || runtime.reconnect_presentation())
+            .await
+            .map_err(|_| "Presentation reconnect worker failed".to_string())
+            .and_then(|result| result);
+    if let Err(error) = reconnected {
+        let _ = payloads.unsubscribe(webview.label(), id);
+        return Err(error);
+    }
+    let title = app.state::<Arc<ExitControl>>().presentation_reconnected();
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_title(title);
+    }
+    Ok(id)
 }
 
 #[tauri::command]
@@ -315,8 +359,17 @@ fn unsubscribe_live_payload(
 }
 
 #[tauri::command]
-fn get_store_status(runtime: tauri::State<'_, Arc<CaptureRuntime>>) -> StoreStatus {
-    runtime.store_status()
+async fn get_store_status(app: tauri::AppHandle) -> StoreStatus {
+    let runtime = app.state::<Arc<CaptureRuntime>>().inner().clone();
+    tauri::async_runtime::spawn_blocking(move || runtime.store_status())
+        .await
+        .unwrap_or_else(|_| StoreStatus {
+            state: maxed_types::StoreState::Failed,
+            queued: 0,
+            durable: None,
+            stream_id: None,
+            message: "Store status worker failed; restart Maxed".into(),
+        })
 }
 
 #[tauri::command]
@@ -343,7 +396,7 @@ async fn get_home_hud(
 ) -> Result<maxed_types::HistoryReply<maxed_types::HomeHud>, String> {
     runtime
         .inner()
-        .home_hud(scope, setup.scope_loot_tiers(), setup.potion_stats())
+        .home_hud(scope, setup.catalog_query_data())
         .await
 }
 
@@ -353,14 +406,10 @@ async fn get_run_recap(
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
     setup: tauri::State<'_, Arc<SetupService>>,
 ) -> Result<maxed_types::HistoryReply<Option<maxed_types::RunRecap>>, String> {
-    let chase_types = setup
-        .scope_loot_tiers()
-        .into_iter()
-        .filter_map(|(item_type, tier)| {
-            matches!(tier.as_deref(), Some("UT" | "ST")).then_some(item_type)
-        })
-        .collect();
-    runtime.inner().run_recap(request, chase_types).await
+    runtime
+        .inner()
+        .run_recap(request, setup.catalog_query_data())
+        .await
 }
 
 #[tauri::command]
@@ -379,7 +428,7 @@ async fn get_scope_loot(
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
     setup: tauri::State<'_, Arc<SetupService>>,
 ) -> Result<maxed_types::HistoryReply<maxed_types::ScopeLootPage>, String> {
-    let tiers = setup.scope_loot_tiers();
+    let tiers = setup.catalog_query_data();
     runtime
         .inner()
         .scope_loot(scope, cursor, limit, tiers)
@@ -640,7 +689,7 @@ async fn get_drop_summary(
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
     setup: tauri::State<'_, Arc<SetupService>>,
 ) -> Result<maxed_types::HistoryReply<maxed_types::DropSummary>, String> {
-    let tiers = setup.scope_loot_tiers();
+    let tiers = setup.catalog_query_data();
     runtime.inner().get_drop_summary(request, tiers).await
 }
 
@@ -650,7 +699,7 @@ async fn get_collection(
     runtime: tauri::State<'_, Arc<CaptureRuntime>>,
     setup: tauri::State<'_, Arc<SetupService>>,
 ) -> Result<maxed_types::HistoryReply<maxed_types::Collection>, String> {
-    let tiers = setup.scope_loot_tiers();
+    let tiers = setup.catalog_query_data();
     runtime.inner().get_collection(request, tiers).await
 }
 
@@ -1017,6 +1066,7 @@ async fn get_dungeon_portal_type(
 }
 
 fn clear_exit_warning(app: &tauri::AppHandle) {
+    app.state::<Arc<ExitControl>>().clear_native_warning();
     app.state::<Arc<ExitControl>>()
         .warned
         .store(false, Ordering::Release);
@@ -1084,6 +1134,42 @@ fn run_measurement_loops(handle: &tauri::AppHandle, service: &SetupService, loop
     }
 }
 
+fn report_startup_failure() -> i32 {
+    use std::sync::atomic::AtomicBool;
+
+    const MESSAGE: &str =
+        "Maxed could not start. Please restart Maxed. If the problem continues, reinstall Maxed.";
+    static DIALOG_SHOWN: AtomicBool = AtomicBool::new(false);
+    let failure = exit::startup_failure(&DIALOG_SHOWN, |name| std::env::var_os(name).is_some());
+    eprintln!("{MESSAGE}");
+    #[cfg(windows)]
+    if failure.show_dialog {
+        show_startup_error(MESSAGE);
+    }
+    failure.exit_code
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn show_startup_error(message: &str) {
+    use windows::core::{w, PCWSTR};
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+
+    let message: Vec<u16> = message.encode_utf16().chain(Some(0)).collect();
+    // SAFETY: Both strings are NUL-terminated and live throughout this blocking
+    // call. The dialog deliberately has no owner, so it can also run on the
+    // startup worker without marshaling to or blocking the Tauri event loop.
+    // No pointer is retained by MessageBoxW.
+    unsafe {
+        let _ = MessageBoxW(
+            None,
+            PCWSTR(message.as_ptr()),
+            w!("Maxed"),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -1116,122 +1202,140 @@ pub fn run() {
             std::env::var("MAXED_MEASURE_STARTUP").ok().as_deref(),
         ))
         .setup(|app| {
-            let root = app
-                .path()
-                .app_data_dir()
-                .map_err(|_| std::io::Error::other("Local app data is unavailable"))?;
-            let lifecycle = Arc::new(setup::NativeLifecycle {
-                runtime: app.state::<Arc<CaptureRuntime>>().inner().clone(),
-                app: app.handle().clone(),
-                app_data: root.clone(),
-            });
-            let service = SetupService::new(
-                root.clone(),
-                Arc::new(setup::NativeCapture),
-                lifecycle,
-                Arc::new(assets_bridge::AssetBridge::default()),
-            )
-            .map_err(std::io::Error::other)?
-            .with_launcher_root(if gui_smoke::enabled() {
-                None
-            } else {
-                app.path().local_data_dir().ok()
-            });
-            let service = Arc::new(service);
-            let weak_setup = Arc::downgrade(&service);
-            service
-                .updates
-                .configure_installer(Arc::new(move |updater| {
-                    let setup = weak_setup.upgrade().ok_or(updater::Error::Shutdown)?;
-                    let installer = setup.install_update(updater)?;
-                    installer.wait()
-                }));
-            app.manage(service.updates.clone());
-            app.state::<Arc<CaptureRuntime>>()
-                .configure_alert_settings(service.settings.clone())?;
-            let storage_notices = app.handle().clone();
-            app.state::<Arc<CaptureRuntime>>()
-                .set_storage_notice_sink(Arc::new(move |notice| {
-                    let _ = storage_notices.emit("storage-maintenance-changed", notice);
-                }));
-            app.state::<Arc<CaptureRuntime>>()
-                .initialize_home(root)
-                .map_err(std::io::Error::other)?;
-            app.state::<Arc<CaptureRuntime>>()
-                .inner()
-                .start_alert_delivery(app.handle().clone())?;
-            app.manage(service.clone());
-            let handle = app.handle().clone();
-            let window = app
-                .config()
-                .app
-                .windows
-                .iter()
-                .find(|window| window.label == "main")
-                .cloned()
-                .ok_or_else(|| std::io::Error::other("Main window configuration missing"))?;
-            // Read local settings off the UI thread before creating the first WebView.
-            // Invalid settings still open the repair UI, using the low-memory default.
-            tauri::async_runtime::spawn_blocking(move || {
-                let _ = service.initialize_updates();
-                let acceleration = service
-                    .settings
-                    .get()
-                    .unwrap_or_default()
-                    .hardware_acceleration;
-                let result = tauri::WebviewWindowBuilder::from_config(&handle, &window)
-                    .map(|builder| {
-                        builder.additional_browser_args(&window_policy::browser_args(acceleration))
-                    })
-                    .and_then(|builder| builder.build());
-                if result.is_err() {
-                    eprintln!("Maxed window could not start");
-                    handle
-                        .state::<Arc<ExitControl>>()
-                        .startup_failed
-                        .store(true, Ordering::Release);
-                    handle.exit(1);
-                    return;
-                }
-                // Smoke always wins over inherited measurement/demo flags.
-                if gui_smoke::enabled() {
-                    return;
-                }
-                #[cfg(feature = "perf-live")]
-                if runtime::perf::enabled() {
-                    std::thread::sleep(std::time::Duration::from_secs(5));
-                    if handle
-                        .state::<Arc<CaptureRuntime>>()
-                        .inner()
-                        .performance_realm(handle.clone())
-                        .is_err()
-                    {
-                        eprintln!("PERF_LIVE failed");
+            let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+                let root = app
+                    .path()
+                    .app_data_dir()
+                    .map_err(|_| std::io::Error::other("Local app data is unavailable"))?;
+                let lifecycle = Arc::new(setup::NativeLifecycle {
+                    runtime: app.state::<Arc<CaptureRuntime>>().inner().clone(),
+                    app: app.handle().clone(),
+                    app_data: root.clone(),
+                });
+                let service = SetupService::new(
+                    root.clone(),
+                    Arc::new(setup::NativeCapture),
+                    lifecycle,
+                    Arc::new(assets_bridge::AssetBridge::default()),
+                )
+                .map_err(std::io::Error::other)?
+                .with_launcher_root(if gui_smoke::enabled() {
+                    None
+                } else {
+                    app.path().local_data_dir().ok()
+                });
+                let service = Arc::new(service);
+                let weak_setup = Arc::downgrade(&service);
+                service
+                    .updates
+                    .configure_installer(Arc::new(move |updater| {
+                        let setup = weak_setup.upgrade().ok_or(updater::Error::Shutdown)?;
+                        let installer = setup.install_update(updater)?;
+                        installer.wait()
+                    }));
+                app.manage(service.updates.clone());
+                app.state::<Arc<CaptureRuntime>>()
+                    .configure_alert_settings(service.settings.clone())?;
+                let storage_notices = app.handle().clone();
+                app.state::<Arc<CaptureRuntime>>()
+                    .set_storage_notice_sink(Arc::new(move |notice| {
+                        let _ = storage_notices.emit("storage-maintenance-changed", notice);
+                    }));
+                // Account-history notices also apply before capture has ever started.
+                app.state::<Arc<CaptureRuntime>>()
+                    .publisher(app.handle().clone())
+                    .map_err(std::io::Error::other)?;
+                app.state::<Arc<CaptureRuntime>>()
+                    .initialize_home(root)
+                    .map_err(std::io::Error::other)?;
+                app.state::<Arc<CaptureRuntime>>()
+                    .inner()
+                    .start_alert_delivery(app.handle().clone())?;
+                app.manage(service.clone());
+                let handle = app.handle().clone();
+                let window = app
+                    .config()
+                    .app
+                    .windows
+                    .iter()
+                    .find(|window| window.label == "main")
+                    .cloned()
+                    .ok_or_else(|| std::io::Error::other("Main window configuration missing"))?;
+                // Read local settings off the UI thread before creating the first WebView.
+                // Invalid settings still open the repair UI, using the low-memory default.
+                tauri::async_runtime::spawn_blocking(move || {
+                    let _ = service.initialize_updates();
+                    let acceleration = service
+                        .settings
+                        .get()
+                        .unwrap_or_default()
+                        .hardware_acceleration;
+                    let result = tauri::WebviewWindowBuilder::from_config(&handle, &window)
+                        .map(|builder| {
+                            builder
+                                .additional_browser_args(&window_policy::browser_args(acceleration))
+                        })
+                        .and_then(|builder| builder.build());
+                    if result.is_err() {
+                        // The ownerless modal blocks only this worker. Request exit after
+                        // dismissal; the event loop remains free to process shutdown.
+                        handle
+                            .state::<Arc<ExitControl>>()
+                            .startup_failed
+                            .store(true, Ordering::Release);
+                        let code = report_startup_failure();
+                        handle.exit(code);
+                        return;
                     }
-                    return;
-                }
-                // Release-enabled measurement seam; same lifecycle as the Settings command.
-                let demo = std::env::var("MAXED_MEASURE_DEMO").ok();
-                let loops = window_policy::measurement_demo_loops(
-                    demo.as_deref(),
-                    std::env::var("MAXED_MEASURE_DEMO_LOOPS").ok().as_deref(),
-                );
-                if !window_policy::measurement_demo(demo.as_deref()) {
-                    return;
-                }
-                if service.set_demo(true).is_err() {
-                    eprintln!("Measurement demo could not start");
-                    handle
-                        .state::<Arc<ExitControl>>()
-                        .startup_failed
-                        .store(true, Ordering::Release);
-                    handle.exit(1);
-                    return;
-                }
-                if let Some(loops) = loops {
-                    run_measurement_loops(&handle, &service, loops);
-                }
-            });
+                    // Smoke always wins over inherited measurement/demo flags.
+                    if gui_smoke::enabled() {
+                        return;
+                    }
+                    #[cfg(feature = "perf-live")]
+                    if runtime::perf::enabled() {
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                        if handle
+                            .state::<Arc<CaptureRuntime>>()
+                            .inner()
+                            .performance_realm(handle.clone())
+                            .is_err()
+                        {
+                            eprintln!("PERF_LIVE failed");
+                        }
+                        return;
+                    }
+                    // Release-enabled measurement seam; same lifecycle as the Settings command.
+                    let demo = std::env::var("MAXED_MEASURE_DEMO").ok();
+                    let loops = window_policy::measurement_demo_loops(
+                        demo.as_deref(),
+                        std::env::var("MAXED_MEASURE_DEMO_LOOPS").ok().as_deref(),
+                    );
+                    if !window_policy::measurement_demo(demo.as_deref()) {
+                        return;
+                    }
+                    if service.set_demo(true).is_err() {
+                        handle
+                            .state::<Arc<ExitControl>>()
+                            .startup_failed
+                            .store(true, Ordering::Release);
+                        let code = report_startup_failure();
+                        handle.exit(code);
+                        return;
+                    }
+                    if let Some(loops) = loops {
+                        run_measurement_loops(&handle, &service, loops);
+                    }
+                });
+                Ok(())
+            })();
+            if result.is_err() {
+                let code = report_startup_failure();
+                let exit = app.state::<Arc<ExitControl>>();
+                exit.setup_failed();
+                // Tauri queues this request until Ready completes. Do not return
+                // the error to Tauri: its setup error path panics.
+                app.handle().exit(code);
+            }
             Ok(())
         })
         .register_asynchronous_uri_scheme_protocol("maxed-sprite", |context, request, responder| {
@@ -1352,8 +1456,7 @@ pub fn run() {
         ])
         .build(tauri::generate_context!());
     let Ok(app) = app else {
-        eprintln!("Maxed window could not start");
-        return;
+        std::process::exit(report_startup_failure());
     };
     app.run(move |app, event| {
         let exit = app.state::<Arc<ExitControl>>().inner().clone();
@@ -1373,79 +1476,11 @@ pub fn run() {
             }
             _ => false,
         };
-        if request_exit && !exit.exiting.swap(true, Ordering::AcqRel) {
-            let runtime = app.state::<Arc<CaptureRuntime>>().inner().clone();
-            let setup = app.state::<Arc<SetupService>>().inner().clone();
-            if setup.updates.installing() {
-                exit.exiting.store(false, Ordering::Release);
-                return;
-            }
-            setup.cancel_pending(true);
-            let app = app.clone();
+        if request_exit {
+            let host = exit_host(app);
             tauri::async_runtime::spawn_blocking(move || {
-                if setup.updates.shutdown().is_err() {
-                    setup.resume_after_cancelled_exit();
-                    exit.exiting.store(false, Ordering::Release);
-                    return;
-                }
-                setup.join_pending();
-                tauri::async_runtime::block_on(runtime.wait_history_preparation());
-                if exit.discard_confirmed(runtime.has_unsaved_summaries()) {
-                    runtime.exit_without_saving();
-                    let _ = runtime.flush_bridge();
-                    exit.finished.store(true, Ordering::Release);
-                    app.exit(exit.exit_code());
-                    return;
-                }
-                if runtime.shutdown().is_ok() {
-                    exit.finished.store(true, Ordering::Release);
-                    app.exit(exit.exit_code());
-                } else if !runtime.has_unsaved_summaries() {
-                    // Durable summaries permit exit, but failed final IPC is
-                    // recorded by shutdown and must not report a clean close.
-                    exit.finished.store(true, Ordering::Release);
-                    app.exit(1);
-                } else {
-                    setup.resume_after_cancelled_exit();
-                    // No UI response defaults to cancelling exit and preserving
-                    // data. Native window chrome provides a fallback confirmation:
-                    // another close confirms discard.
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.set_title(
-                            "Maxed — Unsaved changes. Close again to exit without saving",
-                        );
-                    }
-                    exit.warned.store(true, Ordering::Release);
-                    exit.exiting.store(false, Ordering::Release);
-                }
+                let _ = exit::run(&exit, &host, false);
             });
         }
     });
-}
-
-#[cfg(test)]
-mod exit_tests {
-    use super::*;
-    #[test]
-    fn startup_failure_survives_shutdown_and_discard_confirmation() {
-        let exit = ExitControl::default();
-        assert_eq!(exit.exit_code(), 0);
-        exit.startup_failed.store(true, Ordering::Release);
-        exit.exiting.store(true, Ordering::Release);
-        exit.finished.store(true, Ordering::Release);
-        assert_eq!(exit.exit_code(), 1);
-        exit.warned.store(true, Ordering::Release);
-        assert!(exit.discard_confirmed(true));
-        assert_eq!(exit.exit_code(), 1);
-    }
-
-    #[test]
-    fn unanswered_exit_preserves_changes_and_second_close_confirms_discard() {
-        let exit = ExitControl::default();
-        assert!(!exit.discard_confirmed(true));
-        exit.warned.store(true, Ordering::Release);
-        assert!(exit.discard_confirmed(true));
-        assert!(!exit.discard_confirmed(false));
-        assert!(!exit.finished.load(Ordering::Acquire));
-    }
 }

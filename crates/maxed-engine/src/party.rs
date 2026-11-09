@@ -40,7 +40,11 @@ pub fn evaluate(
             reasons: vec![],
         };
     }
-    if profile.level.is_none() && profile.maxed.is_none() {
+    let maxed = profile
+        .claims_supported()
+        .then_some(profile.maxed)
+        .flatten();
+    if profile.level.is_none() && maxed.is_none() {
         return ParseOutcome {
             result: ParseResult::NotSeen,
             reasons: vec![],
@@ -49,7 +53,7 @@ pub fn evaluate(
 
     let mut reasons = Vec::new();
     if let Some(min) = preset.min_maxed {
-        let reason = match profile.maxed {
+        let reason = match maxed {
             Some(maxed) if maxed < min => {
                 Some((ParseReasonKind::BelowMaxed, format!("{maxed}/8 < {min}/8")))
             }

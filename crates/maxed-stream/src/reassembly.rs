@@ -6,6 +6,8 @@ use maxed_types::*;
 use std::collections::VecDeque;
 
 const MAX_PENDING: usize = 256;
+const HOLE_SEGMENTS: usize = 32;
+const HOLE_AGE_MICROS: u64 = 1_000_000;
 const MAX_BYTES: usize = 2_097_152;
 const HISTORY_BYTES: usize = 65_535;
 const DIRECTIONS: [Direction; 2] = [Direction::ClientToServer, Direction::ServerToClient];
@@ -28,6 +30,110 @@ impl Half {
         self.history.clear();
         self.history_bytes = 0;
     }
+    fn drain(
+        &mut self,
+        conn: ConnId,
+        dir: Direction,
+        at: Timestamp,
+        force: bool,
+        events: &mut Vec<StreamEvent>,
+    ) {
+        while let Some(expected) = self.expected {
+            let Some(position) = self
+                .pending
+                .iter()
+                .position(|p| serial_distance(p.seq.wrapping_add(u32::from(p.syn)), expected) <= 0)
+            else {
+                if !force || self.pending.is_empty() {
+                    break;
+                }
+                let next = self
+                    .pending
+                    .iter()
+                    .map(|p| p.seq.wrapping_add(u32::from(p.syn)))
+                    .min_by_key(|seq| serial_distance(*seq, expected))
+                    .unwrap();
+                if serial_distance(next, expected) as usize > MAX_BYTES {
+                    // A stray far-ahead segment must not pin the sequence cursor
+                    // ahead of all subsequent legitimate traffic.
+                    self.invalidate();
+                    events.push(StreamEvent::Gap {
+                        conn,
+                        dir,
+                        at,
+                        reason: GapReason::ReorderLimit,
+                    });
+                    break;
+                }
+                self.expected = Some(next);
+                events.push(StreamEvent::Gap {
+                    conn,
+                    dir,
+                    at,
+                    reason: GapReason::ReorderLimit,
+                });
+                continue;
+            };
+            let mut part = self.pending.remove(position);
+            let part_len = part.bytes.len();
+            let start = part.seq.wrapping_add(u32::from(part.syn));
+            let consumed = (-i64::from(serial_distance(start, expected))) as usize;
+            if consumed < part.bytes.len() {
+                let Some(offset) = part.origin.offset.checked_add(consumed) else {
+                    self.invalidate();
+                    events.push(StreamEvent::Gap {
+                        conn,
+                        dir: part.dir,
+                        at,
+                        reason: GapReason::InvalidFrame,
+                    });
+                    break;
+                };
+                if part.origin.len != part.bytes.len()
+                    || part.origin.offset.checked_add(part.bytes.len()).is_none()
+                {
+                    self.invalidate();
+                    events.push(StreamEvent::Gap {
+                        conn,
+                        dir: part.dir,
+                        at,
+                        reason: GapReason::InvalidFrame,
+                    });
+                    break;
+                }
+                // Reuse the segment allocation, including for a partial overlap.
+                if consumed != 0 {
+                    part.bytes.drain(..consumed);
+                }
+                let fresh = part.bytes;
+                self.expected = Some(expected.wrapping_add(fresh.len() as u32));
+                self.remember(expected, fresh.clone());
+                events.push(StreamEvent::Data(StreamChunk {
+                    conn,
+                    dir: part.dir,
+                    at,
+                    origins: vec![ByteOrigin {
+                        frame_index: part.origin.frame_index,
+                        offset,
+                        len: fresh.len(),
+                    }],
+                    bytes: fresh,
+                }));
+            }
+            if part.fin && self.expected == Some(start.wrapping_add(part_len as u32)) {
+                self.expected = self.expected.map(|seq| seq.wrapping_add(1));
+                self.closed = true;
+                self.pending.clear();
+                events.push(StreamEvent::Closed {
+                    conn,
+                    dir: part.dir,
+                    at,
+                    reason: CloseReason::Fin,
+                });
+                break;
+            }
+        }
+    }
     fn remember(&mut self, seq: u32, bytes: Vec<u8>) {
         self.history_bytes += bytes.len();
         self.history.push_back((seq, bytes));
@@ -42,6 +148,9 @@ struct Generation {
     flow: FlowKey,
     conn: ConnId,
     halves: [Half; 2],
+    latest_at: Timestamp,
+    // Keep one clock step reversible until capture time advances again.
+    clock_step: Option<(Timestamp, Timestamp)>,
 }
 struct Retired {
     flow: FlowKey,
@@ -86,13 +195,19 @@ impl Reassembler {
     ) {
         if let Some(generation) = self.active.remove(index) {
             let mut ranges: [Vec<(u32, usize)>; 2] = Default::default();
-            for (i, half) in generation.halves.into_iter().enumerate() {
-                events.push(StreamEvent::Closed {
-                    conn: generation.conn,
-                    dir: DIRECTIONS[i],
-                    at,
-                    reason,
-                });
+            for (i, mut half) in generation.halves.into_iter().enumerate() {
+                let was_closed = half.closed;
+                if reason != CloseReason::Stopped {
+                    half.drain(generation.conn, DIRECTIONS[i], at, true, events);
+                }
+                if was_closed || !half.closed {
+                    events.push(StreamEvent::Closed {
+                        conn: generation.conn,
+                        dir: DIRECTIONS[i],
+                        at,
+                        reason,
+                    });
+                }
                 ranges[i].extend(
                     half.history
                         .into_iter()
@@ -113,7 +228,7 @@ impl Reassembler {
     }
 
     pub fn push(&mut self, segment: TcpSegment) -> Vec<StreamEvent> {
-        let mut events = Vec::new();
+        let mut events = self.expire(segment.at);
         if !segment.syn && !segment.fin && !segment.rst && segment.bytes.is_empty() {
             return events;
         }
@@ -163,6 +278,8 @@ impl Reassembler {
                 flow: segment.flow,
                 conn: ConnId(self.next_id),
                 halves: Default::default(),
+                latest_at: at,
+                clock_step: None,
             });
         }
         let Some(index) = self.active.iter().position(|g| g.flow == segment.flow) else {
@@ -237,88 +354,109 @@ impl Reassembler {
             return events;
         }
         if serial_distance(start, expected) > 0
-            && (half.pending.len() >= MAX_PENDING
-                || half.pending.iter().map(|p| p.bytes.len()).sum::<usize>() + segment.bytes.len()
-                    > MAX_BYTES)
+            && half.pending.iter().map(|p| p.bytes.len()).sum::<usize>() + segment.bytes.len()
+                > MAX_BYTES
         {
-            half.invalidate();
-            events.push(StreamEvent::Gap {
-                conn,
-                dir: segment.dir,
-                at,
-                reason: GapReason::ReorderLimit,
-            });
-            return events;
+            half.drain(conn, segment.dir, at, true, &mut events);
         }
+        let segment_dir = segment.dir;
+        half.expected.get_or_insert(start);
         half.pending.push(segment);
-        while let Some(expected) = half.expected {
-            let Some(position) = half
-                .pending
-                .iter()
-                .position(|p| serial_distance(p.seq.wrapping_add(u32::from(p.syn)), expected) <= 0)
-            else {
-                break;
-            };
-            let part = half.pending.remove(position);
-            let start = part.seq.wrapping_add(u32::from(part.syn));
-            let consumed = (-i64::from(serial_distance(start, expected))) as usize;
-            if consumed < part.bytes.len() {
-                let fresh = part.bytes[consumed..].to_vec();
-                let Some(offset) = part.origin.offset.checked_add(consumed) else {
-                    half.invalidate();
-                    events.push(StreamEvent::Gap {
-                        conn,
-                        dir: part.dir,
-                        at,
-                        reason: GapReason::InvalidFrame,
-                    });
-                    break;
-                };
-                if part.origin.len != part.bytes.len()
-                    || part.origin.offset.checked_add(part.bytes.len()).is_none()
-                {
-                    half.invalidate();
-                    events.push(StreamEvent::Gap {
-                        conn,
-                        dir: part.dir,
-                        at,
-                        reason: GapReason::InvalidFrame,
-                    });
-                    break;
-                }
-                half.expected = Some(expected.wrapping_add(fresh.len() as u32));
-                half.remember(expected, fresh.clone());
-                events.push(StreamEvent::Data(StreamChunk {
-                    conn,
-                    dir: part.dir,
-                    at,
-                    origins: vec![ByteOrigin {
-                        frame_index: part.origin.frame_index,
-                        offset,
-                        len: fresh.len(),
-                    }],
-                    bytes: fresh,
-                }));
-            }
-            if part.fin && half.expected == Some(start.wrapping_add(part.bytes.len() as u32)) {
-                half.expected = half.expected.map(|seq| seq.wrapping_add(1));
-                half.closed = true;
-                half.pending.clear();
-                events.push(StreamEvent::Closed {
-                    conn,
-                    dir: part.dir,
-                    at,
-                    reason: CloseReason::Fin,
-                });
-                break;
-            }
-        }
+        half.drain(
+            conn,
+            segment_dir,
+            at,
+            half.pending.len() >= HOLE_SEGMENTS
+                || half
+                    .pending
+                    .iter()
+                    .any(|p| generation.latest_at.0.saturating_sub(p.at.0) >= HOLE_AGE_MICROS),
+            &mut events,
+        );
         if generation.halves.iter().all(|h| h.closed) {
             // Preserve the retired key without emitting duplicate FIN closes.
             let mut discarded = Vec::new();
             self.retire(index, at, CloseReason::Fin, &mut discarded);
         }
         events
+    }
+
+    /// Advance aged holes when capture time advances, even on unrelated frames.
+    pub fn expire(&mut self, at: Timestamp) -> Vec<StreamEvent> {
+        let mut events = Vec::new();
+        for generation in &mut self.active {
+            if let Some((previous, stepped)) = generation.clock_step {
+                if at != stepped {
+                    generation.clock_step = None;
+                    if previous.0.saturating_sub(at.0) <= HOLE_AGE_MICROS {
+                        // A lone old timestamp was an outlier. Undo its shift
+                        // before evaluating age on the restored timeline. Repeated
+                        // expire calls for that same frame must not commit the step.
+                        let forwards = previous.0 - stepped.0;
+                        for half in &mut generation.halves {
+                            for pending in &mut half.pending {
+                                pending.at.0 = pending.at.0.saturating_add(forwards);
+                            }
+                        }
+                        generation.latest_at = previous;
+                    }
+                }
+            }
+            if generation.latest_at.0.saturating_sub(at.0) > HOLE_AGE_MICROS {
+                // A clock step starts a new capture-time baseline. Preserve elapsed
+                // hole age where representable; small timestamp reorders still use
+                // the watermark. The segment-count budget also bounds stalled clocks.
+                generation.clock_step = Some((generation.latest_at, at));
+                let backwards = generation.latest_at.0 - at.0;
+                for half in &mut generation.halves {
+                    for pending in &mut half.pending {
+                        pending.at.0 = pending.at.0.saturating_sub(backwards);
+                    }
+                }
+                generation.latest_at = at;
+            } else {
+                generation.latest_at = generation.latest_at.max(at);
+            }
+            let at = generation.latest_at;
+            for (i, half) in generation.halves.iter_mut().enumerate() {
+                if half
+                    .pending
+                    .iter()
+                    .any(|p| at.0.saturating_sub(p.at.0) >= HOLE_AGE_MICROS)
+                {
+                    half.drain(generation.conn, DIRECTIONS[i], at, true, &mut events);
+                }
+            }
+        }
+        events
+    }
+
+    /// An attributable malformed frame invalidates only its observed direction.
+    pub fn gap_flow(
+        &mut self,
+        flow: FlowKey,
+        dir: Direction,
+        at: Timestamp,
+        reason: GapReason,
+    ) -> Vec<StreamEvent> {
+        let active = self.active.iter().position(|g| {
+            g.flow == flow
+                && g.halves[direction_index(dir)].opened
+                && !g.halves[direction_index(dir)].closed
+        });
+        let Some(index) = active else {
+            // No live directional recipient: retain the unattributed-loss path.
+            return self.gap_all(at, reason);
+        };
+        let generation = &mut self.active[index];
+        let half = &mut generation.halves[direction_index(dir)];
+        half.invalidate();
+        vec![StreamEvent::Gap {
+            conn: generation.conn,
+            dir,
+            at,
+            reason,
+        }]
     }
 
     pub fn gap_all(&mut self, at: Timestamp, reason: GapReason) -> Vec<StreamEvent> {

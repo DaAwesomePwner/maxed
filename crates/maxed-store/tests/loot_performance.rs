@@ -1,5 +1,6 @@
 //! Synthetic retained appearances only; no owner captures or catalog assets.
 mod common;
+use crate::common::account_scope_fixture::ACCOUNT;
 use common::loot::{no_enchant, LootDb};
 use maxed_types::*;
 use rusqlite::params;
@@ -373,7 +374,11 @@ fn home_streak_50k_500k() {
             for offset in 0..2 {
                 let start = Instant::now();
                 if (round + offset) % 2 == 0 {
-                    streak = Some(reader.home_dungeon_streak(request.clone()).unwrap());
+                    streak = Some(
+                        reader
+                            .home_dungeon_streak(request.clone(), Some(ACCOUNT))
+                            .unwrap(),
+                    );
                     streak_samples.push(start.elapsed());
                 } else {
                     stats = Some(reader.loot_stats(LootStatsFilter { range: None }).unwrap());

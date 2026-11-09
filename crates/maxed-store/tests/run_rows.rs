@@ -1,5 +1,6 @@
 //! Synthetic Runs list contracts; no captured identities or traffic.
 use crate::common;
+use crate::common::account_scope_fixture::ACCOUNT;
 use common::*;
 use maxed_store::*;
 use maxed_types::*;
@@ -14,6 +15,10 @@ fn scalar_share_query_is_byte_identical_across_multiple_runs() {
     for players in [30, 360] {
         let mut db = Connection::open_in_memory().unwrap();
         let ids = runs_audit::seed(&mut db, 48, players);
+        // Old-style shares must describe the same damage/total as the new reader.
+        // Stale legacy values are covered by every_share_reader_ignores_legacy_player_share.
+        db.execute_batch("UPDATE fight_players SET json=json_set(json,'$.share',
+            damage/(SELECT json_extract(f.json,'$.total_damage') FROM fights f WHERE f.id=fight_id));").unwrap();
         let legacy = runs_audit::query(true);
         let current = runs_audit::query(false);
         assert_eq!(
@@ -49,7 +54,7 @@ fn run_identity_backfill_and_legacy_fallback_preserve_entry_observations() {
             }
             let mut events = story_events();
             events[1].event = EngineEvent::CharacterUpdated(entry.clone());
-            apply_batch(&mut db, &events).unwrap();
+            crate::common::account_scope_fixture::apply_batch(&mut db, &events).unwrap();
             let mut later = entry.clone();
             later.name = Some("Synthetic Mage".into());
             later.class_id = Some(777);
@@ -59,13 +64,13 @@ fn run_identity_backfill_and_legacy_fallback_preserve_entry_observations() {
             if mode == "merge" {
                 later.id = "synthetic-verified".into();
             }
-            apply_batch(
+            crate::common::account_scope_fixture::apply_batch(
                 &mut db,
                 &[envelope(8, EngineEvent::CharacterUpdated(later.clone()))],
             )
             .unwrap();
             if mode == "merge" {
-                apply_batch(
+                crate::common::account_scope_fixture::apply_batch(
                     &mut db,
                     &[envelope(
                         9,
@@ -87,7 +92,7 @@ fn run_identity_backfill_and_legacy_fallback_preserve_entry_observations() {
             }
             let expected_name = entry.name.clone().or(later.name);
             let expected_class = entry.class_id.or(later.class_id);
-            let reader = open_reader(&path).unwrap();
+            let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
             let details = reader
                 .list_runs(filter(RunSort::Newest, 100))
                 .unwrap()
@@ -139,7 +144,7 @@ fn database() -> (tempfile::TempDir, std::path::PathBuf, Connection) {
     let path = dir.path().join("history.db");
     let mut db = Connection::open(&path).unwrap();
     migrate(&mut db).unwrap();
-    apply_batch(&mut db, &story_events()).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut db, &story_events()).unwrap();
     let original = demo::demo_run_story().run;
     let mut events = Vec::new();
     for (id, start, duration, outcome) in [
@@ -175,7 +180,7 @@ fn database() -> (tempfile::TempDir, std::path::PathBuf, Connection) {
     other.character_id = Some("other-character".into());
     other.dungeon = "Other synthetic dungeon".into();
     events.push(EngineEvent::RunStarted(other));
-    apply_batch(
+    crate::common::account_scope_fixture::apply_batch(
         &mut db,
         &events
             .into_iter()
@@ -194,7 +199,7 @@ fn page(reader: &StoreReader, filter: RunFilter) -> Value {
 #[test]
 fn row_details_follow_page_order_and_preserve_observed_values() {
     let (_dir, path, _db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let result = page(&reader, filter(RunSort::Oldest, 100));
     let details = result["details"].as_array().expect("per-row details");
     assert_eq!(details.len(), result["rows"].as_array().unwrap().len());
@@ -222,7 +227,7 @@ fn row_details_follow_page_order_and_preserve_observed_values() {
 #[test]
 fn summary_counts_ignore_outcome_but_respect_other_filters() {
     let (_dir, path, _db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mut query = filter(RunSort::Newest, 100);
     query.dungeon = Some("Synthetic Sanctum".into());
     query.outcome = Some(Outcome::Cleared);
@@ -255,7 +260,7 @@ fn summary_counts_ignore_outcome_but_respect_other_filters() {
 #[test]
 fn character_filter_and_cursor_summary_are_independent() {
     let (_dir, path, _db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mut value = serde_json::to_value(filter(RunSort::Newest, 1)).unwrap();
     value["character_id"] = json!("demo-character");
     let query: RunFilter = serde_json::from_value(value.clone()).unwrap();
@@ -328,7 +333,7 @@ fn hundred_row_page_stays_under_one_mib_and_loot_is_ranked_then_newest() {
         drop.at = Timestamp(at);
         events.push(EngineEvent::BagDropped(drop));
     }
-    apply_batch(
+    crate::common::account_scope_fixture::apply_batch(
         &mut db,
         &events
             .into_iter()
@@ -337,7 +342,7 @@ fn hundred_row_page_stays_under_one_mib_and_loot_is_ranked_then_newest() {
             .collect::<Vec<_>>(),
     )
     .unwrap();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let page = reader.list_runs(filter(RunSort::Newest, 100)).unwrap();
     assert_eq!(page.rows.len(), 100);
     assert_eq!(page.details.as_ref().unwrap().len(), 100);
@@ -370,7 +375,7 @@ fn valid_share_unknown_identity_and_pb_ties_follow_home_rules() {
         UPDATE fights SET complete_capture=1,json=json_set(json,'$.issues',json('[]'),'$.total_damage',100.0);
         UPDATE fight_players SET damage=40.0,json=json_set(json,'$.is_local',json('true'),'$.share',0.4,'$.sources',json('[]'));
         UPDATE drops SET json=json_set(json,'$.issues',json('[]'));").unwrap();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let query = filter(RunSort::Oldest, 100);
     let detail = reader
         .list_runs(query.clone())
@@ -434,7 +439,7 @@ fn valid_share_unknown_identity_and_pb_ties_follow_home_rules() {
 #[test]
 fn oversized_details_and_summary_are_rejected_before_returning_the_page() {
     let (_dir, path, db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let oversized = "TestMage".repeat(1024 * 1024 / 8);
     db.execute(
         "UPDATE runs SET entry_character_json=json_object('name',?1) WHERE id='demo-run'",
@@ -469,8 +474,12 @@ fn unknown_segment_matches_filtered_rows_and_excludes_in_progress_runs() {
     open.died_at = None;
     open.outcome = None;
     open.evidence.clear();
-    apply_batch(&mut db, &[envelope(14, EngineEvent::RunStarted(open))]).unwrap();
-    let reader = open_reader(&path).unwrap();
+    crate::common::account_scope_fixture::apply_batch(
+        &mut db,
+        &[envelope(14, EngineEvent::RunStarted(open))],
+    )
+    .unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mut query = filter(RunSort::Newest, 100);
     query.dungeon = Some("Synthetic Sanctum".into());
     query.outcome = Some(Outcome::Unknown);
@@ -489,7 +498,7 @@ fn unknown_segment_matches_filtered_rows_and_excludes_in_progress_runs() {
 #[test]
 fn last_death_respects_dungeon_range_and_character_even_with_cleared_filter() {
     let (_dir, path, _db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mut query = filter(RunSort::Newest, 100);
     query.outcome = Some(Outcome::Cleared);
     assert_eq!(
@@ -545,7 +554,7 @@ fn fame_windows_preserve_boundaries_ties_overlaps_and_unknown_samples() {
             ('a',5,'other-character',6000000,30);",
     )
     .unwrap();
-    let page = open_reader(&path)
+    let page = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
         .list_runs(filter(RunSort::Oldest, 100))
         .unwrap();
@@ -662,8 +671,8 @@ fn previous_best_uses_earlier_qualifying_clears_and_started_id_order() {
             envelope(i as u64 + 14, EngineEvent::RunStarted(run))
         })
         .collect::<Vec<_>>();
-    apply_batch(&mut db, &events).unwrap();
-    let reader = open_reader(&path).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut db, &events).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let result = page(&reader, filter(RunSort::Newest, 100));
     let details = result["details"].as_array().unwrap();
     for (id, expected) in [
@@ -723,7 +732,7 @@ fn inferred_weapon_labels_do_not_make_saved_damage_partial() {
         let path = dir.path().join("inferred.db");
         let mut db = Connection::open(&path).unwrap();
         migrate(&mut db).unwrap();
-        apply_batch(&mut db, &story_events()[..4]).unwrap();
+        crate::common::account_scope_fixture::apply_batch(&mut db, &story_events()[..4]).unwrap();
         let mut fight = demo::demo_snapshot().fights.remove(0);
         fight.complete_capture = true;
         fight.issues.clear();
@@ -742,7 +751,7 @@ fn inferred_weapon_labels_do_not_make_saved_damage_partial() {
         let mut run = demo::demo_run_story().run;
         run.complete_capture = true;
         run.issues.clear();
-        apply_batch(
+        crate::common::account_scope_fixture::apply_batch(
             &mut db,
             &[
                 envelope(5, EngineEvent::RunUpdated(run)),
@@ -750,7 +759,7 @@ fn inferred_weapon_labels_do_not_make_saved_damage_partial() {
             ],
         )
         .unwrap();
-        let reader = open_reader(&path).unwrap();
+        let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
         assert_eq!(
             reader.get_run("demo-run").unwrap().unwrap().fights[0].estimated,
             uncertain,
@@ -771,9 +780,12 @@ fn inferred_weapon_labels_do_not_make_saved_damage_partial() {
         );
         assert_eq!(
             reader
-                .home_summary(HomeScope::Session {
-                    id: "demo-session".into()
-                })
+                .home_summary(
+                    HomeScope::Session {
+                        id: "demo-session".into()
+                    },
+                    Some(ACCOUNT)
+                )
                 .unwrap()
                 .recent_details[0]
                 .share_partial,
@@ -781,4 +793,144 @@ fn inferred_weapon_labels_do_not_make_saved_damage_partial() {
             "{reasons:?}"
         );
     }
+}
+
+#[test]
+fn personal_bests_use_each_runs_account_without_hiding_legacy_runs() {
+    let (_dir, path, db) = database();
+    db.execute_batch(
+        "INSERT INTO accounts VALUES('synthetic-b');
+        UPDATE characters SET account_id='synthetic-b' WHERE id='other-character';
+        UPDATE runs SET dungeon='Synthetic Sanctum',started=500000,completed_at=1500000,
+            character_id='other-character' WHERE id='other';
+        UPDATE runs SET character_id=NULL,completed_at=started+1,outcome='cleared' WHERE id='left';
+        INSERT INTO run_evidence VALUES('left',0,30000001,'victory','{}');",
+    )
+    .unwrap();
+    let reader = maxed_store::open_reader(&path).unwrap();
+    let result = page(&reader, filter(RunSort::Oldest, 100));
+    assert_eq!(result["rows"].as_array().unwrap().len(), 6);
+    assert_eq!(result["summary"]["personal_bests"], 2);
+    let details = result["details"].as_array().unwrap();
+    for (id, best, previous, pb) in [
+        ("demo-run", Some(2_000_000), None, false),
+        ("fast", Some(2_000_000), Some(4_000_000), true),
+        ("other", Some(1_000_000), None, true),
+        ("left", None, None, false),
+    ] {
+        let row = details.iter().find(|d| d["run_id"] == id).unwrap();
+        assert_eq!(row["best_clear_micros"], json!(best), "{id}");
+        assert_eq!(row["previous_best_clear_micros"], json!(previous), "{id}");
+        assert_eq!(row["is_personal_best"], pb, "{id}");
+    }
+    // Unattributed clear timing is still observed, but cannot seed or beat a PB.
+    assert_eq!(
+        details.iter().find(|d| d["run_id"] == "left").unwrap()["clear_micros"],
+        1
+    );
+    for (account, best) in [(ACCOUNT, 2_000_000), ("synthetic-b", 1_000_000)] {
+        assert_eq!(
+            reader.dungeon_bests(Some(account)).unwrap()[0].best_clear_micros,
+            best
+        );
+    }
+}
+
+#[test]
+fn account_scoped_rows_comparison_and_recap_agree() {
+    let (_dir, path, mut db) = database();
+    db.execute_batch(
+        "INSERT INTO accounts VALUES('synthetic-b');
+        UPDATE characters SET account_id='synthetic-b' WHERE id='other-character';",
+    )
+    .unwrap();
+    let mut events = Vec::new();
+    for (owner, prefix, duration) in [
+        (Some("demo-character"), "a", 4_000_000),
+        (Some("other-character"), "b", 1_000_000),
+        (None, "legacy", 1),
+    ] {
+        for i in 0..3 {
+            let mut run = demo::demo_run_story().run;
+            run.id = format!("{prefix}-{i}");
+            run.character_id = owner.map(Into::into);
+            run.started = Timestamp(2_000_000 + i * 1_000_000);
+            run.completed_at = Some(Timestamp(run.started.0 + duration));
+            run.ended = run.completed_at;
+            run.evidence = vec![EvidenceAt {
+                at: run.completed_at.unwrap(),
+                evidence: Evidence::Victory,
+            }];
+            events.push(run);
+        }
+    }
+    let mut current = demo::demo_run_story().run;
+    current.id = "b-current".into();
+    current.character_id = Some("other-character".into());
+    current.started = Timestamp(12_000_000);
+    current.completed_at = Some(Timestamp(12_500_000));
+    current.ended = current.completed_at;
+    current.evidence = vec![EvidenceAt {
+        at: current.completed_at.unwrap(),
+        evidence: Evidence::Victory,
+    }];
+    events.push(current);
+    maxed_store::apply_batch(
+        &mut db,
+        &events
+            .into_iter()
+            .enumerate()
+            .map(|(i, run)| envelope(14 + i as u64, EngineEvent::RunStarted(run)))
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    let reader = maxed_store::open_reader(&path).unwrap();
+    let rows = reader
+        .list_runs(filter(RunSort::Newest, 100))
+        .unwrap()
+        .details
+        .unwrap();
+    for (id, account, best, previous, count) in [
+        ("fast", ACCOUNT, 2_000_000, 4_000_000, 4),
+        ("b-current", "synthetic-b", 500_000, 1_000_000, 3),
+    ] {
+        let row = rows.iter().find(|r| r.run_id == id).unwrap();
+        assert_eq!(row.best_clear_micros, Some(best));
+        assert_eq!(row.previous_best_clear_micros, Some(previous));
+        assert!(row.is_personal_best);
+        let comparison = reader.get_run(id).unwrap().unwrap().comparison.unwrap();
+        assert_eq!(comparison.previous_clears, count);
+        assert_eq!(comparison.mean_micros, previous as f64);
+        let pb = reader
+            .run_recap(&RunRecapRequest { run_id: id.into() }, &[])
+            .unwrap()
+            .unwrap()
+            .pb_clear
+            .unwrap();
+        assert_eq!((pb.clear_micros, pb.previous_best_micros), (best, previous));
+        let dungeon = reader
+            .dungeon_bests(Some(account))
+            .unwrap()
+            .into_iter()
+            .find(|d| d.dungeon == "Synthetic Sanctum")
+            .unwrap();
+        assert_eq!(dungeon.best_clear_micros, best);
+    }
+    assert!(reader
+        .get_run("legacy-2")
+        .unwrap()
+        .unwrap()
+        .comparison
+        .is_none());
+    assert!(reader
+        .run_recap(
+            &RunRecapRequest {
+                run_id: "legacy-2".into()
+            },
+            &[]
+        )
+        .unwrap()
+        .unwrap()
+        .pb_clear
+        .is_none());
 }

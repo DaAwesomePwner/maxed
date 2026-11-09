@@ -28,9 +28,13 @@
         "prior-tests"
       ]
     },
+    "gui-smoke": {
+      "if": "github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag'",
+      "uses": "./.github/workflows/gui-smoke.yml"
+    },
     "package": {
-      "needs": ["prior-tests", "tests"],
-      "if": "!cancelled() && github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && ((needs.prior-tests.outputs.tested == 'true' && needs.tests.result == 'skipped') || needs.tests.result == 'success')",
+      "needs": ["prior-tests", "tests", "gui-smoke"],
+      "if": "!cancelled() && github.repository == 'DaAwesomePwner/maxed' && github.ref_type == 'tag' && needs.prior-tests.result == 'success' && needs.gui-smoke.result == 'success' && ((needs.prior-tests.outputs.tested == 'true' && needs.tests.result == 'skipped') || needs.tests.result == 'success')",
       "runs-on": "windows-2022",
       "environment": "release-signing",
       "timeout-minutes": 45,

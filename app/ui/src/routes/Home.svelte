@@ -28,15 +28,16 @@
   import { initialHomeMode, createHomeObservation } from '../lib/home/mode';
   import { homeScope, localDayRange, type ScopeChoice } from '../lib/home/scope';
   import type { HomeHistoryState } from '../lib/home/summary';
+  import AttributionNotice from '../lib/home/AttributionNotice.svelte';
   import NexusHome from '../lib/home/NexusHome.svelte';
   import { createNexusHistory, type LootHistoryState } from '../lib/home/v3/nexus-history';
   import type { ScopeLootPage } from '../lib/bindings/ScopeLootPage';
   import { createDungeonPortal, createHomeVisuals, emptyHomeVisuals, homeVisualTypes, type HomeVisuals } from '../lib/home/visuals';
   import SessionHud from '../lib/home/v4/SessionHud.svelte';
   import { createHomeV4Reads, type HomeV4ReadState } from '../lib/home/v4/reads';
-  import { potionNames, potionStat, WHITE_BAG_TYPE } from '../lib/home/v4/hud';
+  import { WHITE_BAG_TYPE } from '../lib/home/v4/hud';
   import { spriteUrl } from '../lib/bridge/visuals';
-  import { routeHref } from '../lib/navigation/routes';
+  import { productionFeatures, routeHref } from '../lib/navigation/routes';
   import { bossOnly } from '../lib/home/v3/screen-data';
   import { isBossFight, scopedFights } from '../lib/shell/rail';
   import { bestItem } from '../lib/home/v3/loot-rank';
@@ -54,7 +55,7 @@
   import { createRecapReads, type RecapLoad } from '../lib/home/v4/recap-reads';
   import { createWhiteQueue, newWhites, type WhiteBannerItem, type WhiteBannerState } from '../lib/home/v4/white-queue';
 
-  let { snapshot, statsEnabled = false, redesign = false, capture = null, liveState = null, event = null, historyReady = null,
+  let { snapshot, statsEnabled = false, redesign = productionFeatures.homeRedesign, capture = null, liveState = null, event = null, historyReady = null,
     client, store = null, required = null, initial = false, syntheticClock = false, clockReady = true, savedScope = null, onScopeChange, onReady, onClockRetry, entryKey = '', onRowsReady }: {
     snapshot: LiveSnapshot | null; statsEnabled?: boolean; redesign?: boolean; capture?: CaptureStatus | null; liveState?: LiveState | null;
     event?: EventEnvelope | null; historyReady?: StoreStatus | null;
@@ -75,11 +76,40 @@
     const release = observePresentationVisibility(presentation.setActive);
     return () => { release(); presentation.setActive(false); };
   });
+  let accountRevision = $state(0);
+  $effect(() => {
+    const owner = client;
+    if (!owner) return;
+    let active = true;
+    let revision: number | null = null;
+    const release = owner.onAccountHistoryChanged(notice => {
+      if (!active || revision === notice.revision) return;
+      revision = notice.revision;
+      // Dispose synchronously: an already queued A reply cannot publish into B.
+      controller?.dispose(); bestsController?.dispose(); homeReads?.dispose(); v4Reads?.dispose(); recapReads?.dispose();
+      history = { phase: 'loading', summary: null, message: '', retryAvailable: false };
+      scopeLoot = null; dungeonBests = null; v4State = null; baseline = null; recapLoad = null;
+      endedStreaks.reset();
+      endedStreaks = { ...endedStreaks };
+      if (notice.reason === 'account_switched') { observe.historyChanged(); observationRevision++; }
+      accountRevision++;
+    });
+    return () => { active = false; void release.then(stop => stop()); };
+  });
   let mode = $state(initialHomeMode());
   const screen = $derived(redesign ? homeScreen(mode, recap, $recapPresentation.open) : mode.mode);
   let captureState = $derived((capture ?? snapshot?.capture)?.state);
   let displayed = $state.raw<LiveSnapshot | null>(null);
   const observe = createHomeObservation();
+  let observationRevision = $state(0);
+  function observeIdentity(envelope: EventEnvelope) {
+    if (observe.onEvent(envelope)) observationRevision++;
+  }
+  $effect(() => connection?.onEvent?.(observeIdentity));
+  $effect(() => {
+    const next = connection?.onEvent ? null : event;
+    if (next) untrack(() => observeIdentity(next));
+  });
   let choice = $state<ScopeChoice>(untrack(() => savedScope ?? 'session'));
   const currentDay = (): TimeRange | null => { try { return localDayRange(new Date()); } catch { return null; } };
   let day = $state.raw<TimeRange | null>(currentDay());
@@ -96,6 +126,7 @@
     errors: { hud: false, streak: false, profile: false, usual: false } };
   let v4Reads = $state.raw<ReturnType<typeof createHomeV4Reads> | null>(null);
   let v4Owner: Client | undefined;
+  let v4Revision = -1;
   const v4Client = $derived(redesign ? client : undefined);
   let recapLoad = $state.raw<RecapLoad | null>(null);
   const savedRunRecap = $derived(recapLoad?.status === 'saved' && recapLoad.data.kind === 'run'
@@ -114,10 +145,12 @@
     && snapshot.character.id === savedVisitRecap.characterId ? snapshot.character : null);
   let recapReads = $state.raw<ReturnType<typeof createRecapReads> | null>(null);
   let recapOwner: Client | undefined;
+  let recapRevision = -1;
   $effect(() => {
-    const owner = v4Client;
+    const owner = v4Client ? homeReads?.client : undefined, revision = accountRevision;
     untrack(() => {
-      if (owner === recapOwner) return;
+      if (owner === recapOwner && revision === recapRevision) return;
+      recapRevision = revision;
       recapReads?.dispose(); recapOwner = owner; recapLoad = null;
       recapReads = owner ? createRecapReads(owner, next => { recapLoad = next; }) : null;
     });
@@ -129,9 +162,10 @@
   });
   onDestroy(() => recapReads?.dispose());
   $effect(() => {
-    const owner = v4Client;
+    const owner = v4Client ? homeReads?.client : undefined, revision = accountRevision;
     untrack(() => {
-      if (owner === v4Owner) return;
+      if (owner === v4Owner && revision === v4Revision) return;
+      v4Revision = revision;
       v4Reads?.dispose();
       v4Owner = owner;
       v4State = null;
@@ -169,27 +203,6 @@
       bossTypes: fights.filter(snapshot?.area_kind === 'realm' ? isBossFight : bossOnly).map(fight => fight.target_type!), nowMicros: hudNowMs * 1000 };
     untrack(() => instance.update(input));
   });
-  let potionTypes = $state.raw<number[]>([]);
-  $effect(() => {
-    const owner = v4Client;
-    potionTypes = [];
-    if (!owner) return;
-    let disposed = false, revision = 0;
-    const refresh = async () => {
-      const request = ++revision;
-      try {
-        // Native search accepts at most 25 hits. Query each stat so unrelated
-        // consumables cannot crowd a representative potion out of the results.
-        const items = (await Promise.all(Object.values(potionNames).map(name =>
-          owner.searchItems(`Potion of ${name}`, 1).catch(() => [])))).flat();
-        if (!disposed && request === revision) potionTypes = items.filter(item => potionStat(item.name)).map(item => item.object_type);
-      } catch { if (!disposed && request === revision) potionTypes = []; }
-    };
-    const release = owner.onVisualsChanged(() => { potionTypes = []; void refresh(); });
-    void refresh();
-    return () => { disposed = true; release(); };
-  });
-
   let receivedHistory = $state(false);
   let visuals = $state.raw<HomeVisuals>(emptyHomeVisuals());
   let visualController = $state.raw<ReturnType<typeof createHomeVisuals> | null>(null);
@@ -287,7 +300,7 @@
   const visualKey = $derived([...homeVisualTypes(mode.mode !== 'nexus' ? displayed : null,
     mode.mode === 'nexus' ? history.summary : null, scopedWindow),
   ...(mode.mode === 'nexus' ? scopeLoot?.items.map(item => item.item_type) ?? [] : []),
-  ...(redesign ? [WHITE_BAG_TYPE, ...(v4State?.hud?.ut_st ?? []), ...potionTypes,
+  ...(redesign ? [WHITE_BAG_TYPE, ...(v4State?.hud?.ut_st ?? []), ...(v4State?.hud?.potions ?? []).flatMap(potion => potion.object_type === null ? [] : [potion.object_type]),
     ...(!v4State?.errors.profile ? v4State?.profile?.bosses.map(boss => boss.target_type) ?? [] : [])] : []),
   ...(redesign && mode.mode === 'realm' ? scopedFights(displayed, scopedWindow)
     .flatMap(fight => fight.boss_type === null ? [] : [fight.boss_type]) : []),
@@ -328,10 +341,12 @@
   let bestsController = $state.raw<ReturnType<typeof createDungeonBests> | null>(null);
   let homeReads = $state.raw<ReturnType<typeof createHomeReads> | null>(null);
   let historyOwner: Client | undefined;
+  let historyRevision = -1;
   $effect(() => {
-    const owner = client;
+    const owner = client, revision = accountRevision;
     untrack(() => {
-      if (owner === historyOwner) return;
+      if (owner === historyOwner && revision === historyRevision) return;
+      historyRevision = revision;
       bestsController?.dispose(); homeReads?.dispose();
       historyOwner = owner;
       dungeonBests = null;
@@ -479,6 +494,7 @@
 
   $effect(() => {
     const next = snapshot, status = capture, state = liveState;
+    void observationRevision;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const update = () => untrack(() => {
       const observation = observe(next, status, state, performance.now());
@@ -490,7 +506,8 @@
     return () => clearTimeout(timer);
   });
 </script>
-<div class="home" class:home-v4={redesign} data-home={redesign ? 'v4' : 'v3'} bind:this={region} onfocusin={rememberFocus} onfocusout={releaseFocus}>
+<div class="home" class:home-v4={redesign} data-home={redesign ? 'v4' : 'v3'} bind:this={region} tabindex="-1" role="region" aria-label="Home content" onfocusin={rememberFocus} onfocusout={releaseFocus}>
+  <AttributionNotice onDismiss={() => region.focus({ preventScroll: true })} session={connection ?? client} visible={history.summary?.unattributed_history === true} />
 {#if redesign}
   <SessionHud hud={v4State?.errors.hud ? null : v4State?.hud ?? null} sessionStarted={snapshot?.session?.started ?? null} nowMs={hudNowMs}
     sessionEnded={snapshot?.session?.ended ?? null}

@@ -1,5 +1,6 @@
+use crate::common::account_scope_fixture::ACCOUNT;
 use crate::common::stats::{character, database, fame, session, Stream};
-use maxed_store::open_reader;
+
 use maxed_types::*;
 use rusqlite::Connection;
 
@@ -7,8 +8,9 @@ const SECOND: u64 = 1_000_000;
 
 #[test]
 fn home_hud_and_scope_loot_preserve_catalog_limits() {
-    let (_dir, path, _db) = database();
-    let reader = open_reader(&path).unwrap();
+    let (_dir, path, db) = database();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    db.execute("INSERT OR IGNORE INTO identity_spans SELECT 'fixture-'||id,1,id,started,last_traffic,'synthetic-fixture-owner',?1 FROM play_sessions", [ACCOUNT]).unwrap();
     for (tiers, potions) in [
         (vec![(0, None); 65_537], vec![]),
         (vec![(0, Some("a".repeat(17)))], vec![]),
@@ -16,20 +18,24 @@ fn home_hud_and_scope_loot_preserve_catalog_limits() {
         (vec![], vec![(0, PotionStat::Life); 65_537]),
     ] {
         assert!(matches!(
-            reader.home_hud(scope(), &tiers, &potions),
+            reader.home_hud(scope(), Some(ACCOUNT), &tiers, &potions),
             Err(maxed_store::StoreError::Limit)
         ));
         if potions.is_empty() {
             assert!(matches!(
-                reader.scope_loot(scope(), None, 1, &tiers),
+                reader.scope_loot(scope(), Some(ACCOUNT), None, 1, &tiers),
                 Err(maxed_store::StoreError::Limit)
             ));
         }
     }
     let tiers = vec![(0, Some("é".repeat(8))); 65_536];
     let potions = vec![(0, PotionStat::Life); 65_536];
-    reader.home_hud(scope(), &tiers, &potions).unwrap();
-    reader.scope_loot(scope(), None, 1, &tiers).unwrap();
+    reader
+        .home_hud(scope(), Some(ACCOUNT), &tiers, &potions)
+        .unwrap();
+    reader
+        .scope_loot(scope(), Some(ACCOUNT), None, 1, &tiers)
+        .unwrap();
 }
 
 #[test]
@@ -44,8 +50,11 @@ fn home_hud_party_average_plan_searches_scoped_fights() {
             Some(1000.0),
         ))],
     );
-    let sql = include_str!("../src/home_hud.sql")
-        .replace("/*home_scope*/", include_str!("../src/home_scope.sql"))
+    let sql = &crate::common::account_sql::with_accounts(include_str!("../src/home_hud.sql"))
+        .replace(
+            "/*home_scope*/",
+            &crate::common::account_sql::with_accounts(include_str!("../src/home_scope.sql")),
+        )
         .replace(
             "/*party_average_scoped*/",
             include_str!("../src/party_average_scoped.sql"),
@@ -54,7 +63,15 @@ fn home_hud_party_average_plan_searches_scoped_fights() {
         let mut statement = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
         let plan = statement
             .query_map(
-                rusqlite::params![kind, "synthetic-session", 0, 600_000_000_i64, "[]", "[]"],
+                rusqlite::params![
+                    kind,
+                    "synthetic-session",
+                    0,
+                    600_000_000_i64,
+                    ACCOUNT,
+                    "[]",
+                    "[]"
+                ],
                 |row| row.get::<_, String>(3),
             )
             .unwrap()
@@ -91,6 +108,7 @@ fn fight(id: &str, started: u64, seconds: u64, dps: Option<f64>) -> FightView {
     fight.id = id.into();
     fight.session_id = "synthetic-session".into();
     fight.run_id = None;
+    fight.owner_character_id = Some("synthetic-alpha".into());
     fight.started = Timestamp(started);
     fight.first_hit = Some(Timestamp(started + SECOND));
     fight.last_hit = Some(Timestamp(started + (seconds + 1) * SECOND));
@@ -132,6 +150,7 @@ fn bag(id: &str, at: u64, rank: Option<u8>, items: &[u16]) -> DropView {
     bag.id = id.into();
     bag.session_id = "synthetic-session".into();
     bag.run_id = None;
+    bag.owner_character_id = Some("synthetic-alpha".into());
     bag.at = Timestamp(at);
     bag.bag_rank = rank;
     bag.contents_known = true;
@@ -165,9 +184,9 @@ fn home_hud_weights_dps_by_fight_span() {
             EngineEvent::FightUpdated(fight("long", 100 * SECOND, 30, Some(2000.0))),
         ],
     );
-    let hud = open_reader(&path)
+    let hud = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .home_hud(scope(), &[], &[])
+        .home_hud(scope(), Some(ACCOUNT), &[], &[])
         .unwrap();
     let combat = hud.combat.unwrap();
     assert_eq!(combat.fights, 2);
@@ -198,8 +217,13 @@ fn home_hud_vs_party_uses_fights_with_both_values() {
             .map(EngineEvent::FightUpdated)
             .collect(),
     );
-    let reader = open_reader(&path).unwrap();
-    let combat = reader.home_hud(scope(), &[], &[]).unwrap().combat.unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    db.execute("INSERT OR IGNORE INTO identity_spans SELECT 'fixture-'||id,1,id,started,last_traffic,'synthetic-fixture-owner',?1 FROM play_sessions", [ACCOUNT]).unwrap();
+    let combat = reader
+        .home_hud(scope(), Some(ACCOUNT), &[], &[])
+        .unwrap()
+        .combat
+        .unwrap();
     assert_eq!(combat.fights, 3);
     assert_eq!(combat.weighted_dps, 4000.0);
     assert_eq!(combat.weighted_party_dps, Some(2500.0));
@@ -210,7 +234,11 @@ fn home_hud_vs_party_uses_fights_with_both_values() {
         [],
     )
     .unwrap();
-    let combat = reader.home_hud(scope(), &[], &[]).unwrap().combat.unwrap();
+    let combat = reader
+        .home_hud(scope(), Some(ACCOUNT), &[], &[])
+        .unwrap()
+        .combat
+        .unwrap();
     assert_eq!(combat.weighted_party_dps, Some(0.0));
     assert_eq!(combat.vs_party, None);
 }
@@ -263,9 +291,9 @@ fn home_hud_counts_whites_ut_st_and_potions_by_stat() {
         (109, PotionStat::Life),
         (101, PotionStat::Life), // Repeated catalog entries must not multiply appearances.
     ];
-    let hud = open_reader(&path)
+    let hud = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .home_hud(scope(), &tiers, &potions)
+        .home_hud(scope(), Some(ACCOUNT), &tiers, &potions)
         .unwrap();
     assert_eq!(hud.whites, 14);
     assert_eq!(hud.ut_st_count, 14);
@@ -300,21 +328,30 @@ fn home_hud_fame_per_hour_needs_five_minutes() {
             fame("synthetic-beta", 225, 180 * SECOND),
         ],
     );
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    db.execute("INSERT OR IGNORE INTO identity_spans SELECT 'fixture-'||id,1,id,started,last_traffic,'synthetic-fixture-owner',?1 FROM play_sessions", [ACCOUNT]).unwrap();
     for (elapsed, rate) in [(299_999_999, None), (300_000_000, Some(600.0))] {
         db.execute(
             "UPDATE play_sessions SET last_traffic=?1,ended=900000000",
             [elapsed],
         )
         .unwrap();
+        db.execute("UPDATE identity_spans SET ended=?1", [elapsed])
+            .unwrap();
         assert_eq!(
-            reader.home_hud(scope(), &[], &[]).unwrap().fame_per_hour,
+            reader
+                .home_hud(scope(), Some(ACCOUNT), &[], &[])
+                .unwrap()
+                .fame_per_hour,
             rate
         );
     }
     db.execute("DELETE FROM fame_samples", []).unwrap();
     assert_eq!(
-        reader.home_hud(scope(), &[], &[]).unwrap().fame_per_hour,
+        reader
+            .home_hud(scope(), Some(ACCOUNT), &[], &[])
+            .unwrap()
+            .fame_per_hour,
         None
     );
 }
@@ -372,21 +409,25 @@ fn home_hud_today_scope_sums_sessions() {
             session("outside-after", 900 * SECOND, 1100 * SECOND, None),
         ],
     );
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    db.execute("INSERT OR IGNORE INTO identity_spans SELECT 'fixture-'||id,1,id,started,last_traffic,'synthetic-fixture-owner',?1 FROM play_sessions", [ACCOUNT]).unwrap();
     let day = today(100 * SECOND, 900 * SECOND);
     assert_eq!(
-        reader.home_summary(day.clone()).unwrap().fame_delta,
+        reader
+            .home_summary(day.clone(), Some(ACCOUNT))
+            .unwrap()
+            .fame_delta,
         Some(75)
     );
     let hud = reader
-        .home_hud(day, &[(1, Some("UT".into()))], &[])
+        .home_hud(day, Some(ACCOUNT), &[(1, Some("UT".into()))], &[])
         .unwrap();
     assert_eq!(hud.fame_per_hour, Some(600.0)); // 75 fame / (250 + 200) seconds.
     assert_eq!(hud.combat.unwrap().weighted_dps, 2500.0);
     assert_eq!((hud.whites, hud.ut_st_count), (1, 1));
     assert_eq!(
         reader
-            .home_hud(scope(), &[], &[])
+            .home_hud(scope(), Some(ACCOUNT), &[], &[])
             .unwrap()
             .combat
             .unwrap()
@@ -399,8 +440,9 @@ fn home_hud_today_scope_sums_sessions() {
 fn home_hud_combat_none_without_eligible_fights() {
     let (_dir, path, mut db) = database();
     seed(&mut db, vec![]);
-    let reader = open_reader(&path).unwrap();
-    let empty = reader.home_hud(scope(), &[], &[]).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    db.execute("INSERT OR IGNORE INTO identity_spans SELECT 'fixture-'||id,1,id,started,last_traffic,'synthetic-fixture-owner',?1 FROM play_sessions", [ACCOUNT]).unwrap();
+    let empty = reader.home_hud(scope(), Some(ACCOUNT), &[], &[]).unwrap();
     assert_eq!(empty.combat, None);
     assert_eq!(empty.fame_per_hour, None);
     assert_eq!(empty.whites, 0);
@@ -422,9 +464,30 @@ fn home_hud_combat_none_without_eligible_fights() {
         events.push(EngineEvent::FightUpdated(invalid));
     }
     Stream::new("synthetic-invalid").apply(&mut db, events);
-    assert_eq!(reader.home_hud(scope(), &[], &[]).unwrap().combat, None);
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM fight_accounts WHERE account_id=?1",
+            [ACCOUNT],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        8
+    );
+    assert_eq!(
+        reader
+            .home_hud(scope(), Some(ACCOUNT), &[], &[])
+            .unwrap()
+            .combat,
+        None
+    );
     db.execute("UPDATE fights SET json='broken'", []).unwrap();
     db.execute("UPDATE fight_summaries SET json='broken'", [])
         .unwrap();
-    assert_eq!(reader.home_hud(scope(), &[], &[]).unwrap().combat, None);
+    assert_eq!(
+        reader
+            .home_hud(scope(), Some(ACCOUNT), &[], &[])
+            .unwrap()
+            .combat,
+        None
+    );
 }

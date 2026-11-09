@@ -563,6 +563,7 @@ fn detail_expansion_at_eight_and_eighty_five_players_only_expands_boss_views() {
 #[test]
 fn comparison_requires_three_earlier_observed_clears() {
     let (_dir, path, mut db) = database();
+    crate::common::account_scope_fixture::attribute(&db);
     let reader = open_reader(&path).unwrap();
     let mut sequence = 8;
     let mut current = demo::demo_run_story().run;
@@ -586,7 +587,7 @@ fn comparison_requires_three_earlier_observed_clears() {
     for i in 0..3 {
         let mut prior = current.clone();
         prior.id = format!("prior-{i}");
-        prior.character_id = None;
+        prior.character_id = current.character_id.clone();
         prior.started = Timestamp(10_000_000 + i * 10_000_000);
         prior.completed_at = Some(Timestamp(prior.started.0 + 10_000_000));
         apply_batch(

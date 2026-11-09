@@ -18,7 +18,7 @@ const visuals = { ...emptyHomeVisuals(), objects: [
   { object_type: 1000, name: 'Invented Staff', sprite: null, bag: null, item_tier: 'T14' },
   { object_type: 101, name: 'Invented Skin', sprite: null, bag: null },
 ] };
-const profile: PlayerProfileView = { scope_id: 'run-1', player_id: 'player-1', object_id: 7, is_local: true,
+const profile: PlayerProfileView = { scope_id: 'run-1', player_id: 'player-1', object_id: 7, is_local: true, maxed_gated: true,
   name: 'Invented Player', class_id: 100, level: 20, stars: 75, maxed: 8, maxed_stats: [], fame: 4812, skin_id: 101,
   first_seen: '1000000', last_seen: '5000000', stats: [{ stat_id: 20, value: 87 }, { stat_id: 48, value: 12 }],
   equipment: [{ slot: 0, item_type: 1000, enchant: source({ enchant: { state: 'recorded', slots: 3, applied: 3, ids: [1, 2, 3] } }).enchant }] };
@@ -181,4 +181,30 @@ it('renders activity labels and death markers without inventing absent events', 
   expect(screen.getByText('Entered run')).toBeTruthy();
   expect(container.querySelector('[data-kind="death"]')).toBeTruthy();
   expect(screen.queryByText('Last hit')).toBeNull();
+});
+
+const evidenceCases = [
+  { is_local: true, count: '—/8', tone: 'boosted' },
+  { is_local: true, maxed_gated: false, count: '—/8', tone: 'boosted' },
+  { is_local: true, maxed_gated: true, count: '8/8', tone: 'max' },
+  { is_local: false, count: '8/8', tone: 'max' },
+];
+it.each(evidenceCases)('gates header counts with provenance %j', evidence => {
+  const { maxed_gated: _, ...legacy } = profile;
+  render(PlayerHeader, { name: profile.name!, classId: 100, isLocal: evidence.is_local,
+    live: false, partial: false, profile: { ...legacy, ...evidence }, inRunMs: 4000,
+    visuals, picker: [], prevHref: null, nextHref: null });
+  expect(screen.getByText(/Invented Wizard · Lv 20/).textContent).toContain(evidence.count);
+});
+it.each(evidenceCases)('gates cap highlights and preserves boost tones with provenance %j', evidence => {
+  const { maxed_gated: _, ...legacy } = profile;
+  const { container } = render(StatsCard, { profile: { ...legacy, ...evidence, maxed_stats: [20, 21, 22], stats: [
+    ...profile.stats, { stat_id: 21, value: 40 }, { stat_id: 49, value: -5 },
+    { stat_id: 22, value: 50 }, { stat_id: 50, value: 0 },
+  ] }, visuals });
+  expect(screen.getByRole('heading').textContent).toContain(evidence.count);
+  expect(container.querySelector('[data-stat-id="20"]')?.getAttribute('data-tone')).toBe(evidence.tone);
+  expect(container.querySelector('[data-stat-id="21"]')?.getAttribute('data-tone')).toBe(evidence.tone);
+  expect(screen.getByText('−5').classList.contains('player-danger')).toBe(true);
+  if (evidence.count === '—/8') expect(container.querySelector('[data-tone="max"]')).toBeNull();
 });

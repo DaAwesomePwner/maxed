@@ -1,0 +1,71 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { afterEach, expect, it, vi } from 'vitest';
+import Shell from '../../src/lib/shell/Shell.svelte';
+import { setupFixture } from '../setup/fixture';
+import { fakeHistory } from '../navigation/fake-history';
+
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+it('retries failed storage before capture can start', async () => {
+  const { client } = setupFixture();
+  const ready = await client.queryStore();
+  let failed = true;
+  client.queryStore = vi.fn(async () => failed ? { ...ready, state: 'failed' as const, queued: 1 } : ready);
+  client.retryStore = vi.fn(async () => { failed = false; });
+  client.startCapture = vi.fn(async () => { if (failed) throw new Error('Pending summaries are not saved; retry storage before starting capture'); });
+  render(Shell, { client, historyAdapter: fakeHistory('#/').adapter });
+  await fireEvent.click(await screen.findByRole('button', { name: 'Retry saving' }));
+  await waitFor(() => expect(client.retryStore).toHaveBeenCalledOnce());
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull());
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Capture' }));
+  await waitFor(() => expect(client.startCapture).toHaveBeenCalledOnce());
+  expect(failed).toBe(false);
+});
+
+it('unsaved close stays open until the user explicitly confirms discard', async () => {
+  const { client } = setupFixture();
+  let warn = () => {};
+  client.onUnsavedClose = vi.fn(async receive => { warn = receive; return () => {}; });
+  client.exitWithoutSaving = vi.fn(async () => {});
+  render(Shell, { client, historyAdapter: fakeHistory('#/').adapter });
+  await waitFor(() => expect(client.onUnsavedClose).toHaveBeenCalledOnce());
+  warn();
+  const dialog = await screen.findByRole('alertdialog', { name: 'Unsaved changes' });
+  await waitFor(() => expect(document.activeElement).toBe(dialog));
+  await fireEvent.click(await screen.findByRole('button', { name: 'Keep Maxed open' }));
+  expect(client.exitWithoutSaving).not.toHaveBeenCalled();
+  warn();
+  await fireEvent.click(await screen.findByRole('button', { name: 'Exit without saving' }));
+  expect(client.exitWithoutSaving).toHaveBeenCalledOnce();
+});
+
+it('offers retry saving when capture refuses pending summaries before status catches up', async () => {
+  const { client } = setupFixture();
+  let pending = true;
+  client.startCapture = vi.fn(async () => {
+    if (pending) throw new Error('Pending summaries are not saved; retry storage before starting capture');
+  });
+  client.retryStore = vi.fn(async () => { pending = false; });
+  render(Shell, { client, historyAdapter: fakeHistory('#/').adapter });
+  const start = await screen.findByRole('button', { name: 'Start Capture' });
+  await waitFor(() => expect(start.getAttribute('aria-disabled')).not.toBe('true'));
+  expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull();
+  await fireEvent.click(start);
+  await fireEvent.click(await screen.findByRole('button', { name: 'Retry saving' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull());
+  await fireEvent.click(start);
+  expect(client.startCapture).toHaveBeenCalledTimes(2);
+  expect(client.retryStore).toHaveBeenCalledOnce();
+  expect(pending).toBe(false);
+});
+
+it('does not offer saving retry for storage that failed to open without pending summaries', async () => {
+  const { client } = setupFixture();
+  const ready = await client.queryStore();
+  client.queryStore = vi.fn(async () => ({ ...ready, state: 'failed' as const, queued: 0 }));
+  render(Shell, { client, historyAdapter: fakeHistory('#/').adapter });
+  await screen.findByText("Couldn't save. Storage is unavailable; use Start Capture to try again.");
+  expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull();
+  expect(screen.queryByText("Couldn't save. Retry.")).toBeNull();
+  expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).not.toBe('true');
+});

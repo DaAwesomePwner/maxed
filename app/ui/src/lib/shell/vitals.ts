@@ -33,13 +33,13 @@ export function statCapUnavailableReason(line: StatLine): string | null {
   const evidence = line.split_evidence;
   if (!evidence) return 'split evidence missing';
   if (evidence.reasons.includes('negative_other')) return 'inconsistent stat split';
-  if (evidence.reasons.includes('invalid_exalt')) return 'invalid exalt level';
-  if (evidence.reasons.includes('missing_exalt')) return 'exalt level unknown';
+  if (evidence.reasons.includes('invalid_exalt')) return 'invalid exalt bonus';
+  if (evidence.reasons.includes('missing_exalt')) return 'exalt bonus unknown';
   if (evidence.reasons.includes('overflow') || evidence.reasons.includes('negative_base')) return 'invalid stat arithmetic';
   if (evidence.reasons.includes('unverified_placement')) return 'exalt placement unverified';
   return 'base or cap unavailable';
 }
-// Exalt is already scaled by the engine (HP/MP ×5); never treat it as a level.
+// Exalt carries the observed bonus amount, including HP/MP; never treat it as a level.
 export function statExalt(line: StatLine | null | undefined): number | null {
   const exalt = line?.exalt;
   return Number.isSafeInteger(exalt) && exalt! > 0 ? exalt! : null;

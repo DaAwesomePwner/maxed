@@ -74,6 +74,14 @@ pub struct Engine {
     pub(crate) catalog: Arc<Catalog>,
     pub(crate) object_index: BTreeMap<u16, usize>,
     pub(crate) object_name_index: BTreeMap<String, Option<u16>>,
+    pub(crate) character_dirty: bool,
+    pub(crate) class_index: BTreeMap<u16, usize>,
+    #[cfg(test)]
+    pub(crate) character_rebuilds: usize,
+    #[cfg(test)]
+    pub(crate) target_refreshes: usize,
+    pub(crate) target_dirty: BTreeSet<crate::fights::FightKey>,
+    pub(crate) refreshed_quest: Option<crate::fights::FightKey>,
     pub(crate) item_index: BTreeMap<u16, usize>,
     pub(crate) enchant_index: BTreeMap<i32, usize>,
     pub(crate) reconstruction: crate::reconstruction::ReconstructionCoverage,
@@ -116,6 +124,8 @@ pub struct Engine {
     pub(crate) preceding: Option<crate::runs::Preceding>,
     pub(crate) fights: BTreeMap<(i32, u32), crate::fights::Fight>,
     pub(crate) retired_targets: BTreeSet<(i32, u32)>,
+    pub(crate) dropped_fight_targets: BTreeSet<(i32, u32)>,
+    pub(crate) dropped_fight_targets_overflow: bool,
     pub(crate) retired_entities: BTreeMap<i32, crate::world::RetiredEntity>,
     pub(crate) shots: BTreeMap<(i32, u16), crate::combat::Shot>,
     pub(crate) shot_number: u64,
@@ -171,6 +181,12 @@ impl Engine {
                 })
                 .or_insert(Some(object.object_type));
         }
+        let class_index = catalog
+            .classes
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.object_type, i))
+            .collect();
         let item_index = catalog
             .items
             .iter()
@@ -189,6 +205,14 @@ impl Engine {
             object_index,
             object_name_index,
             item_index,
+            class_index,
+            character_dirty: false,
+            #[cfg(test)]
+            character_rebuilds: 0,
+            #[cfg(test)]
+            target_refreshes: 0,
+            target_dirty: BTreeSet::new(),
+            refreshed_quest: None,
             enchant_index,
             reconstruction: Default::default(),
             removed_shots: BTreeMap::new(),
@@ -230,6 +254,8 @@ impl Engine {
             preceding: None,
             fights: BTreeMap::new(),
             retired_targets: BTreeSet::new(),
+            dropped_fight_targets: BTreeSet::new(),
+            dropped_fight_targets_overflow: false,
             retired_entities: BTreeMap::new(),
             shots: BTreeMap::new(),
             shot_number: 0,
@@ -334,6 +360,7 @@ impl Engine {
         run_totals: Option<RunTotals>,
     ) -> LiveSnapshot {
         LiveSnapshot {
+            revision: None,
             instance: self.instance.context.as_ref().map(|context| InstanceLive {
                 context: context.into(),
                 population: self.instance.population(),
@@ -492,6 +519,7 @@ impl Engine {
                 s.ended = Some(s.last_traffic);
                 events.push(EngineEvent::SessionUpdated(s.clone()));
             }
+            self.lose_identity(events);
             self.clear_world();
             self.map = None;
             self.area_kind = AreaKind::Unknown;
@@ -664,6 +692,7 @@ impl Engine {
                 events.push(EngineEvent::SessionUpdated(s.clone()));
             }
         }
+        self.lose_identity(&mut events);
         self.clear_world();
         self.map = None;
         self.area_kind = AreaKind::Unknown;
@@ -691,6 +720,8 @@ impl Engine {
         self.removed_enemies.clear();
         self.loot_tick = 0;
         self.retired_targets.clear();
+        self.dropped_fight_targets.clear();
+        self.dropped_fight_targets_overflow = false;
         self.pair_expiry.clear();
         self.dirty_fights.clear();
     }
@@ -753,7 +784,7 @@ impl Engine {
                 self.shot_expiry.clear();
                 self.local = None;
                 self.clear_entities();
-                self.character = None;
+                self.lose_identity(&mut events);
             }
         }
         if self.capture.state == CaptureState::Recovering
@@ -769,7 +800,7 @@ impl Engine {
                 let replacing = self.local.is_some();
                 if replacing {
                     self.forget_entity(p.objectId, &mut events);
-                    self.character = None;
+                    self.lose_identity(&mut events);
                 }
                 self.create_number += 1;
                 self.death_seen = false;

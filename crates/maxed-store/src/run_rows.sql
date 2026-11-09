@@ -9,7 +9,6 @@
 ), player_inputs AS MATERIALIZED (
     SELECT f.id,f.run_id,f.complete_capture,f.total_damage,f.issue_count,f.ambiguous,
         json_extract(p.json,'$.is_local') AS is_local,p.damage,
-        json_extract(p.json,'$.share') AS share,
         EXISTS(SELECT 1 FROM json_each(p.json,'$.sources') src
             WHERE (json_extract(src.value,'$.estimated')=1
                 AND json_array_length(src.value,'$.reasons')=0)
@@ -20,12 +19,11 @@
     SELECT id,run_id,complete_capture,total_damage,issue_count,ambiguous,
         count(CASE WHEN is_local=1 THEN 1 END) AS locals,
         max(CASE WHEN is_local=1 THEN damage END) AS local_damage,
-        max(CASE WHEN is_local=1 THEN share END) AS supplied_share,
         max(estimated) AS estimated
     FROM player_inputs GROUP BY id
 ), shares AS (
     SELECT run_id,
-        CASE WHEN min(CASE WHEN locals=1 AND supplied_share BETWEEN 0 AND 1
+        CASE WHEN min(CASE WHEN locals=1
             AND total_damage>0 AND total_damage<=1.7976931348623157e308
             AND local_damage BETWEEN 0 AND total_damage AND NOT ambiguous
             THEN 1 ELSE 0 END)=1 AND sum(total_damage)<=1.7976931348623157e308
@@ -43,8 +41,8 @@
 ), details AS (
     SELECT r.ordinal,json_object(
         'run_id',r.id,
-        'character_name',coalesce(json_extract(r.entry_character_json,'$.name'),json_extract(c.json,'$.name')),
-        'class_id',coalesce(json_extract(r.entry_character_json,'$.class_id'),json_extract(c.json,'$.class_id')),
+        'character_name',coalesce(json_extract(r.entry_character_json,'$.name'),json_extract(run_character.json,'$.name')),
+        'class_id',coalesce(json_extract(r.entry_character_json,'$.class_id'),json_extract(run_character.json,'$.class_id')),
         'local_share',CASE WHEN NOT EXISTS(SELECT 1 FROM detail_issues i
             WHERE i.run_id=r.id AND i.value='missing_identity') THEN sh.local_share END,
         'share_partial',json(CASE WHEN NOT r.complete_capture OR coalesce(sh.partial,0)
@@ -58,12 +56,13 @@
             SELECT min(previous_clear.clear_micros)
             FROM all_time_clears previous_clear
             WHERE previous_clear.dungeon=r.dungeon
+              AND previous_clear.account_id=/*account:character:r.character_id*/
               AND (previous_clear.started<r.started
                 OR (previous_clear.started=r.started AND previous_clear.id<r.id))),
         'is_personal_best',json(CASE WHEN m.is_personal_best THEN 'true' ELSE 'false' END)
     ) AS json
     FROM selected r JOIN metrics m ON m.id=r.id LEFT JOIN shares sh ON sh.run_id=r.id
-    LEFT JOIN characters c ON c.id=r.character_id
+    LEFT JOIN characters run_character ON run_character.id=r.character_id
 ), result AS (
     SELECT json_group_array(json(json)) AS payload FROM (SELECT json FROM details ORDER BY ordinal)
 )

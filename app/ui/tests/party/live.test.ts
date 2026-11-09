@@ -600,3 +600,56 @@ it.each(['auto', 'default'] as const)('describes an unpicked %s preset absent fr
   await fireEvent.change(select, { target: { value: 'synth-missing' } });
   expect(page.queries.setPartyPresetPick).toHaveBeenCalledWith('synth-missing');
 });
+
+it.each([
+  { is_local: true, expected: '—' },
+  { is_local: true, maxed_gated: false, expected: '—' },
+  { is_local: true, maxed_gated: true, expected: '8/8' },
+  { is_local: false, expected: '8/8' },
+])('gates the side panel last-profile count with provenance %j', async ({ expected, ...evidence }) => {
+  const detail: PartyPlayerView = {
+    row: { key: 'synthalpha', name: 'SynthAlpha', runs_together: 1, deaths: 0, left_early: 0, last_seen: '5000000' },
+    first_seen: '1000000', runs: [],
+    last_profile: { scope_id: 'synth-scope', player_id: 'SynthAlpha', object_id: 7, ...evidence,
+      maxed: 8, maxed_stats: [20], stats: [], equipment: [], first_seen: '1000000', last_seen: '5000000' },
+  };
+  await mount(view({ members: [member('SynthAlpha', 'pass', { is_local: evidence.is_local })] }), false,
+    { getPartyPlayer: async () => ready(detail) });
+  await fireEvent.click(roster().getByText('SynthAlpha'));
+  await flush();
+  const panel = within(screen.getByRole('complementary', { name: 'Player details' }));
+  const lastGear = panel.getByText('Last gear').nextElementSibling!;
+  expect(lastGear.textContent).toMatch(new RegExp(` · ${expected}$`));
+  if (expected === '—') expect(lastGear.textContent).not.toContain('8/8');
+});
+
+it('keeps waiting beyond three durability checks and refreshes without another event', async () => {
+  const page = await mount(view({ live: false }), true);
+  let durable = '1';
+  page.client.queryStore = async () => ({ state: 'ready', queued: 0, durable, stream_id: 'synth-store', message: '' });
+  page.transport.publishEngineEvent({ stream_id: 'synth-store', sequence: '3', at: '1', event: { run_ended: run({ id: 'synth-run' }) } });
+  await vi.advanceTimersByTimeAsync(6000); await flush();
+  expect(page.queries.getPartyRun).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('Waiting for saved history to catch up.')).toBeTruthy();
+  durable = '3';
+  await vi.advanceTimersByTimeAsync(1000); await flush();
+  expect(page.queries.getPartyRun).toHaveBeenCalledTimes(2);
+});
+
+it.each(['failed', 'changed-stream'] as const)('stops durability polling for %s and recovers through Retry', async reason => {
+  const page = await mount(view({ live: false }), true);
+  const store = vi.fn().mockResolvedValue({ state: reason === 'failed' ? 'failed' : 'ready',
+    queued: 0, durable: '1', stream_id: reason === 'failed' ? 'synth-store' : 'new-stream', message: '' });
+  page.client.queryStore = store;
+  page.transport.publishEngineEvent({ stream_id: 'synth-store', sequence: '3', at: '1', event: { run_ended: run({ id: 'synth-run' }) } });
+  await vi.advanceTimersByTimeAsync(1000); await flush();
+  expect(store).toHaveBeenCalledOnce();
+  expect(page.queries.getPartyRun).toHaveBeenCalledTimes(1);
+  expect(screen.getByText(reason === 'failed' ? /Saving failed/ : 'Waiting for saved history to catch up.')).toBeTruthy();
+  await vi.advanceTimersByTimeAsync(6000); await flush();
+  expect(store).toHaveBeenCalledOnce();
+  store.mockResolvedValue({ state: 'ready', queued: 0, durable: '3', stream_id: 'synth-store', message: '' });
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
+  expect(store).toHaveBeenCalledTimes(2);
+  expect(page.queries.getPartyRun).toHaveBeenCalledTimes(2);
+});

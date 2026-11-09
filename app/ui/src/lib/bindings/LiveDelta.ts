@@ -2,4 +2,4 @@
 import type { LiveSnapshot } from "./LiveSnapshot";
 import type { Sequence } from "./Sequence";
 
-export type LiveDelta = { base_sequence: Sequence, snapshot: LiveSnapshot, removed_fights: Array<string>, removed_drops: Array<string>, };
+export type LiveDelta = { base_sequence: Sequence, base_revision?: Sequence | null, snapshot: LiveSnapshot, removed_fights: Array<string>, removed_drops: Array<string>, };

@@ -108,3 +108,61 @@ pub fn parse_frame(frame: &RawFrame) -> Result<Option<TcpSegment>, ParseError> {
         },
     }))
 }
+
+impl ParseError {
+    /// Recover attribution only from a complete IPv4 address/port prefix.
+    /// Noninitial fragments have no TCP header; never interpret their payload as ports.
+    pub fn affected_flow(self, frame: &RawFrame) -> Option<(FlowKey, Direction)> {
+        let bytes = &frame.bytes;
+        let mut kind = be_u16(bytes, 12).ok()?;
+        let mut start = 14;
+        for _ in 0..2 {
+            if !matches!(kind, 0x8100 | 0x88a8) {
+                break;
+            }
+            kind = be_u16(bytes, start + 2).ok()?;
+            start += 4;
+        }
+        if kind != 0x0800 {
+            return None;
+        }
+        let ip = bytes.get(start..)?;
+        let base = ip.get(..20)?;
+        let ihl = usize::from(base[0] & 15) * 4;
+        let total = usize::from(be_u16(ip, 2).ok()?);
+        if base[0] >> 4 != 4
+            || ihl < 20
+            || base[9] != 6
+            || be_u16(ip, 6).ok()? & 0x1fff != 0
+            || total < ihl + 4
+        {
+            return None;
+        }
+        let ports = ip.get(ihl..ihl + 4)?;
+        let source = Endpoint {
+            ip: base[12..16].try_into().ok()?,
+            port: be_u16(ports, 0).ok()?,
+        };
+        let dest = Endpoint {
+            ip: base[16..20].try_into().ok()?,
+            port: be_u16(ports, 2).ok()?,
+        };
+        match (source.port == 2050, dest.port == 2050) {
+            (true, false) => Some((
+                FlowKey {
+                    client: dest,
+                    server: source,
+                },
+                Direction::ServerToClient,
+            )),
+            (false, true) => Some((
+                FlowKey {
+                    client: source,
+                    server: dest,
+                },
+                Direction::ClientToServer,
+            )),
+            _ => None,
+        }
+    }
+}

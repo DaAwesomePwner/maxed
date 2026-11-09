@@ -228,6 +228,7 @@ fn nested_nonfinite_values_fail_serialization() {
         assert!(serde_json::to_string(&result).is_err());
         let mut item = demo_catalog().items.remove(0);
         item.weapon_firing = Some(WeaponFiringDef {
+            subattack_projectile_indices: None,
             support: CatalogSupport::Supported,
             groups: vec![WeaponAttackGroup {
                 group_id: "synthetic-group".into(),

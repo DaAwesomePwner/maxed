@@ -1,4 +1,5 @@
 use crate::common;
+use crate::common::account_scope_fixture::ACCOUNT;
 use maxed_store::*;
 use maxed_types::*;
 use rusqlite::Connection;
@@ -8,22 +9,28 @@ fn dungeon_stats_session_and_today_scopes() {
     let path = dir.path().join("home");
     let mut db = Connection::open(&path).unwrap();
     migrate(&mut db).unwrap();
-    apply_batch(&mut db, &common::story_events()).unwrap();
-    let reader = open_reader(&path).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut db, &common::story_events()).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let session = reader
-        .home_summary(HomeScope::Session {
-            id: "demo-session".into(),
-        })
+        .home_summary(
+            HomeScope::Session {
+                id: "demo-session".into(),
+            },
+            Some(ACCOUNT),
+        )
         .unwrap()
         .dungeon_stats
         .unwrap();
     let today = reader
-        .home_summary(HomeScope::Today {
-            range: TimeRange {
-                start: Timestamp(0),
-                end: Timestamp(10_000_000),
+        .home_summary(
+            HomeScope::Today {
+                range: TimeRange {
+                    start: Timestamp(0),
+                    end: Timestamp(10_000_000),
+                },
             },
-        })
+            Some(ACCOUNT),
+        )
         .unwrap()
         .dungeon_stats
         .unwrap();
@@ -31,12 +38,15 @@ fn dungeon_stats_session_and_today_scopes() {
     assert_eq!(session.len(), 1);
     assert_eq!(session[0].runs, 1);
     assert!(reader
-        .home_summary(HomeScope::Today {
-            range: TimeRange {
-                start: Timestamp(10_000_000),
-                end: Timestamp(20_000_000)
-            }
-        })
+        .home_summary(
+            HomeScope::Today {
+                range: TimeRange {
+                    start: Timestamp(10_000_000),
+                    end: Timestamp(20_000_000)
+                }
+            },
+            Some(ACCOUNT)
+        )
         .unwrap()
         .dungeon_stats
         .unwrap()
@@ -48,7 +58,8 @@ fn observed_clear_qualification_matches_comparison() {
     let path = dir.path().join("home");
     let mut db = Connection::open(&path).unwrap();
     migrate(&mut db).unwrap();
-    apply_batch(&mut db, &common::story_events()[..2]).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut db, &common::story_events()[..2])
+        .unwrap();
     for i in 0..7 {
         let mut r = demo::demo_run_story().run;
         r.id = format!("r-{i}");
@@ -69,7 +80,7 @@ fn observed_clear_qualification_matches_comparison() {
                 evidence: Evidence::Victory,
             });
         }
-        apply_batch(
+        crate::common::account_scope_fixture::apply_batch(
             &mut db,
             &[common::envelope(i + 3, EngineEvent::RunEnded(r))],
         )
@@ -85,12 +96,12 @@ fn observed_clear_qualification_matches_comparison() {
         at: Timestamp(101_000_000),
         evidence: Evidence::Victory,
     }];
-    apply_batch(
+    crate::common::account_scope_fixture::apply_batch(
         &mut db,
         &[common::envelope(10, EngineEvent::RunEnded(current))],
     )
     .unwrap();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let comparison = reader
         .get_run("comparison-current")
         .unwrap()
@@ -98,12 +109,15 @@ fn observed_clear_qualification_matches_comparison() {
         .comparison
         .unwrap();
     let stats = reader
-        .home_summary(HomeScope::Today {
-            range: TimeRange {
-                start: Timestamp(0),
-                end: Timestamp(100_000_000),
+        .home_summary(
+            HomeScope::Today {
+                range: TimeRange {
+                    start: Timestamp(0),
+                    end: Timestamp(100_000_000),
+                },
             },
-        })
+            Some(ACCOUNT),
+        )
         .unwrap()
         .dungeon_stats
         .unwrap();
@@ -122,22 +136,26 @@ fn dungeon_stats_limit_20() {
     let path = dir.path().join("home");
     let mut db = Connection::open(&path).unwrap();
     migrate(&mut db).unwrap();
-    apply_batch(&mut db, &common::story_events()[..2]).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut db, &common::story_events()[..2])
+        .unwrap();
     for i in 0..60 {
         let mut r = demo::demo_run_story().run;
         r.id = format!("r-{i}");
         r.dungeon = format!("Dungeon-{i:02}");
-        apply_batch(
+        crate::common::account_scope_fixture::apply_batch(
             &mut db,
             &[common::envelope(i + 3, EngineEvent::RunEnded(r))],
         )
         .unwrap();
     }
-    let stats = open_reader(&path)
+    let stats = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .home_summary(HomeScope::Session {
-            id: "demo-session".into(),
-        })
+        .home_summary(
+            HomeScope::Session {
+                id: "demo-session".into(),
+            },
+            Some(ACCOUNT),
+        )
         .unwrap()
         .dungeon_stats
         .unwrap();
@@ -152,7 +170,8 @@ fn dungeon_bests_are_all_time_and_tied_scoped_clears_qualify() {
     let path = dir.path().join("all-time-bests");
     let mut db = Connection::open(&path).unwrap();
     migrate(&mut db).unwrap();
-    apply_batch(&mut db, &common::story_events()[..2]).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut db, &common::story_events()[..2])
+        .unwrap();
     for (i, duration) in [9_000_000, 5_000_000, 5_000_000, 7_000_000, 1_000_000]
         .into_iter()
         .enumerate()
@@ -172,24 +191,27 @@ fn dungeon_bests_are_all_time_and_tied_scoped_clears_qualify() {
                 evidence: Evidence::Victory,
             }]
         };
-        apply_batch(
+        crate::common::account_scope_fixture::apply_batch(
             &mut db,
             &[common::envelope(i as u64 + 3, EngineEvent::RunEnded(run))],
         )
         .unwrap();
     }
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     assert_eq!(
-        reader.dungeon_bests().unwrap(),
+        reader.dungeon_bests(Some(ACCOUNT)).unwrap(),
         vec![DungeonBest {
             dungeon: "PB Dungeon".into(),
             best_clear_micros: 5_000_000,
         }]
     );
     let session = reader
-        .home_summary(HomeScope::Session {
-            id: "demo-session".into(),
-        })
+        .home_summary(
+            HomeScope::Session {
+                id: "demo-session".into(),
+            },
+            Some(ACCOUNT),
+        )
         .unwrap();
     assert_eq!(
         session.dungeon_stats.unwrap()[0].all_time_best_clear_micros,
@@ -203,12 +225,15 @@ fn dungeon_bests_are_all_time_and_tied_scoped_clears_qualify() {
         (50_000_000, false),
     ] {
         let summary = reader
-            .home_summary(HomeScope::Today {
-                range: TimeRange {
-                    start: Timestamp(start),
-                    end: Timestamp(start + 10_000_000),
+            .home_summary(
+                HomeScope::Today {
+                    range: TimeRange {
+                        start: Timestamp(start),
+                        end: Timestamp(start + 10_000_000),
+                    },
                 },
-            })
+                Some(ACCOUNT),
+            )
             .unwrap();
         let rows = summary.dungeon_stats.unwrap();
         let row = &rows[0];
@@ -226,10 +251,11 @@ fn dungeon_bests_exclude_unqualified_clears_and_keep_unknown_null() {
     let path = dir.path().join("no-bests");
     let mut db = Connection::open(&path).unwrap();
     migrate(&mut db).unwrap();
-    apply_batch(&mut db, &common::story_events()[..2]).unwrap();
-    assert!(open_reader(&path)
+    crate::common::account_scope_fixture::apply_batch(&mut db, &common::story_events()[..2])
+        .unwrap();
+    assert!(crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .dungeon_bests()
+        .dungeon_bests(Some(ACCOUNT))
         .unwrap()
         .is_empty());
     for i in 0..5 {
@@ -251,18 +277,21 @@ fn dungeon_bests_exclude_unqualified_clears_and_keep_unknown_null() {
             3 => run.outcome = Some(Outcome::Died),
             _ => run.completed_at = None,
         }
-        apply_batch(
+        crate::common::account_scope_fixture::apply_batch(
             &mut db,
             &[common::envelope(i + 3, EngineEvent::RunEnded(run))],
         )
         .unwrap();
     }
-    let reader = open_reader(&path).unwrap();
-    assert!(reader.dungeon_bests().unwrap().is_empty());
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    assert!(reader.dungeon_bests(Some(ACCOUNT)).unwrap().is_empty());
     let rows = reader
-        .home_summary(HomeScope::Session {
-            id: "demo-session".into(),
-        })
+        .home_summary(
+            HomeScope::Session {
+                id: "demo-session".into(),
+            },
+            Some(ACCOUNT),
+        )
         .unwrap()
         .dungeon_stats
         .unwrap();

@@ -37,6 +37,7 @@ fn first_gear_row_uses_first_seen_and_swaps_use_last_seen() {
 
 fn profile(item: u16, at: u64) -> PlayerProfileView {
     PlayerProfileView {
+        maxed_gated: false,
         scope_id: "scope-a".into(),
         run_id: Some("demo-run".into()),
         player_id: "synthetic-player".into(),
@@ -1166,4 +1167,361 @@ fn player_context_map_scope_keeps_deaths_in_the_observed_map() {
             fight_id: Some("realm-boss".into())
         }]
     );
+}
+
+#[test]
+fn stored_provenance_normalizes_all_profile_reads_without_upgrading_replay() {
+    for local in [true, false] {
+        for gated in [true, false] {
+            for count in [Some(8), None] {
+                let (_dir, path, mut db) = reader_database();
+                let mut p = run_profile("synthetic-player", 1, 500);
+                p.is_local = local;
+                p.maxed_gated = gated;
+                p.maxed = count;
+                p.maxed_stats = vec![20];
+                apply_batch(
+                    &mut db,
+                    &[envelope(8, EngineEvent::PlayerObserved(p.clone()))],
+                )
+                .unwrap();
+                if !gated {
+                    db.execute(
+                        "UPDATE player_profiles SET json=json_remove(json,'$.maxed_gated')",
+                        [],
+                    )
+                    .unwrap();
+                }
+                let raw: String = db
+                    .query_row(
+                        "SELECT json FROM player_profiles WHERE player_id='synthetic-player'",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap();
+                let replay: PlayerProfileView = serde_json::from_str(&raw).unwrap();
+                assert_eq!(replay.maxed_gated, gated);
+                let reader = open_reader(&path).unwrap();
+                let context = reader
+                    .get_player_context("demo-run", "synthetic-player", None, None)
+                    .unwrap()
+                    .unwrap();
+                let run = reader
+                    .get_run_player("demo-run", "synthetic-player")
+                    .unwrap()
+                    .unwrap();
+                let supported = !local || gated;
+                for actual in [context.profile.unwrap(), run.profile.unwrap()] {
+                    let mut expected = p.clone();
+                    if !supported {
+                        expected.maxed = None;
+                        expected.maxed_stats.clear();
+                    }
+                    assert_eq!(actual, expected);
+                }
+                let party = reader.get_party_run("demo-run").unwrap().unwrap();
+                let member = party
+                    .members
+                    .iter()
+                    .find(|m| m.player_id == p.player_id)
+                    .unwrap();
+                assert_eq!(member.maxed, if supported { count } else { None });
+                assert_eq!(member.maxed_gated, gated);
+                apply_batch(&mut db, &[envelope(9, EngineEvent::PlayerObserved(replay))]).unwrap();
+                let raw: String = db
+                    .query_row(
+                        "SELECT json FROM player_profiles WHERE player_id='synthetic-player'",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap();
+                assert_eq!(
+                    serde_json::from_str::<PlayerProfileView>(&raw)
+                        .unwrap()
+                        .maxed_gated,
+                    gated
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn fight_revisions_match_full_replacement_and_only_write_changed_players_and_sources() {
+    fn rows(db: &Connection, table: &str) -> Vec<Vec<rusqlite::types::Value>> {
+        // Legacy unchanged rows may retain a share; it is not stored player data.
+        let columns_sql = if table == "fight_players" {
+            "fight_id,player_id,object_id,damage,dps,rank,json_remove(json,'$.share')"
+        } else {
+            "*"
+        };
+        let mut statement = db
+            .prepare(&format!("SELECT {columns_sql} FROM {table} ORDER BY 1,2,3"))
+            .unwrap();
+        let columns = statement.column_count();
+        statement
+            .query_map([], |row| (0..columns).map(|i| row.get(i)).collect())
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    }
+    let mut actual = database();
+    let mut replacement = database();
+    actual
+        .execute_batch(
+            "CREATE TEMP TABLE writes(table_name TEXT, operation TEXT);
+         CREATE TEMP TRIGGER source_insert AFTER INSERT ON damage_sources BEGIN
+             INSERT INTO writes VALUES('source','insert'); END;
+         CREATE TEMP TRIGGER source_update AFTER UPDATE ON damage_sources BEGIN
+             INSERT INTO writes VALUES('source','update'); END;
+         CREATE TEMP TRIGGER source_delete AFTER DELETE ON damage_sources BEGIN
+             INSERT INTO writes VALUES('source','delete'); END;
+         CREATE TEMP TRIGGER player_update AFTER UPDATE ON fight_players BEGIN
+             INSERT INTO writes VALUES('player','update'); END;",
+        )
+        .unwrap();
+    let mut fight = demo::demo_snapshot().fights.remove(0);
+    let template = fight.players[0].clone();
+    assert!(!template.sources.is_empty());
+    fight.players = (0..40)
+        .map(|i| {
+            let mut player = template.clone();
+            player.player_id = format!("synthetic-{i}");
+            player.object_id = i;
+            player.name = Some(format!("Synthetic{i}"));
+            player.is_local = i == 0;
+            player.sources = vec![template.sources[0].clone(); 3];
+            player
+        })
+        .collect();
+    for revision in 0..7 {
+        match revision {
+            1 => {
+                // First update of an old database must also avoid share-only writes.
+                for p in &fight.players {
+                    actual
+                        .execute(
+                            "UPDATE fight_players SET json=json_set(json,'$.share',?1)
+                        WHERE fight_id=?2 AND player_id=?3",
+                            params![p.share, fight.id, p.player_id],
+                        )
+                        .unwrap();
+                }
+                fight.players[0].sources[0].damage += 1.;
+                fight.players[0].sources[0].hits += 1;
+            }
+            2 => {
+                fight.players[0].sources.remove(0);
+                fight.players[1].sources.push(template.sources[0].clone());
+                fight.players[2].name = Some("Synthetic changed".into());
+            }
+            3 => {
+                fight.players.remove(1);
+                let mut added = template.clone();
+                added.player_id = "added".into();
+                fight.players.push(added);
+            }
+            4 => fight.players.reverse(),
+            5 => fight.players.clear(),
+            6 => fight.players.push(template.clone()),
+            _ => {}
+        }
+        for player in &mut fight.players {
+            player.damage = player.sources.iter().map(|source| source.damage).sum();
+            player.hits = player.sources.iter().map(|source| source.hits).sum();
+        }
+        fight.total_damage = fight.players.iter().map(|player| player.damage).sum();
+        for player in &mut fight.players {
+            player.share = (fight.total_damage > 0.).then(|| player.damage / fight.total_damage);
+        }
+        actual.execute("DELETE FROM writes", []).unwrap();
+        let event = envelope(8 + revision * 2, EngineEvent::FightUpdated(fight.clone()));
+        apply_batch(&mut actual, std::slice::from_ref(&event)).unwrap();
+        // Force the reference path to insert all children from scratch.
+        replacement
+            .execute("DELETE FROM damage_sources WHERE fight_id=?1", [&fight.id])
+            .unwrap();
+        replacement
+            .execute("DELETE FROM fight_players WHERE fight_id=?1", [&fight.id])
+            .unwrap();
+        apply_batch(&mut replacement, &[event]).unwrap();
+        for table in [
+            "fights",
+            "fight_summaries",
+            "fight_players",
+            "damage_sources",
+            "pd_player_contributions",
+            "pd_run_players",
+            "party_run_members",
+            "party_players",
+        ] {
+            assert_eq!(
+                rows(&actual, table),
+                rows(&replacement, table),
+                "{table}, revision {revision}"
+            );
+        }
+        if revision == 1 {
+            let writes: Vec<(String, String)> = actual
+                .prepare("SELECT * FROM writes")
+                .unwrap()
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            let source_writes: Vec<_> = writes
+                .iter()
+                .filter(|(table, _)| table == "source")
+                .collect();
+            assert_eq!(source_writes, [&("source".into(), "update".into())]);
+            // Only the hit player changed; the other 39 derived shares do not write rows.
+            assert_eq!(
+                writes
+                    .iter()
+                    .filter(|(table, operation)| table == "player" && operation == "update")
+                    .count(),
+                1
+            );
+            assert_eq!(count(&actual, "pd_player_contributions"), 40);
+            assert_eq!(count(&actual, "pd_run_players"), 40);
+            assert_eq!(count(&actual, "party_run_members"), 39);
+            assert!(count(&actual, "party_players") >= 39);
+            // Old implementation deleted and inserted all 120 source rows.
+            assert_eq!(count(&actual, "damage_sources"), 120);
+        }
+        actual.execute("DELETE FROM writes", []).unwrap();
+        // A new receipt for the same projection must not rewrite either table.
+        let repeat = envelope(9 + revision * 2, EngineEvent::FightUpdated(fight.clone()));
+        apply_batch(&mut actual, std::slice::from_ref(&repeat)).unwrap();
+        apply_batch(&mut replacement, &[repeat]).unwrap();
+        assert_eq!(count(&actual, "writes"), 0);
+    }
+}
+
+#[test]
+fn every_share_reader_ignores_legacy_player_share() {
+    use crate::common::account_scope_fixture::{attribute, ACCOUNT};
+    for total in [700., 0.] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("shares.sqlite");
+        let mut db = Connection::open(&path).unwrap();
+        migrate(&mut db).unwrap();
+        apply_batch(&mut db, &story_events()).unwrap();
+        let mut fight = demo::demo_snapshot().fights.remove(0);
+        fight.issues.clear();
+        fight.total_damage = total;
+        let template = fight.players[0].clone();
+        fight.players = (0..3)
+            .map(|i| {
+                let mut p = template.clone();
+                p.player_id = format!("share-player-{i}");
+                p.object_id = i;
+                p.is_local = i == 0;
+                p.damage = if total > 0. {
+                    (i + 1) as f64 * 100.
+                } else {
+                    0.
+                };
+                p.share = maxed_engine::share(p.damage, total);
+                p
+            })
+            .collect();
+        apply_batch(
+            &mut db,
+            &[envelope(8, EngineEvent::FightUpdated(fight.clone()))],
+        )
+        .unwrap();
+        attribute(&db);
+        let reader = open_reader(&path).unwrap();
+        let snapshot = || {
+            let players: Vec<_> = fight
+                .players
+                .iter()
+                .map(|p| {
+                    let by_id = reader
+                        .get_player_by_id(&fight.id, &p.player_id)
+                        .unwrap()
+                        .unwrap();
+                    let by_object = reader
+                        .get_player_breakdown(&fight.id, p.object_id)
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(by_id.share, p.share);
+                    assert_eq!(by_object.share, p.share);
+                    let strip = reader
+                        .run_fight_strip("demo-run", Some(&p.player_id))
+                        .unwrap();
+                    assert!(!strip.is_empty());
+                    assert_eq!(strip[0].share, p.share);
+                    let run = reader
+                        .get_run_player("demo-run", &p.player_id)
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(run.fights[0].share, p.share);
+                    json!([by_id, by_object, strip, run])
+                })
+                .collect();
+            json!([
+                players,
+                reader
+                    .list_runs(crate::common::filter(RunSort::Newest, 30))
+                    .unwrap(),
+                reader
+                    .home_summary(
+                        HomeScope::Session {
+                            id: "demo-session".into()
+                        },
+                        Some(ACCOUNT)
+                    )
+                    .unwrap(),
+                reader.get_party_run("demo-run").unwrap(),
+                reader.get_run("demo-run").unwrap(),
+                reader.run_fight_strip("demo-run", None).unwrap()
+            ])
+        };
+        // Model old databases, including the zero-total NULL share.
+        for p in &fight.players {
+            db.execute(
+                "UPDATE fight_players SET json=json_set(json,'$.share',?1)
+                WHERE fight_id=?2 AND player_id=?3",
+                params![p.share, fight.id, p.player_id],
+            )
+            .unwrap();
+        }
+        let legacy = snapshot();
+        // Deliberately stale shares must never affect any read surface.
+        db.execute(
+            "UPDATE fight_players SET json=json_set(json,'$.share',0.99)",
+            [],
+        )
+        .unwrap();
+        assert_eq!(snapshot(), legacy);
+        db.execute(
+            "UPDATE fight_players SET json=json_remove(json,'$.share')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(snapshot(), legacy);
+        // Player drill-down needs only compact summaries, even if full fight JSON is damaged.
+        db.execute("UPDATE fights SET json='malformed'", [])
+            .unwrap();
+        for p in &fight.players {
+            assert_eq!(
+                reader
+                    .get_player_by_id(&fight.id, &p.player_id)
+                    .unwrap()
+                    .unwrap()
+                    .share,
+                p.share
+            );
+            assert_eq!(
+                reader
+                    .get_player_breakdown(&fight.id, p.object_id)
+                    .unwrap()
+                    .unwrap()
+                    .share,
+                p.share
+            );
+        }
+    }
 }

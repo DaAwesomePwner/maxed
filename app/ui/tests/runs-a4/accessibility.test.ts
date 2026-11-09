@@ -6,7 +6,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { HistoryReply } from '../../src/lib/bindings/HistoryReply';
 import type { RunPage } from '../../src/lib/bindings/RunPage';
 import type { RunStory } from '../../src/lib/bindings/RunStory';
-import { DENSE_STORY_ROWS } from '../../src/lib/phase2/contracts';
 import SourceBreakdown from '../../src/lib/runs/SourceBreakdown.svelte';
 import { advance, click, deferred, flush, main, mountRuns, ready, region, run, runPage, saved, source, story, player } from '../runs/fixtures';
 

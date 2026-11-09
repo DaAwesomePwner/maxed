@@ -10,7 +10,15 @@ impl SnapshotEncoder {
         let result = match &self.previous {
             Some(previous)
                 if previous.stream_id == snapshot.stream_id
-                    && previous.sequence.0 < snapshot.sequence.0 =>
+                    && match (previous.revision, snapshot.revision) {
+                        // A gap means an intervening materialization may have
+                        // reached a direct reader. Its base differs from ours.
+                        (Some(before), Some(after)) => {
+                            before.0 .0.checked_add(1) == Some(after.0 .0)
+                        }
+                        (None, None) => previous.sequence.0 < snapshot.sequence.0,
+                        _ => false,
+                    } =>
             {
                 let mut changes = snapshot.clone();
                 let fights: BTreeMap<_, _> =
@@ -29,6 +37,7 @@ impl SnapshotEncoder {
                     snapshot.drops.iter().map(|row| &row.id).collect();
                 LiveSnapshotUpdate::Delta(LiveDelta {
                     base_sequence: previous.sequence,
+                    base_revision: previous.revision,
                     snapshot: changes,
                     removed_fights: fights
                         .keys()
@@ -117,6 +126,45 @@ mod tests {
     use maxed_types::{EngineEvent, EventEnvelope, PlayerSeries, Sequence, TargetKind, Timestamp};
 
     #[test]
+    fn silent_snapshot_uses_revision_as_delta_identity() {
+        let mut encoder = SnapshotEncoder::default();
+        let mut snapshot = maxed_types::demo::demo_snapshot();
+        snapshot.revision = Some(Sequence(Timestamp(1)));
+        assert!(matches!(
+            encoder.encode(snapshot.clone()),
+            LiveSnapshotUpdate::Full(_)
+        ));
+        snapshot.revision = Some(Sequence(Timestamp(2)));
+        snapshot.map = Some("changed metadata".into());
+        let LiveSnapshotUpdate::Delta(delta) = encoder.encode(snapshot.clone()) else {
+            panic!("new revision at the same event watermark must be a delta");
+        };
+        assert_eq!(delta.base_sequence, snapshot.sequence);
+        assert_eq!(delta.base_revision, Some(Sequence(Timestamp(1))));
+        assert_eq!(delta.snapshot.revision, snapshot.revision);
+        assert_eq!(delta.snapshot.map, snapshot.map);
+    }
+
+    #[test]
+    fn queried_revision_gap_forces_full_then_resumes_deltas() {
+        let mut encoder = SnapshotEncoder::default();
+        let mut snapshot = maxed_types::demo::demo_snapshot();
+        snapshot.revision = Some(Sequence(Timestamp(10)));
+        encoder.encode(snapshot.clone());
+        // A direct reader got revision 11; a later transaction materialized 12.
+        snapshot.revision = Some(Sequence(Timestamp(12)));
+        assert!(matches!(
+            encoder.encode(snapshot.clone()),
+            LiveSnapshotUpdate::Full(_)
+        ));
+        snapshot.revision = Some(Sequence(Timestamp(13)));
+        let LiveSnapshotUpdate::Delta(delta) = encoder.encode(snapshot) else {
+            panic!("consecutive publications should resume deltas");
+        };
+        assert_eq!(delta.base_revision, Some(Sequence(Timestamp(12))));
+    }
+
+    #[test]
     fn history_timeline_presentation_keeps_refresh_identity_and_flags() {
         let update = maxed_types::ScopeTimelineUpdate {
             scope_id: "synthetic-scope".into(),
@@ -158,6 +206,7 @@ mod tests {
     #[test]
     fn player_observation_presentation_is_unchanged() {
         let profile = maxed_types::PlayerProfileView {
+            maxed_gated: false,
             scope_id: "synthetic-scope".into(),
             run_id: Some("synthetic-run".into()),
             player_id: "synthetic-player".into(),

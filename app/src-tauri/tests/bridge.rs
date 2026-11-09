@@ -134,6 +134,7 @@ fn every_event_bypasses_the_gate_and_shutdown_flush_preserves_order() {
                 Publication::Snapshot(_) => 1001,
                 Publication::Capture(_) => 1002,
                 Publication::PartyChanged(_) => 1003,
+                Publication::AccountHistoryChanged(_) => 1004,
             };
             values.lock().unwrap().push(value);
             Ok(())

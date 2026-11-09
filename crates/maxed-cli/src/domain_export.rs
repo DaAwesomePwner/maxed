@@ -1,6 +1,5 @@
 //! Passive, deterministic domain projection. Opaque engine identities stay internal.
 use crate::{domain_compare::DomainError, CliError, Pipeline, ReplayReport};
-use maxed_capture::parse_frame;
 use maxed_engine::{Engine, EngineConfig};
 use maxed_protocol::{canonical::lower_hex, DecodeEvent, Diagnostic, Packet};
 use maxed_recording::PcapReader;
@@ -13,7 +12,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
-    io::{BufReader, Read, Seek, SeekFrom, Write},
+    io::{BufReader, Read, Write},
     path::Path,
     sync::Arc,
 };
@@ -248,6 +247,7 @@ fn consume(
     projection: &mut Projection,
     report: &mut ReplayReport,
     events: Vec<DecodeEvent>,
+    observed: bool,
 ) -> Result<(), CliError> {
     for event in events {
         report.observe(&event);
@@ -257,7 +257,11 @@ fn consume(
                     projection.pending_map = Some(projection.maps.len());
                     projection.maps.push(map.name.clone());
                 }
-                engine.apply(p)
+                if observed {
+                    engine.apply_observed(p)
+                } else {
+                    engine.apply(p)
+                }
             }
             DecodeEvent::Packet(p) => {
                 engine.diagnostic(p.conn, p.dir, p.at, Diagnostic::Recovering)
@@ -277,9 +281,25 @@ fn consume(
     Ok(())
 }
 
+// Hash the bytes delivered to PcapReader, never a separate pre-pass.
+struct HashingReader<'a> {
+    file: File,
+    hash: &'a mut Sha256,
+}
+impl Read for HashingReader<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.file.read(buffer)?;
+        self.hash.update(&buffer[..n]);
+        Ok(n)
+    }
+}
+
 /// Export to two CREATE_NEW files. Failure removes only files this invocation created.
 /// No packet values, account identities, stream IDs or local paths are serialized.
 pub fn export_domain(input: &Path, catalog: &Path, output: &Path) -> Result<(), CliError> {
+    let output = crate::record::private_output_path(output)?;
+    let output = output.as_path();
+    let meta_path = crate::record::private_output_path(&crate::decode::metadata_path(output))?;
     let catalog_file = File::open(catalog)?;
     let mut bytes = Vec::new();
     catalog_file
@@ -296,19 +316,11 @@ pub fn export_domain(input: &Path, catalog: &Path, output: &Path) -> Result<(), 
         serde_json::from_value(catalog_json).map_err(|_| DomainError::Catalog)?;
     let mut engine = Engine::new(EngineConfig::default(), Arc::new(catalog))
         .map_err(|_| DomainError::Catalog)?;
-    let mut input = File::open(input)?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0; 65536];
-    loop {
-        let n = input.read(&mut buffer)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buffer[..n]);
-    }
-    let input_hash = lower_hex(&hasher.finalize());
-    input.seek(SeekFrom::Start(0))?;
-    let mut reader = PcapReader::new(BufReader::new(input))?;
+    let mut reader = PcapReader::new(BufReader::new(HashingReader {
+        file: File::open(input)?,
+        hash: &mut hasher,
+    }))?;
     let mut pipeline = Pipeline::default();
     let mut projection = Projection::default();
     let mut report = ReplayReport::default();
@@ -316,22 +328,29 @@ pub fn export_domain(input: &Path, catalog: &Path, output: &Path) -> Result<(), 
     while let Some(frame) = reader.next_frame()? {
         at = Timestamp(at.0.max(frame.at.0));
         report.frames += 1;
-        if parse_frame(&frame)
-            .ok()
-            .flatten()
-            .is_some_and(|s| !s.bytes.is_empty())
-        {
-            projection.consume(engine.observe_traffic(frame.at))?;
+        let frame_at = frame.at;
+        let output = pipeline.push_frame(frame);
+        if output.trusted_traffic {
+            projection.consume(engine.observe_traffic(frame_at))?;
         }
         consume(
             &mut engine,
             &mut projection,
             &mut report,
-            pipeline.push(frame),
+            output.events,
+            true,
         )?;
     }
-    consume(&mut engine, &mut projection, &mut report, pipeline.finish())?;
+    consume(
+        &mut engine,
+        &mut projection,
+        &mut report,
+        pipeline.finish(),
+        false,
+    )?;
     projection.consume(engine.finish(at, FightEnd::CaptureStopped))?;
+    drop(reader);
+    let input_hash = lower_hex(&hasher.finalize());
     let records = projection.records()?;
     let header = json!({"schema":"maxed-domain-v1", "inputSha256":input_hash,
         "catalogSha256":catalog_hash, "clock":"tick-receipt-ms-v1"});
@@ -342,7 +361,6 @@ pub fn export_domain(input: &Path, catalog: &Path, output: &Path) -> Result<(), 
         "decodeFailures":report.failures, "unsupportedFrames":pipeline.unsupported_frames(),
         "unmappedFights":projection.unmapped_fights.len(), "issues":projection.issues,
         "reconstruction":engine.reconstruction_coverage()});
-    let meta_path = crate::decode::metadata_path(output);
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -383,6 +401,43 @@ pub fn export_domain(input: &Path, catalog: &Path, output: &Path) -> Result<(), 
 mod tests {
     use super::*;
     use maxed_types::{EventEnvelope, EvidenceAt, Outcome};
+
+    #[test]
+    fn hashing_reader_tracks_mutated_bytes_as_they_are_read() {
+        use std::io::{Seek, SeekFrom};
+        struct RemoveFile(std::path::PathBuf);
+        impl Drop for RemoveFile {
+            fn drop(&mut self) {
+                let _ = fs::remove_file(&self.0);
+            }
+        }
+        let path = std::env::temp_dir().join(format!("maxed-domain-hash-{}", std::process::id()));
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        // Install the guard only after CREATE_NEW succeeds; never remove another file.
+        let cleanup = RemoveFile(path.clone());
+        // Shadow the handle so it closes before cleanup during unwinding (Windows).
+        let mut file = file;
+        file.write_all(b"old-prefix-old-tail").unwrap();
+        let mut hash = Sha256::new();
+        let mut reader = HashingReader {
+            file: File::open(&path).unwrap(),
+            hash: &mut hash,
+        };
+        let mut observed = vec![0; 11];
+        reader.read_exact(&mut observed).unwrap();
+        file.seek(SeekFrom::Start(0)).unwrap();
+        file.write_all(b"new-prefix-new-tail").unwrap();
+        reader.read_to_end(&mut observed).unwrap();
+        drop(reader);
+        assert_eq!(observed, b"old-prefix-new-tail");
+        assert_eq!(hash.finalize(), Sha256::digest(&observed));
+        drop(file);
+        drop(cleanup);
+    }
 
     fn events(stream: &str) -> Vec<EventEnvelope> {
         let root =
@@ -671,7 +726,12 @@ mod tests {
         let mut projection = Projection::default();
         let mut report = ReplayReport::default();
         while let Some(frame) = reader.next_frame().unwrap() {
-            for mut event in pipeline.push(frame) {
+            let at = frame.at;
+            let batch = pipeline.push_frame(frame);
+            if batch.trusted_traffic {
+                projection.consume(engine.observe_traffic(at)).unwrap();
+            }
+            for mut event in batch.events {
                 if let DecodeEvent::Packet(p) = &mut event {
                     if let Packet::Update(update) = &mut p.packet {
                         // The demo's Realm target is object 4. Add a lower-ID target.
@@ -706,7 +766,8 @@ mod tests {
                                 objectId: damage.objectId,
                             }),
                         };
-                        consume(&mut engine, &mut projection, &mut report, vec![event]).unwrap();
+                        consume(&mut engine, &mut projection, &mut report, vec![event], true)
+                            .unwrap();
                         let first = &engine.snapshot().fights[0];
                         assert_eq!(first.target_id, 4);
                         assert_eq!(first.total_damage, 0.);
@@ -716,6 +777,7 @@ mod tests {
                             &mut projection,
                             &mut report,
                             vec![DecodeEvent::Packet(second)],
+                            true,
                         )
                         .unwrap();
                         assert!(engine
@@ -735,7 +797,7 @@ mod tests {
                         return;
                     }
                 }
-                consume(&mut engine, &mut projection, &mut report, vec![event]).unwrap();
+                consume(&mut engine, &mut projection, &mut report, vec![event], true).unwrap();
             }
         }
         panic!("demo fixture did not emit its first DAMAGE report");

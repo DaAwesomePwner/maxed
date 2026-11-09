@@ -105,6 +105,7 @@ The linked GUI delegates XML loading to `Equip`/`Weapon`; those same-revision so
 | Omitted fields | No subattacks + explicit item rate: projectile 0, omitted item count 1. [Weapon][x-weapon]. |
 | Missing subattack count | Missing `NumProjectiles` has no supported positive default. [Weapon][x-weapon]. |
 | Missing rate / reference | No default is adopted for missing item rate or `projectileId`. [Weapon][x-weapon]. |
+| PLAYERSHOOT wire lookup | With `<Subattack>` entries, `projectileId` is the XML-order subattack index; wire `-1` selects subattack 0 and then its projectile reference. A null/missing reference remains `missingProjectileDefinition`. Without a subattack mapping, wire `-1` selects projectile index 0 directly. |
 | Projectile lookup | Groups resolve the `Projectile` attribute `id`, not list position. [Equip][x-equip]. |
 | Damage | Existing fixed `Damage` and ranged `MinDamage`/`MaxDamage` reconstruction stays intact. |
 | Fire together | Plain subattacks are summed in this reference model. [GUI lines 449–467][x-gui]. |
@@ -146,6 +147,24 @@ Version 12 invalidates version 11 fingerprints and manifests so old additions re
 Catalog format stays at 1. Rebuild errors preserve the prior publication; native capture already handles these
 errors with an unavailable catalog and missing-assets coverage (`app/src-tauri/src/runtime/storage.rs:101–110`).
 This extraction change does not alter that fallback or claim live capture verification.
+
+## History classification metadata
+
+The asset bridge retains one immutable, shared `CatalogQueryData` per published
+catalog fingerprint. It prepares normalized tier/potion SQL parameters, the UT/ST
+item set and representative potion item types once. Requests clone its Arc-backed
+handle; their history keys contain only a process-local generation identity and
+validation status. Replacing the catalog changes every catalog-dependent history
+key, including run recap. Recap only consumes UT/ST membership and retains its
+previous behavior for unrelated tier values exceeding loot/HUD metadata limits.
+Failed selections retain the previous metadata alongside
+the last-good catalog. Synthetic demo mode uses its own shared metadata instance.
+
+`PotionCount.object_type` supplies the HUD sprite lookup directly. Representatives
+prefer the exact base potion name for the classified stat, then the lowest object
+type; ties between base definitions also use the lowest type. Missing
+classification remains `None`; Home does not search item names or duplicate potion
+classification rules. Counts and stat grouping still come from the native catalog.
 
 ## Cache and cancellation
 

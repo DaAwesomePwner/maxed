@@ -5,5 +5,5 @@ SELECT session_id,dungeon,started,outcome='cleared',
             AND kind IN ('victory','completion_dialogue'))
         THEN completed_at-started END AS clear_micros,
     EXISTS(SELECT 1 FROM drops INDEXED BY drops_white_runs
-        WHERE run_id=runs.id AND bag_rank=255) AS has_white
+        WHERE run_id=runs.id AND bag_rank=255 AND /*account:drop:drops*/=/*account:run:?1*/) AS has_white
 FROM runs WHERE id=?1

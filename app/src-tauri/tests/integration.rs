@@ -38,6 +38,7 @@ fn history_commands_match_durable_live_story_after_stop() {
     h.service.start().unwrap();
     h.story_to(12_000_000);
     h.runtime.stop_and_flush().unwrap();
+    seed_home_rate_period(&h);
     let before = h.runtime.store_status();
     let reader = h.reader();
     let page = history_ready(tauri::async_runtime::block_on(
@@ -94,11 +95,49 @@ fn history_commands_match_durable_live_story_after_stop() {
             end: Timestamp(i64::MAX as u64),
         },
     };
+    assert!(
+        reader
+            .home_summary(scope.clone(), reader.current_account().unwrap().as_deref())
+            .unwrap()
+            .runs
+            > 0
+    );
     assert_eq!(
         history_ready(tauri::async_runtime::block_on(
             h.runtime.home_summary(scope.clone())
         )),
-        reader.home_summary(scope).unwrap(),
+        reader
+            .home_summary(scope.clone(), reader.current_account().unwrap().as_deref())
+            .unwrap(),
+    );
+    let expected = reader
+        .home_hud(
+            scope.clone(),
+            reader.current_account().unwrap().as_deref(),
+            &[],
+            &[],
+        )
+        .unwrap();
+    assert!(expected.fame_per_hour.is_some());
+    assert!(
+        reader
+            .scope_loot(
+                scope.clone(),
+                reader.current_account().unwrap().as_deref(),
+                None,
+                100,
+                &[]
+            )
+            .unwrap()
+            .total_bags
+            > 0
+    );
+    assert_eq!(
+        history_ready(tauri::async_runtime::block_on(
+            h.runtime
+                .home_hud(scope, maxed_store::CatalogQueryData::new(&[], &[]))
+        )),
+        expected
     );
     assert_eq!(h.runtime.store_status(), before);
 }
@@ -1045,4 +1084,53 @@ fn recording_changes_keep_the_worker_stream_session_and_open_fights() {
     wait(|| h.runtime.snapshot().at.0 >= 12_000_000);
     assert_eq!(h.runtime.snapshot().stream_id, before.stream_id);
     h.service.stop().unwrap();
+}
+
+// Extend only this test's stored synthetic identity period beyond the HUD's
+// five-minute rate threshold; replay observations remain the comparison payload.
+fn seed_home_rate_period(h: &Harness) {
+    let snapshot = h.runtime.snapshot();
+    let db = rusqlite::Connection::open(h.root.path().join("live.sqlite3")).unwrap();
+    let json:String=db.query_row("SELECT json FROM characters WHERE account_id=(SELECT account_id FROM current_account) LIMIT 1",[],|r|r.get(0)).unwrap();
+    let character: CharacterView = serde_json::from_str(&json).unwrap();
+    assert!(character.account_id.is_some());
+    let mut session = snapshot.session.unwrap();
+    let start = session.last_traffic;
+    session.last_traffic = Timestamp(start.0 + 600_000_000);
+    session.ended = Some(session.last_traffic);
+    let events = [
+        EngineEvent::SessionUpdated(session),
+        EngineEvent::CharacterUpdated(character.clone()),
+        EngineEvent::LocalIdentityChanged {
+            at: start,
+            character_id: Some(character.id.clone()),
+            account_id: character.account_id,
+        },
+        EngineEvent::FameChanged {
+            at: Timestamp(start.0 + 1),
+            character_id: character.id.clone(),
+            fame: 10_000,
+        },
+        EngineEvent::FameChanged {
+            at: Timestamp(start.0 + 599_000_000),
+            character_id: character.id,
+            fame: 10_010,
+        },
+    ];
+    let events: Vec<_> = events
+        .into_iter()
+        .enumerate()
+        .map(|(i, event)| EventEnvelope {
+            fight_chart_omitted: false,
+            stream_id: "synthetic-rate-test".into(),
+            sequence: Sequence(Timestamp(i as u64 + 1)),
+            at: start,
+            event,
+        })
+        .collect();
+    maxed_store::apply_batch(
+        &mut rusqlite::Connection::open(h.root.path().join("live.sqlite3")).unwrap(),
+        &events,
+    )
+    .unwrap();
 }

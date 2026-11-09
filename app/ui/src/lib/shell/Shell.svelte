@@ -21,6 +21,7 @@
   import { invalidatesHomeHistory } from '../bridge/live';
   import { observePresentationVisibility } from '../bridge/visibility';
   import { createHistoryCache, type HistoryCache } from '../runs/history-cache';
+  import { runInvalidationRoute } from '../runs/invalidation';
   import { invalidatesSavedHistory } from './history-invalidation';
   import { notifyEventObserver } from './event-observers';
   import { createLogsPending, matchesPendingView } from '../logs/pending';
@@ -115,7 +116,8 @@
   };
   const dungeonMute = createDungeonMute(alerts, () => mounted && !preview && nativeDemo === false);
   setContext(DUNGEON_MUTE, dungeonMute);
-  const cache = untrack(() => historyCache) ?? createHistoryCache({ invalidates: invalidatesSavedHistory, route: () => router?.route });
+  // Read the current relationship so run-scoped notices invalidate standalone fight-player routes.
+  const cache = untrack(() => historyCache) ?? createHistoryCache({ invalidates: invalidatesSavedHistory, route: () => runInvalidationRoute(router?.route, relationship) });
   setContext<ShellConnection>(SHELL_CONNECTION, { character: characterController, capture: sharedCapture, snapshot: sharedSnapshot, historyCache: cache,
     onEvent: receive => { eventObservers.add(receive); return () => { eventObservers.delete(receive); }; },
     homeRecap, recapPresentation: homeRecap.presentation, dismissHomeRecap: homeRecap.dismiss,
@@ -136,6 +138,29 @@
   let setupStream: string | null = null;
   let setupRetry: ReturnType<typeof setTimeout> | undefined;
   let errors = $state({ captureSubscription: '', captureAction: '', snapshot: '', store: '' });
+  let unsavedClose = $state(false);
+  let unsavedDialog: HTMLDivElement | undefined = $state();
+  $effect(() => { if (unsavedClose) unsavedDialog?.focus(); });
+  let pendingSummaries = $state(false);
+  $effect(() => {
+    if (preview) return;
+    let disposed = false;
+    let release: (() => void) | undefined;
+    void client.onUnsavedClose(() => { unsavedClose = true; }).then(stop => {
+      if (disposed) stop(); else release = stop;
+    }).catch(() => { /* Store failure still exposes recovery actions. */ });
+    return () => { disposed = true; release?.(); };
+  });
+  async function recoverStore(discard = false) {
+    if (busy || preview) return;
+    busy = true;
+    try {
+      if (discard) await client.exitWithoutSaving();
+      else { await client.retryStore(); store = await client.queryStore(); pendingSummaries = false; }
+      unsavedClose = false; errors.captureAction = '';
+    } catch { errors.captureAction = discard ? 'Couldn’t exit. Retry.' : 'Couldn’t save. Retry saving.'; }
+    finally { busy = false; }
+  }
   let captureError = $derived([errors.captureSubscription, errors.captureAction].filter(Boolean).join(' '));
   let busy = $state(false);
   let router = $state<Router>();
@@ -154,11 +179,26 @@
   let missingRow = $state(false);
   let observedStream: string | null = null;
   const observeRail = createHomeObservation({ pauseOnCaptureRecovery: true });
+  let accountRailRevision = $state(0);
+  $effect(() => {
+    const owner = client;
+    let active = true;
+    let revision: number | null = null;
+    const release = owner.onAccountHistoryChanged(notice => {
+      if (!active || revision === notice.revision) return;
+      revision = notice.revision;
+      if (notice.reason === 'account_switched') {
+        observeRail.historyChanged(); railSnapshot = null; accountRailRevision++;
+      }
+    });
+    return () => { active = false; void release.then(stop => stop()); };
+  });
   let railSnapshot = $state.raw<LiveSnapshot | null>(null);
   let railPaused = $state(false);
   let view = $derived(railView(railSnapshot, visuals, railPaused));
   $effect(() => {
     const next = snapshot, status = capture, state = liveState;
+    void accountRailRevision;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const update = () => untrack(() => {
       const observation = observeRail(next, status, state, performance.now());
@@ -206,7 +246,7 @@
   function historyApplied(key: string, required: string | null) {
     logsPending.applied(key, required); pendingRevision++;
   }
-  const historyInvalidates = (event: EventEnvelope) => invalidatesSavedHistory(router?.route, event);
+  const historyInvalidates = (event: EventEnvelope) => invalidatesSavedHistory(runInvalidationRoute(router?.route, relationship), event);
   const historyInvalidated = (event: EventEnvelope) => invalidatesHomeHistory(event) || historyInvalidates(event);
   function rowsRendered(key: string) {
     if (key !== routeRowsKey) return;
@@ -391,6 +431,7 @@
       },
       store: (next) => { store = next; },
       event: (next) => {
+        if (observeRail.onEvent(next)) { railSnapshot = null; accountRailRevision++; }
         cache.observe(next);
         // Home applies ordered events within the same presentation transaction.
         // Consume every occurrence before Svelte batches the latest-event prop.
@@ -405,7 +446,7 @@
         if (historyInvalidated(next) && (historyRequired === null || BigInt(next.sequence) > BigInt(historyRequired))) {
           historyRequired = next.sequence; historyInitial = false;
         }
-        if ((route?.kind === 'home' ? invalidatesHomeHistory(next) : invalidatesSavedHistory(route, next))
+        if ((route?.kind === 'home' ? invalidatesHomeHistory(next) : historyInvalidates(next))
           && (routeRequired === null || BigInt(next.sequence) > BigInt(routeRequired))) {
           routeRequired = next.sequence;
         }
@@ -439,7 +480,7 @@
     if (busy || preview) return;
     busy = true; errors.captureAction = '';
     try { await (start ? client.startCapture() : client.stopCapture()); }
-    catch { if (mounted) errors.captureAction = 'Capture failed. Retry.'; }
+    catch (error) { if (mounted) { pendingSummaries = String(error).includes('Pending summaries are not saved'); errors.captureAction = 'Capture failed. Retry.'; } }
     finally { if (mounted) busy = false; }
   }
   function save() {
@@ -540,10 +581,21 @@
     {#if navigation && router}
       {#if preview}<p class="preview-note">Preview</p>{/if}
       {#if liveState.phase === 'resyncing'}<DebugNote text="Some updates may be missing." />{/if}
-      {#if store?.state === 'failed'}
-        <p class="store-warning" role="status">Couldn't save. Retry.</p>
-        <DebugNote text={`Latest durable sequence: ${store.durable ?? "unavailable"}`} />
-      {:else if liveState.historyFailed || errors.store || !store}<p class="storage-note">Storage Error</p>
+      {#if unsavedClose}
+        <div bind:this={unsavedDialog} role="alertdialog" tabindex="-1" aria-label="Unsaved changes" aria-describedby="unsaved-description">
+          <p id="unsaved-description">Changes are not saved. Exiting without saving will discard pending summaries.</p>
+          <button disabled={busy || preview} onclick={() => recoverStore()}>Retry saving</button>
+          <button disabled={busy || preview} onclick={() => recoverStore(true)}>Exit without saving</button>
+          <button disabled={busy} onclick={() => { unsavedClose = false; }}>Keep Maxed open</button>
+        </div>
+      {/if}
+      {#if store?.state === 'failed' || pendingSummaries}
+        {#if pendingSummaries || (store?.queued ?? 0) > 0}
+          <p class="store-warning" role="status">Couldn't save. Retry.</p>
+          {#if !unsavedClose}<button disabled={busy || preview} onclick={() => recoverStore()}>Retry saving</button>{/if}
+        {:else if !unsavedClose}<p class="store-warning" role="status">Couldn't save. Storage is unavailable; use Start Capture to try again.</p>{/if}
+        <DebugNote text={`Latest durable sequence: ${store?.durable ?? "unavailable"}`} />
+      {:else if liveState.historyFailed || errors.store}<p class="storage-note">Storage Error</p>
       {/if}
       <h1 class:sr-only={homeRoute || ['runs', 'run', 'fight', 'player', 'run-player', 'loot', 'item', 'logs', 'alerts'].includes(navigation.entry.route.kind)} tabindex="-1">{routeTitle(navigation.entry.route)}</h1>
       <div class:home-content={homeRoute} class:route-content={!homeRoute}>

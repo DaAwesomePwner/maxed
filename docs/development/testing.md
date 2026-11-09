@@ -10,6 +10,8 @@ cargo test --locked --offline --workspace
 cargo fmt --all -- --check
 cargo clippy --locked --offline --workspace --all-targets -- -D warnings
 cargo clippy --locked --offline -p maxed-app --all-targets --features perf-live -- -D warnings
+cargo clippy --locked --offline -p maxed-app --all-targets --features updater-signing-tool -- -D warnings
+cargo test --locked --offline -p maxed-app --features updater-signing-tool --test integration updater_package::
 npm --prefix app/ui test
 npm --prefix app/ui run test:ui
 npm --prefix app/ui run check
@@ -105,15 +107,28 @@ paths are used. Pull requests whose `Cargo.lock` or toolchain differs from main
 fall back to the newest cache with the same job prefix; main, schedule and
 dispatch runs restore exact keys only, so the caches they save never carry stale
 artifacts from an older lockfile.
-Five parallel jobs run: `rust-lint` (fmt and both clippy checks), `rust-test`
+Six parallel jobs run: `rust-lint` (fmt and all clippy checks), `rust-test`
 (workspace tests excluding maxed-store, then bindings freshness), `store-test`
-(maxed-store tests), `ui` (all five UI scripts), and `packaging` (offline memory
-tooling and packaging/collector checks). Each Rust job has its own cache key.
-`store-test` runs as three matrix shards using `cargo nextest run --partition
-count:N/3`, because its SQLite integration suite dominates wall time. The job
-downloads a pinned `cargo-nextest` release and checks its SHA-256 before use.
-Shard 1 also runs the crate's doctests, which nextest does not run, and is the
-only shard that saves the cache. The store and workspace test steps point
+(maxed-store tests), `ui` (svelte-check, node tests, build and the Vitest
+smoke-replay file), `ui-vitest` (every other Vitest file) and `packaging`
+(offline memory tooling and packaging/collector checks). Each Rust job has its
+own cache key. The existing Windows Rust jobs also lint the
+`updater-signing-tool` feature and run the `integration` target filtered to
+`updater_package::` with nextest. This builds the verifier binary and exercises
+the real signing preflight with disposable keys and the locked Tauri CLI;
+production signing secrets are never provided.
+`rust-test` and `store-test` download a pinned `cargo-nextest` release and check
+its SHA-256 before use. nextest runs each test in its own process and runs test
+binaries concurrently; doctests, which nextest does not run, still run through
+`cargo test --doc`. `store-test` runs as three matrix shards using
+`cargo nextest run --partition count:N/3`, because its SQLite integration suite
+dominates wall time. Shard 1 also runs the crate's doctests and is the only
+shard that saves the cache. `ui-vitest` runs as two Node-only shards
+(`vitest --shard=N/2`) that exclude `tests/home-v2/smoke-replay.test.ts`; that
+file shells out to `cargo`, so it runs in the `ui` job with the Rust toolchain.
+Store fixtures that seed hundreds of rows or install historical schemas wrap the
+writes in one transaction, as production migrations do; autocommitting each
+statement syncs the disk once per statement, which is slow on hosted Windows. The store and workspace test steps point
 `TMP`/`TEMP` at `runner.temp`, which is on the runner's work disk (`D:`), so
 temporary SQLite databases avoid the slower OS disk.
 The `tests` aggregator on `ubuntu-latest` is the single required check for this
@@ -123,7 +138,7 @@ check name. It needs every test job and runs unless cancelled, failing unless
 all results are `success`. It checks results without checkout or tools.
 An aggregator failure also fails a reusable workflow call, so release packaging
 remains blocked by `needs.tests.result == 'success'` when tests run.
-The UI job also installs the pinned minimal Rust toolchain and fetches locked
+The `ui` job also installs the pinned minimal Rust toolchain and fetches locked
 Cargo dependencies before its offline CLI smoke-replay test, using a separate
 `rust-ui-` cache with the same restore, prune and save conditions.
 Generated bindings and fixtures must remain current. Release tags reuse a
@@ -137,7 +152,11 @@ The reusable `release` input remains for caller compatibility.
 `.github/workflows/gui-smoke.yml` independently uses GitHub-hosted `windows-2022`
 daily at 09:47 UTC (`47 9 * * *`), for pull requests to `main`, including forks,
 and manual dispatch. Pushes to `main` do not trigger it.
-This job is not reusable and does not gate release signing. It has a 45-minute
+Release tags always call this workflow as a prerequisite, checking out
+`${{ github.sha }}` (the exact tagged commit), even when deterministic tests are
+reused. Packaging requires `needs.gui-smoke.result == 'success'`; failed,
+skipped or cancelled smoke runs block signing and therefore publication.
+The local reusable call passes no secrets or inputs. It has a 45-minute
 timeout, read-only contents permission, no secrets or environment scopes, and
 no persistent caches. Both workflows use `pull_request`, never privileged PR events.
 
@@ -178,3 +197,7 @@ with `-Check`, and uploads only the notices file for maintainer review/commit. S
 The workflow-policy suite pins its commands, input paths, conditions and actions,
 with mutations for permissions, secrets, environments and missing verification.
 Local policy tests do not prove the Windows provisioning build works.
+
+Native `account_scope` tests require Windows; macOS cross-linking does not execute them.
+Store account-scope tests run with `cargo test --locked -p maxed-store --test integration account_scope`.
+The pure batch planner can also run on macOS using `rustc --test app/src-tauri/src/runtime/account_batches.rs`.

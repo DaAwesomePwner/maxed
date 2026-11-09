@@ -230,6 +230,7 @@ fn project(
         EngineEvent::InstanceEvent(event) => crate::instance::project(tx, event)?,
         EngineEvent::SessionUpdated(session) => {
             let mut session = session.clone();
+            tx.execute("UPDATE identity_spans SET ended=max(started,?3) WHERE stream_id=?1 AND session_id IS NOT ?2 AND ended IS NULL", params![envelope.stream_id,session.id,micros(session.started)?])?;
             let previous: Option<String> = tx
                 .query_row(
                     "SELECT json FROM play_sessions WHERE id=?1",
@@ -248,12 +249,27 @@ fn project(
             tx.execute("INSERT INTO play_sessions VALUES(?1,?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET started=excluded.started,last_traffic=excluded.last_traffic,ended=excluded.ended,json=excluded.json", params![session.id,micros(session.started)?,micros(session.last_traffic)?,optional(session.ended)?,json(&session)?])?;
             tx.execute("INSERT INTO stream_sessions VALUES(?1,?2) ON CONFLICT(stream_id) DO UPDATE SET session_id=excluded.session_id", params![envelope.stream_id,session.id])?;
             if let Some(ended) = session.ended {
+                tx.execute("UPDATE identity_spans SET ended=max(started,?2) WHERE session_id=?1 AND ended IS NULL", params![session.id,micros(ended)?])?;
                 crate::visits::close_session(tx, &session.id, ended)?;
             }
         }
         EngineEvent::CharacterUpdated(character) => {
             let mut character = character.clone();
             character.id = resolve(tx, &character.id)?;
+            let old_account: Option<String> = tx
+                .query_row(
+                    "SELECT account_id FROM characters WHERE id=?1",
+                    [&character.id],
+                    |r| r.get(0),
+                )
+                .optional()?
+                .flatten();
+            if let Some(old) = old_account {
+                character.account_id = Some(old);
+            }
+            if let Some(account) = &character.account_id {
+                crate::accounts::register(tx, account)?;
+            }
             let learned_identity: bool = tx.query_row(
                 "SELECT EXISTS(SELECT 1 FROM characters WHERE id=?1 AND
                     ((json_extract(json,'$.name') IS NULL AND ?2 IS NOT NULL)
@@ -261,7 +277,9 @@ fn project(
                 params![character.id, character.name, character.class_id],
                 |row| row.get(0),
             )?;
-            tx.execute("INSERT INTO characters VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET observed_at=excluded.observed_at,json=excluded.json WHERE excluded.observed_at>=characters.observed_at", params![character.id,micros(character.observed_at)?,json(&character)?])?;
+            tx.execute("INSERT INTO characters(id,observed_at,json,account_id) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET observed_at=excluded.observed_at,json=excluded.json,account_id=coalesce(characters.account_id,excluded.account_id) WHERE excluded.observed_at>=characters.observed_at", params![character.id,micros(character.observed_at)?,json(&character)?,character.account_id])?;
+            // Membership is monotonic evidence independent of snapshot freshness.
+            tx.execute("UPDATE characters SET account_id=?2,json=json_set(json,'$.account_id',?2) WHERE id=?1 AND account_id IS NULL AND ?2 IS NOT NULL", params![character.id,character.account_id])?;
             if learned_identity {
                 backfill_run_identity(tx, &character.id)?;
             }
@@ -419,6 +437,21 @@ fn project(
             }
         }
         EngineEvent::ScopeTimelineUpdated(update) => crate::players::write_timeline(tx, update)?,
+        EngineEvent::LocalIdentityChanged {
+            at,
+            character_id,
+            account_id,
+        } => {
+            crate::accounts::identity(
+                tx,
+                &envelope.stream_id,
+                micros(envelope.sequence.0)?,
+                stream_session(tx, &envelope.stream_id)?.as_deref(),
+                micros(*at)?,
+                character_id.as_deref(),
+                account_id.as_deref(),
+            )?;
+        }
         EngineEvent::CaptureStateChanged(_) => {}
     }
     Ok(())
@@ -633,6 +666,7 @@ pub(crate) fn write_fight_summary(
 }
 
 fn write_fight(tx: &Transaction<'_>, fight: &FightView) -> Result<(), StoreError> {
+    crate::accounts::owner(tx, "fight", &fight.id, fight.owner_character_id.as_deref())?;
     let player_ids: Vec<_> = fight.players.iter().map(|p| p.player_id.as_str()).collect();
     if player_ids
         .iter()
@@ -652,17 +686,21 @@ fn write_fight(tx: &Transaction<'_>, fight: &FightView) -> Result<(), StoreError
     tx.execute("INSERT INTO fights VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9) ON CONFLICT(id) DO UPDATE SET run_id=excluded.run_id,session_id=excluded.session_id,started=excluded.started,ended=excluded.ended,boss_type=excluded.boss_type,local_dps=excluded.local_dps,complete_capture=excluded.complete_capture,json=excluded.json", params![fight.id,fight.run_id,fight.session_id,micros(fight.started)?,optional(fight.ended)?,fight.boss_type,local_dps,fight.complete_capture,json(fight)?])?;
     write_fight_summary(tx, fight)?;
     crate::instance::kill_timeline(tx, fight)?;
-    tx.execute("DELETE FROM damage_sources WHERE fight_id=?1", [&fight.id])?;
+    // Remove children before their players; retained source indices are upserted below.
+    tx.prepare_cached("DELETE FROM damage_sources WHERE fight_id=?1 AND player_id NOT IN (SELECT value FROM json_each(?2))")?
+        .execute(params![fight.id, json(&player_ids)?])?;
     // Retain unchanged observations: rebuilding every player's contribution on
     // a local-only update needlessly churns the run aggregates and their indexes.
     tx.execute("DELETE FROM fight_players WHERE fight_id=?1 AND player_id NOT IN (SELECT value FROM json_each(?2))",
         params![fight.id, json(&player_ids)?])?;
+    // Share depends on the fight total, not this player. Ignore legacy stored shares
+    // in comparisons too, so the first revision does not churn unchanged rows.
     for player in &fight.players {
         tx.execute(
-            "INSERT INTO fight_players VALUES(?1,?2,?3,?4,?5,?6,?7)
+            "INSERT INTO fight_players VALUES(?1,?2,?3,?4,?5,?6,json_remove(?7,'$.share'))
             ON CONFLICT(fight_id,player_id) DO UPDATE SET object_id=excluded.object_id,
                 damage=excluded.damage,dps=excluded.dps,rank=excluded.rank,json=excluded.json
-            WHERE fight_players.json<>excluded.json OR fight_players.object_id IS NOT excluded.object_id
+            WHERE json_remove(fight_players.json,'$.share')<>excluded.json OR fight_players.object_id IS NOT excluded.object_id
                 OR fight_players.damage IS NOT excluded.damage OR fight_players.dps IS NOT excluded.dps
                 OR fight_players.rank IS NOT excluded.rank",
             params![
@@ -675,20 +713,36 @@ fn write_fight(tx: &Transaction<'_>, fight: &FightView) -> Result<(), StoreError
                 json(player)?
             ],
         )?;
+        tx.prepare_cached(
+            "DELETE FROM damage_sources WHERE fight_id=?1 AND player_id=?2 AND source_index>=?3",
+        )?
+        .execute(params![
+            fight.id,
+            player.player_id,
+            player.sources.len() as i64
+        ])?;
         for (i, source) in player.sources.iter().enumerate() {
-            tx.execute(
-                "INSERT INTO damage_sources VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
-                params![
-                    fight.id,
-                    player.player_id,
-                    i as i64,
-                    source.item_type,
-                    tag(&source.kind)?,
-                    source.damage,
-                    source.hits,
-                    json(source)?
-                ],
-            )?;
+            tx.prepare_cached(
+                "INSERT INTO damage_sources VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
+                 ON CONFLICT(fight_id,player_id,source_index) DO UPDATE SET
+                    item_type=excluded.item_type,kind=excluded.kind,damage=excluded.damage,
+                    hits=excluded.hits,json=excluded.json
+                 WHERE damage_sources.json IS NOT excluded.json
+                    OR damage_sources.item_type IS NOT excluded.item_type
+                    OR damage_sources.kind IS NOT excluded.kind
+                    OR damage_sources.damage IS NOT excluded.damage
+                    OR damage_sources.hits IS NOT excluded.hits",
+            )?
+            .execute(params![
+                fight.id,
+                player.player_id,
+                i as i64,
+                source.item_type,
+                tag(&source.kind)?,
+                source.damage,
+                source.hits,
+                json(source)?
+            ])?;
         }
     }
     // Remove a stale timeline link if a full projection changes association.
@@ -711,6 +765,7 @@ fn write_fight(tx: &Transaction<'_>, fight: &FightView) -> Result<(), StoreError
 }
 
 fn write_drop(tx: &Transaction<'_>, input: &DropView) -> Result<(), StoreError> {
+    crate::accounts::owner(tx, "drop", &input.id, input.owner_character_id.as_deref())?;
     let mut drop = input.clone();
     let mut keys = std::collections::BTreeSet::new();
     if drop
@@ -820,6 +875,26 @@ fn merge(tx: &Transaction<'_>, provisional: &str, verified: &str) -> Result<(), 
     if present != 2 {
         return Err(StoreError::InvalidEvent);
     }
+    let accounts: Vec<Option<String>> = [from.as_str(), to.as_str()]
+        .iter()
+        .map(|id| {
+            tx.query_row("SELECT account_id FROM characters WHERE id=?1", [id], |r| {
+                r.get(0)
+            })
+        })
+        .collect::<Result<_, _>>()?;
+    if accounts[0].is_some() && accounts[1].is_some() && accounts[0] != accounts[1] {
+        return Err(StoreError::InvalidEvent);
+    }
+    tx.execute(
+        "UPDATE characters SET account_id=coalesce(account_id,?2) WHERE id=?1",
+        params![to, accounts[0]],
+    )?;
+    tx.execute(
+        "UPDATE observation_characters SET character_id=?2 WHERE character_id=?1",
+        params![from, to],
+    )?;
+    tx.execute("UPDATE identity_spans SET character_id=?2,account_id=coalesce(account_id,(SELECT account_id FROM characters WHERE id=?2)) WHERE character_id=?1", params![from,to])?;
     // Preserve known historical names, gear, and stats; fill only missing identity.
     tx.execute("UPDATE runs SET character_id=?2,json=json_set(json,'$.character_id',?2),entry_character_json=CASE WHEN entry_character_json IS NULL THEN NULL ELSE json_set(entry_character_json,'$.id',?2) END WHERE character_id=?1", params![from,to])?;
     backfill_run_identity(tx, &to)?;

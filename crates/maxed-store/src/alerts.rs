@@ -377,15 +377,24 @@ pub(crate) fn project(
             )? {
                 return Ok(());
             }
-            // Match Home's history-wide dungeon best, excluding this run even
+            let owner: Option<String> = tx.query_row(
+                &crate::account_sql::with_accounts("SELECT /*account:run:?1*/"),
+                [&run.id],
+                |r| r.get(0),
+            )?;
+            let Some(owner) = owner else {
+                return Ok(());
+            };
+            // Match Home's account-scoped dungeon best, excluding this run even
             // when its completed RunUpdated projection is already durable.
             let previous: Option<i64> = tx.query_row(
-                "SELECT min(r.completed_at-r.started) FROM runs r
+                &crate::account_sql::with_accounts("SELECT min(r.completed_at-r.started) FROM runs r
                  WHERE r.id<>?1 AND r.dungeon=?2 AND r.outcome='cleared'
+                   AND /*account:character:r.character_id*/=?3
                    AND r.completed_at>r.started
                    AND CASE WHEN json_valid(r.json) THEN json_extract(r.json,'$.area_kind') END='dungeon'
-                   AND r.id IN (SELECT run_id FROM run_evidence WHERE kind IN ('victory','completion_dialogue'))",
-                params![run.id, run.dungeon], |r| r.get(0),
+                   AND r.id IN (SELECT run_id FROM run_evidence WHERE kind IN ('victory','completion_dialogue'))"),
+                params![run.id, run.dungeon, owner], |r| r.get(0),
             )?;
             let previous = previous.map(|micros| micros as u64);
             record(
@@ -1177,6 +1186,14 @@ mod revision_query_tests {
         crate::migrate(&mut db).unwrap();
         let mut seq = workload::burst_setup(&mut db);
         let mut run = demo::demo_snapshot().run.unwrap();
+        let account = format!("account-{}", "a".repeat(64));
+        db.execute("INSERT OR IGNORE INTO accounts VALUES(?1)", [&account])
+            .unwrap();
+        db.execute(
+            "UPDATE characters SET account_id=?1 WHERE id='c000'",
+            [&account],
+        )
+        .unwrap();
         run.id = "victory-query".into();
         run.character_id = Some("c000".into());
         run.ended = None;

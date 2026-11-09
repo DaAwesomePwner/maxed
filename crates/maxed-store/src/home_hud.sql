@@ -1,4 +1,4 @@
--- Parameters: kind (0=session, 1=today), session id, lo, hi, tiers JSON, potions JSON.
+-- Parameters: kind (0=session, 1=today), session id, lo, hi, account, tiers JSON, potions JSON.
 WITH /*home_scope*/,
 party_scope(fight_id) AS (SELECT id FROM scoped_fights),
 /*party_average_scoped*/,
@@ -22,10 +22,10 @@ spans AS (
     FROM eligible
 ), tiers AS (
     SELECT CAST(json_extract(value,'$[0]') AS INTEGER) AS item_type,
-        json_extract(value,'$[1]') AS tier FROM json_each(?5)
+        json_extract(value,'$[1]') AS tier FROM json_each(?6)
 ), potion_types AS (
     SELECT CAST(json_extract(value,'$[0]') AS INTEGER) AS item_type,
-        json_extract(value,'$[1]') AS stat FROM json_each(?6)
+        json_extract(value,'$[1]') AS stat FROM json_each(?7)
 ), appearances AS MATERIALIZED (
     SELECT i.item_type,d.at FROM scoped_drops d JOIN drop_items i ON i.drop_id=d.id
 ), ut_st AS MATERIALIZED (
@@ -39,11 +39,12 @@ spans AS (
         WHEN 'defense' THEN 3 WHEN 'speed' THEN 4 WHEN 'dexterity' THEN 5
         WHEN 'vitality' THEN 6 WHEN 'wisdom' THEN 7 END
 ), elapsed AS (
-    SELECT coalesce(sum(CASE WHEN ?1=0 THEN max(0,p.last_traffic-p.started)
-        ELSE max(0,min(p.last_traffic,s.hi)-max(p.started,s.lo)) END),0) AS micros
-    FROM play_sessions p,scope s
-    WHERE (?1=0 AND p.id=s.session_id)
-        OR (?1=1 AND p.started<s.hi AND p.last_traffic>s.lo)
+    SELECT coalesce(sum(max(0,
+        min(coalesce(i.ended,p.ended,p.last_traffic),coalesce(p.ended,p.last_traffic),coalesce(s.hi,coalesce(p.ended,p.last_traffic)))
+        -max(i.started,p.started,s.lo))),0) AS micros
+    FROM identity_spans i JOIN play_sessions p ON p.id=i.session_id,scope s
+    WHERE i.account_id=?5 AND ((?1=0 AND p.id=s.session_id)
+        OR (?1=1 AND i.started<s.hi AND coalesce(i.ended,p.ended,p.last_traffic)>s.lo))
 )
 SELECT json_object(
     'fame_per_hour',NULL,

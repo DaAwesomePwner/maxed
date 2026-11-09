@@ -172,15 +172,13 @@ impl CaptureRuntime {
                 if self.closing.load(Ordering::Acquire) {
                     break;
                 }
-                if maxed_capture::parse_frame(&frame)
-                    .ok()
-                    .flatten()
-                    .is_some_and(|s| !s.bytes.is_empty())
-                {
-                    adapter.traffic(frame.at)?;
+                let frame_at = frame.at;
+                let output = pipeline.push_frame(frame);
+                if output.trusted_traffic {
+                    adapter.traffic(frame_at)?;
                 }
-                for event in pipeline.push(frame) {
-                    adapter.decoded(event)?;
+                for event in output.events {
+                    adapter.decoded_observed(event)?;
                 }
                 adapter.publish_due(presentation_clock.elapsed());
             }
@@ -318,14 +316,12 @@ fn play_demo(
                     break;
                 }
             }
-            if maxed_capture::parse_frame(&frame)
-                .ok()
-                .flatten()
-                .is_some_and(|s| !s.bytes.is_empty())
-            {
-                adapter.traffic(frame.at)?;
+            let frame_at = frame.at;
+            let output = pipeline.push_frame(frame);
+            if output.trusted_traffic {
+                adapter.traffic(frame_at)?;
             }
-            for event in pipeline.push(frame) {
+            for event in output.events {
                 let state = match &event {
                     PipelineEvent::Decoded(DecodeEvent::Packet(packet))
                         if !matches!(packet.packet, Packet::Unknown { .. }) =>
@@ -338,7 +334,7 @@ fn play_demo(
                     }) => Some(CaptureState::Recovering),
                     _ => None,
                 };
-                adapter.decoded(event)?;
+                adapter.decoded_observed(event)?;
                 if let Some(state) = state {
                     shared.publish(
                         CaptureStatus {

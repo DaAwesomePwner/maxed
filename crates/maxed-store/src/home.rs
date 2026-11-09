@@ -3,20 +3,30 @@ use maxed_types::{HomeScope, HomeSummary};
 use rusqlite::params;
 
 static HOME_SQL: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
-    crate::stats::with_dungeon_stats(&with_home_scope(include_str!("home.sql")))
+    crate::stats::with_dungeon_stats(&with_home_scope(&crate::account_sql::with_accounts(
+        include_str!("home.sql"),
+    )))
 });
 
 /// Share Home's session/day boundaries, scoped observations and per-character fame delta.
 pub(crate) fn with_home_scope(sql: &str) -> String {
     const SLOT: &str = "/*home_scope*/";
     debug_assert_eq!(sql.matches(SLOT).count(), 1);
-    sql.replacen(SLOT, include_str!("home_scope.sql"), 1)
+    sql.replacen(
+        SLOT,
+        &crate::account_sql::with_accounts(include_str!("home_scope.sql")),
+        1,
+    )
 }
 
 impl StoreReader {
     /// One statement owns scope, aggregates and bounded details in one read snapshot.
     /// Today boundaries are caller-supplied local midnights, including DST changes.
-    pub fn home_summary(&self, scope: HomeScope) -> Result<HomeSummary, StoreError> {
+    pub fn home_summary(
+        &self,
+        scope: HomeScope,
+        account: Option<&str>,
+    ) -> Result<HomeSummary, StoreError> {
         let (kind, session_id, start, end) = match scope {
             HomeScope::Session { id } => {
                 if id.is_empty() || id.len() > 256 {
@@ -37,7 +47,7 @@ impl StoreReader {
             .conn
             .query_row(
                 HOME_SQL.as_str(),
-                params![kind, session_id, start, end],
+                params![kind, session_id, start, end, account],
                 |row| row.get(0),
             )
             .map_err(|error| {
@@ -99,7 +109,7 @@ mod tests {
             },
         ] {
             STATEMENTS.with(|s| s.borrow_mut().clear());
-            assert_eq!(reader.home_summary(scope).unwrap().runs, 0);
+            assert_eq!(reader.home_summary(scope, Some("account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).unwrap().runs, 0);
             STATEMENTS.with(|s| {
                 let statements = s.borrow();
                 assert_eq!(statements.len(), 1, "{statements:?}");

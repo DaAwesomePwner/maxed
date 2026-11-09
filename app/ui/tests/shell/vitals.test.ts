@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { potsLeft, statPotsLeft, statTone, vitalText } from '../../src/lib/shell/vitals';
+import { potsLeft, statCapUnavailableReason, statPotsLeft, statTone, vitalText } from '../../src/lib/shell/vitals';
 
 describe('game rail numbers', () => {
   it('uses one point for core stats and five for HP/MP, rounding up', () => {
@@ -54,4 +54,14 @@ it('counts only trained base for verified exalt placement, including HP/MP round
   expect(statPotsLeft(line)).toBe(2);
   expect(statPotsLeft({ ...line, stat_id: 0, base: 739, cap: 750, exalt: 10 })).toBe(3);
   expect(statPotsLeft({ ...line, stat_id: 3, base: 300, cap: 311, exalt: 10 })).toBe(3);
+});
+
+it('describes missing and invalid exalt values as bonuses', () => {
+  const line = { stat_id: 3, total: 360, base: null, cap: 350, exalt: null, at_cap: null };
+  expect(statCapUnavailableReason({ ...line, split_evidence: {
+    placement: 'verified_inside_boost', cap_eligible: false, reasons: ['missing_exalt'],
+  } })).toBe('exalt bonus unknown');
+  expect(statCapUnavailableReason({ ...line, split_evidence: {
+    placement: 'verified_inside_boost', cap_eligible: false, reasons: ['invalid_exalt'],
+  } })).toBe('invalid exalt bonus');
 });

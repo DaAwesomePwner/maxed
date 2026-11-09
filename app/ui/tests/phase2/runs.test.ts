@@ -21,8 +21,7 @@ it('phase2_runs_filters_page_no_n_plus_one', async () => {
   await edit('Dungeon', '  Invented dungeon 6  '); await advance(300); await click(/^Cleared /); await edit('Sort', 'oldest');
   expect(page.queries.listRuns.mock.lastCall![0]).toMatchObject({ dungeon: 'Invented dungeon 6', outcome: 'cleared', sort: 'oldest', cursor: null, limit: 25 });
   await advance(250);
-  expect(page.browser.adapter.state).toMatchObject({ runsWindow: 0,
-    filters: { dungeon: 'Invented dungeon 6', outcome: 'cleared', sort: 'oldest', range: null, cursor: null, limit: 25 } });
+  expect(page.browser.adapter.state).toMatchObject({ filters: { dungeon: 'Invented dungeon 6', outcome: 'cleared', sort: 'oldest', range: null, cursor: null, limit: 25 } });
 });
 
 it('saved run loot uses the Home ranking and timeline bag selection', async () => {

@@ -218,17 +218,19 @@ fn run_fights(
     budget: &mut ReadBudget,
 ) -> Result<Vec<RunPlayerFight>, StoreError> {
     let mut fights: Vec<RunPlayerFight> = budget.rows(conn, crate::run_strip::FIGHTS, [run_id])?;
+    // Restrict the batch to the same bounded strip, preserving its read budget.
+    let ids: Vec<_> = fights.iter().map(|fight| &fight.fight_id).collect();
+    let contributions: Vec<FightContribution> = budget.rows(
+        conn,
+        include_str!("player_fight_contributions.sql"),
+        params![run_id, player_id, json(&ids)?],
+    )?;
+    let mut contributions: BTreeMap<_, _> = contributions
+        .into_iter()
+        .map(|contribution| (contribution.fight_id.clone(), contribution))
+        .collect();
     for fight in &mut fights {
-        let contribution: Option<FightContribution> = budget.one(conn,
-            "SELECT length(CAST(payload AS BLOB)),payload FROM (
-                SELECT json_object('object_id',
-                    CASE WHEN (SELECT count(*) FROM fight_players other
-                        WHERE other.fight_id=p.fight_id AND other.object_id=p.object_id)=1
-                        THEN p.object_id END,
-                    'damage',p.damage,'dps',json_extract(p.json,'$.dps'),'rank',json_extract(p.json,'$.rank'),
-                    'share',json_extract(p.json,'$.share'),'deaths',json_extract(p.json,'$.deaths')) AS payload
-                FROM fight_players p WHERE p.fight_id=?1 AND p.player_id=?2)",
-            params![fight.fight_id, player_id])?;
+        let contribution = contributions.remove(&fight.fight_id);
         if let Some(contribution) = contribution {
             fight.object_id = contribution.object_id;
             fight.damage = Some(contribution.damage);
@@ -243,6 +245,7 @@ fn run_fights(
 
 #[derive(Deserialize)]
 struct FightContribution {
+    fight_id: String,
     object_id: Option<i32>,
     damage: f64,
     dps: Option<f64>,
@@ -314,9 +317,12 @@ fn player_context(
     until: Option<i64>,
     budget: &mut ReadBudget,
 ) -> Result<PlayerContextView, StoreError> {
-    let profile = budget.one(conn,
+    let mut profile: Option<PlayerProfileView> = budget.one(conn,
         "SELECT length(CAST(json AS BLOB)),json FROM player_profiles WHERE scope_id=?1 AND player_id=?2",
         params![scope_id, player_id])?;
+    if let Some(profile) = &mut profile {
+        profile.normalize_maxed();
+    }
     let scope: Option<StoredScopeTimeline> = budget.one(
         conn,
         "SELECT length(CAST(json AS BLOB)),json FROM scope_timelines WHERE scope_id=?1",
@@ -501,4 +507,113 @@ pub(crate) fn write_timeline(
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    thread_local! {
+        static QUERIES: Cell<usize> = const { Cell::new(0) };
+    }
+
+    #[test]
+    fn contribution_query_uses_run_index_and_player_key() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::migrate(&mut conn).unwrap();
+        let plan = conn
+            .prepare(&format!(
+                "EXPLAIN QUERY PLAN {}",
+                include_str!("player_fight_contributions.sql"),
+            ))
+            .unwrap()
+            .query_map(
+                params![
+                    "demo-run",
+                    "synthetic-player",
+                    r#"["fight-000","fight-001"]"#
+                ],
+                |row| row.get::<_, String>(3),
+            )
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .join("\n");
+        assert!(
+            plan.contains("SEARCH s USING") && plan.contains("fight_summaries_run (run_id=?"),
+            "{plan}"
+        );
+        assert!(plan.contains("SEARCH p USING INDEX sqlite_autoindex_fight_players_1 (fight_id=? AND player_id=?)"), "{plan}");
+        assert!(plan.contains("SEARCH other USING COVERING INDEX fight_players_object (fight_id=? AND object_id=?)"), "{plan}");
+        // json_each scans only the bounded input list; persisted tables must seek.
+        for line in plan.lines().filter(|line| line.contains("SCAN ")) {
+            assert!(line.contains("SCAN json_each VIRTUAL TABLE"), "{plan}");
+        }
+    }
+
+    #[test]
+    fn contribution_queries_are_constant_and_preserve_object_ambiguity() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::migrate(&mut conn).unwrap();
+        let snapshot = demo::demo_snapshot();
+        let story = demo::demo_run_story();
+        let mut events = vec![
+            EngineEvent::SessionUpdated(snapshot.session.unwrap()),
+            EngineEvent::CharacterUpdated(story.character.unwrap()),
+            EngineEvent::RunStarted(story.run),
+        ];
+        let mut fight = snapshot.fights[0].clone();
+        fight.players.truncate(1);
+        let player_id = fight.players[0].player_id.clone();
+        fight.target_kind = Some(TargetKind::Boss);
+        fight.boss_type = Some(1);
+        for i in 0..65 {
+            fight.id = format!("fight-{i:03}");
+            events.push(EngineEvent::FightStarted(fight.clone()));
+        }
+        let events: Vec<_> = events
+            .into_iter()
+            .enumerate()
+            .map(|(i, event)| EventEnvelope {
+                fight_chart_omitted: false,
+                stream_id: "synthetic-query-count".into(),
+                sequence: Sequence(Timestamp(i as u64 + 1)),
+                at: Timestamp(6_000_000),
+                event,
+            })
+            .collect();
+        crate::apply_batch(&mut conn, &events).unwrap();
+        conn.execute(
+            "INSERT INTO fight_players SELECT fight_id,'ambiguous',object_id,damage,dps,rank,json
+             FROM fight_players WHERE fight_id='fight-000'",
+            [],
+        )
+        .unwrap();
+        conn.trace_v2(
+            rusqlite::trace::TraceEventCodes::SQLITE_TRACE_STMT,
+            Some(|_| QUERIES.with(|n| n.set(n.get() + 1))),
+        );
+        for (run, expected) in [("absent", 0), ("demo-run", 64)] {
+            QUERIES.with(|n| n.set(0));
+            let fights = run_fights(
+                &conn,
+                run,
+                &player_id,
+                &mut ReadBudget {
+                    used: 0,
+                    limit: MAX_RUN_PLAYER_BYTES,
+                },
+            )
+            .unwrap();
+            assert_eq!(QUERIES.with(Cell::get), 2);
+            assert_eq!(fights.len(), expected);
+            if expected > 0 {
+                assert_eq!(fights[0].object_id, None);
+                assert_eq!(fights[1].object_id, Some(fight.players[0].object_id));
+                assert_eq!(fights[0].damage, Some(fight.players[0].damage));
+                assert_eq!(fights[1].share, fight.players[0].share);
+            }
+        }
+    }
 }

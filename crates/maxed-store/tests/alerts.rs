@@ -1,5 +1,6 @@
 //! Invented summaries derived from the admitted demo; no gameplay recordings.
 use crate::common;
+use crate::common::account_scope_fixture::ACCOUNT;
 use maxed_store::*;
 use maxed_types::*;
 use rusqlite::{params, Connection};
@@ -168,6 +169,7 @@ fn character(id: &str) -> CharacterView {
     let mut c = demo::demo_run_story().character.unwrap();
     c.id = id.into();
     c.identity_verified = true;
+    c.account_id = Some(ACCOUNT.into());
     c
 }
 fn drop(id: &str, rank: Option<u8>) -> DropView {
@@ -287,7 +289,7 @@ impl Harness {
             .unwrap()
     }
     fn logs(&self) -> Vec<AlertView> {
-        open_reader(&self.path)
+        crate::common::account_scope_fixture::open_reader(&self.path)
             .unwrap()
             .list_alerts(AlertFilter {
                 kinds: vec![],
@@ -455,7 +457,7 @@ fn alert_pages_escape_literal_search_and_validate_unicode_bounds() {
             AlertLoudness::Off,
         );
     }
-    let reader = open_reader(&h.path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&h.path).unwrap();
     let mut filter = alert_filter();
     filter.query = "  100%_\\  ".into();
     assert_eq!(
@@ -546,7 +548,7 @@ fn alert_pages_bound_legacy_json_and_rows() {
         )
         .unwrap();
     }
-    let reader = open_reader(&h.path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&h.path).unwrap();
     let page = reader.list_alerts(alert_filter()).unwrap();
     assert_eq!(page.rows.len(), 100);
     assert!(page.next.is_some());
@@ -850,7 +852,7 @@ fn pb_emission_time_and_bounds_are_preserved() {
     let claim = h.writer.claim_alerts(1).unwrap().remove(0);
     assert_eq!(claim.committed_at, emitted.at);
     assert_eq!(claim.view.at, Timestamp(2_000_000));
-    let reader = open_reader(&h.path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&h.path).unwrap();
     for limit in [0, 101] {
         assert!(reader
             .list_alerts(AlertFilter {
@@ -1013,7 +1015,7 @@ fn cleared_then_died_preserves_both_facts_and_alertfired_cannot_replace_details(
     h.send(EngineEvent::AlertFired(stale), AlertLoudness::Banner);
     assert_eq!(h.logs(), vec![original]);
     assert_eq!(h.count("deaths"), 1);
-    let saved = open_reader(&h.path)
+    let saved = crate::common::account_scope_fixture::open_reader(&h.path)
         .unwrap()
         .get_run(&run.id)
         .unwrap()
@@ -1045,7 +1047,7 @@ fn oversized_new_alerts_fail_atomically() {
     alert.explanation = "bounded".into();
     // The direct batch API shares exactly the same validation/transaction path.
     let mut db = h.db();
-    assert!(apply_batch(
+    assert!(maxed_store::apply_batch(
         &mut db,
         &[common::envelope(h.seq, EngineEvent::AlertFired(alert))]
     )
@@ -1113,7 +1115,7 @@ fn key_pop_occurrence_uses_instance_id_and_dungeon_filter() {
 fn timed_run(id: &str, duration: u64) -> RunView {
     let mut run = demo::demo_run_story().run;
     run.id = id.into();
-    run.character_id = None;
+    run.character_id = Some("self".into());
     run.dungeon = "Lair of Shaitan".into();
     run.area_kind = AreaKind::Dungeon;
     run.started = Timestamp(1_000_000);
@@ -1156,7 +1158,10 @@ fn run_time_pb_matches_home_and_republish_is_silent() {
     assert_eq!(details["type"], "run_time_personal_best");
     assert_eq!(details["duration_micros"], 86_000_000);
     assert_eq!(details["previous_micros"], 87_000_000);
-    let best = open_reader(&h.path).unwrap().dungeon_bests().unwrap();
+    let best = crate::common::account_scope_fixture::open_reader(&h.path)
+        .unwrap()
+        .dungeon_bests(Some(ACCOUNT))
+        .unwrap();
     assert_eq!(best[0].best_clear_micros, 86_000_000);
     send_timed(&mut h, EngineEvent::RunEnded(faster), true);
     assert_eq!(h.logs().len(), 1);
@@ -1653,7 +1658,7 @@ fn alert_multi_kind_filters_and_legacy_decode() {
             AlertLoudness::Off,
         );
     }
-    let reader = open_reader(&h.path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&h.path).unwrap();
     let mut filter = old;
     filter.kinds = vec![AlertKind::Whisper, AlertKind::GuildMessage];
     filter.exclude_kinds = vec![AlertKind::GuildMessage];
@@ -1720,7 +1725,7 @@ fn alert_multi_kind_filters_and_legacy_decode() {
 #[test]
 fn alert_summary_counts_range_and_personal_bests() {
     let mut h = Harness::new();
-    let reader = open_reader(&h.path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&h.path).unwrap();
     let request = AlertSummaryRequest::default;
     assert_eq!(reader.alert_summary(request()).unwrap().total, 0);
     let mut run = demo::demo_run_story().run;
@@ -1844,7 +1849,7 @@ fn alert_summary_bounds_dates_and_legacy_last_white_text() {
         }),
         AlertLoudness::Off,
     );
-    let reader = open_reader(&h.path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&h.path).unwrap();
     for (start, end) in [(1, 1), (2, 1), (0, u64::MAX)] {
         assert!(reader
             .alert_summary(AlertSummaryRequest {
@@ -1885,4 +1890,46 @@ fn default_key_pop_policy_keeps_events_without_alerts() {
     assert_eq!(h.count("instance_events"), 1);
     assert_eq!(h.count("alert_occurrences"), 0);
     assert!(h.writer.claim_alerts(32).unwrap().is_empty());
+}
+
+#[test]
+fn account_scope_run_pb_ignores_other_accounts_and_unknown_owners() {
+    let mut h = Harness::new();
+    let mut a = character("self");
+    a.account_id = Some(format!("account-{}", "a".repeat(64)));
+    let mut b = character("other");
+    b.account_id = Some(format!("account-{}", "b".repeat(64)));
+    h.send(EngineEvent::CharacterUpdated(a), AlertLoudness::Off);
+    h.send(EngineEvent::CharacterUpdated(b), AlertLoudness::Off);
+    let mut foreign = timed_run("b-fast", 10_000_000);
+    foreign.character_id = Some("other".into());
+    send_timed(&mut h, EngineEvent::RunEnded(foreign), true);
+    // A's first clear cannot beat B's baseline, even if faster.
+    send_timed(
+        &mut h,
+        EngineEvent::RunEnded(timed_run("a-first", 5_000_000)),
+        true,
+    );
+    assert_eq!(h.count("alerts"), 0);
+    let mut foreign = timed_run("b-faster", 1_000_000);
+    foreign.character_id = Some("other".into());
+    send_timed(&mut h, EngineEvent::RunEnded(foreign), true);
+    let before = h.count("alerts");
+    // B's faster clear must not suppress A's own improvement.
+    send_timed(
+        &mut h,
+        EngineEvent::RunEnded(timed_run("a-improved", 4_000_000)),
+        true,
+    );
+    assert_eq!(h.count("alerts"), before + 1);
+    let mut unknown = timed_run("unknown", 500_000);
+    unknown.character_id = None;
+    send_timed(&mut h, EngineEvent::RunEnded(unknown), true);
+    assert_eq!(h.count("alerts"), before + 1);
+    send_timed(
+        &mut h,
+        EngineEvent::RunEnded(timed_run("a-again", 3_000_000)),
+        true,
+    );
+    assert_eq!(h.count("alerts"), before + 2);
 }

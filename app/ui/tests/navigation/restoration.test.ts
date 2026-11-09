@@ -27,7 +27,7 @@ it('offers a heading fallback for removed rows and cancels obsolete restorations
 it('focuses a row inserted before rows-ready only after ready resolves', async () => {
   const pane = document.createElement('main'); pane.innerHTML = '<h1 tabindex="-1">Runs</h1>'; document.body.append(pane);
   let ready!: () => void;
-  const pending = restorePosition(pane, { ...emptyListState(), runsWindow: 2, focusedRowId: 'run-13' }, new Promise<void>(resolve => { ready = resolve; }));
+  const pending = restorePosition(pane, { ...emptyListState(), focusedRowId: 'run-13' }, new Promise<void>(resolve => { ready = resolve; }));
   expect(document.activeElement).not.toBe(pane.querySelector('h1'));
   pane.insertAdjacentHTML('beforeend', '<a data-row-id="run-13" href="#/runs/run-13">Saved run</a>');
   ready();

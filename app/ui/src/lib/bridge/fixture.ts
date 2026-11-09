@@ -143,8 +143,10 @@ export function createFixtureTransport(initial: LiveSnapshot, visuals?: VisualPa
   const enchants = structuredClone(preview.enchants ?? []);
   const history = structuredClone(home);
   const listeners: Listeners = {
+    'account-history-changed': new Set(),
     'storage-maintenance-changed': new Set(),
     'capture-status': new Set(),
+    'unsaved-close': new Set(),
     'presentation-visible': new Set(),
     'engine-event': new Set(),
     'live-snapshot': new Set(),
@@ -512,6 +514,8 @@ export function createFixtureTransport(initial: LiveSnapshot, visuals?: VisualPa
       message: 'Preview',
     }),
     list_adapters: unavailable,
+    retry_store: unavailable,
+    exit_without_saving: unavailable,
     start_capture: unavailable,
     stop_capture: unavailable,
     set_adapter: unavailable,
@@ -685,6 +689,7 @@ export function createFixtureTransport(initial: LiveSnapshot, visuals?: VisualPa
       emit('capture-status', next);
     },
     publishEngineEvent(next: Events['engine-event']) { emit('engine-event', next); },
+    publishAccountHistoryChanged(next: Events['account-history-changed']) { emit('account-history-changed', next); },
     publishPartyChanged(next: Events['party-changed']) { emit('party-changed', next); },
   };
 }

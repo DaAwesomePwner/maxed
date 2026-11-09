@@ -26,18 +26,10 @@ export function createNexusHistory(
     const result = queue.then(read); queue = result.catch(() => {}); return result;
   }
   async function readCurrent<T>(request: number, read: () => Promise<HistoryReply<T>>): Promise<HistoryReply<T>> {
-    let superseded = 0;
-    while (!disposed && request === revision) {
-      const reply = await serial(async () => !await visibility.wait() || disposed || request !== revision
-        ? { status: 'superseded' as const } : read());
-      if (reply.status !== 'superseded') return reply;
-      // The native scheduler can replace its pending read. Retry unchanged
-      // inputs, yielding on repeated replacements rather than spinning.
-      if (++superseded > 1 && !disposed && request === revision) {
-        await new Promise<void>(resolve => setTimeout(resolve, 25));
-      }
-    }
-    return { status: 'superseded' };
+    return serial(async () => {
+      if (!await visibility.wait() || disposed || request !== revision) return { status: 'superseded' };
+      return read();
+    });
   }
   const emit = () => { if (!disposed) receive({ summary, loot, page }); };
   async function readLoot(nextCursor: string | null, nextPage: number) {
@@ -56,8 +48,9 @@ export function createNexusHistory(
           loot = { phase: 'ready', value: reply.value, message: '', retryAvailable: false }; emit(); return;
         }
         const policy = historyControl(reply.status, attempt > 0);
-        loot = { ...loot, phase: reply.status, message: policy.message, retryAvailable: policy.retryAvailable }; emit();
+        loot = { ...loot, phase: 'busy', message: policy.message, retryAvailable: policy.retryAvailable }; emit();
         if (!policy.retry) return;
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     } catch (error) {
       if (disposed || request !== revision) return;

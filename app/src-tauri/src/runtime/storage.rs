@@ -176,31 +176,95 @@ fn identity_key(root: &Path) -> Result<[u8; 32], String> {
     let _lease = exclusive(&root.join("identity.lock"))?;
     let path = root.join("identity.key");
     let mut key = [0; 32];
-    if path.exists() {
-        let mut file = File::open(path).map_err(|_| "Could not read local identity key")?;
-        if file
+    let existing = match File::open(&path) {
+        Ok(file) => Some(file),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(_) => return Err("Could not read local identity key".into()),
+    };
+    if let Some(mut file) = existing {
+        let len = file
             .metadata()
-            .map_err(|_| "Could not validate local identity key")?
-            .len()
-            != 32
-        {
+            .map_err(|_| "Could not read local identity key")?
+            .len();
+        if len == 32 {
+            file.read_exact(&mut key)
+                .map_err(|_| "Could not read local identity key")?;
+            return Ok(key);
+        }
+        if len != 0 {
             return Err("Local identity key is invalid".into());
         }
-        file.read_exact(&mut key)
-            .map_err(|_| "Could not read local identity key")?;
-    } else {
-        getrandom::fill(&mut key).map_err(|_| "Could not create local identity key")?;
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .map_err(|_| "Could not save local identity key")?;
+        // An empty key could never have been used to hash account history.
+        drop(file);
+        fs::remove_file(&path).map_err(|_| "Could not save local identity key")?;
+    }
+    getrandom::fill(&mut key).map_err(|_| "Could not create local identity key")?;
+    let staging = root.join("identity.key.pending");
+    match fs::remove_file(&staging) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err("Could not save local identity key".into()),
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&staging)
+        .map_err(|_| "Could not save local identity key")?;
+    let result = (|| {
         file.write_all(&key)
             .and_then(|_| file.sync_all())
             .map_err(|_| "Could not save local identity key")?;
+        drop(file);
+        // Publish only a complete, synced key while holding the identity lease.
+        publish_identity_key(&staging, &path).map_err(|_| "Could not save local identity key")
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(staging);
     }
+    result?;
     Ok(key)
 }
+
+fn publish_identity_key(staging: &Path, path: &Path) -> std::io::Result<()> {
+    publish_identity_key_with(staging, path, |from, to| fs::hard_link(from, to))
+}
+
+fn publish_identity_key_with(
+    staging: &Path,
+    path: &Path,
+    link: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    // Unlike rename on Windows, hard_link never replaces an existing key.
+    if let Err(error) = link(staging, path) {
+        if error.kind() != std::io::ErrorKind::Unsupported
+            && !(cfg!(windows) && matches!(error.raw_os_error(), Some(1 | 50)))
+        {
+            return Err(error);
+        }
+        // Redirected app data may live on a filesystem without hard links.
+        // The caller still holds the identity lease. Fail closed on read errors
+        // and use create_new to protect against a destination appearing later.
+        match File::open(path) {
+            Ok(_) => return Err(std::io::ErrorKind::AlreadyExists.into()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        let key = fs::read(staging)?;
+        let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
+        file.write_all(&key)?;
+        file.sync_all()?;
+        return fs::remove_file(staging);
+    }
+    // Flush the published file before removing the staging name. On failure,
+    // leave the complete published key intact so the next attempt reuses it.
+    OpenOptions::new().write(true).open(path)?.sync_all()?;
+    fs::remove_file(staging)
+}
+
+#[cfg(test)]
+#[path = "identity_key_tests.rs"]
+mod identity_key_tests;
+
 pub(super) fn random_id() -> Result<String, String> {
     let mut bytes = [0; 16];
     getrandom::fill(&mut bytes).map_err(|_| "Could not create capture stream identity")?;
@@ -262,6 +326,15 @@ impl CaptureRuntime {
             .clone()
     }
     pub fn retry_store(&self) -> Result<(), String> {
+        if !self.has_unsaved_summaries() {
+            let status = self.store_status();
+            if status.state != maxed_types::StoreState::Failed || status.queued == 0 {
+                return Ok(());
+            }
+        }
+        // Retire the live/completed owner before retrying its retained writer.
+        // A storage error from stop is precisely what this operation recovers.
+        let _ = self.stop();
         let _lifecycle = self.session.lock().map_err(|_| super::WORKER_FAILED)?;
         let mut recovery = self
             .shared

@@ -1,6 +1,6 @@
 # Known limitations
 
-Maxed is pre-release 0.1.5. These limits describe the available behavior and its
+Maxed is pre-release 0.2.0. These limits describe the available behavior and its
 evidence boundaries. Automated regressions cover several reported problems;
 Windows gameplay and installed-release acceptance remain incomplete.
 
@@ -165,14 +165,17 @@ is recorded.
 - Gate U was accepted PASS by the owner on 2026-10-17 in
   private-repo PR 176 (archived, not public), with the evidence in
   [Character live acceptance](development/character-live-acceptance.md).
-  Gate P (exalt placement in base versus boost) is still open. The provisional
-  split retains totals/raw boosts; nonzero or unknown exalt keeps at-cap,
-  pots-left and maxed null without placement evidence. Negative Other remains
-  inconsistent evidence, not a named effect. U does not unlock P.
+  Gate P was resolved on 2026-11-08 by nonzero-exalt owner evidence in #37/#38:
+  exalt is inside boost, and HP/MP exalt fields already contain bonus amounts.
+  Known nonzero exalt now permits at-cap, pots-left and maxed decisions. Missing
+  exalt/caps remain unknown; negative Other remains inconsistent evidence, not
+  a named effect. Historical saved rows are not retroactively recomputed.
 - [#3](https://github.com/DaAwesomePwner/maxed/issues/3) tracks expanded rail
   exalt presentation. [#5](https://github.com/DaAwesomePwner/maxed/issues/5)
-  tracks legacy saved local profiles retaining ungated maxed counts; current
-  Character split safety does not retroactively repair those records.
+  adds provenance gating for saved local profiles and Party members. Legacy local
+  records without that provenance show maxed counts as unknown (`—`) and omit cap
+  highlights. Party maxed requirements return Check (stats not seen), not Fail.
+  Remote-player display is unchanged. Windows UI acceptance is still pending.
 - Normal-fire DPS and regen are baseline models, with source-derived
   [Gate X metadata](architecture/assets.md#character-metadata-gate-x-2026-10-17).
   Current-client rate/regen coefficients still need Windows verification.
@@ -196,3 +199,40 @@ is recorded.
   aggregation in saved history; Character uses only the current local observation
   and adds no account/history lookup. Object stat 114 remains out of scope in
   [#2](https://github.com/DaAwesomePwner/maxed/issues/2).
+
+## Current-account Home history
+
+- Unattributed legacy history remains stored but is excluded from Home totals,
+  records and bests; Home shows a short notice when this history exists.
+- Local recovery searches character numbers 0..=65,535. Some older history may
+  remain unmatched; a single known account does not establish ownership.
+- Real Windows account-switch rail acceptance is pending. Synthetic UI tests do
+  not establish live game or WebView2 behavior.
+- The “Runs list newest” 50 ms release gate fails on the development Mac at the
+  task base too; this is a pre-existing performance limitation.
+
+## Automatic capture adapters
+
+Automatic selection keeps candidate handles drained and can re-select after five
+seconds without frames when another adapter has fresh game traffic. Only adapters
+opened at capture start are eligible; newly created adapters require restarting
+capture. Switching marks uncertain continuity and discards candidate observations,
+so decoding may need recovery. Live Windows/Npcap switching remains unverified.
+
+## Passive TCP loss recovery
+
+Missing TCP bytes trigger a directional gap after 32 buffered segments, one
+second of capture time checked on subsequent frames, or the existing 2 MiB
+budget. Buffered bytes are retained for delivery after the gap, but RC4 alignment
+may prevent decoding until the existing recovery search succeeds. Quiet holes
+are reported at the next frame or wire close, not by a wall-clock timer. Expiry
+retains a timestamp watermark per flow for reorders within one second. Larger
+backward clock steps re-baseline pending ages; a lone outlier is undone when the
+next distinct timestamp returns within the old watermark's reorder window or
+beyond it. Saturation near zero can discard less than one second of elapsed age.
+Far-ahead sequence jumps beyond 2 MiB invalidate rather than pinning the cursor. Partial protocol frames
+at wire close report loss; teardown/EOF only reports a decode diagnostic and
+discards pending holes without marking coverage loss. Malformed frames with insufficient flow
+identity retain global invalidation so every candidate stream reports possible
+loss. Frames with readable addresses and ports affect only that active flow/direction;
+inactive, unopened or closed recipients fall back to global invalidation.

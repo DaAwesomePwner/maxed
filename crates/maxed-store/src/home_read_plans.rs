@@ -88,14 +88,17 @@ fn bounded_boss_history_seeks() {
 fn bounded_dungeon_profile_seeks_both_scopes() {
     let (_dir, reader) = reader();
     reader
-        .dungeon_profile(DungeonProfileRequest {
-            dungeon: "Synthetic Dungeon".into(),
-            character_id: Some("synthetic-character".into()),
-            range: TimeRange {
-                start: Timestamp(10),
-                end: Timestamp(100),
+        .dungeon_profile(
+            DungeonProfileRequest {
+                dungeon: "Synthetic Dungeon".into(),
+                character_id: Some("synthetic-character".into()),
+                range: TimeRange {
+                    start: Timestamp(10),
+                    end: Timestamp(100),
+                },
             },
-        })
+            Some("account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        )
         .unwrap();
     let statements = STATEMENTS.with(|s| s.take());
     let sql = statements
@@ -114,14 +117,17 @@ fn bounded_home_boss_baselines_seek_without_full_history_work() {
     let (_dir, reader) = reader();
     for target_types in [None, Some(vec![42]), Some((0..64).collect()), Some(vec![])] {
         reader
-            .home_boss_baselines(BossHistoryRequest {
-                range: Some(TimeRange {
-                    start: Timestamp(10),
-                    end: Timestamp(100),
-                }),
-                character_id: Some("synthetic-character".into()),
-                target_types,
-            })
+            .home_boss_baselines(
+                BossHistoryRequest {
+                    range: Some(TimeRange {
+                        start: Timestamp(10),
+                        end: Timestamp(100),
+                    }),
+                    character_id: Some("synthetic-character".into()),
+                    target_types,
+                },
+                Some("account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            )
             .unwrap();
         let statements = STATEMENTS.with(|s| s.take());
         assert_eq!(statements.len(), 1);

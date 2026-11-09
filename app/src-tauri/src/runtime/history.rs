@@ -1,5 +1,6 @@
 //! One native history scheduler, shared by Home and every drill-down.
 use super::{home::*, CaptureRuntime};
+use maxed_store::{CatalogQueryData, CatalogQueryIdentity};
 use maxed_types::*;
 use std::{
     collections::VecDeque,
@@ -33,6 +34,7 @@ impl HistoryCaller {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum HistoryKey {
+    Account(u64, Box<HistoryKey>),
     StorageStatus(bool),
     MaintenanceJobs,
     StatsMaps(StatsFilter),
@@ -45,18 +47,14 @@ pub(super) enum HistoryKey {
     StatsExport(StatsExportRequest),
     Home(HomeScope),
     HomeDungeonStreak(HomeDungeonStreakRequest),
-    RunRecap(RunRecapRequest),
+    RunRecap(RunRecapRequest, CatalogQueryIdentity),
     VisitRecap(VisitRecapRequest),
-    HomeHud(
-        HomeScope,
-        Vec<(u16, Option<String>)>,
-        Vec<(u16, PotionStat)>,
-    ),
-    ScopeLoot(HomeScope, Option<String>, u16, Vec<(u16, Option<String>)>),
+    HomeHud(HomeScope, CatalogQueryIdentity),
+    ScopeLoot(HomeScope, Option<String>, u16, CatalogQueryIdentity),
     DungeonBests,
     Runs(RunFilter),
     Drops(DropFilter),
-    DropSummary(DropSummaryRequest, Vec<(u16, Option<String>)>),
+    DropSummary(DropSummaryRequest, CatalogQueryIdentity),
     Chat(ChatFilter, Vec<String>, Vec<String>),
     ChatOverview(ChatOverviewRequest),
     ChatSender(ChatSenderRequest),
@@ -65,7 +63,7 @@ pub(super) enum HistoryKey {
     EventSummary(EventSummaryRequest),
     ItemHistory(ItemHistoryRequest),
     LootStats(LootStatsFilter),
-    Collection(CollectionRequest, Vec<(u16, Option<String>)>),
+    Collection(CollectionRequest, CatalogQueryIdentity),
     Alerts(AlertFilter),
     AlertSummary(AlertSummaryRequest),
     Run(String),
@@ -85,8 +83,25 @@ pub(super) enum HistoryKey {
     PlayerContext(String, String, Option<Timestamp>, Option<Timestamp>),
 }
 impl HistoryKey {
+    fn account_scoped(&self) -> bool {
+        match self {
+            Self::Account(_, key) => key.account_scoped(),
+            Self::Home(_)
+            | Self::HomeHud(..)
+            | Self::ScopeLoot(..)
+            | Self::DungeonBests
+            | Self::HomeDungeonStreak(_)
+            | Self::DungeonProfile(_)
+            | Self::HomeBossBaselines(_) => true,
+            _ => false,
+        }
+    }
+
     fn storage(&self) -> bool {
-        matches!(self, Self::StorageStatus(_) | Self::MaintenanceJobs)
+        match self {
+            Self::Account(_, key) => key.storage(),
+            _ => matches!(self, Self::StorageStatus(_) | Self::MaintenanceJobs),
+        }
     }
     #[cfg(test)]
     pub(super) fn validate_for_tests(&self) -> Result<(), String> {
@@ -95,6 +110,7 @@ impl HistoryKey {
 
     pub(super) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::Account(_, key) => key.validate(),
             Self::StatsMaps(filter) | Self::StatsDungeons(filter) => validate_stats(filter),
             Self::DungeonProfile(request) => {
                 identifier(&request.dungeon)?;
@@ -220,14 +236,15 @@ impl HistoryKey {
             }
             Self::Home(scope) => validate_scope(scope),
             Self::HomeDungeonStreak(request) => identifier(&request.dungeon),
-            Self::RunRecap(request) => identifier(&request.run_id),
+            // Recap only consumes UT/ST membership, not bounded tier SQL metadata.
+            Self::RunRecap(request, _) => identifier(&request.run_id),
             Self::VisitRecap(request) => identifier(&request.visit_id),
-            Self::HomeHud(scope, tiers, potions) => {
+            Self::HomeHud(scope, catalog) => {
                 validate_scope(scope)?;
-                maxed_store::validate_loot_catalog(tiers, potions).map_err(|_| INVALID.into())
+                catalog.validate().map_err(|_| INVALID.into())
             }
-            Self::ScopeLoot(scope, cursor, limit, tiers) => {
-                maxed_store::validate_loot_catalog(tiers, &[]).map_err(|_| INVALID.to_owned())?;
+            Self::ScopeLoot(scope, cursor, limit, catalog) => {
+                catalog.validate().map_err(|_| INVALID.to_owned())?;
                 maxed_store::validate_scope_loot(scope, cursor.as_deref(), *limit)
                     .map_err(|_| INVALID.into())
             }
@@ -240,13 +257,9 @@ impl HistoryKey {
                 }
                 Ok(())
             }
-            Self::DropSummary(request, tiers) => {
-                if request.days.len() > 8
-                    || tiers.len() > 65_536
-                    || tiers
-                        .iter()
-                        .any(|(_, tier)| tier.as_ref().is_some_and(|s| s.len() > 16))
-                {
+            Self::DropSummary(request, catalog) => {
+                catalog.validate().map_err(|_| INVALID.to_owned())?;
+                if request.days.len() > 8 {
                     return Err(INVALID.into());
                 }
                 validate_loot_range(request.filter.range.as_ref())?;
@@ -262,13 +275,9 @@ impl HistoryKey {
                 validate_loot_page(request.limit, request.cursor.as_ref())
             }
             Self::LootStats(filter) => validate_loot_range(filter.range.as_ref()),
-            Self::Collection(request, tiers) => {
-                if request.chase.len() > MAX_CHASE_ITEMS
-                    || tiers.len() > 65_536
-                    || tiers
-                        .iter()
-                        .any(|(_, tier)| tier.as_ref().is_some_and(|s| s.len() > 16))
-                {
+            Self::Collection(request, catalog) => {
+                catalog.validate().map_err(|_| INVALID.to_owned())?;
+                if request.chase.len() > MAX_CHASE_ITEMS {
                     return Err(INVALID.into());
                 }
                 if let Some(dungeon) = &request.dungeon {
@@ -505,6 +514,12 @@ impl<T: Send + 'static, F: FnOnce(HomeJob) -> Result<T, String> + Send + 'static
 pub(super) enum ReaderMessage {
     Job(Pending),
     Close,
+    RecoveryProgress(
+        std::path::PathBuf,
+        u64,
+        String,
+        mpsc::Sender<Result<Option<u16>, maxed_store::StoreError>>,
+    ),
 }
 
 pub(super) struct Pending {
@@ -523,7 +538,7 @@ struct Active {
 #[derive(Default)]
 pub(super) struct Scheduler {
     active: Option<Active>,
-    pending: Option<Pending>,
+    pending: VecDeque<Pending>,
     storage: VecDeque<Pending>,
     preparing: Option<u64>,
     request: u64,
@@ -537,7 +552,7 @@ impl Scheduler {
     pub(super) fn counts(&self) -> (usize, usize, usize, usize) {
         (
             usize::from(self.active.is_some()),
-            usize::from(self.pending.is_some()) + self.storage.len(),
+            self.pending.len() + self.storage.len(),
             self.notices.iter().filter(|n| n.is_some()).count(),
             self.attempts.iter().map(VecDeque::len).sum(),
         )
@@ -555,11 +570,27 @@ impl Scheduler {
     pub(super) fn active(&self) -> bool {
         self.active.is_some()
     }
+    pub(super) fn retire_accounts(&mut self) {
+        if let Some(active) = &mut self.active {
+            if active.key.account_scoped() {
+                active.superseded = true;
+            }
+        }
+        let mut retained = VecDeque::new();
+        for pending in self.pending.drain(..) {
+            if pending.key.account_scoped() {
+                pending.operation.reject(None);
+            } else {
+                retained.push_back(pending);
+            }
+        }
+        self.pending = retained;
+    }
     pub(super) fn retire(&mut self) {
         if let Some(active) = &mut self.active {
             active.superseded = true;
         }
-        if let Some(pending) = self.pending.take() {
+        for pending in self.pending.drain(..) {
             pending.operation.reject(None);
         }
         for pending in self.storage.drain(..) {
@@ -613,6 +644,34 @@ fn reader_loop(owner: Weak<HomeReads>, receive: mpsc::Receiver<ReaderMessage>) {
                 let Some(owner) = owner.upgrade() else { break };
                 owner.run_reader(pending);
             }
+            Ok(ReaderMessage::RecoveryProgress(path, generation, account, reply)) => {
+                let Some(owner) = owner.upgrade() else { break };
+                let context = owner.context.lock().unwrap_or_else(|p| p.into_inner());
+                if !context.as_ref().is_some_and(|c| {
+                    c.namespace == super::Namespace::Live
+                        && c.database == path
+                        && c.generation == generation
+                }) {
+                    let _ = reply.send(Err(maxed_store::StoreError::Closed));
+                    continue;
+                }
+                owner
+                    .scheduler
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .open = true;
+                drop(context);
+                drop_kept_reader();
+                let result =
+                    maxed_store::open_reader(&path).and_then(|r| r.recovery_progress(&account));
+                let _ = reply.send(result);
+                owner
+                    .scheduler
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .open = false;
+                owner.idle.notify_all();
+            }
             Ok(ReaderMessage::Close) | Err(mpsc::RecvTimeoutError::Timeout) => {
                 drop_kept_reader();
                 if let Some(owner) = owner.upgrade() {
@@ -642,7 +701,7 @@ impl HomeReads {
         }
     }
 
-    fn send_reader(self: &Arc<Self>, mut message: ReaderMessage) {
+    pub(super) fn send_reader(self: &Arc<Self>, mut message: ReaderMessage) {
         let mut failed = None;
         for _ in 0..2 {
             let sender = {
@@ -696,6 +755,11 @@ impl HomeReads {
             context,
             operation,
         } = pending;
+        let account_scoped = key.account_scoped();
+        let revision = context
+            .as_ref()
+            .filter(|_| account_scoped)
+            .map(|c| c.account_revision);
         // Only this active worker owns the reader. A dropped receiver skips SQL.
         let completion = if operation.closed() {
             operation.reject(None);
@@ -707,6 +771,7 @@ impl HomeReads {
             Some(operation.run(HomeJob {
                 owner: owner.clone(),
                 context,
+                account_scoped,
             }))
         } else {
             operation.reject(Some(UNAVAILABLE.into()));
@@ -718,7 +783,8 @@ impl HomeReads {
             .active
             .as_ref()
             .is_none_or(|active| active.request != request || active.superseded)
-            || owner.generation.load(Ordering::Acquire) != namespace_generation;
+            || owner.generation.load(Ordering::Acquire) != namespace_generation
+            || revision.is_some_and(|r| r != owner.account_revision.load(Ordering::Acquire));
         // Retirement may race ahead of dispatching this job to the channel.
         if idle.is_zero() || superseded || queue.stopped {
             drop_kept_reader();
@@ -750,13 +816,13 @@ impl HomeReads {
             let storage_first = queue.storage.front().is_some_and(|storage| {
                 queue
                     .pending
-                    .as_ref()
+                    .front()
                     .is_none_or(|page| storage.request < page.request)
             });
             let pending = if storage_first {
                 queue.storage.pop_front()
             } else {
-                queue.pending.take()
+                queue.pending.pop_front()
             };
             let pending = pending?;
             if queue.stopped
@@ -814,6 +880,12 @@ impl HomeReads {
                 }
                 Some(context)
             };
+        // Admission holds the context lock: a switch cannot race revision capture.
+        let key = if key.account_scoped() {
+            HistoryKey::Account(self.account_revision.load(Ordering::Acquire), Box::new(key))
+        } else {
+            key
+        };
         let Some(request) = queue.request.checked_add(1) else {
             queue.retire();
             operation.reject(Some(UNAVAILABLE.into()));
@@ -840,8 +912,16 @@ impl HomeReads {
             } else {
                 queue.storage.push_back(pending);
             }
-        } else if let Some(previous) = queue.pending.replace(pending) {
+        } else if let Some(index) = queue.pending.iter().position(|p| p.key == pending.key) {
+            // Coalesce only identical queries, preserving their FIFO position.
+            let mut pending = pending;
+            pending.request = queue.pending[index].request;
+            let previous = std::mem::replace(&mut queue.pending[index], pending);
             previous.operation.reject(None);
+        } else if queue.pending.len() >= 8 {
+            pending.operation.busy();
+        } else {
+            queue.pending.push_back(pending);
         }
         if waiting {
             if queue.preparing.is_none() {
@@ -869,10 +949,18 @@ impl HomeReads {
                             None
                         } else {
                             pending.context = context.clone();
+                            if let (Some(context), HistoryKey::Account(revision, _)) =
+                                (&context, &mut pending.key)
+                            {
+                                *revision = context.account_revision;
+                            }
                             Some(pending)
                         }
                     };
-                    queue.pending = queue.pending.take().and_then(fill_context);
+                    queue.pending = std::mem::take(&mut queue.pending)
+                        .into_iter()
+                        .filter_map(fill_context)
+                        .collect();
                     queue.storage = std::mem::take(&mut queue.storage)
                         .into_iter()
                         .filter_map(fill_context)
@@ -935,21 +1023,24 @@ impl CaptureRuntime {
         scope: HomeScope,
         cursor: Option<String>,
         limit: u16,
-        tiers: Vec<(u16, Option<String>)>,
+        catalog: impl Into<CatalogQueryData>,
     ) -> Result<HistoryReply<ScopeLootPage>, String> {
+        let catalog = catalog.into();
         let runtime = self.clone();
         self.submit_history(
             HistoryCaller::MainWindow,
-            HistoryKey::ScopeLoot(scope.clone(), cursor.clone(), limit, tiers.clone()),
+            HistoryKey::ScopeLoot(scope.clone(), cursor.clone(), limit, catalog.identity()),
             move |job| {
-                runtime.read_history(
+                runtime.read_account_history(
                     job,
                     || ScopeLootPage {
                         items: vec![],
                         next: None,
                         total_bags: 0,
                     },
-                    |reader| reader.scope_loot(scope, cursor, limit, &tiers),
+                    |reader, account| {
+                        reader.scope_loot_catalog(scope, account, cursor, limit, &catalog)
+                    },
                 )
             },
         )
@@ -961,7 +1052,11 @@ impl CaptureRuntime {
         self.submit_history(
             HistoryCaller::MainWindow,
             HistoryKey::DungeonBests,
-            move |job| runtime.read_history(job, Vec::new, |reader| reader.dungeon_bests()),
+            move |job| {
+                runtime.read_account_history(job, Vec::new, |reader, account| {
+                    reader.dungeon_bests(account)
+                })
+            },
         )
         .await
     }
@@ -1049,7 +1144,9 @@ impl CaptureRuntime {
             HistoryCaller::MainWindow,
             HistoryKey::Home(scope.clone()),
             move |job| {
-                runtime.read_history(job, empty_history, |reader| reader.home_summary(scope))
+                runtime.read_account_history(job, empty_history, |reader, account| {
+                    reader.home_summary(scope, account)
+                })
             },
         )
         .await
@@ -1140,12 +1237,13 @@ impl CaptureRuntime {
     pub async fn get_drop_summary(
         self: &Arc<Self>,
         request: DropSummaryRequest,
-        tiers: Vec<(u16, Option<String>)>,
+        catalog: impl Into<CatalogQueryData>,
     ) -> Result<HistoryReply<DropSummary>, String> {
+        let catalog = catalog.into();
         let runtime = self.clone();
         self.submit_history(
             HistoryCaller::MainWindow,
-            HistoryKey::DropSummary(request.clone(), tiers.clone()),
+            HistoryKey::DropSummary(request.clone(), catalog.identity()),
             move |job| {
                 let day_count = request.days.len();
                 let empty = DropTotals {
@@ -1163,7 +1261,7 @@ impl CaptureRuntime {
                         totals: empty.clone(),
                         days: vec![empty; day_count],
                     },
-                    |reader| reader.drop_summary(request, &tiers),
+                    |reader| reader.drop_summary_catalog(request, &catalog),
                 )
             },
         )
@@ -1233,12 +1331,13 @@ impl CaptureRuntime {
     pub async fn get_collection(
         self: &Arc<Self>,
         request: CollectionRequest,
-        tiers: Vec<(u16, Option<String>)>,
+        catalog: impl Into<CatalogQueryData>,
     ) -> Result<HistoryReply<Collection>, String> {
+        let catalog = catalog.into();
         let runtime = self.clone();
         self.submit_history(
             HistoryCaller::MainWindow,
-            HistoryKey::Collection(request.clone(), tiers.clone()),
+            HistoryKey::Collection(request.clone(), catalog.identity()),
             move |job| {
                 let empty_request = request.clone();
                 runtime.read_history(
@@ -1257,7 +1356,7 @@ impl CaptureRuntime {
                         grid_dungeon: empty_request.dungeon,
                         grid: vec![],
                     },
-                    |reader| reader.collection(request, &tiers),
+                    |reader| reader.collection_catalog(request, &catalog),
                 )
             },
         )

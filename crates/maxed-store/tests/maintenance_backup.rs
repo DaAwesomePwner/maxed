@@ -224,7 +224,7 @@ fn read_only_preflight_matches_copy_budget_and_creates_no_manifest() {
     let mut db = Connection::open(&path).unwrap();
     migrate(&mut db).unwrap();
     let probe = HistoryUpgrade::preflight(&path, &Space(None)).unwrap();
-    assert_eq!(probe.schema, Some(16));
+    assert_eq!(probe.schema, Some(maxed_store::SCHEMA_VERSION));
     assert_eq!(probe.space.check(), Err(BackupError::SpaceUnknown));
     assert!(!dir.path().join("backups").exists());
     let required = probe.space.required_bytes.unwrap();
@@ -290,7 +290,7 @@ fn upgrade_boundary_is_verified_and_cancellable_before_migration() {
                 .unwrap()
                 .user_version()
                 .unwrap(),
-            16
+            maxed_store::SCHEMA_VERSION
         );
     }
 }

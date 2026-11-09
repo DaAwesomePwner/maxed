@@ -40,3 +40,5 @@ pub use engine::{Engine, EngineConfig, EngineError};
 
 #[cfg(test)]
 mod maintenance_tests;
+
+pub use identity::character_id_for;

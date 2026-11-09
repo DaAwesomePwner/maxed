@@ -117,7 +117,9 @@ fn setup() -> (tempfile::TempDir, Arc<CaptureRuntime>) {
     let dir = tempfile::tempdir().unwrap();
     let snapshot = demo::demo_snapshot();
     let session = snapshot.session.unwrap();
-    let character = snapshot.character.unwrap();
+    let mut character = snapshot.character.unwrap();
+    character.identity_verified = true;
+    character.account_id = Some(format!("account-{}", "a".repeat(64)));
     let start = session.started.0;
     let mut open = session.clone();
     open.ended = None;
@@ -127,6 +129,11 @@ fn setup() -> (tempfile::TempDir, Arc<CaptureRuntime>) {
     let events = [
         EngineEvent::SessionUpdated(open),
         EngineEvent::CharacterUpdated(character.clone()),
+        EngineEvent::LocalIdentityChanged {
+            at: Timestamp(start),
+            character_id: Some(character.id.clone()),
+            account_id: character.account_id.clone(),
+        },
         EngineEvent::MapEntered {
             realm_instance_key: None,
             at: Timestamp(start),
@@ -620,19 +627,24 @@ fn export_retries_superseded_reads_at_most_three_times() {
                     },
                 ));
                 pending(active.as_mut());
-                let mut saving = Box::pin(runtime.export_stats_csv(
-                    &dialog,
-                    StatsExportRequest {
-                        kind: StatsExportKind::Maps,
-                        filter: all(),
-                        include_empty: true,
-                    },
-                    |_| HashMap::new(),
-                ));
+                let request = StatsExportRequest {
+                    kind: StatsExportKind::Maps,
+                    filter: all(),
+                    include_empty: true,
+                };
+                let mut saving =
+                    Box::pin(
+                        runtime.export_stats_csv(&dialog, request.clone(), |_| HashMap::new()),
+                    );
                 pending(saving.as_mut());
                 let mut competing = None;
                 for attempt in 0..supersessions {
-                    let mut refresh = Box::pin(runtime.stats_dungeons(all()));
+                    // Only an identical queued query coalesces with the export read.
+                    let mut refresh = Box::pin(runtime.submit_history(
+                        HistoryCaller::MainWindow,
+                        HistoryKey::StatsExport(request.clone()),
+                        |_| Ok(()),
+                    ));
                     pending(refresh.as_mut());
                     competing = Some(refresh);
                     if attempt < 2 {

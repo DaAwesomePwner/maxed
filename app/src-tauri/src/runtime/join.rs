@@ -14,6 +14,7 @@ use std::{
 
 #[derive(Clone)]
 pub(super) struct Bridge {
+    pub account_changed: Arc<dyn Fn(AccountHistoryChanged) + Send + Sync>,
     pub visibility: Arc<crate::bridge::PresentationVisibility>,
     // Full canonical envelopes, also used by replay consumers as store inputs.
     pub event: Arc<dyn Fn(EventEnvelope) + Send + Sync>,
@@ -25,6 +26,7 @@ pub(super) struct Bridge {
 impl Default for Bridge {
     fn default() -> Self {
         Self {
+            account_changed: Arc::new(|_| {}),
             visibility: Arc::default(),
             event: Arc::new(|_| {}),
             batch: None,
@@ -65,6 +67,7 @@ impl Default for Views {
             party_write: Mutex::new(None),
             party_catalog: Mutex::new(None),
             snapshot: Mutex::new(LiveSnapshot {
+                revision: None,
                 instance: None,
                 run_totals: None,
                 at: Timestamp(0),
@@ -94,7 +97,11 @@ impl Default for Views {
 pub(super) struct Adapter {
     maintenance_work: super::maintenance::OwnerWork,
     pub engine: Engine,
-    writer: Option<StoreWriter>,
+    writer: Option<Arc<StoreWriter>>,
+    recovery: Option<super::account_history::Recovery>,
+    identity_key: [u8; 32],
+    recovery_account: Option<String>,
+    identity_acquisition: super::account_history::IdentityAcquisition,
     path: PathBuf,
     writer_config: WriterConfig,
     pending: VecDeque<maxed_store::ContextualEvent>,
@@ -106,6 +113,7 @@ pub(super) struct Adapter {
     finalized: bool,
     gate: crate::bridge::SnapshotGate,
     snapshot_dirty: bool,
+    snapshot_revision: u64,
     rejected: bool,
     at: Timestamp,
     sequence: Sequence,
@@ -157,6 +165,7 @@ impl Adapter {
         bridge: Bridge,
     ) -> Result<Self, String> {
         let stream_id = config.stream_id.clone();
+        let identity_key = config.identity_key;
         let engine = Engine::new(config, catalog.clone())
             .map_err(|_| "Catalog could not initialize the engine")?;
         let writer =
@@ -170,7 +179,11 @@ impl Adapter {
         let mut adapter = Self {
             maintenance_work: super::maintenance::OwnerWork::default(),
             engine,
-            writer: Some(writer),
+            writer: Some(Arc::new(writer)),
+            recovery: None,
+            identity_key,
+            recovery_account: None,
+            identity_acquisition: Default::default(),
             path,
             writer_config,
             pending: VecDeque::new(),
@@ -187,6 +200,7 @@ impl Adapter {
                 ..Default::default()
             },
             snapshot_dirty: true,
+            snapshot_revision: 0,
             rejected: false,
             at: Timestamp(0),
             sequence: Sequence(Timestamp(0)),
@@ -264,6 +278,7 @@ impl Adapter {
     fn events_at(&mut self, events: Vec<EngineEvent>, at: Option<Timestamp>) {
         // Engine metadata (e.g. last traffic) can change without a domain event.
         self.snapshot_dirty = true;
+        self.gate.dirty = true;
         // Feed both paths under one lock, before publishing the complete batch.
         // Presence and roster profiles never enter the durable writer queue.
         let presence = self.engine.take_roster_presence();
@@ -297,9 +312,43 @@ impl Adapter {
         if events.is_empty() {
             return;
         }
+        // Pin acquisition reads to the complete engine batch, including the later
+        // LocalIdentityChanged projection following CharacterUpdated.
+        let identity_watermark = Sequence(Timestamp(self.sequence.0 .0 + events.len() as u64));
         let mut envelopes = Vec::with_capacity(events.len());
         for mut event in events {
             self.partial(&mut event);
+            let acquired = self.identity_acquisition.observe(&event);
+            let account = super::account_history::verified_account(&event);
+            if let (Some(account), Some(home)) = (account, &self.home) {
+                if let Some(notice) = home.observe_account(
+                    Some(&self.stream_id),
+                    account,
+                    acquired.then_some(identity_watermark),
+                ) {
+                    (self.bridge.account_changed)(notice);
+                }
+                if self.live && self.recovery_account.as_deref() != Some(account) {
+                    if self.recovery.is_none() {
+                        if let Some(writer) = &self.writer {
+                            self.recovery = super::account_history::Recovery::start(
+                                home.clone(),
+                                writer.clone(),
+                                self.path.clone(),
+                                self.identity_key,
+                                self.bridge.account_changed.clone(),
+                            );
+                        }
+                    }
+                    if let Some(recovery) = &mut self.recovery {
+                        recovery.observe(account);
+                        self.recovery_account = Some(account.to_owned());
+                    } else {
+                        // A failed start must not suppress the next acquisition.
+                        self.recovery_account = None;
+                    }
+                }
+            }
             if let EngineEvent::CaptureStateChanged(status) = &event {
                 self.capture_status = status.clone();
             }
@@ -685,7 +734,14 @@ impl Adapter {
     pub fn live_tick(&mut self, at: Timestamp, quiet: std::time::Duration) -> Result<(), String> {
         self.at = self.at.max(at);
         let events = self.engine.advance_live_to(self.at, quiet);
+        // An event-free clock tick changes nothing presented. Keep the gate's
+        // prior state so idle sessions do not republish at the 1 Hz floor.
+        let gate_dirty = self.gate.dirty;
+        let idle = events.is_empty();
         self.events(events);
+        if idle {
+            self.gate.dirty = gate_dirty;
+        }
         self.drain()
     }
     pub fn capture(&mut self, mut status: CaptureStatus) -> Result<(), String> {
@@ -843,6 +899,11 @@ impl Adapter {
                 add_missing(&mut drop.issues);
             }
         }
+        self.snapshot_revision = self
+            .snapshot_revision
+            .checked_add(1)
+            .expect("snapshot revision exhausted");
+        snapshot.revision = Some(Sequence(Timestamp(self.snapshot_revision)));
         snapshot.character = self.observe_character(snapshot.character.take());
         *self
             .views
@@ -879,19 +940,25 @@ impl Adapter {
             // Resume the durable head with the exact original stream. Startup
             // recovery can close interrupted rows, then these retained terminal
             // revisions restore their recorded evidence before retry acknowledges.
-            self.writer = Some(
+            self.writer = Some(Arc::new(
                 start_writer(self.path.clone(), self.writer_config.clone())
                     .map_err(|e| e.to_string())?,
-            );
+            ));
         }
         self.drain()?;
         self.close()
     }
 
     fn reclaim_failed_writer(&mut self) {
+        self.recovery_account = None;
+        if let Some(mut recovery) = self.recovery.take() {
+            recovery.stop();
+        }
         if let Some(writer) = self.writer.take() {
             if let Err(maxed_store::ContextualShutdownError { pending, .. }) =
-                writer.shutdown_with_alert_context()
+                Arc::try_unwrap(writer)
+                    .unwrap_or_else(|_| panic!("recovery writer still owned"))
+                    .shutdown_with_alert_context()
             {
                 self.retain_accepted(pending);
             }
@@ -912,6 +979,10 @@ impl Adapter {
     }
 
     pub fn close(&mut self) -> Result<(), String> {
+        self.recovery_account = None;
+        if let Some(mut recovery) = self.recovery.take() {
+            recovery.stop();
+        }
         self.maintenance_work.stop();
         if let Some(writer) = &self.writer {
             writer.set_maintenance_blocked(true);
@@ -928,7 +999,10 @@ impl Adapter {
         let before = writer.status();
         let writer = self.writer.take().expect("writer checked above");
         let mut status = before;
-        match writer.shutdown_with_alert_context() {
+        match Arc::try_unwrap(writer)
+            .unwrap_or_else(|_| panic!("recovery writer still owned"))
+            .shutdown_with_alert_context()
+        {
             Ok(receipt) => {
                 status.state = StoreState::Closed;
                 status.queued = 0;
@@ -1051,6 +1125,7 @@ mod session_coverage_tests {
         adapter.live_traffic(Timestamp(2)).unwrap();
         let latest = adapter.read_snapshot();
         assert_eq!(latest.sequence, first.sequence);
+        assert!(latest.revision.unwrap().0 > first.revision.unwrap().0);
         assert_eq!(latest.session.as_ref().unwrap().last_traffic, Timestamp(2));
         assert_eq!(adapter.snapshot_builds, 3);
         for _ in 0..10 {
@@ -1074,6 +1149,18 @@ mod session_coverage_tests {
             "publication reuses the fresh cache"
         );
 
+        // A silent transaction after a clean publication must dirty the gate.
+        assert!(!adapter.gate.dirty);
+        adapter.live_traffic(Timestamp(3)).unwrap();
+        assert!(adapter.gate.dirty);
+        adapter.publish_due(std::time::Duration::from_millis(1999));
+        assert!(snapshots.try_recv().is_err());
+        adapter.publish_due(std::time::Duration::from_secs(2));
+        let silent = snapshots.try_recv().unwrap();
+        assert_eq!(silent.sequence, latest.sequence);
+        assert!(silent.revision.unwrap().0 > latest.revision.unwrap().0);
+        assert_eq!(silent.session.as_ref().unwrap().last_traffic, Timestamp(3));
+
         adapter
             .capture(CaptureStatus {
                 state: CaptureState::Live,
@@ -1081,15 +1168,15 @@ mod session_coverage_tests {
             })
             .unwrap();
         let latest = adapter.read_snapshot();
-        adapter.publish_due(std::time::Duration::from_millis(1250));
+        adapter.publish_due(std::time::Duration::from_millis(2250));
         assert!(
             snapshots.try_recv().is_err(),
             "idle publication stays at 1 Hz"
         );
-        adapter.publish_due(std::time::Duration::from_secs(2));
+        adapter.publish_due(std::time::Duration::from_secs(3));
         assert_eq!(snapshots.try_recv().unwrap(), latest);
         adapter
-            .finish(Timestamp(2), FightEnd::CaptureStopped)
+            .finish(Timestamp(3), FightEnd::CaptureStopped)
             .unwrap();
         adapter.close().unwrap();
     }
@@ -1123,7 +1210,14 @@ mod session_coverage_tests {
         adapter.close().unwrap();
         let home = maxed_store::open_reader(&path)
             .unwrap()
-            .home_summary(HomeScope::Session { id: session.id })
+            .home_summary(
+                HomeScope::Session { id: session.id },
+                maxed_store::open_reader(&path)
+                    .unwrap()
+                    .current_account()
+                    .unwrap()
+                    .as_deref(),
+            )
             .unwrap();
         assert_eq!((home.runs, home.clears), (0, 0));
         assert_eq!(home.issues, vec![CoverageIssue::MissingCatalog]);
@@ -1141,3 +1235,11 @@ mod snapshot_tests;
 #[cfg(test)]
 #[path = "hidden_snapshot_tests.rs"]
 mod hidden_snapshot_tests;
+
+#[cfg(test)]
+#[path = "account_adapter_tests.rs"]
+mod account_adapter_tests;
+
+#[cfg(test)]
+#[path = "join_publication_tests.rs"]
+mod publication_tests;

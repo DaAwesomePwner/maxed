@@ -150,6 +150,17 @@ fn weapon_firing(
         })
         .collect::<Result<_, _>>()?;
     let mut f = WeaponFiringDef {
+        subattack_projectile_indices: Some(
+            subattacks
+                .iter()
+                .map(|attack| {
+                    attack
+                        .attr("projectileId")
+                        .and_then(|s| num::<i16>(s).ok())
+                        .filter(|v| *v >= 0)
+                })
+                .collect(),
+        ),
         support: CatalogSupport::Unsupported,
         groups: vec![],
         omitted_projectile_indices: vec![],
@@ -1031,6 +1042,11 @@ fn validate_firing(item: &ItemDef, f: &WeaponFiringDef) -> bool {
         .iter()
         .any(|g| g.schedule == WeaponSchedule::Simultaneous);
     (!f.groups.is_empty() || !f.reasons.is_empty())
+        && f.subattack_projectile_indices
+            .as_ref()
+            .is_none_or(|indices| {
+                indices.len() <= 256 && indices.iter().flatten().all(|index| *index >= 0)
+            })
         && f.groups.len() <= 256
         && f.omitted_projectile_indices.len() <= 512
         && f.omitted_projectile_indices.windows(2).all(|w| w[0] < w[1])

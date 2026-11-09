@@ -103,17 +103,17 @@ impl CaptureRuntime {
     pub async fn run_recap(
         self: &Arc<Self>,
         request: RunRecapRequest,
-        chase_types: Vec<u16>,
+        catalog: maxed_store::CatalogQueryData,
     ) -> Result<HistoryReply<Option<RunRecap>>, String> {
         let runtime = self.clone();
         self.submit_history(
             HistoryCaller::MainWindow,
-            HistoryKey::RunRecap(request.clone()),
+            HistoryKey::RunRecap(request.clone(), catalog.identity()),
             move |job| {
                 runtime.read_history(
                     job,
                     || None,
-                    |reader| reader.run_recap(&request, &chase_types),
+                    |reader| reader.run_recap(&request, catalog.chase_types()),
                 )
             },
         )
@@ -130,13 +130,13 @@ impl CaptureRuntime {
             HistoryKey::HomeDungeonStreak(request.clone()),
             move |job| {
                 let dungeon = request.dungeon.clone();
-                runtime.read_history(
+                runtime.read_account_history(
                     job,
                     || HomeDungeonStreak {
                         dungeon,
                         ..Default::default()
                     },
-                    |reader| reader.home_dungeon_streak(request),
+                    |reader, account| reader.home_dungeon_streak(request, account),
                 )
             },
         )
@@ -146,16 +146,15 @@ impl CaptureRuntime {
     pub async fn home_hud(
         self: &Arc<Self>,
         scope: HomeScope,
-        tiers: Vec<(u16, Option<String>)>,
-        potions: Vec<(u16, PotionStat)>,
+        catalog: maxed_store::CatalogQueryData,
     ) -> Result<HistoryReply<HomeHud>, String> {
         let runtime = self.clone();
         self.submit_history(
             HistoryCaller::MainWindow,
-            HistoryKey::HomeHud(scope.clone(), tiers.clone(), potions.clone()),
+            HistoryKey::HomeHud(scope.clone(), catalog.identity()),
             move |job| {
-                runtime.read_history(job, HomeHud::default, |reader| {
-                    reader.home_hud(scope, &tiers, &potions)
+                runtime.read_account_history(job, HomeHud::default, |reader, account| {
+                    reader.home_hud_catalog(scope, account, &catalog)
                 })
             },
         )
@@ -276,13 +275,13 @@ impl CaptureRuntime {
             HistoryCaller::MainWindow,
             HistoryKey::HomeBossBaselines(request.clone()),
             move |job| {
-                runtime.read_history(
+                runtime.read_account_history(
                     job,
                     || HomeBossBaselines {
                         rows: vec![],
                         truncated: false,
                     },
-                    |reader| reader.home_boss_baselines(request),
+                    |reader, account| reader.home_boss_baselines(request, account),
                 )
             },
         )
@@ -299,7 +298,7 @@ impl CaptureRuntime {
             HistoryKey::DungeonProfile(request.clone()),
             move |job| {
                 let dungeon = request.dungeon.clone();
-                runtime.read_history(
+                runtime.read_account_history(
                     job,
                     || DungeonProfile {
                         dungeon,
@@ -310,7 +309,7 @@ impl CaptureRuntime {
                         usual_clear_micros: None,
                         clear_samples: 0,
                     },
-                    |reader| reader.dungeon_profile(request),
+                    |reader, account| reader.dungeon_profile(request, account),
                 )
             },
         )

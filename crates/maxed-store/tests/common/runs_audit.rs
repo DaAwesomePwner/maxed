@@ -1,6 +1,8 @@
 //! Invented multi-run workload. No account data or captured payloads.
 use rusqlite::{params, Connection};
 
+use crate::common::account_sql;
+
 pub fn seed(db: &mut Connection, fights: usize, players: usize) -> String {
     maxed_store::migrate(db).unwrap();
     let tx = db.transaction().unwrap();
@@ -58,11 +60,11 @@ pub fn query(legacy: bool) -> String {
     } else {
         current.to_owned()
     };
-    format!(
+    account_sql::with_accounts(&format!(
         "WITH selected AS MATERIALIZED (SELECT r.*,j.key AS ordinal
         FROM json_each(?1) j CROSS JOIN runs r ON r.id=j.value)\n{}\n{tail}",
         include_str!("../../src/run_metrics.sql")
-    )
+    ))
 }
 
 pub fn read(db: &Connection, query: &str, ids: &str) -> String {

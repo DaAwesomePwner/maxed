@@ -1,4 +1,4 @@
--- One read snapshot. Parameters: kind (0=session, 1=today), session id, lo, hi.
+-- One read snapshot. Parameters: kind (0=session, 1=today), session id, lo, hi, account (NULL excludes history).
 WITH /*home_scope*/, scoped_runs AS MATERIALIZED (
     SELECT r.id,r.started,r.ended,r.outcome,r.dungeon,CASE WHEN json_valid(r.json) THEN json_extract(r.json,'$.issues') ELSE r.json END AS issues,
         CASE WHEN r.outcome='cleared' AND r.completed_at>r.started
@@ -7,7 +7,7 @@ WITH /*home_scope*/, scoped_runs AS MATERIALIZED (
                 AND e.kind IN ('victory','completion_dialogue'))
             THEN r.completed_at-r.started END AS observed_duration
     FROM runs r INDEXED BY pd_home_session_runs, scope s
-    WHERE ?1=0 AND r.session_id=s.session_id
+    WHERE ?1=0 AND r.session_id=s.session_id AND /*account:character:r.character_id*/=?5
     UNION ALL
     SELECT r.id,r.started,r.ended,r.outcome,r.dungeon,CASE WHEN json_valid(r.json) THEN json_extract(r.json,'$.issues') ELSE r.json END AS issues,
         CASE WHEN r.outcome='cleared' AND r.completed_at>r.started
@@ -16,21 +16,22 @@ WITH /*home_scope*/, scoped_runs AS MATERIALIZED (
                 AND e.kind IN ('victory','completion_dialogue'))
             THEN r.completed_at-r.started END AS observed_duration
     FROM runs r INDEXED BY pd_home_today_runs, scope s
-    WHERE ?1=1 AND r.started>=s.lo AND r.started<s.hi
+    WHERE ?1=1 AND r.started>=s.lo AND r.started<s.hi AND /*account:character:r.character_id*/=?5
 ), all_time_clears AS MATERIALIZED (
-    SELECT r.dungeon, r.completed_at-r.started AS best_clear_micros,
-        row_number() OVER (PARTITION BY r.dungeon
-            ORDER BY r.completed_at-r.started, r.started, r.id) AS ordinal
+    SELECT r.dungeon, min(r.completed_at-r.started) AS best_clear_micros
     FROM runs r
-    WHERE r.outcome='cleared' AND r.completed_at>r.started
+    WHERE r.outcome='cleared' AND r.completed_at>r.started AND /*account:character:r.character_id*/=?5
       AND CASE WHEN json_valid(r.json) THEN json_extract(r.json,'$.area_kind') END='dungeon'
       AND r.id IN (SELECT run_id FROM run_evidence WHERE kind IN ('victory','completion_dialogue'))
+    GROUP BY r.dungeon
 ), dungeon_limit AS (SELECT 20 AS n),
 /*dungeon_stats*/
 , scoped_deaths AS (
     SELECT d.* FROM deaths d, scope s
-    WHERE (?1=0 AND d.session_id=s.session_id)
-       OR (?1=1 AND d.at>=s.lo AND d.at<s.hi)
+    WHERE ((?1=0 AND d.session_id=s.session_id)
+       OR (?1=1 AND d.at>=s.lo AND d.at<s.hi)) AND (CASE WHEN d.character_id IS NULL THEN /*account:run:d.run_id*/
+        WHEN /*account:character:d.character_id*/ IS NOT NULL AND /*account:run:d.run_id*/ IS NOT NULL AND /*account:character:d.character_id*/<>/*account:run:d.run_id*/ THEN NULL
+        ELSE /*account:character:d.character_id*/ END)=?5
 ), top_dps_policy AS (
     -- Require 20 seconds of the local player's own first-to-last hit window.
     -- Exclude legacy rows without it: the fight window cannot prove local
@@ -55,7 +56,7 @@ WITH /*home_scope*/, scoped_runs AS MATERIALIZED (
     ) selected ON selected.id=r.id
 ), recent_fights AS MATERIALIZED (
     -- Whole run history, even when the selected run crosses the day boundary.
-    SELECT f.* FROM recent r CROSS JOIN fights f ON f.run_id=r.id
+    SELECT f.* FROM recent r CROSS JOIN fights f ON f.run_id=r.id WHERE /*account:fight:f*/=?5
 ), recent_players AS (
     SELECT f.id, f.run_id, f.complete_capture,
         json_extract(f.json,'$.total_damage') AS total_damage,
@@ -63,7 +64,6 @@ WITH /*home_scope*/, scoped_runs AS MATERIALIZED (
         EXISTS(SELECT 1 FROM json_each(f.json,'$.issues') WHERE value='missing_identity') AS ambiguous,
         count(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN 1 END) AS locals,
         max(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN p.damage END) AS local_damage,
-        max(CASE WHEN json_extract(p.json,'$.is_local')=1 THEN json_extract(p.json,'$.share') END) AS supplied_share,
         EXISTS(SELECT 1 FROM fight_players fp, json_each(fp.json,'$.sources') src
             WHERE fp.fight_id=f.id AND ((json_extract(src.value,'$.estimated')=1
                 AND json_array_length(src.value,'$.reasons')=0)
@@ -73,7 +73,7 @@ WITH /*home_scope*/, scoped_runs AS MATERIALIZED (
     GROUP BY f.id
 ), shares AS (
     SELECT run_id,
-        CASE WHEN min(CASE WHEN locals=1 AND supplied_share BETWEEN 0 AND 1
+        CASE WHEN min(CASE WHEN locals=1
             AND total_damage>0 AND total_damage<=1.7976931348623157e308
             AND local_damage BETWEEN 0 AND total_damage AND NOT ambiguous
             THEN 1 ELSE 0 END)=1
@@ -83,7 +83,7 @@ WITH /*home_scope*/, scoped_runs AS MATERIALIZED (
     FROM recent_players GROUP BY run_id
 ), recent_loot AS MATERIALIZED (
     SELECT d.*, row_number() OVER (PARTITION BY d.run_id ORDER BY d.at DESC,d.id DESC) AS ordinal
-    FROM recent r CROSS JOIN drops d ON d.run_id=r.id
+    FROM recent r CROSS JOIN drops d ON d.run_id=r.id WHERE /*account:drop:d*/=?5
 ), detail_issues AS MATERIALIZED (
     SELECT r.id AS run_id, i.value FROM recent r, json_each(r.json,'$.issues') i
     UNION
@@ -170,7 +170,8 @@ WITH /*home_scope*/, scoped_runs AS MATERIALIZED (
             'observed_clears',c.observed_clears,'mean_clear_micros',c.mean_clear_micros,
             'best_clear_micros',c.best_clear_micros,'last_started',CAST(c.last_started AS TEXT),
             'all_time_best_clear_micros',a.best_clear_micros
-        )) FROM dungeon_counts c LEFT JOIN all_time_clears a ON a.dungeon=c.dungeon AND a.ordinal=1),
+        )) FROM dungeon_counts c LEFT JOIN all_time_clears a ON a.dungeon=c.dungeon),
+        'unattributed_history', json(CASE WHEN /*unattributed_history*/ THEN 'true' ELSE 'false' END),
         'runs', (SELECT count(*) FROM scoped_runs),
         'clears', (SELECT count(*) FROM scoped_runs WHERE outcome='cleared'),
         'deaths', (SELECT count(*) FROM scoped_deaths),

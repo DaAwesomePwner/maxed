@@ -155,6 +155,8 @@ pub fn build(shape: Shape) -> Fixture {
     session.last_traffic = Timestamp(START + 5_000_000);
     session.ended = Some(session.last_traffic);
     let mut character = snapshot.character.unwrap();
+    character.account_id =
+        Some("account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into());
     character.observed_at = Timestamp(BASE - DAY);
     let mut other = character.clone();
     other.id = "archive-character".into();
@@ -632,10 +634,15 @@ impl Fixture {
                 format!("SELECT length(CAST(json AS BLOB)),json FROM fight_summaries WHERE run_id='{RUN}' ORDER BY started,fight_id LIMIT 12001"),
                 format!("SELECT length(CAST(json AS BLOB)),json FROM drops WHERE run_id='{RUN}' ORDER BY at,id LIMIT 2001"),
                 format!("SELECT length(CAST(id AS BLOB))+coalesce(length(CAST(related_id AS BLOB)),0)+length(CAST(explanation AS BLOB))+length(CAST(kind AS BLOB)),id,at,kind,related_id,explanation FROM timeline WHERE run_id='{RUN}' AND (kind!='player_left' OR {completed_at} IS NULL OR at<{completed_at}) ORDER BY at,id LIMIT 20001"),
-                format!("SELECT count(*),avg(completed_at-started) FROM runs WHERE dungeon='Synthetic Sanctum' AND outcome='cleared' AND started<{START} AND completed_at>started AND CASE WHEN json_valid(json) THEN json_extract(json,'$.area_kind') END='dungeon' AND EXISTS(SELECT 1 FROM run_evidence e WHERE e.run_id=runs.id AND e.kind IN ('victory','completion_dialogue'))"),
+                comparison_sql().replace("?1", "'Synthetic Sanctum'").replace("?2", &START.to_string()).replace("?3", &format!("'{RUN}'")),
             ],
             "fight" => vec![format!("SELECT length(CAST(json AS BLOB)),json FROM fights WHERE id='{FIGHT}'")],
-            "player" => vec![format!("SELECT length(CAST(json AS BLOB)),json FROM fight_players WHERE fight_id='{FIGHT}' AND object_id=1 LIMIT 2")],
+            "player" => vec![format!("SELECT length(CAST(payload AS BLOB)),payload FROM (
+                SELECT json_set(fight_players.json,'$.share',
+                    CASE WHEN json_extract(f.json,'$.total_damage')>0
+                    THEN damage/json_extract(f.json,'$.total_damage') END) AS payload
+                FROM fight_players JOIN fight_summaries f ON f.fight_id=fight_players.fight_id
+                WHERE fight_players.fight_id='{FIGHT}' AND object_id=1 LIMIT 2)")],
             _ => {
                 let key = match label {
                     "duration-ascending" => "coalesce((CASE WHEN ended>=started THEN ended-started END),9223372036854775807)",
@@ -720,4 +727,28 @@ impl Fixture {
             );
         }
     }
+}
+
+// This fixture also builds inside the native memory-history example. Reuse the
+// central SQL expression without requiring a private store module in that crate.
+fn comparison_sql() -> String {
+    let mut sql = include_str!("../../src/run_comparison.sql").to_owned();
+    for (slot, character) in [
+        (
+            "/*account:character:runs.character_id*/",
+            "runs.character_id",
+        ),
+        (
+            "/*account:run:?3*/",
+            "(SELECT character_id FROM runs WHERE id=?3)",
+        ),
+    ] {
+        sql = sql.replace(
+            slot,
+            &include_str!("../../src/account_character.sql")
+                .trim()
+                .replace("$character", character),
+        );
+    }
+    sql
 }

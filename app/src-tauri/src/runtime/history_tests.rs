@@ -349,7 +349,11 @@ pub(super) async fn command(
                 .await?,
         ),
         5 => json(runtime.list_alerts(alert_filter()).await?),
-        6 => json(runtime.scope_loot(scope(), None, 20, vec![]).await?),
+        6 => json(
+            runtime
+                .scope_loot(scope(), None, 20, history_test_catalog())
+                .await?,
+        ),
         7 => json(runtime.dungeon_bests().await?),
         8 => json(
             runtime
@@ -385,7 +389,7 @@ pub(super) async fn command(
                         dungeon: None,
                         chase: vec![],
                     },
-                    vec![],
+                    history_test_catalog(),
                 )
                 .await?,
         ),
@@ -476,13 +480,12 @@ fn ordinary_navigation_never_returns_busy() {
         pending(displaced.as_mut());
         let mut newest = Box::pin(command(&runtime, 3));
         pending(newest.as_mut());
-        assert_eq!(
-            tauri::async_runtime::block_on(displaced).unwrap(),
-            HistoryReply::Superseded
-        );
-        assert_eq!((counts(&runtime).0, counts(&runtime).1), (1, 1));
+        assert_eq!((counts(&runtime).0, counts(&runtime).1), (1, 2));
         release.send(()).unwrap();
         ready(tauri::async_runtime::block_on(active));
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        release.send(()).unwrap();
+        ready(tauri::async_runtime::block_on(displaced));
         entered.recv_timeout(Duration::from_secs(5)).unwrap();
         release.send(()).unwrap();
         ready(tauri::async_runtime::block_on(newest));
@@ -501,13 +504,12 @@ fn alerts_history_home_run_alert_competition_never_returns_busy() {
         pending(displaced.as_mut());
         let mut newest = Box::pin(command(&runtime, if first == 5 { 0 } else { 5 }));
         pending(newest.as_mut());
-        assert_eq!(
-            tauri::async_runtime::block_on(displaced).unwrap(),
-            HistoryReply::Superseded
-        );
-        assert_eq!((counts(&runtime).0, counts(&runtime).1), (1, 1));
+        assert_eq!((counts(&runtime).0, counts(&runtime).1), (1, 2));
         release.send(()).unwrap();
         ready(tauri::async_runtime::block_on(active));
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        release.send(()).unwrap();
+        ready(tauri::async_runtime::block_on(displaced));
         entered.recv_timeout(Duration::from_secs(5)).unwrap();
         release.send(()).unwrap();
         ready(tauri::async_runtime::block_on(newest));
@@ -525,15 +527,15 @@ fn newer_same_key_supersedes_active_even_when_newest_pending_changes_again() {
     pending(refresh.as_mut());
     let mut newest = Box::pin(command(&runtime, 4));
     pending(newest.as_mut());
-    assert_eq!(
-        tauri::async_runtime::block_on(refresh).unwrap(),
-        HistoryReply::Superseded
-    );
+    assert_eq!((counts(&runtime).0, counts(&runtime).1), (1, 2));
     release.send(()).unwrap();
     assert_eq!(
         tauri::async_runtime::block_on(active).unwrap(),
         HistoryReply::Superseded
     );
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(refresh));
     entered.recv_timeout(Duration::from_secs(5)).unwrap();
     release.send(()).unwrap();
     ready(tauri::async_runtime::block_on(newest));
@@ -760,7 +762,7 @@ fn dropped_pending_receiver_never_opens_a_reader_and_panic_recovers() {
 }
 
 #[test]
-fn startup_coalesces_before_any_reader_is_dispatched() {
+fn startup_keeps_distinct_lanes_with_bounded_admission() {
     let dir = tempfile::tempdir().unwrap();
     seed(&dir.path().join("live.sqlite3"));
     let runtime = Arc::new(CaptureRuntime::default());
@@ -772,20 +774,27 @@ fn startup_coalesces_before_any_reader_is_dispatched() {
     }));
     runtime.initialize_home(dir.path().into()).unwrap();
     entered.recv_timeout(Duration::from_secs(5)).unwrap();
-    let mut previous = None;
+    let mut admitted = Vec::new();
     for index in 0..14 {
         let mut next = Box::pin(command(&runtime, index));
-        pending(next.as_mut());
-        if let Some(old) = previous.replace(next) {
+        if index < 8 {
+            pending(next.as_mut());
+            admitted.push(next);
+        } else {
             assert_eq!(
-                tauri::async_runtime::block_on(old).unwrap(),
-                HistoryReply::Superseded
+                tauri::async_runtime::block_on(next).unwrap(),
+                HistoryReply::Busy
             );
         }
-        assert_eq!((counts(&runtime).0, counts(&runtime).1), (0, 1));
+        assert_eq!(
+            (counts(&runtime).0, counts(&runtime).1),
+            (0, (index + 1).min(8))
+        );
     }
     release.send(()).unwrap();
-    ready(tauri::async_runtime::block_on(previous.unwrap()));
+    for request in admitted {
+        ready(tauri::async_runtime::block_on(request));
+    }
 }
 
 #[test]
@@ -1183,8 +1192,13 @@ fn scope_loot_validates_before_read_and_returns_a_page() {
     let (_dir, runtime) = setup();
     for limit in [0, 101] {
         assert_eq!(
-            tauri::async_runtime::block_on(runtime.scope_loot(scope(), None, limit, vec![]))
-                .unwrap_err(),
+            tauri::async_runtime::block_on(runtime.scope_loot(
+                scope(),
+                None,
+                limit,
+                history_test_catalog()
+            ))
+            .unwrap_err(),
             super::history::INVALID
         );
     }
@@ -1192,7 +1206,7 @@ fn scope_loot_validates_before_read_and_returns_a_page() {
         scope(),
         None,
         20,
-        vec![],
+        history_test_catalog(),
     )));
     assert!(page.items.len() <= 20);
     // This runtime fixture seeds sessions/runs/fights, but deliberately no bags.
@@ -1492,4 +1506,261 @@ fn reader_reuse_latency_bench() {
         eprintln!("{mode}: median={median:?}, p95={:?}", times[189]);
         runtime.shared.home.shutdown_reads();
     }
+}
+
+#[test]
+fn account_scope_same_stream_switch_supersedes_in_flight_read() {
+    let (_dir, runtime) = setup();
+    runtime.shared.views.store.lock().unwrap().state = StoreState::Ready;
+    let home = &runtime.shared.home;
+    home.context.lock().unwrap().as_mut().unwrap().stream_id = Some("synthetic".into());
+    let stream = home
+        .context
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .stream_id
+        .clone();
+    let a = format!("account-{}", "a".repeat(64));
+    let b = format!("account-{}", "b".repeat(64));
+    home.observe_account(stream.as_deref(), &a, None);
+    let (entered, release) = pause(&runtime);
+    let reading = runtime.clone();
+    let read =
+        std::thread::spawn(move || tauri::async_runtime::block_on(reading.home_summary(scope())));
+    entered.recv().unwrap();
+    let before = home.account_revision.load(Ordering::Acquire);
+    assert!(home.observe_account(stream.as_deref(), &b, None).is_some());
+    assert!(home.account_revision.load(Ordering::Acquire) > before);
+    *home.on_reader.lock().unwrap() = None;
+    release.send(()).unwrap();
+    assert!(matches!(
+        read.join().unwrap().unwrap(),
+        HistoryReply::Superseded
+    ));
+    let reading = runtime.clone();
+    let result = tauri::async_runtime::block_on(runtime.submit_history(
+        HistoryCaller::MainWindow,
+        HistoryKey::DungeonBests,
+        move |job| {
+            reading.read_account_history(job, || None, |_, account| Ok(account.map(str::to_owned)))
+        },
+    ))
+    .unwrap();
+    assert!(matches!(result, HistoryReply::Ready { value: Some(account) } if account == b));
+}
+
+#[test]
+fn account_scope_live_stopped_unknown_and_demo_resolve_their_own_database() {
+    let (dir, runtime) = setup();
+    let read = || {
+        let owner = runtime.shared.home.clone();
+        let context = owner.context.lock().unwrap().clone().unwrap();
+        runtime
+            .read_account_history(
+                super::home::HomeJob {
+                    owner,
+                    context,
+                    account_scoped: true,
+                },
+                || None,
+                |_, account| Ok(account.map(str::to_owned)),
+            )
+            .unwrap()
+    };
+    assert_eq!(read(), None);
+    let a = format!("account-{}", "a".repeat(64));
+    let b = format!("account-{}", "b".repeat(64));
+    for (name, account) in [("live.sqlite3", &a), ("demo.sqlite3", &b)] {
+        let mut db = rusqlite::Connection::open(dir.path().join(name)).unwrap();
+        maxed_store::migrate(&mut db).unwrap();
+        db.execute("INSERT OR IGNORE INTO accounts VALUES(?1)", [account])
+            .unwrap();
+        db.execute(
+            "INSERT OR REPLACE INTO current_account VALUES(1,?1)",
+            [account],
+        )
+        .unwrap();
+    }
+    assert_eq!(read(), Some(a.clone()));
+    {
+        let mut context = runtime.shared.home.context.lock().unwrap();
+        let context = context.as_mut().unwrap();
+        context.account = Some(b.clone());
+        context.stream_id = Some("synthetic".into());
+    }
+    runtime.shared.views.store.lock().unwrap().state = StoreState::Ready;
+    assert_eq!(read(), Some(b.clone()));
+    runtime.shared.views.store.lock().unwrap().state = StoreState::Closed;
+    assert_eq!(read(), Some(a.clone()));
+    runtime
+        .shared
+        .home
+        .context
+        .lock()
+        .unwrap()
+        .as_mut()
+        .unwrap()
+        .stream_id = None;
+    assert_eq!(read(), Some(a.clone()));
+    {
+        let mut context = runtime.shared.home.context.lock().unwrap();
+        let context = context.as_mut().unwrap();
+        context.namespace = Namespace::Demo;
+        context.database = dir.path().join("demo.sqlite3");
+        context.stream_id = Some("demo".into());
+        context.account = Some(a.clone());
+    }
+    assert_eq!(read(), Some(b));
+    assert_eq!(
+        maxed_store::open_reader(&dir.path().join("live.sqlite3"))
+            .unwrap()
+            .current_account()
+            .unwrap(),
+        Some(a)
+    );
+}
+
+#[test]
+fn account_scope_switch_preserves_active_and_queued_storage_reads() {
+    let (_dir, runtime) = setup();
+    let (entered, release) = pause(&runtime);
+    let reading = runtime.clone();
+    let first = std::thread::spawn(move || {
+        tauri::async_runtime::block_on(reading.submit_history(
+            HistoryCaller::Storage,
+            HistoryKey::StorageStatus(false),
+            {
+                let runtime = reading.clone();
+                move |job| runtime.read_history(job, || 0, |reader| reader.user_version())
+            },
+        ))
+    });
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    let queued = runtime.clone();
+    let mut second = Box::pin(runtime.submit_history(
+        HistoryCaller::Storage,
+        HistoryKey::StorageStatus(false),
+        move |job| queued.read_history(job, || 0, |reader| reader.user_version()),
+    ));
+    assert!(second
+        .as_mut()
+        .poll(&mut Context::from_waker(Waker::noop()))
+        .is_pending());
+    let stream = runtime
+        .shared
+        .home
+        .context
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .stream_id
+        .clone();
+    runtime
+        .shared
+        .home
+        .observe_account(stream.as_deref(), "synthetic-account", None);
+    *runtime.shared.home.on_reader.lock().unwrap() = None;
+    release.send(()).unwrap();
+    assert!(
+        matches!(first.join().unwrap().unwrap(), HistoryReply::Ready { value } if value == maxed_store::SCHEMA_VERSION)
+    );
+    assert!(
+        matches!(tauri::async_runtime::block_on(second).unwrap(), HistoryReply::Ready { value } if value == maxed_store::SCHEMA_VERSION)
+    );
+}
+
+#[test]
+fn pending_same_lane_coalesces_without_displacing_other_lanes() {
+    let (_dir, runtime) = setup();
+    let (entered, release) = pause(&runtime);
+    let mut active = Box::pin(native(&runtime, HistoryCaller::NativeTest, "active"));
+    pending(active.as_mut());
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    let mut old = Box::pin(native(&runtime, HistoryCaller::NativeTest, "loot"));
+    pending(old.as_mut());
+    let mut other = Box::pin(native(&runtime, HistoryCaller::NativeTest, "logs"));
+    pending(other.as_mut());
+    let mut newer = Box::pin(native(&runtime, HistoryCaller::NativeTest, "loot"));
+    pending(newer.as_mut());
+    assert_eq!(
+        tauri::async_runtime::block_on(old).unwrap(),
+        HistoryReply::Superseded
+    );
+    assert_eq!(counts(&runtime).1, 2);
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(active));
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(newer));
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(other));
+}
+
+#[test]
+fn full_pending_queue_returns_busy_without_evicting_any_lane() {
+    let (_dir, runtime) = setup();
+    let (entered, release) = pause(&runtime);
+    let mut active = Box::pin(native(&runtime, HistoryCaller::NativeTest, "active"));
+    pending(active.as_mut());
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    let mut queued = Vec::new();
+    let keys: Vec<_> = (0..8).map(|i| format!("reader-{i}")).collect();
+    for key in &keys {
+        let mut request = Box::pin(native(&runtime, HistoryCaller::NativeTest, key));
+        pending(request.as_mut());
+        queued.push(request);
+    }
+    assert_eq!(counts(&runtime).1, 8);
+    assert_eq!(
+        tauri::async_runtime::block_on(native(&runtime, HistoryCaller::NativeTest, "overflow"))
+            .unwrap(),
+        HistoryReply::Busy
+    );
+    assert_eq!(counts(&runtime).1, 8);
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(active));
+    for request in queued {
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        release.send(()).unwrap();
+        ready(tauri::async_runtime::block_on(request));
+    }
+}
+
+#[test]
+fn startup_same_lane_coalesces_before_any_reader_is_dispatched() {
+    let dir = tempfile::tempdir().unwrap();
+    seed(&dir.path().join("live.sqlite3"));
+    let runtime = Arc::new(CaptureRuntime::default());
+    let (send, entered) = bounded(1);
+    let (release, wait) = bounded(1);
+    *runtime.shared.home.on_prepare.lock().unwrap() = Some(Arc::new(move || {
+        send.send(()).unwrap();
+        wait.recv_timeout(Duration::from_secs(10)).unwrap();
+    }));
+    runtime.initialize_home(dir.path().into()).unwrap();
+    entered.recv_timeout(Duration::from_secs(5)).unwrap();
+    let mut previous = None;
+    for _ in 0..14 {
+        let mut next = Box::pin(command(&runtime, 0));
+        pending(next.as_mut());
+        if let Some(old) = previous.replace(next) {
+            assert_eq!(
+                tauri::async_runtime::block_on(old).unwrap(),
+                HistoryReply::Superseded
+            );
+        }
+        assert_eq!((counts(&runtime).0, counts(&runtime).1), (0, 1));
+    }
+    release.send(()).unwrap();
+    ready(tauri::async_runtime::block_on(previous.unwrap()));
+}
+
+fn history_test_catalog() -> maxed_store::CatalogQueryData {
+    static CATALOG: std::sync::LazyLock<maxed_store::CatalogQueryData> =
+        std::sync::LazyLock::new(maxed_store::CatalogQueryData::default);
+    CATALOG.clone()
 }

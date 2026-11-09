@@ -1,4 +1,5 @@
 use crate::common;
+use crate::common::account_scope_fixture::ACCOUNT;
 use common::*;
 use maxed_store::*;
 use maxed_types::*;
@@ -12,7 +13,7 @@ fn database() -> (tempfile::TempDir, std::path::PathBuf, Connection) {
     let path = dir.path().join("home.sqlite");
     let mut db = Connection::open(&path).unwrap();
     migrate(&mut db).unwrap();
-    apply_batch(&mut db, &story_events()).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut db, &story_events()).unwrap();
     (dir, path, db)
 }
 
@@ -38,7 +39,7 @@ fn add(db: &mut Connection, events: Vec<EngineEvent>) {
         .enumerate()
         .map(|(i, e)| envelope(head as u64 + i as u64 + 1, e))
         .collect();
-    apply_batch(db, &events).unwrap();
+    crate::common::account_scope_fixture::apply_batch(db, &events).unwrap();
 }
 
 // Synthetic completed encounter eligible for Home's 20-second combat window.
@@ -93,17 +94,21 @@ fn home_top_dps_requires_complete_ended_twenty_second_combat() {
             .map(EngineEvent::FightUpdated)
             .collect(),
     );
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     for scope in [session(), today(0, 30_000_000)] {
         assert_eq!(
-            reader.home_summary(scope).unwrap().top_fight,
+            reader.home_summary(scope, Some(ACCOUNT)).unwrap().top_fight,
             Some(complete.clone())
         );
     }
     let mut no_longer_eligible = complete;
     no_longer_eligible.complete_capture = false;
     add(&mut db, vec![EngineEvent::FightUpdated(no_longer_eligible)]);
-    assert!(reader.home_summary(session()).unwrap().top_fight.is_none());
+    assert!(reader
+        .home_summary(session(), Some(ACCOUNT))
+        .unwrap()
+        .top_fight
+        .is_none());
 }
 
 #[test]
@@ -122,14 +127,18 @@ fn home_top_dps_excludes_legacy_basis_and_missing_basis_json() {
             )
             .unwrap();
         }
-        let reader = open_reader(&path).unwrap();
+        let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
         for scope in [session(), today(0, 30_000_000)] {
-            assert!(reader.home_summary(scope).unwrap().top_fight.is_none());
+            assert!(reader
+                .home_summary(scope, Some(ACCOUNT))
+                .unwrap()
+                .top_fight
+                .is_none());
         }
         add(&mut db, vec![EngineEvent::FightUpdated(current.clone())]);
         for scope in [session(), today(0, 30_000_000)] {
             assert_eq!(
-                reader.home_summary(scope).unwrap().top_fight,
+                reader.home_summary(scope, Some(ACCOUNT)).unwrap().top_fight,
                 Some(current.clone())
             );
         }
@@ -149,9 +158,9 @@ fn home_top_dps_ties_use_latest_start_then_id() {
         fights.into_iter().map(EngineEvent::FightUpdated).collect(),
     );
     assert_eq!(
-        open_reader(&path)
+        crate::common::account_scope_fixture::open_reader(&path)
             .unwrap()
-            .home_summary(session())
+            .home_summary(session(), Some(ACCOUNT))
             .unwrap()
             .top_fight
             .unwrap()
@@ -165,7 +174,7 @@ fn home_json_decodes_fame_timestamps_and_overflowing_delta() {
     let (_dir, path, db) = database();
     db.execute("DELETE FROM fame_samples", []).unwrap();
     let at = 9_007_199_254_740_993_i64;
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     for (baseline, latest, expected) in [
         (i32::MIN, i32::MAX, None),
         (i32::MAX, i32::MIN, None),
@@ -184,7 +193,7 @@ fn home_json_decodes_fame_timestamps_and_overflowing_delta() {
         )
         .unwrap();
         let home = reader
-            .home_summary(today(at as u64 - 1, at as u64 + 1))
+            .home_summary(today(at as u64 - 1, at as u64 + 1), Some(ACCOUNT))
             .unwrap();
         assert_eq!(home.fame_delta, expected);
         assert_eq!(home.fame[0].at, Timestamp(at as u64 - 1));
@@ -197,7 +206,7 @@ fn home_json_decodes_fame_timestamps_and_overflowing_delta() {
     db.execute("DELETE FROM fame_samples WHERE sequence=1", [])
         .unwrap();
     let home = reader
-        .home_summary(today(at as u64 - 1, at as u64 + 1))
+        .home_summary(today(at as u64 - 1, at as u64 + 1), Some(ACCOUNT))
         .unwrap();
     assert_eq!(home.fame_delta, Some(0));
     assert_eq!(home.fame_missing_baselines, 0);
@@ -233,8 +242,8 @@ fn scope_ranking_and_recent_projection() {
         events.push(EngineEvent::BagDropped(bag));
     }
     add(&mut db, events);
-    let reader = open_reader(&path).unwrap();
-    let home = reader.home_summary(session()).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    let home = reader.home_summary(session(), Some(ACCOUNT)).unwrap();
     assert_eq!(home.runs, 13);
     let best = home.best_drop.unwrap();
     assert_eq!(best.id, "white-new-z");
@@ -259,12 +268,16 @@ fn scope_ranking_and_recent_projection() {
     );
     assert!(detail.issues.contains(&CoverageIssue::MissingCatalog));
     // Tile drops obey the day window; recent details preserve the whole selected run.
-    let day = reader.home_summary(today(10_000_000, 11_000_000)).unwrap();
+    let day = reader
+        .home_summary(today(10_000_000, 11_000_000), Some(ACCOUNT))
+        .unwrap();
     assert!(day.best_drop.is_none());
     assert_eq!(day.unranked_drop_count, 0);
     assert_eq!(day.recent_details[0].observed_drop_count, 5);
     assert!(day.issues.contains(&CoverageIssue::MissingCatalog));
-    let old_white = reader.home_summary(today(11_000_000, 14_000_000)).unwrap();
+    let old_white = reader
+        .home_summary(today(11_000_000, 14_000_000), Some(ACCOUNT))
+        .unwrap();
     assert_eq!(old_white.best_drop.unwrap().id, "white-old");
 }
 
@@ -297,9 +310,9 @@ fn weighted_share_requires_every_fights_known_unambiguous_local() {
             EngineEvent::FightUpdated(large.clone()),
         ],
     );
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let detail = reader
-        .home_summary(session())
+        .home_summary(session(), Some(ACCOUNT))
         .unwrap()
         .recent_details
         .remove(0);
@@ -310,7 +323,7 @@ fn weighted_share_requires_every_fights_known_unambiguous_local() {
     large.players[0].sources[0].estimated = true;
     add(&mut db, vec![EngineEvent::FightUpdated(large.clone())]);
     let detail = reader
-        .home_summary(session())
+        .home_summary(session(), Some(ACCOUNT))
         .unwrap()
         .recent_details
         .remove(0);
@@ -334,8 +347,12 @@ fn weighted_share_requires_every_fights_known_unambiguous_local() {
         }
         add(&mut db, vec![EngineEvent::FightUpdated(invalid)]);
         assert_eq!(
-            reader.home_summary(session()).unwrap().recent_details[0].local_share,
-            None,
+            reader
+                .home_summary(session(), Some(ACCOUNT))
+                .unwrap()
+                .recent_details[0]
+                .local_share,
+            if variant == 0 { Some(0.74) } else { None },
             "variant {variant}"
         );
     }
@@ -344,7 +361,11 @@ fn weighted_share_requires_every_fights_known_unambiguous_local() {
     large.players[0].share = Some(0.0);
     add(&mut db, vec![EngineEvent::FightUpdated(large)]);
     assert_eq!(
-        reader.home_summary(session()).unwrap().recent_details[0].local_share,
+        reader
+            .home_summary(session(), Some(ACCOUNT))
+            .unwrap()
+            .recent_details[0]
+            .local_share,
         Some(0.02)
     );
 }
@@ -360,11 +381,14 @@ fn unknown_sessions_and_invalid_scopes_never_borrow_nearby_events() {
             run_id: None,
         }],
     );
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let empty = reader
-        .home_summary(HomeScope::Session {
-            id: "absent".into(),
-        })
+        .home_summary(
+            HomeScope::Session {
+                id: "absent".into(),
+            },
+            Some(ACCOUNT),
+        )
         .unwrap();
     assert_eq!(
         (empty.runs, empty.deaths, empty.unranked_drop_count),
@@ -382,14 +406,17 @@ fn unknown_sessions_and_invalid_scopes_never_borrow_nearby_events() {
         today(0, u64::MAX),
     ] {
         assert!(matches!(
-            reader.home_summary(scope),
+            reader.home_summary(scope, Some(ACCOUNT)),
             Err(StoreError::InvalidEvent)
         ));
     }
     assert!(reader
-        .home_summary(HomeScope::Session {
-            id: "x".repeat(256)
-        })
+        .home_summary(
+            HomeScope::Session {
+                id: "x".repeat(256)
+            },
+            Some(ACCOUNT)
+        )
         .is_ok());
 }
 
@@ -423,12 +450,14 @@ fn session_ids_exclude_other_sessions_at_the_same_time() {
             },
         ],
     );
-    let reader = open_reader(&path).unwrap();
-    let home = reader.home_summary(session()).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    let home = reader.home_summary(session(), Some(ACCOUNT)).unwrap();
     assert_eq!((home.runs, home.deaths), (1, 0));
     assert!(home.top_fight.is_none());
     assert!(home.best_drop.is_none());
-    let day = reader.home_summary(today(0, 6_000_000)).unwrap();
+    let day = reader
+        .home_summary(today(0, 6_000_000), Some(ACCOUNT))
+        .unwrap();
     assert_eq!((day.runs, day.deaths), (2, 1));
     assert_eq!(day.top_fight.unwrap().id, "other-fight");
     assert_eq!(day.best_drop.unwrap().id, "other-bag");
@@ -453,9 +482,9 @@ fn fame_ties_use_stream_then_sequence_for_chart_and_baseline() {
         )
         .unwrap();
     }
-    let home = open_reader(&path)
+    let home = crate::common::account_scope_fixture::open_reader(&path)
         .unwrap()
-        .home_summary(today(1, 2))
+        .home_summary(today(1, 2), Some(ACCOUNT))
         .unwrap();
     // The baseline is the first point in the chart's tie order, 91, not a pre-scope sample.
     assert_eq!(home.fame_delta, Some(24 - 91));
@@ -468,12 +497,18 @@ fn fame_ties_use_stream_then_sequence_for_chart_and_baseline() {
 #[test]
 fn late_revision_updates_one_recent_run() {
     let (_dir, path, mut db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mut run = demo::demo_run_story().run;
     run.outcome = Some(Outcome::Left);
     run.completed_at = None;
     add(&mut db, vec![EngineEvent::RunUpdated(run.clone())]);
-    assert_eq!(reader.home_summary(session()).unwrap().clears, 0);
+    assert_eq!(
+        reader
+            .home_summary(session(), Some(ACCOUNT))
+            .unwrap()
+            .clears,
+        0
+    );
     run.completed_at = Some(Timestamp(5_000_000));
     run.outcome = Some(Outcome::Cleared);
     run.died_at = Some(Timestamp(5_500_000));
@@ -489,7 +524,10 @@ fn late_revision_updates_one_recent_run() {
         ],
     );
     drop(reader);
-    let home = open_reader(&path).unwrap().home_summary(session()).unwrap();
+    let home = crate::common::account_scope_fixture::open_reader(&path)
+        .unwrap()
+        .home_summary(session(), Some(ACCOUNT))
+        .unwrap();
     assert_eq!((home.runs, home.clears, home.deaths), (1, 1, 1));
     assert_eq!(home.recent_runs, vec![run]);
     assert_eq!(home.recent_details.len(), 1);
@@ -507,6 +545,7 @@ fn fame_sampling_keeps_endpoints_exact_delta_and_character_identity() {
         [],
     )
     .unwrap();
+    db.execute_batch("BEGIN").unwrap();
     for i in 1..=301 {
         let character = if i % 2 == 0 {
             "second"
@@ -519,8 +558,9 @@ fn fame_sampling_keeps_endpoints_exact_delta_and_character_identity() {
         )
         .unwrap();
     }
-    let reader = open_reader(&path).unwrap();
-    let home = reader.home_summary(today(1, 302)).unwrap();
+    db.execute_batch("COMMIT").unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+    let home = reader.home_summary(today(1, 302), Some(ACCOUNT)).unwrap();
     assert_eq!(home.fame.len(), 301);
     assert!(!home.fame_sampled);
     // Each character counts from its first in-scope sample: (301-1) + (300-2).
@@ -539,7 +579,7 @@ fn fame_sampling_keeps_endpoints_exact_delta_and_character_identity() {
             }
         );
     }
-    let exact = reader.home_summary(today(1, 121)).unwrap();
+    let exact = reader.home_summary(today(1, 121), Some(ACCOUNT)).unwrap();
     assert_eq!(exact.fame.len(), 120);
     assert!(!exact.fame_sampled);
     // Two individually representable deltas can overflow their aggregate.
@@ -556,7 +596,7 @@ fn fame_sampling_keeps_endpoints_exact_delta_and_character_identity() {
         )
         .unwrap();
     }
-    let overflow = reader.home_summary(today(0, 2)).unwrap();
+    let overflow = reader.home_summary(today(0, 2), Some(ACCOUNT)).unwrap();
     assert_eq!(overflow.fame_delta, None);
     assert_eq!(overflow.fame.len(), 4);
 }
@@ -564,7 +604,7 @@ fn fame_sampling_keeps_endpoints_exact_delta_and_character_identity() {
 #[test]
 fn corrupt_and_oversized_home_rows_fail_instead_of_returning_empty_history() {
     let (_dir, path, db) = database();
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let mut run = demo::demo_run_story().run;
     run.dungeon = "x".repeat(2 * 1024 * 1024);
     db.execute(
@@ -573,14 +613,14 @@ fn corrupt_and_oversized_home_rows_fail_instead_of_returning_empty_history() {
     )
     .unwrap();
     assert!(matches!(
-        reader.home_summary(session()),
+        reader.home_summary(session(), Some(ACCOUNT)),
         Err(StoreError::InvalidEvent)
     ));
     for corrupt in ["{", "{}", "null"] {
         db.execute("UPDATE runs SET json=?1", [corrupt]).unwrap();
         assert!(
             matches!(
-                reader.home_summary(session()),
+                reader.home_summary(session(), Some(ACCOUNT)),
                 Err(StoreError::InvalidEvent)
             ),
             "{corrupt}"
@@ -632,8 +672,8 @@ fn local_day_bounds_and_session_membership_remain_independent() {
             ]);
         }
         add(&mut db, events);
-        let reader = open_reader(&path).unwrap();
-        let day = reader.home_summary(today(lo, hi)).unwrap();
+        let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
+        let day = reader.home_summary(today(lo, hi), Some(ACCOUNT)).unwrap();
         assert_eq!((day.runs, day.deaths), (2, 2));
         assert_eq!(day.best_drop.unwrap().id, "last");
         assert_eq!(day.top_fight.unwrap().id, "last");
@@ -641,13 +681,13 @@ fn local_day_bounds_and_session_membership_remain_independent() {
             day.fame.iter().map(|p| p.at.0).collect::<Vec<_>>(),
             [lo, hi - 1]
         );
-        let all = reader.home_summary(session()).unwrap();
+        let all = reader.home_summary(session(), Some(ACCOUNT)).unwrap();
         assert_eq!((all.runs, all.deaths), (5, 4));
         // Run-associated deaths use the explicit session even after its closed end.
         let mut ended = demo::demo_snapshot().session.unwrap();
         ended.ended = Some(Timestamp(lo));
         add(&mut db, vec![EngineEvent::SessionUpdated(ended)]);
-        let closed = reader.home_summary(session()).unwrap();
+        let closed = reader.home_summary(session(), Some(ACCOUNT)).unwrap();
         assert_eq!((closed.runs, closed.deaths), (5, 4));
         assert_eq!(closed.fame.last().unwrap().at, Timestamp(hi));
     }
@@ -670,7 +710,7 @@ fn benchmark_database(
     let tx = db.transaction().unwrap();
     let character = story.character.as_ref().unwrap();
     tx.execute(
-        "INSERT INTO characters VALUES(?1,?2,?3)",
+        "INSERT INTO characters(id,observed_at,json) VALUES(?1,?2,?3)",
         params![
             character.id,
             character.observed_at.0 as i64,
@@ -785,9 +825,9 @@ fn realistic_history_query_plans_and_thirty_warm_reads() {
 
 fn benchmark_home(shape: &str, scoped_runs: i64, scoped_fame: i64, release_limit_ms: u64) {
     let (_dir, path, db) = benchmark_database(scoped_runs, scoped_fame);
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let setup = std::time::Instant::now();
-    drop(open_reader(&path).unwrap());
+    drop(crate::common::account_scope_fixture::open_reader(&path).unwrap());
     eprintln!("Reader open/configure/schema: {:?}", setup.elapsed());
     for (kind, scope) in [
         (0, session()),
@@ -799,8 +839,13 @@ fn benchmark_home(shape: &str, scoped_runs: i64, scoped_fame: i64, release_limit
         let mut explain = db
             .prepare(&format!(
                 "EXPLAIN QUERY PLAN {}",
-                include_str!("../src/home.sql")
-                    .replace("/*home_scope*/", include_str!("../src/home_scope.sql"))
+                crate::common::account_sql::with_accounts(include_str!("../src/home.sql"))
+                    .replace(
+                        "/*home_scope*/",
+                        &crate::common::account_sql::with_accounts(include_str!(
+                            "../src/home_scope.sql"
+                        ))
+                    )
                     .replace(
                         "/*dungeon_stats*/",
                         include_str!("../src/dungeon_stats.sql")
@@ -809,7 +854,13 @@ fn benchmark_home(shape: &str, scoped_runs: i64, scoped_fame: i64, release_limit
             .unwrap();
         let plan: Vec<String> = explain
             .query_map(
-                params![kind, "demo-session", BENCH_START, BENCH_START + BENCH_DAY],
+                params![
+                    kind,
+                    "demo-session",
+                    BENCH_START,
+                    BENCH_START + BENCH_DAY,
+                    ACCOUNT
+                ],
                 |r| r.get(3),
             )
             .unwrap()
@@ -822,11 +873,11 @@ fn benchmark_home(shape: &str, scoped_runs: i64, scoped_fame: i64, release_limit
         assert!(plan.iter().any(|s| s.contains("fights_run")));
         assert!(plan.iter().any(|s| s.contains("drops_run")));
         assert!(plan.iter().any(|s| s.contains("fame_character")));
-        reader.home_summary(scope.clone()).unwrap();
+        reader.home_summary(scope.clone(), Some(ACCOUNT)).unwrap();
         let mut durations = Vec::new();
         for _ in 0..30 {
             let before = std::time::Instant::now();
-            let home = reader.home_summary(scope.clone()).unwrap();
+            let home = reader.home_summary(scope.clone(), Some(ACCOUNT)).unwrap();
             durations.push(before.elapsed());
             assert_eq!(home.runs, scoped_runs as u32);
             assert_eq!(home.recent_runs.len(), 10);
@@ -862,22 +913,26 @@ fn saved_session_coverage_survives_catalog_repair_without_runs() {
     migrate(&mut db).unwrap();
     let mut view = demo::demo_snapshot().session.unwrap();
     view.issues.push(CoverageIssue::MissingCatalog);
-    apply_batch(
+    crate::common::account_scope_fixture::apply_batch(
         &mut db,
         &[envelope(1, EngineEvent::SessionUpdated(view.clone()))],
     )
     .unwrap();
     view.issues.clear();
-    apply_batch(&mut db, &[envelope(2, EngineEvent::SessionUpdated(view))]).unwrap();
+    crate::common::account_scope_fixture::apply_batch(
+        &mut db,
+        &[envelope(2, EngineEvent::SessionUpdated(view))],
+    )
+    .unwrap();
     drop(db);
-    let reader = open_reader(&path).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     for scope in [session(), today(0, 10_000_000)] {
-        let home = reader.home_summary(scope).unwrap();
+        let home = reader.home_summary(scope, Some(ACCOUNT)).unwrap();
         assert_eq!((home.runs, home.clears), (0, 0));
         assert_eq!(home.issues, vec![CoverageIssue::MissingCatalog]);
     }
     assert!(reader
-        .home_summary(today(10_000_000, 20_000_000))
+        .home_summary(today(10_000_000, 20_000_000), Some(ACCOUNT))
         .unwrap()
         .issues
         .is_empty());
@@ -908,7 +963,7 @@ fn future_dated_observations_from_old_stream_do_not_leak_into_new_session() {
     view.ended = None;
     let mut event = envelope(1, EngineEvent::SessionUpdated(view));
     event.stream_id = "new-stream".into();
-    apply_batch(&mut db, &[event]).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut db, &[event]).unwrap();
     drop(db);
     let mut db = Connection::open(&path).unwrap();
     let mut event = envelope(
@@ -920,22 +975,31 @@ fn future_dated_observations_from_old_stream_do_not_leak_into_new_session() {
         },
     );
     event.stream_id = "new-stream".into();
-    apply_batch(&mut db, &[event]).unwrap();
-    let reader = open_reader(&path).unwrap();
+    crate::common::account_scope_fixture::apply_batch(&mut db, &[event]).unwrap();
+    let reader = crate::common::account_scope_fixture::open_reader(&path).unwrap();
     let home = reader
-        .home_summary(HomeScope::Session {
-            id: "new-session".into(),
-        })
+        .home_summary(
+            HomeScope::Session {
+                id: "new-session".into(),
+            },
+            Some(ACCOUNT),
+        )
         .unwrap();
     assert_eq!(home.deaths, 0);
     assert_eq!(home.fame.len(), 1);
     assert_eq!(home.fame[0].fame, 1300);
     // Neither the old session's 1260 nor its future-dated 9999 is a baseline.
     assert_eq!(home.fame_delta, Some(0));
-    assert_eq!(reader.home_summary(session()).unwrap().deaths, 1);
     assert_eq!(
         reader
-            .home_summary(today(89_000_000, 91_000_000))
+            .home_summary(session(), Some(ACCOUNT))
+            .unwrap()
+            .deaths,
+        1
+    );
+    assert_eq!(
+        reader
+            .home_summary(today(89_000_000, 91_000_000), Some(ACCOUNT))
             .unwrap()
             .deaths,
         1
@@ -949,6 +1013,7 @@ fn fame_sampling_preserves_short_character_segment_and_all_boundaries_under_cap(
     other.id = "B".into();
     add(&mut db, vec![EngineEvent::CharacterUpdated(other)]);
     db.execute("DELETE FROM fame_samples", []).unwrap();
+    db.execute_batch("BEGIN").unwrap();
     for i in 1..=600 {
         let character = if (302..=303).contains(&i) {
             "B"
@@ -961,7 +1026,11 @@ fn fame_sampling_preserves_short_character_segment_and_all_boundaries_under_cap(
         )
         .unwrap();
     }
-    let home = open_reader(&path).unwrap().home_summary(session()).unwrap();
+    db.execute_batch("COMMIT").unwrap();
+    let home = crate::common::account_scope_fixture::open_reader(&path)
+        .unwrap()
+        .home_summary(session(), Some(ACCOUNT))
+        .unwrap();
     assert!(home.fame.len() <= 120);
     assert!(home.fame_sampled);
     for boundary in [1, 301, 302, 303, 304, 600] {
@@ -984,6 +1053,7 @@ fn fame_endpoint_overflow_drops_oldest_whole_segments() {
     add(&mut db, vec![EngineEvent::CharacterUpdated(other)]);
     db.execute("DELETE FROM fame_samples", []).unwrap();
     // 300 segments of three points: 600 mandatory endpoints. Keep newest 256.
+    db.execute_batch("BEGIN").unwrap();
     for i in 0..900 {
         let character = if i / 3 % 2 == 0 {
             "B"
@@ -996,7 +1066,11 @@ fn fame_endpoint_overflow_drops_oldest_whole_segments() {
         )
         .unwrap();
     }
-    let home = open_reader(&path).unwrap().home_summary(session()).unwrap();
+    db.execute_batch("COMMIT").unwrap();
+    let home = crate::common::account_scope_fixture::open_reader(&path)
+        .unwrap()
+        .home_summary(session(), Some(ACCOUNT))
+        .unwrap();
     assert_eq!(home.fame.len(), 512);
     assert_eq!(home.fame.first().unwrap().at, Timestamp(132));
     assert_eq!(home.fame.last().unwrap().at, Timestamp(899));
@@ -1022,6 +1096,7 @@ fn fame_endpoint_overflow_drops_oldest_whole_segments() {
 fn single_character_fame_sampling_keeps_exact_budget_and_endpoints() {
     let (_dir, path, db) = database();
     db.execute("DELETE FROM fame_samples", []).unwrap();
+    db.execute_batch("BEGIN").unwrap();
     for i in 1..=600 {
         db.execute(
             "INSERT INTO fame_samples VALUES('single',?1,'demo-character',?1,?1,'demo-session')",
@@ -1029,7 +1104,11 @@ fn single_character_fame_sampling_keeps_exact_budget_and_endpoints() {
         )
         .unwrap();
     }
-    let home = open_reader(&path).unwrap().home_summary(session()).unwrap();
+    db.execute_batch("COMMIT").unwrap();
+    let home = crate::common::account_scope_fixture::open_reader(&path)
+        .unwrap()
+        .home_summary(session(), Some(ACCOUNT))
+        .unwrap();
     assert_eq!(home.fame.len(), 120);
     assert!(home.fame_sampled);
     assert_eq!(home.fame.first().unwrap().at, Timestamp(1));

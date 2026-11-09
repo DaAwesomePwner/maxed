@@ -71,7 +71,7 @@ describe('automatic Home transitions', () => {
       page.transport.publishSnapshot(dungeon);
       await flushHomeRender();
       expect(screen.getByRole('rowheader', { name: /\bYou$/ })).toBeTruthy();
-      expect(within(screen.getByRole('main')).getByRole('heading', { name: 'Fight Damage' })).toBeTruthy();
+      expect(within(screen.getByRole('main')).getByRole('heading', { name: 'Party damage' })).toBeTruthy();
       page.client.queryStore = vi.fn(async () => saved(String(sequence + 1), next.stream_id));
       page.transport.publishSnapshot({ ...next, sequence: String(sequence + 1) });
       await flushHomeRender();
@@ -79,7 +79,7 @@ describe('automatic Home transitions', () => {
     };
     const expectNexus = () => {
       expect(screen.queryByRole('rowheader', { name: /\bYou$/ })).toBeNull();
-      expect(within(screen.getByRole('main')).queryByRole('heading', { name: 'Fight Damage' })).toBeNull();
+      expect(within(screen.getByRole('main')).queryByRole('heading', { name: 'Party damage' })).toBeNull();
       expect(page.browser.adapter.hash).toBe('#/');
     };
     await showDungeonThenNexus(2);

@@ -39,6 +39,7 @@ fn equipment(slot: u8, item_type: Option<u16>) -> EquipmentView {
 
 fn profile() -> PlayerProfileView {
     PlayerProfileView {
+        maxed_gated: false,
         scope_id: "synthetic-scope".into(),
         run_id: None,
         player_id: "synthetic-player".into(),
@@ -554,4 +555,53 @@ fn flags_in_no_damage_left_early_mostly_trash_order() {
             ContributionFlag::MostlyTrash,
         ]
     );
+}
+
+#[test]
+fn local_maxed_provenance_controls_requirements() {
+    let mut requirements = preset();
+    requirements.min_maxed = Some(6);
+    for (local, gated, count, result, reason) in [
+        (
+            true,
+            false,
+            8,
+            ParseResult::Check,
+            Some(ParseReasonKind::StatsNotSeen),
+        ),
+        (true, true, 8, ParseResult::Pass, None),
+        (
+            true,
+            true,
+            4,
+            ParseResult::Fail,
+            Some(ParseReasonKind::BelowMaxed),
+        ),
+        (false, false, 8, ParseResult::Pass, None),
+        (
+            false,
+            false,
+            4,
+            ParseResult::Fail,
+            Some(ParseReasonKind::BelowMaxed),
+        ),
+    ] {
+        let mut p = profile();
+        p.is_local = local;
+        p.maxed_gated = gated;
+        p.maxed = Some(count);
+        let outcome = parse(&requirements, &p, &[]);
+        assert_eq!(outcome.result, result);
+        assert_eq!(outcome.reasons.first().map(|r| r.kind.clone()), reason);
+    }
+    let mut p = profile();
+    p.is_local = true;
+    requirements.min_tier.weapon = Some(1);
+    let outcome = parse(&requirements, &p, &[]);
+    assert_eq!(outcome.result, ParseResult::Fail);
+    assert_eq!(outcome.reasons[0].kind, ParseReasonKind::StatsNotSeen);
+    assert_eq!(outcome.reasons[1].kind, ParseReasonKind::SlotEmpty);
+    assert_eq!(parse(&preset(), &p, &[]).result, ParseResult::Pass);
+    p.level = None;
+    assert_eq!(parse(&requirements, &p, &[]).result, ParseResult::NotSeen);
 }

@@ -40,6 +40,7 @@ fn visit(db: &Connection, id: &str, kind: &str, dungeon: Option<&str>, started: 
          VALUES(?1,'synthetic-stream','synthetic-session',?2,'Synthetic Map',?3,'synthetic-realm',?4,?4+100,'live','{}')",
         params![id, run, kind, started],
     ).unwrap();
+    crate::common::account_scope_fixture::attribute(db);
 }
 
 fn sequence(entries: &[(&str, Option<&str>)]) -> (Connection, Vec<VisitRow>) {
@@ -53,6 +54,7 @@ fn sequence(entries: &[(&str, Option<&str>)]) -> (Connection, Vec<VisitRow>) {
             index as i64 * 100,
         );
     }
+    crate::common::account_scope_fixture::attribute(&db);
     let visits = session_visits(&db, "synthetic-session").unwrap();
     (db, visits)
 }
@@ -228,6 +230,12 @@ fn fight(
          VALUES(?1,?2,?3,?4,?4+90,?5,1,json_object('first_hit',CAST(?4+1 AS TEXT),'last_hit',CAST(?4+1+?6 AS TEXT)))",
         params![id,run,session,started,local,span],
     ).unwrap();
+    crate::common::account_scope_fixture::attribute(db);
+    db.execute(
+        "INSERT INTO observation_characters VALUES('fight',?1,'synthetic-fixture-owner')",
+        [id],
+    )
+    .unwrap();
     for (player, local, dps) in [
         ("local", true, Some(99999.0)),
         ("one", false, Some(1000.0)),
@@ -302,6 +310,12 @@ fn chain_step_aggregates_weight_by_hit_span() {
 fn bag(db: &Connection, id: &str, run: Option<&str>, at: i64, rank: Option<i64>, items: &[u16]) {
     db.execute("INSERT INTO drops(id,session_id,run_id,at,bag_type,bag_rank,json) VALUES(?1,'synthetic-session',?2,?3,5000,?4,'{}')",
         params![id,run,at,rank]).unwrap();
+    crate::common::account_scope_fixture::attribute(db);
+    db.execute(
+        "INSERT INTO observation_characters VALUES('drop',?1,'synthetic-fixture-owner')",
+        [id],
+    )
+    .unwrap();
     for (slot, item) in items.iter().enumerate() {
         db.execute(
             "INSERT INTO drop_items(drop_id,slot,item_type,quantity,json) VALUES(?1,?2,?3,1,'{}')",
@@ -340,8 +354,8 @@ fn chain_step_whites_match_streak_predicate() {
     for step in &result.steps[1..] {
         let (last_white, average): (Option<i64>, Option<f64>) = db
             .query_row(
-                include_str!("../src/home_streak.sql"),
-                [&step.name],
+                &crate::common::account_sql::with_accounts(include_str!("../src/home_streak.sql")),
+                params![step.name, crate::common::account_scope_fixture::ACCOUNT],
                 |row| Ok((row.get(1)?, row.get(3)?)),
             )
             .unwrap();
@@ -452,6 +466,7 @@ fn open_realm_and_empty_aggregates_preserve_unknowns() {
     let (db, _) = sequence(&[("realm", None), ("dungeon", Some(CASTLE))]);
     db.execute("UPDATE map_visits SET ended=NULL WHERE id='v0000'", [])
         .unwrap();
+    crate::common::account_scope_fixture::attribute(&db);
     let visits = session_visits(&db, "synthetic-session").unwrap();
     bag(&db, "open-realm", None, 1000, None, &[]);
     let result = chain(&db, "synthetic-session", &visits, 0..2).unwrap();
@@ -477,6 +492,7 @@ fn session_visits_orders_ties_scopes_and_caps() {
         [],
     )
     .unwrap();
+    crate::common::account_scope_fixture::attribute(&db);
     let visits = session_visits(&db, "synthetic-session").unwrap();
     assert_eq!(visits.len(), 2000);
     assert_eq!(visits.first().unwrap().id, "v0000");
@@ -596,5 +612,67 @@ fn chain_step_plans_use_indexes() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn account_scope_journey_keeps_foreign_visits_as_boundaries() {
+    for entries in [
+        vec![
+            ("realm", None),
+            ("dungeon", Some(CASTLE)),
+            ("dungeon", Some(CHAMBER)),
+        ],
+        vec![
+            ("dungeon", Some(CASTLE)),
+            ("nexus", None),
+            ("dungeon", Some(CASTLE)),
+        ],
+    ] {
+        let (db, _) = sequence(&entries);
+        let b = "account-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        db.execute("INSERT INTO accounts VALUES(?1)", [b]).unwrap();
+        db.execute("INSERT INTO characters(id,observed_at,json,account_id) VALUES('synthetic-b',0,'{}',?1)",[b]).unwrap();
+        db.execute(
+            "UPDATE map_visits SET character_id='synthetic-b' WHERE id='v0001'",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "UPDATE runs SET character_id='synthetic-b' WHERE id='run-v0001'",
+            [],
+        )
+        .unwrap();
+        let visits = session_visits(&db, "synthetic-session").unwrap();
+        assert_eq!(visits.len(), 3);
+        assert!(chain_range(&visits, 2).is_none());
+        assert_eq!(in_a_row(&visits, 2), 1);
+    }
+}
+
+#[test]
+fn account_scope_unknown_chain_steps_never_bridge_different_known_accounts() {
+    for owners in [
+        [Some("a"), None, Some("b")],
+        [None, Some("a"), Some("b")],
+        [Some("a"), Some("b"), None],
+    ] {
+        let (_, mut visits) = sequence(&[
+            ("realm", None),
+            ("dungeon", Some(CASTLE)),
+            ("dungeon", Some(CHAMBER)),
+        ]);
+        for (visit, owner) in visits.iter_mut().zip(owners) {
+            visit.account = owner.map(str::to_owned);
+        }
+        assert_eq!(chain_range(&visits, 2), None, "{owners:?}");
+        assert_eq!(
+            chain_range(&visits, 0),
+            if owners[1] == Some("b") {
+                None
+            } else {
+                Some(0..2)
+            }
+        );
     }
 }

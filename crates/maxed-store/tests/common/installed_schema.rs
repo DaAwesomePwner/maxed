@@ -105,6 +105,9 @@ const SCRIPTS: [(&str, &str); 16] = [
 pub fn install(db: &Connection, version: usize) {
     assert!((1..=SCRIPTS.len()).contains(&version));
     db.pragma_update(None, "foreign_keys", true).unwrap();
+    // Install in one transaction, as production migrations do. Autocommitting
+    // every statement syncs the disk once per statement, which is slow on CI.
+    db.execute_batch("BEGIN").unwrap();
     for (i, (script, checksum)) in SCRIPTS.iter().take(version).enumerate() {
         assert_eq!(hash(script), *checksum);
         db.execute_batch(script).unwrap();
@@ -116,6 +119,7 @@ pub fn install(db: &Connection, version: usize) {
     }
     db.pragma_update(None, "user_version", version as i64)
         .unwrap();
+    db.execute_batch("COMMIT").unwrap();
 }
 
 pub fn hash(text: &str) -> String {
@@ -191,27 +195,63 @@ pub fn assert_integrity(db: &Connection) {
 // Small synthetic fixtures only. Hash sorted, typed rows to compare every saved
 // byte without exposing identity fields if an assertion fails.
 pub fn history(db: &Connection) -> BTreeMap<String, String> {
-    schema(db)
+    let mut snapshots: BTreeMap<_, _> = schema(db)
         .into_iter()
         .filter(|(kind, name, _, _)| kind == "table" && name != "schema_migrations")
         .map(|(_, name, _, _)| {
-            let mut stmt = db
-                .prepare(&format!("SELECT * FROM \"{}\"", name.replace('"', "\"\"")))
-                .unwrap();
-            let columns = stmt.column_count();
-            let mut rows = stmt
-                .query_map([], |r| {
-                    (0..columns)
-                        .map(|i| r.get::<_, rusqlite::types::Value>(i))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .unwrap()
-                .map(|r| format!("{:?}", r.unwrap()))
-                .collect::<Vec<_>>();
-            rows.sort();
-            (name, hash(&rows.join("\n")))
+            let columns = if name == "characters" {
+                "id,observed_at,json"
+            } else {
+                "*"
+            };
+            let digest = row_hash(
+                db,
+                &format!("SELECT {columns} FROM \"{}\"", name.replace('"', "\"\"")),
+            );
+            (name, digest)
         })
-        .collect()
+        .collect();
+    // Keep legacy payload hashes comparable, while still detecting any mutation
+    // of the new membership column in rollback/idempotency snapshots.
+    if db.prepare("SELECT account_id FROM characters").is_ok() {
+        snapshots.insert(
+            "characters.account_id".into(),
+            row_hash(db, "SELECT id,account_id FROM characters"),
+        );
+    }
+    snapshots
+}
+
+fn row_hash(db: &Connection, sql: &str) -> String {
+    let mut stmt = db.prepare(sql).unwrap();
+    let columns = stmt.column_count();
+    let mut rows = stmt
+        .query_map([], |r| {
+            (0..columns)
+                .map(|i| r.get::<_, rusqlite::types::Value>(i))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .unwrap()
+        .map(|r| format!("{:?}", r.unwrap()))
+        .collect::<Vec<_>>();
+    rows.sort();
+    hash(&rows.join("\n"))
+}
+
+/// The sole allowed modification of an installed object by 017 is this exact
+/// nullable column; every other byte of every installed schema object survives.
+pub fn account_schema_preserves(
+    object: &(String, String, String, String),
+    after: &[(String, String, String, String)],
+) -> bool {
+    let mut expected = object.clone();
+    if object.0 == "table" && object.1 == "characters" {
+        expected.3 = format!(
+            "{}, account_id TEXT REFERENCES accounts(id))",
+            object.3.strip_suffix(')').unwrap()
+        );
+    }
+    after.contains(&expected)
 }
 
 thread_local! {
@@ -302,7 +342,37 @@ pub fn assert_additive_upgrade(
                 version, next,
                 "each script must have one ordered checksum insertion"
             );
-            if version >= 16 {
+            if version == 17 {
+                // Match the complete reviewed 017 script, including its sole
+                // ALTER, populated-character index and read-only ownership views.
+                let baseline: Vec<_> =
+                    normalized(include_str!("../../migrations/017_accounts.sql"))
+                        .split(';')
+                        .map(normalized)
+                        .filter(|sql| !sql.is_empty())
+                        .collect();
+                assert_eq!(
+                    pending, baseline,
+                    "unexpected work attributed to migration 017"
+                );
+            } else if version == 18 {
+                let baseline: Vec<_> =
+                    normalized(include_str!("../../migrations/018_account_reads.sql"))
+                        .split(';')
+                        .map(normalized)
+                        .filter(|sql| !sql.is_empty())
+                        .collect();
+                assert_eq!(
+                    pending, baseline,
+                    "unexpected work attributed to migration 018"
+                );
+            } else if version == 19 {
+                assert_eq!(
+                    normalized(&pending.join("; ")),
+                    normalized(include_str!("../../migrations/019_attribution_notice.sql")),
+                    "unexpected work attributed to migration 019"
+                );
+            } else if version >= 16 {
                 assert!(!pending.is_empty(), "missing additive DDL trace");
                 for statement in &pending {
                     assert!(

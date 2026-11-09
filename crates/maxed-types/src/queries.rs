@@ -64,6 +64,8 @@ pub struct HomeCombat {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct PotionCount {
+    #[serde(default)]
+    pub object_type: Option<u16>,
     pub stat: PotionStat,
     pub count: u32,
 }
@@ -349,6 +351,10 @@ pub struct HomeRunDetail {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct HomeSummary {
+    // Unknown-owner history anywhere in this database is excluded from account reads.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(as = "Option<bool>", optional)]
+    pub unattributed_history: bool,
     pub runs: u32,
     pub clears: u32,
     pub deaths: u32,

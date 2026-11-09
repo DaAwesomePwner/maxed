@@ -40,6 +40,7 @@ fn fixture(att: i32, dex: i32, min: i32, max: i32) -> (CharacterView, Catalog) {
         lifetime_millis: None,
     }];
     item.weapon_firing = Some(WeaponFiringDef {
+        subattack_projectile_indices: None,
         support: CatalogSupport::Supported,
         omitted_projectile_indices: vec![],
         reasons: vec![],

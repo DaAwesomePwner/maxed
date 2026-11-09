@@ -27,19 +27,57 @@ fn run_recap_validates_id() {
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
     for run_id in [String::new(), "x".repeat(257), "synthetic\ninvalid".into()] {
         let request = RunRecapRequest { run_id };
-        assert!(HistoryKey::RunRecap(request.clone())
-            .validate_for_tests()
-            .is_err());
+        assert!(HistoryKey::RunRecap(
+            request.clone(),
+            maxed_store::CatalogQueryData::new(&[], &[]).identity()
+        )
+        .validate_for_tests()
+        .is_err());
         assert_eq!(
-            tauri::async_runtime::block_on(runtime.run_recap(request, vec![])).unwrap_err(),
+            tauri::async_runtime::block_on(
+                runtime.run_recap(request, maxed_store::CatalogQueryData::new(&[], &[]))
+            )
+            .unwrap_err(),
             super::history::INVALID
         );
     }
-    assert!(HistoryKey::RunRecap(RunRecapRequest {
-        run_id: "x".repeat(256)
-    })
+    assert!(HistoryKey::RunRecap(
+        RunRecapRequest {
+            run_id: "x".repeat(256)
+        },
+        maxed_store::CatalogQueryData::new(&[], &[]).identity()
+    )
     .validate_for_tests()
     .is_ok());
+}
+
+#[test]
+fn run_recap_ignores_unrelated_catalog_tier_limits() {
+    use super::history::HistoryKey;
+    let catalog = maxed_store::CatalogQueryData::new(
+        &[
+            (1, Some("x".repeat(17))),
+            (2, Some("UT".into())),
+            (3, Some("ST".into())),
+        ],
+        &[],
+    );
+    assert!(catalog.identity().validate().is_err());
+    assert_eq!(catalog.chase_types(), &[2, 3]);
+    let request = maxed_types::RunRecapRequest {
+        run_id: "synthetic-run".into(),
+    };
+    assert!(HistoryKey::RunRecap(request.clone(), catalog.identity())
+        .validate_for_tests()
+        .is_ok());
+    let root = tempfile::tempdir().unwrap();
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    assert_eq!(
+        tauri::async_runtime::block_on(runtime.run_recap(request, catalog)).unwrap(),
+        HistoryReply::Ready { value: None }
+    );
 }
 
 #[test]
@@ -117,7 +155,7 @@ fn run_recap_without_database_is_none() {
             maxed_types::RunRecapRequest {
                 run_id: "synthetic-run".into()
             },
-            vec![]
+            maxed_store::CatalogQueryData::new(&[], &[])
         ))
         .unwrap(),
         HistoryReply::Ready { value: None }
@@ -176,7 +214,7 @@ fn home_streak_reads_through_the_history_worker() {
         &[EventEnvelope {
             fight_chart_omitted: false,
             stream_id: "invented-home-test".into(),
-            sequence: Sequence(Timestamp(4)),
+            sequence: Sequence(Timestamp(5)),
             at: bag.at,
             event: EngineEvent::BagDropped(bag.clone()),
         }],
@@ -185,7 +223,12 @@ fn home_streak_reads_through_the_history_worker() {
     let reader = maxed_store::open_reader(&path).unwrap();
     let dungeon = snapshot.run.unwrap().dungeon;
     let request = HomeDungeonStreakRequest { dungeon };
-    let expected = reader.home_dungeon_streak(request.clone()).unwrap();
+    let expected = reader
+        .home_dungeon_streak(
+            request.clone(),
+            reader.current_account().unwrap().as_deref(),
+        )
+        .unwrap();
     assert_eq!(expected.last_white_at, Some(bag.at));
     let runtime = Arc::new(CaptureRuntime::default());
     runtime.initialize_home(root.path().into()).unwrap();
@@ -205,27 +248,42 @@ fn home_hud_and_scope_loot_keys_preserve_catalog_limits() {
         vec![(0, Some("a".repeat(17)))],
         vec![(0, Some("é".repeat(9)))],
     ] {
-        assert!(HistoryKey::HomeHud(today(), tiers.clone(), vec![])
-            .validate_for_tests()
-            .is_err());
-        assert!(HistoryKey::ScopeLoot(today(), None, 1, tiers)
-            .validate_for_tests()
-            .is_err());
-    }
-    assert!(
-        HistoryKey::HomeHud(today(), vec![], vec![(0, PotionStat::Life); 65_537])
-            .validate_for_tests()
-            .is_err()
-    );
-    let tiers = vec![(0, Some("é".repeat(8))); 65_536];
-    assert!(
-        HistoryKey::HomeHud(today(), tiers.clone(), vec![(0, PotionStat::Life); 65_536])
-            .validate_for_tests()
-            .is_ok()
-    );
-    assert!(HistoryKey::ScopeLoot(today(), None, 1, tiers)
+        assert!(HistoryKey::HomeHud(
+            today(),
+            maxed_store::CatalogQueryData::new(&tiers, &[]).identity()
+        )
         .validate_for_tests()
-        .is_ok());
+        .is_err());
+        assert!(HistoryKey::ScopeLoot(
+            today(),
+            None,
+            1,
+            maxed_store::CatalogQueryData::new(&tiers, &[]).identity()
+        )
+        .validate_for_tests()
+        .is_err());
+    }
+    assert!(HistoryKey::HomeHud(
+        today(),
+        maxed_store::CatalogQueryData::new(&[], &vec![(0, PotionStat::Life); 65_537]).identity()
+    )
+    .validate_for_tests()
+    .is_err());
+    let tiers = vec![(0, Some("é".repeat(8))); 65_536];
+    assert!(HistoryKey::HomeHud(
+        today(),
+        maxed_store::CatalogQueryData::new(&tiers, &vec![(0, PotionStat::Life); 65_536]).identity()
+    )
+    .validate_for_tests()
+    .is_ok());
+    assert!(HistoryKey::ScopeLoot(
+        today(),
+        None,
+        1,
+        maxed_store::CatalogQueryData::new(&tiers, &[]).identity()
+    )
+    .validate_for_tests()
+    .is_ok());
 }
 
 #[test]
@@ -258,19 +316,24 @@ fn home_hud_key_rejects_invalid_scope() {
             },
         },
     ] {
-        assert!(HistoryKey::HomeHud(scope, vec![], vec![])
-            .validate_for_tests()
-            .is_err());
-    }
-    assert!(HistoryKey::HomeHud(today(), vec![], vec![])
+        assert!(HistoryKey::HomeHud(
+            scope,
+            maxed_store::CatalogQueryData::new(&[], &[]).identity()
+        )
         .validate_for_tests()
-        .is_ok());
+        .is_err());
+    }
+    assert!(HistoryKey::HomeHud(
+        today(),
+        maxed_store::CatalogQueryData::new(&[], &[]).identity()
+    )
+    .validate_for_tests()
+    .is_ok());
     assert!(HistoryKey::HomeHud(
         HomeScope::Session {
             id: "a".repeat(256)
         },
-        vec![],
-        vec![]
+        maxed_store::CatalogQueryData::new(&[], &[]).identity()
     )
     .validate_for_tests()
     .is_ok());
@@ -298,7 +361,7 @@ fn home_hud_reads_catalog_classifications_through_history_worker() {
     .map(|(i, event)| EventEnvelope {
         fight_chart_omitted: false,
         stream_id: "invented-home-test".into(),
-        sequence: Sequence(Timestamp(4 + i as u64)),
+        sequence: Sequence(Timestamp(5 + i as u64)),
         at: Timestamp(6_000_000),
         event,
     })
@@ -309,8 +372,10 @@ fn home_hud_reads_catalog_classifications_through_history_worker() {
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
     let reply = tauri::async_runtime::block_on(runtime.home_hud(
         today(),
-        vec![(item, Some("UT".into()))],
-        vec![(item, PotionStat::Life)],
+        maxed_store::CatalogQueryData::new(
+            &[(item, Some("UT".into()))],
+            &[(item, PotionStat::Life)],
+        ),
     ))
     .unwrap();
     let HistoryReply::Ready { value } = reply else {
@@ -323,6 +388,7 @@ fn home_hud_reads_catalog_classifications_through_history_worker() {
         value.potions,
         [PotionCount {
             stat: PotionStat::Life,
+            object_type: Some(item),
             count: 1
         }]
     );
@@ -336,7 +402,10 @@ fn home_hud_absent_live_history_is_empty_without_creating_a_database() {
     runtime.initialize_home(root.path().into()).unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
     assert_eq!(
-        tauri::async_runtime::block_on(runtime.home_hud(today(), vec![], vec![])).unwrap(),
+        tauri::async_runtime::block_on(
+            runtime.home_hud(today(), maxed_store::CatalogQueryData::new(&[], &[]))
+        )
+        .unwrap(),
         HistoryReply::Ready {
             value: maxed_types::HomeHud::default()
         },
@@ -349,9 +418,19 @@ fn seed(path: &std::path::Path) {
     let mut db = rusqlite::Connection::open(path).unwrap();
     maxed_store::migrate(&mut db).unwrap();
     let snapshot = demo::demo_snapshot();
+    let mut character = snapshot.character.unwrap();
+    character.identity_verified = true;
+    character.account_id =
+        Some("account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into());
+    let identity = EngineEvent::LocalIdentityChanged {
+        at: Timestamp(1_000_000),
+        character_id: Some(character.id.clone()),
+        account_id: character.account_id.clone(),
+    };
     let events: Vec<_> = [
         EngineEvent::SessionUpdated(snapshot.session.unwrap()),
-        EngineEvent::CharacterUpdated(snapshot.character.unwrap()),
+        EngineEvent::CharacterUpdated(character),
+        identity,
         EngineEvent::RunStarted(snapshot.run.unwrap()),
     ]
     .into_iter()
@@ -470,14 +549,16 @@ fn playback_replacement_waits_for_reader_and_rejects_same_namespace_generation()
     let replace = thread::spawn(move || open(&switching, &app_data, Namespace::Replay).close());
     wait_for_invalidation(&runtime);
     assert!(!replace.is_finished());
+    let stored = maxed_store::open_reader(&database).unwrap();
     assert_eq!(
-        maxed_store::open_reader(&database)
-            .unwrap()
-            .home_summary(today())
+        stored
+            .with_account(None, |reader, account| reader
+                .home_summary(today(), account))
             .unwrap()
             .runs,
         1
     );
+    drop(stored); // Windows cannot replace playback while the oracle reader owns a handle.
     release.send(()).unwrap();
     assert_eq!(read.join().unwrap().unwrap(), HistoryReply::Superseded);
     replace.join().unwrap().unwrap();
@@ -818,7 +899,7 @@ fn seed_legacy(path: &std::path::Path, version: i64) {
         &[maxed_types::EventEnvelope {
             fight_chart_omitted: false,
             stream_id: "invented-home-test".into(),
-            sequence: maxed_types::Sequence(Timestamp(4)),
+            sequence: maxed_types::Sequence(Timestamp(5)),
             at: Timestamp(2_000_000),
             event: maxed_types::EngineEvent::FightStarted(
                 maxed_types::demo::demo_snapshot().fights.remove(0),
@@ -829,7 +910,7 @@ fn seed_legacy(path: &std::path::Path, version: i64) {
     super::receipt_tests::copy_to_legacy(&source);
     assert_eq!(
         super::receipt_tests::count_stream(&source, "invented-home-test"),
-        4
+        5
     );
     drop(source);
     let db = rusqlite::Connection::open(path).unwrap();
@@ -883,8 +964,15 @@ fn seed_legacy(path: &std::path::Path, version: i64) {
         "damage_sources",
         "timeline",
     ] {
-        db.execute_batch(&format!("INSERT INTO {table} SELECT * FROM source.{table}"))
-            .unwrap();
+        let columns = if table == "characters" {
+            "id,observed_at,json"
+        } else {
+            "*"
+        };
+        db.execute_batch(&format!(
+            "INSERT INTO {table} SELECT {columns} FROM source.{table}"
+        ))
+        .unwrap();
     }
     if version >= 2 {
         db.execute_batch("INSERT INTO fight_summaries SELECT * FROM source.fight_summaries")
@@ -955,6 +1043,7 @@ fn cold_legacy_upgrades_after_confirmation_without_capture(version: i64) {
         .unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
     assert_eq!(schema_version(&path), maxed_store::SCHEMA_VERSION);
+    verify_legacy_seed_identity(&path);
     assert_eq!(home(&runtime, today()).unwrap().runs, 1);
     let reader = maxed_store::open_reader(&path).unwrap();
     assert_eq!(
@@ -1165,6 +1254,7 @@ fn capture_start_failure_preserves_upgraded_cold_history() {
         )
         .unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    verify_legacy_seed_identity(&root.path().join("live.sqlite3"));
     // Hold the lease so capture's writer cannot open; upgraded history remains readable.
     let lease = super::storage::namespace_lease(root.path(), Namespace::Live).unwrap();
     assert!(runtime
@@ -1418,4 +1508,83 @@ fn namespace_switch_supersedes_scope_loot_read() {
     assert_eq!(read.join().unwrap().unwrap(), HistoryReply::Superseded);
     reset.join().unwrap().unwrap();
     *runtime.shared.home.on_reader.lock().unwrap() = None;
+}
+
+// Historical migrations deliberately retain unknown ownership. These lifecycle
+// tests explicitly observe their synthetic character again after upgrading.
+fn verify_legacy_seed_identity(path: &std::path::Path) {
+    use maxed_types::{demo, EngineEvent, EventEnvelope, Sequence};
+    let mut character = demo::demo_snapshot().character.unwrap();
+    character.identity_verified = true;
+    character.account_id =
+        Some("account-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into());
+    let identity = EngineEvent::LocalIdentityChanged {
+        at: Timestamp(1_000_000),
+        character_id: Some(character.id.clone()),
+        account_id: character.account_id.clone(),
+    };
+    let events: Vec<_> = [
+        EngineEvent::CaptureStateChanged(CaptureStatus::default()),
+        EngineEvent::CharacterUpdated(character),
+        identity,
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(i, event)| EventEnvelope {
+        fight_chart_omitted: false,
+        stream_id: "synthetic-upgrade-identity".into(),
+        sequence: Sequence(Timestamp(i as u64 + 1)),
+        at: Timestamp(1_000_000),
+        event,
+    })
+    .collect();
+    maxed_store::apply_batch(&mut rusqlite::Connection::open(path).unwrap(), &events).unwrap();
+}
+
+#[test]
+fn catalog_generation_changes_all_history_keys() {
+    use super::history::HistoryKey;
+    use maxed_store::CatalogQueryData;
+    let first = CatalogQueryData::new(&[(201, Some("UT".into()))], &[]);
+    let shared = first.clone();
+    let replacement = CatalogQueryData::new(&[(201, Some("UT".into()))], &[]);
+    let keys = |catalog: &CatalogQueryData| {
+        vec![
+            HistoryKey::HomeHud(today(), catalog.identity()),
+            HistoryKey::ScopeLoot(today(), None, 20, catalog.identity()),
+            HistoryKey::RunRecap(
+                maxed_types::RunRecapRequest {
+                    run_id: "synthetic".into(),
+                },
+                catalog.identity(),
+            ),
+            HistoryKey::Collection(
+                maxed_types::CollectionRequest {
+                    dungeon: None,
+                    chase: vec![],
+                },
+                catalog.identity(),
+            ),
+            HistoryKey::DropSummary(
+                maxed_types::DropSummaryRequest {
+                    filter: maxed_types::DropFilter {
+                        min_rank: None,
+                        place: None,
+                        item_type: None,
+                        enchanted_only: false,
+                        range: None,
+                        cursor: None,
+                        limit: 20,
+                    },
+                    days: vec![],
+                    include_items: true,
+                },
+                catalog.identity(),
+            ),
+        ]
+    };
+    assert_eq!(keys(&first), keys(&shared));
+    for (old, new) in keys(&first).iter().zip(keys(&replacement)) {
+        assert_ne!(*old, new);
+    }
 }

@@ -15,7 +15,7 @@ npm --prefix app/ui ci
 npm --prefix app/ui run tauri dev
 ```
 
-Use `scripts/build-release.ps1` for a release executable. Do not use an ordinary Cargo release build for desktop or performance acceptance. See [testing](docs/development/testing.md) for checks and [UI preview](docs/development/ui-preview.md) for synthetic browser scenarios.
+Use `scripts/build-release.ps1` for a release executable. Do not use an ordinary Cargo release build for desktop or performance acceptance. See [testing](docs/development/testing.md) for checks, [UI preview](docs/development/ui-preview.md) for synthetic browser scenarios, and [local UI review](docs/development/windows-ui-review.md) for driving a debug build of the desktop app.
 
 ## macOS development
 

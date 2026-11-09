@@ -1,10 +1,10 @@
--- kind, session, lo, hi, catalog tiers JSON, cursor rank, cursor item, limit+1.
+-- kind, session, lo, hi, catalog tiers JSON, cursor rank, cursor item, limit+1, account (NULL excludes history).
 WITH scoped AS MATERIALIZED (
     SELECT id,at FROM drops INDEXED BY drops_session
-    WHERE ?1=0 AND session_id=?2
+    WHERE ?1=0 AND session_id=?2 AND /*account:drop:drops*/=?9
     UNION ALL
     SELECT id,at FROM drops INDEXED BY drops_at
-    WHERE ?1=1 AND at>=?3 AND at<?4
+    WHERE ?1=1 AND at>=?3 AND at<?4 AND /*account:drop:drops*/=?9
 ), tiers AS MATERIALIZED (
     SELECT CAST(json_extract(value,'$[0]') AS INTEGER) AS item_type,
         json_extract(value,'$[1]') AS tier FROM json_each(?5)
