@@ -1,7 +1,7 @@
 use crate::{
     maintenance::{Control, ControlResult, JobStatus, MaintenanceService, Step},
     migrate::{digest, open_writer},
-    project::{apply_prepared_contexts, json, validate_event},
+    project::{apply_contexts, json, validate_submission},
     receipts::{self, ReceiptDigest},
     StoreError,
 };
@@ -57,7 +57,6 @@ struct Pending {
     context: Arc<crate::AlertContext>,
     bytes: usize,
     ticket: u64,
-    hash: ReceiptDigest,
 }
 struct Shared {
     path: PathBuf,
@@ -362,7 +361,7 @@ impl StoreWriter {
         if event.stream_id != self.config.stream_id {
             return Err(StoreError::InvalidEvent);
         }
-        validate_event(event).map(|_| ())
+        validate_submission(event).map(|_| ())
     }
 
     #[allow(clippy::result_large_err)] // The required API returns ownership of the original event.
@@ -383,13 +382,12 @@ impl StoreWriter {
         if event.stream_id != self.config.stream_id {
             return Err(SubmitError::Invalid(event));
         }
-        let (bytes, hash) = match validate_event(&event) {
-            Ok((bytes, hash)) => (
-                bytes
-                    .saturating_add(context_bytes)
-                    .saturating_add(hash.len()),
-                hash,
-            ),
+        let bytes = match validate_submission(&event) {
+            // Retain the legacy 32-byte receipt allowance even though hashing now
+            // happens on the worker. Queue admission is byte-for-byte unchanged.
+            Ok(bytes) => bytes
+                .saturating_add(context_bytes)
+                .saturating_add(std::mem::size_of::<ReceiptDigest>()),
             Err(_) => return Err(SubmitError::Invalid(event)),
         };
         // Never wait for the worker, another producer, or SQLite on the submit path.
@@ -423,7 +421,6 @@ impl StoreWriter {
             context: Arc::new(context),
             bytes,
             ticket,
-            hash,
         });
         drop(shared);
         let _ = self.wake.try_send(());
@@ -743,22 +740,17 @@ fn commit_next(
         .iter()
         .take_while(|p| p.ticket <= through)
         .take(config.batch_size)
-        .map(|p| (Arc::clone(&p.event), Arc::clone(&p.context), p.hash))
+        .map(|p| (Arc::clone(&p.event), Arc::clone(&p.context)))
         .collect();
     if events.is_empty() {
         return Ok(false);
     }
-    if let Err(error) = apply_prepared_contexts(
-        conn,
-        events
-            .iter()
-            .map(|(e, c, h)| (e.as_ref(), c.as_ref(), Some(h))),
-    ) {
+    if let Err(error) = apply_contexts(conn, events.iter().map(|(e, c)| (e.as_ref(), c.as_ref()))) {
         mark_failed(shared, &error);
         return Err(error);
     }
     let mut shared = lock(shared);
-    for (event, _, _) in &events {
+    for (event, _) in &events {
         if let Some(pending) = shared.queue.pop_front() {
             shared.bytes -= pending.bytes;
         }
@@ -1342,7 +1334,6 @@ mod tests {
             context: Arc::default(),
             bytes: 0,
             ticket: 1,
-            hash: [0; 32],
         });
         let shared = Arc::new(shared);
         retain_abandoned(shared.clone());
@@ -1359,7 +1350,7 @@ mod tests {
     }
 
     #[test]
-    fn prepared_receipt_matches_direct_projection_and_duplicate_validation() {
+    fn worker_receipt_matches_direct_projection_and_duplicate_validation() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("prepared.sqlite3");
         let writer = start_writer(
@@ -1371,7 +1362,7 @@ mod tests {
         )
         .unwrap();
         let envelope = event(1);
-        let expected = validate_event(&envelope).unwrap().1;
+        let expected = crate::project::validate_event(&envelope).unwrap().1;
         submit(&writer, envelope.clone());
         writer.flush().unwrap();
         let mut conn = open_writer(&path).unwrap();
@@ -1408,7 +1399,6 @@ mod tests {
         };
         for ticket in 1..=3 {
             state.queue.push_back(Pending {
-                hash: validate_event(&event(ticket)).unwrap().1,
                 event: Arc::new(event(ticket)),
                 context: Arc::new(crate::AlertContext::default()),
                 bytes: 0,
