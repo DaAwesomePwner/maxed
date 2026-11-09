@@ -7,6 +7,21 @@ use std::sync::{atomic::Ordering, Arc};
 const STALE: &str = "stale_character_revision";
 const UNAVAILABLE: &str = "character_inputs_unavailable";
 
+/// Only the identity fields needed to validate the owner observation.
+pub(super) struct CharacterIdentity {
+    stream_id: String,
+    character_id: Option<String>,
+}
+
+impl CharacterIdentity {
+    pub fn from_snapshot(snapshot: &LiveSnapshot) -> Self {
+        Self {
+            stream_id: snapshot.stream_id.clone(),
+            character_id: snapshot.character.as_ref().map(|c| c.id.clone()),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct CharacterInputs {
     pub generation: Arc<()>,
@@ -43,9 +58,9 @@ impl CharacterInputs {
             .and_then(|c| c.calculation_revision.as_ref())
     }
 
-    fn matches_snapshot(&self, snapshot: &LiveSnapshot) -> bool {
+    fn matches_snapshot(&self, snapshot: &CharacterIdentity) -> bool {
         snapshot.stream_id == self.stream_id
-            && snapshot.character.as_ref().map(|c| &c.id) == self.character.as_ref().map(|c| &c.id)
+            && snapshot.character_id.as_ref() == self.character.as_ref().map(|c| &c.id)
     }
 
     fn same_inputs(&self, other: &Self) -> bool {
@@ -100,6 +115,33 @@ impl CharacterViewState {
 }
 
 impl CaptureRuntime {
+    fn character_identity(&self) -> CharacterIdentity {
+        // Match snapshot reads: rendezvous with the owner, buffered reply, and
+        // final cached view on disconnect. Never hold a lock while waiting.
+        let requests = self
+            .shared
+            .character_requests
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        if let Some(requests) = requests {
+            let (reply, response) = crossbeam_channel::bounded(1);
+            if requests.send(reply).is_ok() {
+                if let Ok(identity) = response.recv() {
+                    return identity;
+                }
+            }
+        }
+        CharacterIdentity::from_snapshot(
+            &self
+                .shared
+                .views
+                .snapshot
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()),
+        )
+    }
+
     pub fn get_character_calculation(
         &self,
         request: CharacterCalculationRequest,
@@ -107,8 +149,8 @@ impl CaptureRuntime {
         request.validate().map_err(str::to_owned)?;
         // Use the existing engine-owner read path, including metadata-only changes.
         // Neither this wait nor the calculation owns lifecycle or view locks.
-        let snapshot = self.snapshot();
-        if snapshot.character.is_none() {
+        let snapshot = self.character_identity();
+        if snapshot.character_id.is_none() {
             return Err("no_local_character".into());
         }
         let (input, epoch, capture) = {
@@ -168,7 +210,7 @@ impl CaptureRuntime {
         }
         // An owner read observes pending metadata changes as well as stream changes.
         // No snapshot from either read is joined to an independently loaded catalog.
-        let snapshot = self.snapshot();
+        let snapshot = self.character_identity();
         let view = self
             .shared
             .views

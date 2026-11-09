@@ -821,6 +821,19 @@ impl Adapter {
             .clone()
     }
 
+    pub(super) fn read_character_identity(&mut self) -> super::character::CharacterIdentity {
+        // Refresh pending metadata exactly as a snapshot read does, but never
+        // clone the cached fights, series, buckets or drops for this query.
+        self.materialize_snapshot();
+        super::character::CharacterIdentity::from_snapshot(
+            &self
+                .views
+                .snapshot
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()),
+        )
+    }
+
     fn observe_character(&self, character: Option<CharacterView>) -> Option<CharacterView> {
         // Engine finalization clears world state. Keep the last presentation
         // observation only in that retiring generation, with its immutable catalog.
@@ -1123,12 +1136,16 @@ mod session_coverage_tests {
 
         // SessionUpdated is throttled to 30 seconds; this changes no watermark.
         adapter.live_traffic(Timestamp(2)).unwrap();
+        // The lightweight query must still refresh pending owner metadata.
+        adapter.read_character_identity();
+        assert_eq!(adapter.snapshot_builds, 3);
         let latest = adapter.read_snapshot();
         assert_eq!(latest.sequence, first.sequence);
         assert!(latest.revision.unwrap().0 > first.revision.unwrap().0);
         assert_eq!(latest.session.as_ref().unwrap().last_traffic, Timestamp(2));
         assert_eq!(adapter.snapshot_builds, 3);
         for _ in 0..10 {
+            adapter.read_character_identity();
             assert_eq!(adapter.read_snapshot(), latest);
         }
         assert_eq!(

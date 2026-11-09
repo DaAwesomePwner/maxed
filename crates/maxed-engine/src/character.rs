@@ -7,6 +7,13 @@ use maxed_types::*;
 use sha2::{Digest, Sha256};
 
 const FORMULA_VERSION: &str = "character-v1";
+const WEAK: u32 = 0x4;
+const DAMAGING: u32 = 0x40000;
+
+fn calculation_conditions(mask: i32) -> u32 {
+    mask as u32 & (WEAK | DAMAGING)
+}
+
 const WORK_LIMIT: usize = 65_536;
 // Match the catalog's bounded projectile collection; counts are bounded by u16
 // and are multiplied, never expanded into individual shots.
@@ -49,7 +56,16 @@ pub fn input_revision(
         .stats
         .iter()
         .filter(|s| [0, 3, 20, 27, 28, 29].contains(&s.stat_id))
-        .map(|s| (s.stat_id, s.value))
+        .map(|s| {
+            (
+                s.stat_id,
+                if s.stat_id == 29 {
+                    calculation_conditions(s.value) as i32
+                } else {
+                    s.value
+                },
+            )
+        })
         .collect();
     stats.sort_unstable();
     let mut equipment: Vec<_> = character.equipment.iter().collect();
@@ -186,15 +202,15 @@ fn observed(character: &CharacterView, stat_id: u8) -> Result<i32, &'static str>
 
 fn multiplier(character: &CharacterView) -> Result<f32, &'static str> {
     let att = observed(character, 20)?;
-    let mask = observed(character, 29)? as u32;
+    let mask = calculation_conditions(observed(character, 29)?);
     if att < 0 {
         return Err("invalid_att");
     }
-    if mask & 4 != 0 {
+    if mask & WEAK != 0 {
         return Ok(0.5);
     }
     let mut m = att.checked_add(25).ok_or("invalid_att")? as f32 * 0.02;
-    if mask & 0x40000 != 0 {
+    if mask & DAMAGING != 0 {
         m = (f64::from(m) * 1.25) as f32;
     }
     if !m.is_finite() {

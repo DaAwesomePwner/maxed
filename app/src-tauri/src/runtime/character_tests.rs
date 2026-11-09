@@ -382,7 +382,14 @@ fn unrelated_snapshot_updates_do_not_invalidate_the_input_hash() {
     let updating = runtime.clone();
     *runtime.shared.after_character_calculation.lock().unwrap() = Some(Box::new(move || {
         change(&updating, |input| {
-            input.character.as_mut().unwrap().observed_at = Timestamp(999)
+            let character = input.character.as_mut().unwrap();
+            character.observed_at = Timestamp(999);
+            character
+                .stats
+                .iter_mut()
+                .find(|s| s.stat_id == 29)
+                .unwrap()
+                .value ^= 0x8000;
         });
         let mut snapshot = updating.shared.views.snapshot.lock().unwrap();
         snapshot.sequence = Sequence(Timestamp(999));
@@ -623,11 +630,11 @@ fn adapter_annotates_only_presentation_and_keeps_damage_and_receipts_unchanged()
 }
 
 #[test]
-fn owner_snapshot_wait_releases_locks_so_stop_can_join() {
+fn owner_character_wait_releases_locks_so_stop_can_join() {
     let runtime = runtime(inputs());
     let request = request(&runtime);
-    let (requests, reads) = bounded::<SnapshotRequest>(0);
-    *runtime.shared.snapshot_requests.lock().unwrap() = Some(requests);
+    let (requests, reads) = bounded::<CharacterRequest>(0);
+    *runtime.shared.character_requests.lock().unwrap() = Some(requests);
     let (stop, stopped) = bounded(1);
     let (claimed, waiting) = bounded(1);
     let worker = thread::spawn(move || {
@@ -953,5 +960,63 @@ fn replacement_generation_clears_finalized_character_before_observing_new_inputs
         assert_eq!(result.revision.stream_id, replacement_stream);
         assert_eq!(result.catalog_fingerprint, Some("b".repeat(64)));
         replacement.close().unwrap();
+    }
+}
+
+#[test]
+fn calculation_queries_owner_identity_twice_and_rejects_stream_changes() {
+    for changed_stream in [false, true] {
+        let runtime = runtime(inputs());
+        let request = request(&runtime);
+        let (requests, reads) = bounded::<CharacterRequest>(0);
+        *runtime.shared.character_requests.lock().unwrap() = Some(requests);
+        let owner = runtime.clone();
+        let worker = thread::spawn(move || {
+            for read in 0..2 {
+                let reply = reads.recv_timeout(Duration::from_secs(5)).unwrap();
+                let mut snapshot = owner.shared.views.snapshot.lock().unwrap();
+                if changed_stream && read == 1 {
+                    snapshot.stream_id = "replacement-stream".into();
+                }
+                reply
+                    .send(super::character::CharacterIdentity::from_snapshot(
+                        &snapshot,
+                    ))
+                    .unwrap();
+            }
+        });
+        let result = runtime.get_character_calculation(request);
+        worker.join().unwrap();
+        if changed_stream {
+            assert_eq!(result.unwrap_err(), "stale_character_revision");
+        } else {
+            assert!(result.is_ok());
+        }
+    }
+}
+
+#[test]
+fn modeled_condition_changes_during_calculation_reject_the_reply() {
+    for mask in [0x4, 0x40000] {
+        let runtime = runtime(inputs());
+        let request = request(&runtime);
+        let updating = runtime.clone();
+        *runtime.shared.after_character_calculation.lock().unwrap() = Some(Box::new(move || {
+            change(&updating, |input| {
+                input
+                    .character
+                    .as_mut()
+                    .unwrap()
+                    .stats
+                    .iter_mut()
+                    .find(|s| s.stat_id == 29)
+                    .unwrap()
+                    .value = mask;
+            });
+        }));
+        assert_eq!(
+            runtime.get_character_calculation(request).unwrap_err(),
+            "stale_character_revision"
+        );
     }
 }

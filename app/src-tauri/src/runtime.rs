@@ -43,6 +43,7 @@ pub use storage::{discover_resources, Namespace, RuntimeOptions};
 
 const WORKER_FAILED: &str = "Capture worker failed; restart Maxed";
 type StatusSink = Arc<dyn Fn(CaptureStatus) + Send + Sync>;
+type CharacterRequest = Sender<character::CharacterIdentity>;
 type SnapshotRequest = Sender<maxed_types::LiveSnapshot>;
 #[cfg(test)]
 type BeforeWorkerLoop =
@@ -68,6 +69,7 @@ struct Shared {
     bridge_failed: AtomicBool,
     views: Arc<Views>,
     snapshot_requests: Mutex<Option<Sender<SnapshotRequest>>>,
+    character_requests: Mutex<Option<Sender<CharacterRequest>>>,
     #[cfg(test)]
     before_worker_loop: Mutex<Option<BeforeWorkerLoop>>,
     recovery: Mutex<Option<Adapter>>,
@@ -487,6 +489,12 @@ impl CaptureRuntime {
             .snapshot_requests
             .lock()
             .map_err(|_| WORKER_FAILED)? = Some(snapshot_requests);
+        let (character_requests, character_reads) = bounded(0);
+        *self
+            .shared
+            .character_requests
+            .lock()
+            .map_err(|_| WORKER_FAILED)? = Some(character_requests);
         let cancel = Arc::new(AtomicBool::new(false));
         let shared = self.shared.clone();
         let worker_sink = sink.clone();
@@ -529,7 +537,7 @@ impl CaptureRuntime {
                             run_worker(
                                 factory,
                                 stopped,
-                                &snapshot_reads,
+                                (&snapshot_reads, &character_reads),
                                 worker_cancel,
                                 &shared,
                                 &worker_sink,
@@ -742,12 +750,13 @@ impl Drop for CaptureRuntime {
 fn run_worker(
     factory: impl FnOnce() -> Result<CaptureHandle, CaptureError>,
     stopped: Receiver<()>,
-    snapshot_reads: &Receiver<SnapshotRequest>,
+    reads: (&Receiver<SnapshotRequest>, &Receiver<CharacterRequest>),
     cancel: Arc<AtomicBool>,
     shared: &Shared,
     sink: &StatusSink,
     adapter: &mut Adapter,
 ) -> Result<(), String> {
+    let (snapshot_reads, character_reads) = reads;
     let handle = match factory() {
         Ok(handle) => handle,
         Err(error) => {
@@ -787,6 +796,11 @@ fn run_worker(
             recv(snapshot_reads) -> request => {
                 if let Ok(reply) = request {
                     let _ = reply.send(adapter.read_snapshot());
+                }
+            },
+            recv(character_reads) -> request => {
+                if let Ok(reply) = request {
+                    let _ = reply.send(adapter.read_character_identity());
                 }
             },
             recv(committed) -> _ => {
