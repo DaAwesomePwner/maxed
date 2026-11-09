@@ -446,3 +446,22 @@ it('home_flag_off_keeps_existing_dungeon_and_does_not_create_white_queue', async
   for (const read of [h.client.getHomeHud, h.client.getHomeDungeonStreak, h.client.getDungeonProfile,
     h.client.getBossHistory, h.client.getHomeBossBaselines, h.client.getLootStats]) expect(read).not.toHaveBeenCalled();
 });
+
+it('home_banner_reselects_best_item_when_new_tiers_arrive_after_a_white_bag', async () => {
+  const value = snapshot(), h = homeHarness(value); await settle();
+  const pending = deferred<Awaited<ReturnType<typeof h.client.getObjectVisuals>>>();
+  vi.mocked(h.client.getObjectVisuals).mockReturnValue(pending.promise);
+  const fresh = { ...newDrop(value, 'late-tiers'), items: [2591, 3000],
+    contents: [2591, 3000].map((item_type, slot) => ({ ...value.drops[0].contents[0], item_type, slot })) };
+  h.homeWindow.update(window => ({ ...window, drops: [...window.drops, fresh] })); await settle();
+  expect(h.client.getObjectVisuals).toHaveBeenCalledWith(expect.arrayContaining([2591, 3000]));
+  const banner = h.page.container.querySelector('.white-banner-region') as HTMLElement;
+  expect(within(banner).getByRole('link').getAttribute('href')).toBe('#/loot/item/2591');
+  pending.resolve({ ...visuals, objects: [
+    { object_type: 2591, name: 'Synthetic potion', item_tier: null, sprite: null, bag: null },
+    { object_type: 3000, name: 'Synthetic UT winner', item_tier: 'UT', sprite: null, bag: null },
+  ] }); await settle();
+  expect(within(banner).getByRole('link', { name: 'Synthetic UT winner' }).getAttribute('href')).toBe('#/loot/item/3000');
+  expect(h.page.container.querySelector('.best-card')?.textContent).toContain('Synthetic UT winner');
+  expect(within(banner).getByText('Ended a 23-run Synthetic Sanctum dry streak')).toBeTruthy();
+});

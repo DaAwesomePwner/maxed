@@ -1,6 +1,8 @@
 import type { DropView } from '../../bindings/DropView';
 
 export interface WhiteBannerItem {
+  /** Retain observation evidence for catalog updates after arrival. */
+  drop?: DropView;
   dropId: string;
   itemType: number | null;
   itemName: string;

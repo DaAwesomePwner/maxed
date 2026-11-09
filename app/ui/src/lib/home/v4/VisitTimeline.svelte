@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { rankedDrops } from '../../loot/ranking';
   import { onMount } from 'svelte';
   import type { DropView } from '../../bindings/DropView';
   import type { FightView } from '../../bindings/FightView';
@@ -74,12 +75,12 @@
   <div class="track" bind:this={track}>
     <div class="point-row">
       {#each bags as group, index}
-        {@const best = group.values.reduce((a, b) => (b.bag_rank ?? -1) > (a.bag_rank ?? -1) ? b : a)}
+        {@const best = rankedDrops(group.values)[0]}
         {@const visual = objectVisual(visuals.objects, best.bag_type)}
         <span class="point" style:left={`${group.x - 12}px`}>
           <Tooltip id={`${uid}-bag-${index}`} text={group.values.map(drop => `${objectVisual(visuals.objects, drop.bag_type)?.name ?? 'Bag'} · ${elapsed(drop.at)}${drop.source_estimated ? ' · Source estimated' : ''}`).join('\n')}>
             {#snippet trigger(describedby)}
-              <a class="bag-pip" href={routeHref({ kind: 'loot', view: 'feed' })} aria-describedby={describedby}
+              <a class="bag-pip" data-drop-id={best.id} href={routeHref({ kind: 'loot', view: 'feed' })} aria-describedby={describedby}
                 aria-label={`${group.values.length === 1 ? visual?.name ?? 'Bag' : `${group.values.length} bags`} · ${elapsed(best.at)}`}>
                 {#if visual?.sprite}<SpriteImage sprite={visual.sprite} sheetUrl={resolveSpriteUrl(visual.sprite)} fit={16} alt="" />
                 {:else}<span class="bag-dot" aria-hidden="true"></span>{/if}

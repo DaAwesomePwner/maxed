@@ -1,3 +1,4 @@
+import { rankedDrops } from '../loot/ranking';
 import type { DropView } from '../bindings/DropView';
 import type { FamePoint } from '../bindings/FamePoint';
 import type { HomeRunDetail } from '../bindings/HomeRunDetail';
@@ -56,8 +57,7 @@ export function runResult(run: RunView): string {
 
 export function bestPreviewBag(drops: DropView[], runId: string): DropView | null {
   const unique = new Map(drops.filter(drop => drop.run_id === runId).map(drop => [drop.id, drop]));
-  return [...unique.values()].filter(drop => drop.bag_rank !== null && Number.isFinite(drop.bag_rank))
-    .sort((a, b) => (b.bag_rank! - a.bag_rank!) || b.id.localeCompare(a.id))[0] ?? null;
+  return rankedDrops([...unique.values()]).find(drop => drop.bag_rank !== null && Number.isFinite(drop.bag_rank)) ?? null;
 }
 
 export function recentRunRows(runs: RunView[], details: HomeRunDetail[]) {

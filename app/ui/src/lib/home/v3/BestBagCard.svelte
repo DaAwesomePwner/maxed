@@ -57,7 +57,7 @@
       {:else}<div class="name clamp">{bagVisual?.name ?? `Bag ${featured.bag_type}`}</div><div class="meta">{meta}</div>{/if}
     </div>
   </div>
-  {#if !best?.item}<DebugNote text="Contents unknown" />{/if}
+  {#if !featured.contents.length && !(featured.contents_known && featured.items.length)}<DebugNote text="Contents unknown" />{/if}
   {#if featured.bag_rank === null}<DebugNote text="Bag rank unavailable." />{/if}
   {#if featured.source_estimated}<DebugNote>Source estimated: {reasonLabel(featured.source_reason)}</DebugNote><DebugNote text="Source estimated." />{/if}
   {#if !featured.contents_known}<DebugNote text="Partially observed contents; other items may be missing." />{/if}

@@ -52,7 +52,7 @@ it('reuses every heavy projection without reading drops again, and invalidates c
   expect(bestDrop(drops, changedVisuals)).toEqual(old.bestDrop(drops, changedVisuals));
 });
 
-it('matches the pre-change ranking, items, counts and evidence on randomized inputs', () => {
+it('matches the documented ranking, items, counts and evidence on randomized inputs', () => {
   let seed = 40;
   const random = (n: number) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % n; };
   const catalog = visuals();

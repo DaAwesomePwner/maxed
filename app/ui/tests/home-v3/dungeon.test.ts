@@ -251,7 +251,7 @@ it.each([false, true])('new ST bag row and its merged timeline marker animate on
   try {
     const snapshot = homeSnapshot(), seed = snapshot.drops[0];
     snapshot.at = '100000000'; snapshot.run!.started = '1000000';
-    snapshot.drops = [{ ...seed, id: 'old-ut', at: '50000000', contents_known: true,
+    snapshot.drops = [{ ...seed, id: 'old-ut', at: '50000000', bag_rank: 255, contents_known: true,
       items: [200], contents: [{ ...seed.contents[0], item_type: 200 }] }];
     const visuals = { ...emptyHomeVisuals(), objects: [
       { object_type: 200, name: 'UT item', sprite: null, bag: null, item_tier: 'UT' },
@@ -259,13 +259,14 @@ it.each([false, true])('new ST bag row and its merged timeline marker animate on
     ] };
     const page = render(DungeonHome, { snapshot, visuals, stale: false }); await tick(); await tick();
     const next = structuredClone(snapshot);
-    next.drops.push({ ...seed, id: 'new-st', at: '50000001', contents_known: true,
+    next.drops.push({ ...seed, id: 'new-st', at: '50000001', bag_rank: 90, contents_known: true,
       items: [201], contents: [{ ...seed.contents[0], item_type: 201 }] });
     await page.rerender({ snapshot: next, visuals, stale: false }); await tick(); await tick();
     if (reduced) expect(calls).toHaveLength(0);
     else {
       const glow = calls.find(call => call.node.dataset.dropId === 'new-st');
-      expect(glow?.frames).toContainEqual({ boxShadow: '0 0 14px var(--bag-orange)', offset: .35 });
+      expect(glow?.frames).toContainEqual({ boxShadow: '0 0 14px var(--loot-arrival-colour)', offset: .35 });
+      expect(glow?.node.style.getPropertyValue('--loot-arrival-colour')).toBe('var(--bag-orange)');
       const pulse = calls.find(call => call.node.dataset.markerMembers?.includes('drop:new-st'));
       expect(pulse?.node.dataset.count).toBe('2');
       expect(pulse?.frames).toContainEqual({ transform: 'scale(1.18)', offset: .35 });
@@ -280,4 +281,22 @@ it.each([false, true])('new ST bag row and its merged timeline marker animate on
     else Reflect.deleteProperty(HTMLElement.prototype, 'animate');
     vi.unstubAllGlobals();
   }
+});
+
+it('updates the arrival glow colour when catalog tiers load', async () => {
+  const snapshot = homeSnapshot(), seed = snapshot.drops[0];
+  const loading = { ...emptyHomeVisuals(), phase: 'loading' as const, objects: [
+    { object_type: 999, item_tier: null, name: 'Unrelated', sprite: null, bag: null },
+  ] };
+  const page = render(DungeonHome, { snapshot, visuals: loading, stale: false });
+  const fresh = { ...seed, id: 'late-colour', bag_rank: 255, items: [2591, 3000],
+    contents: [2591, 3000].map((item_type, slot) => ({ ...seed.contents[0], item_type, slot })) };
+  await page.rerender({ snapshot: { ...snapshot, drops: [...snapshot.drops, fresh] } }); await tick(); await tick();
+  const node = page.container.querySelector<HTMLElement>('[data-drop-id="late-colour"]')!;
+  expect(node.style.getPropertyValue('--loot-arrival-colour')).toBe('var(--text-secondary)');
+  await page.rerender({ visuals: { ...loading, phase: 'ready', objects: [
+    ...loading.objects, { object_type: 3000, item_tier: 'UT', name: 'Synthetic UT', sprite: null, bag: null },
+  ] } }); await tick(); await tick();
+  expect(page.container.querySelector('[data-drop-id="late-colour"]')).toBe(node);
+  expect(node.style.getPropertyValue('--loot-arrival-colour')).toBe('var(--violet-text)');
 });
