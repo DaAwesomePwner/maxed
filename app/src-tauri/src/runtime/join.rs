@@ -94,7 +94,18 @@ impl Default for Views {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct StoreInputs {
+    writer: usize,
+    generation: u64,
+    pending: usize,
+    rejected: bool,
+    notice: Option<&'static str>,
+}
+
 pub(super) struct Adapter {
+    store_inputs: std::cell::Cell<Option<StoreInputs>>,
+    catalog_prefix: std::cell::RefCell<String>,
     maintenance_work: super::maintenance::OwnerWork,
     pub engine: Engine,
     writer: Option<Arc<StoreWriter>>,
@@ -177,6 +188,8 @@ impl Adapter {
         }
         *views.party.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
         let mut adapter = Self {
+            store_inputs: std::cell::Cell::new(None),
+            catalog_prefix: std::cell::RefCell::new(String::new()),
             maintenance_work: super::maintenance::OwnerWork::default(),
             engine,
             writer: Some(Arc::new(writer)),
@@ -225,6 +238,29 @@ impl Adapter {
     }
 
     pub fn refresh_store(&self) {
+        let inputs = StoreInputs {
+            writer: self
+                .writer
+                .as_ref()
+                .map_or(0, |writer| Arc::as_ptr(writer) as usize),
+            generation: self
+                .writer
+                .as_ref()
+                .map_or(0, |writer| writer.status_generation()),
+            pending: self.pending.len(),
+            rejected: self.rejected,
+            notice: self.catalog_notice,
+        };
+        let previous = self.store_inputs.get();
+        if previous == Some(inputs) {
+            return;
+        }
+        if previous.is_none_or(|old| old.notice != inputs.notice) {
+            *self.catalog_prefix.borrow_mut() = inputs
+                .notice
+                .map_or_else(String::new, |notice| format!("{notice} "));
+        }
+        self.store_inputs.set(Some(inputs));
         if let Some(writer) = &self.writer {
             let mut status = writer.status();
             status.queued = status.queued.saturating_add(self.pending.len() as u32);
@@ -237,8 +273,8 @@ impl Adapter {
                 status.message =
                     "Summary event could not be saved; pending changes are retained".into();
             }
-            if let Some(notice) = self.catalog_notice {
-                status.message = format!("{notice} {}", status.message);
+            if self.catalog_notice.is_some() {
+                status.message.insert_str(0, &self.catalog_prefix.borrow());
             }
             *self.views.store.lock().unwrap_or_else(|p| p.into_inner()) = status;
         } else if !self.pending.is_empty() {
@@ -353,7 +389,7 @@ impl Adapter {
                 self.capture_status = status.clone();
             }
             self.sequence.0 .0 += 1;
-            let envelope = EventEnvelope {
+            let mut envelope = EventEnvelope {
                 fight_chart_omitted: false,
                 stream_id: self.stream_id.clone(),
                 sequence: self.sequence,
@@ -377,11 +413,16 @@ impl Adapter {
                 } else {
                     self.engine.key_pop_dungeon(&envelope.event)
                 },
-                preferences: self
-                    .alert_policy
-                    .lock()
-                    .unwrap_or_else(|p| p.into_inner())
-                    .clone(),
+                preferences: {
+                    let policy = self.alert_policy.lock().unwrap_or_else(|p| p.into_inner());
+                    if maxed_store::AlertContext::uses_preferences(&envelope.event)
+                        || !policy.valid()
+                    {
+                        policy.clone()
+                    } else {
+                        AlertPreferences::disabled()
+                    }
+                },
                 bag_window: match &envelope.event {
                     EngineEvent::BagDropped(drop) | EngineEvent::DropUpdated(drop) => {
                         self.alert_calendar.seven_day_window(drop.at).ok()
@@ -392,10 +433,6 @@ impl Adapter {
             if let Some(writer) = &self.writer {
                 writer.set_maintenance_blocked(true);
             }
-            self.pending.push_back(maxed_store::ContextualEvent {
-                event: envelope.clone(),
-                context,
-            });
             // Update the calculator's separate view without changing full events.
             match &envelope.event {
                 EngineEvent::CharacterUpdated(character) => {
@@ -417,7 +454,17 @@ impl Adapter {
                 }
                 _ => {}
             }
-            envelopes.push(envelope);
+            let presentation = if self.bridge.batch.is_some() {
+                crate::bridge::payload::presentation_copy(&mut envelope)
+            } else {
+                // Replay consumers use canonical events as storage inputs.
+                envelope.clone()
+            };
+            self.pending.push_back(maxed_store::ContextualEvent {
+                event: envelope,
+                context,
+            });
+            envelopes.push(presentation);
         }
         // The original full events and alert contexts are retained first. Only
         // presentation delivery changes; writer ordering/backpressure is intact.
@@ -953,6 +1000,7 @@ impl Adapter {
             // Resume the durable head with the exact original stream. Startup
             // recovery can close interrupted rows, then these retained terminal
             // revisions restore their recorded evidence before retry acknowledges.
+            self.store_inputs.set(None);
             self.writer = Some(Arc::new(
                 start_writer(self.path.clone(), self.writer_config.clone())
                     .map_err(|e| e.to_string())?,
@@ -1033,6 +1081,9 @@ impl Adapter {
         if let Some(notice) = self.catalog_notice {
             status.message = format!("{notice} {}", status.message);
         }
+        // Completed and recovery adapters share this view; a direct write must
+        // not leave a cached refresh claiming that it is still current.
+        self.store_inputs.set(None);
         *self.views.store.lock().unwrap_or_else(|p| p.into_inner()) = status;
         if failed {
             Err("Summary shutdown failed; changes are not saved".into())
@@ -1059,6 +1110,8 @@ impl Adapter {
         self.reclaim_failed_writer();
         self.pending.clear();
         let _ = self.cleanup_playback();
+        // Completed and recovery adapters share the view, including discard writes.
+        self.store_inputs.set(None);
         let mut status = self.views.store.lock().unwrap_or_else(|p| p.into_inner());
         status.state = StoreState::Closed;
         status.queued = 0;
