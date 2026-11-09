@@ -946,3 +946,26 @@ fn partial_frame_and_pending_hole_at_teardown_do_not_mark_run_loss() {
         adapter.close().unwrap();
     }
 }
+
+#[test]
+fn unchanged_store_refresh_does_not_lock_or_rewrite_view() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut adapter, views, _) = adapter(&dir.path().join("refresh"), 1024);
+    adapter.refresh_store();
+    {
+        let status = views.store.lock().unwrap();
+        let message = status.message.as_ptr();
+        // Holding this lock would deadlock if refresh tried to publish again.
+        adapter.refresh_store();
+        assert_eq!(status.message.as_ptr(), message);
+    }
+    adapter.catalog_notice = Some("Synthetic catalog notice");
+    adapter.refresh_store();
+    assert!(views
+        .store
+        .lock()
+        .unwrap()
+        .message
+        .starts_with("Synthetic catalog notice "));
+    adapter.close().unwrap();
+}

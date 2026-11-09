@@ -51,6 +51,22 @@ fn chat_eligible(context: &AlertContext, m: &ChatMessageView) -> Option<AlertKin
 }
 
 impl AlertContext {
+    /// Events whose alert decisions consume preferences. Validation still applies
+    /// to every context; callers must retain invalid preferences for rejection.
+    pub fn uses_preferences(event: &EngineEvent) -> bool {
+        match event {
+            EngineEvent::BagDropped(_)
+            | EngineEvent::DropUpdated(_)
+            | EngineEvent::FightEnded(_)
+            | EngineEvent::RunEnded(_)
+            | EngineEvent::InstanceEvent(_)
+            | EngineEvent::Chat(_) => true,
+            EngineEvent::FightUpdated(fight) => fight.ended.is_some(),
+            EngineEvent::RunUpdated(run) => run.completed_at.is_some(),
+            _ => false,
+        }
+    }
+
     pub(crate) fn needs_prompt_commit(&self, event: &EngineEvent) -> bool {
         let kind = match event {
             EngineEvent::BagDropped(drop) | EngineEvent::DropUpdated(drop)
