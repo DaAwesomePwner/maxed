@@ -2133,3 +2133,171 @@ fn saved_party_clears_legacy_local_count_before_parsing() {
     assert_eq!(view.counts.fail, 0);
     assert_eq!(view.counts.pass, 0);
 }
+
+#[test]
+fn stopped_party_mark_and_note_waits_for_maintenance_lease() {
+    use std::time::{Duration, Instant};
+    let (root, runtime) = command_runtime();
+    let path = root.path().join("live.sqlite3");
+    runtime
+        .set_party_mark(
+            "synthalpha".into(),
+            "SynthAlpha".into(),
+            Some(PartyMark::Banned),
+            None,
+        )
+        .unwrap();
+    let operation = super::party::PartyWrite::Mark {
+        key: "synthalpha".into(),
+        name: "SynthAlpha".into(),
+        mark: Some(PartyMark::Watched),
+        note: Some("Synthetic note".into()),
+    };
+    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
+    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
+    let timeout = Duration::from_secs(5);
+    let started = Instant::now();
+    std::thread::scope(|scope| {
+        let (send, recv) = crossbeam_channel::bounded(1);
+        let runtime = &runtime;
+        scope.spawn(move || {
+            send.send(runtime.write_party_with_timeout(operation, timeout))
+                .unwrap();
+        });
+        assert_eq!(
+            recv.recv_timeout(Duration::from_millis(50)),
+            Err(crossbeam_channel::RecvTimeoutError::Timeout)
+        );
+        drop(owner);
+        drop(lease);
+        recv.recv_timeout(timeout).unwrap().unwrap();
+    });
+    assert!(started.elapsed() < timeout);
+    let player = maxed_store::open_reader(&path)
+        .unwrap()
+        .get_party_player("synthalpha", None)
+        .unwrap();
+    let player = player.unwrap();
+    assert_eq!(player.row.mark, Some(PartyMark::Watched));
+    assert_eq!(player.row.note.as_deref(), Some("Synthetic note"));
+    assert!(runtime.shared.views.party_write.lock().unwrap().is_none());
+}
+
+#[test]
+fn stopped_party_mark_and_note_lease_wait_expires() {
+    use std::time::{Duration, Instant};
+    let (root, runtime) = command_runtime();
+    let path = root.path().join("live.sqlite3");
+    runtime
+        .set_party_mark(
+            "synthalpha".into(),
+            "SynthAlpha".into(),
+            Some(PartyMark::Banned),
+            None,
+        )
+        .unwrap();
+    let operation = super::party::PartyWrite::Mark {
+        key: "synthalpha".into(),
+        name: "SynthAlpha".into(),
+        mark: Some(PartyMark::Watched),
+        note: Some("Synthetic note".into()),
+    };
+    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
+    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
+    let timeout = Duration::from_millis(100);
+    let started = Instant::now();
+    assert_eq!(
+        runtime.write_party_with_timeout(operation, timeout),
+        Err(super::party::WRITE_FAILED.into())
+    );
+    assert!(started.elapsed() >= timeout);
+    assert!(started.elapsed() < Duration::from_secs(2));
+    drop(owner);
+    drop(lease);
+    let player = maxed_store::open_reader(&path)
+        .unwrap()
+        .get_party_player("synthalpha", None)
+        .unwrap();
+    assert_eq!(player.unwrap().row.mark, Some(PartyMark::Banned));
+    assert!(runtime.shared.views.party_write.lock().unwrap().is_none());
+}
+
+#[test]
+fn stopped_party_clear_waits_for_maintenance_lease() {
+    use std::time::{Duration, Instant};
+    let (root, runtime) = command_runtime();
+    let path = root.path().join("live.sqlite3");
+    runtime
+        .set_party_mark(
+            "synthalpha".into(),
+            "SynthAlpha".into(),
+            Some(PartyMark::Banned),
+            None,
+        )
+        .unwrap();
+    let operation = super::party::PartyWrite::Clear(ClearPartyHistory {
+        marks_and_notes: true,
+    });
+    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
+    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
+    let timeout = Duration::from_secs(5);
+    let started = Instant::now();
+    std::thread::scope(|scope| {
+        let (send, recv) = crossbeam_channel::bounded(1);
+        let runtime = &runtime;
+        scope.spawn(move || {
+            send.send(runtime.write_party_with_timeout(operation, timeout))
+                .unwrap();
+        });
+        assert_eq!(
+            recv.recv_timeout(Duration::from_millis(50)),
+            Err(crossbeam_channel::RecvTimeoutError::Timeout)
+        );
+        drop(owner);
+        drop(lease);
+        recv.recv_timeout(timeout).unwrap().unwrap();
+    });
+    assert!(started.elapsed() < timeout);
+    let player = maxed_store::open_reader(&path)
+        .unwrap()
+        .get_party_player("synthalpha", None)
+        .unwrap();
+    assert!(player.is_none());
+    assert!(runtime.shared.views.party_write.lock().unwrap().is_none());
+}
+
+#[test]
+fn stopped_party_clear_lease_wait_expires() {
+    use std::time::{Duration, Instant};
+    let (root, runtime) = command_runtime();
+    let path = root.path().join("live.sqlite3");
+    runtime
+        .set_party_mark(
+            "synthalpha".into(),
+            "SynthAlpha".into(),
+            Some(PartyMark::Banned),
+            None,
+        )
+        .unwrap();
+    let operation = super::party::PartyWrite::Clear(ClearPartyHistory {
+        marks_and_notes: true,
+    });
+    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
+    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
+    let timeout = Duration::from_millis(100);
+    let started = Instant::now();
+    assert_eq!(
+        runtime.write_party_with_timeout(operation, timeout),
+        Err(super::party::WRITE_FAILED.into())
+    );
+    assert!(started.elapsed() >= timeout);
+    assert!(started.elapsed() < Duration::from_secs(2));
+    drop(owner);
+    drop(lease);
+    let player = maxed_store::open_reader(&path)
+        .unwrap()
+        .get_party_player("synthalpha", None)
+        .unwrap();
+    assert_eq!(player.unwrap().row.mark, Some(PartyMark::Banned));
+    assert!(runtime.shared.views.party_write.lock().unwrap().is_none());
+}

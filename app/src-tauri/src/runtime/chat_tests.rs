@@ -1045,3 +1045,61 @@ fn event_reads_use_replay_namespace_and_return_flags_summary_and_matches() {
         );
     });
 }
+
+#[test]
+fn stopped_chat_clear_waits_for_maintenance_lease() {
+    use std::time::{Duration, Instant};
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("live.sqlite3");
+    seed_chat(&path, 1, chat::wall_now());
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
+    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
+    let timeout = Duration::from_secs(5);
+    let started = Instant::now();
+    std::thread::scope(|scope| {
+        let (send, recv) = crossbeam_channel::bounded(1);
+        let runtime = &runtime;
+        scope.spawn(move || {
+            send.send(runtime.clear_chat_history_with_timeout(timeout))
+                .unwrap();
+        });
+        assert_eq!(
+            recv.recv_timeout(Duration::from_millis(50)),
+            Err(crossbeam_channel::RecvTimeoutError::Timeout)
+        );
+        drop(owner);
+        drop(lease);
+        recv.recv_timeout(timeout).unwrap().unwrap();
+    });
+    assert!(started.elapsed() < timeout);
+    assert_eq!(chat_count(&path), 0);
+    assert!(runtime.shared.views.chat_clear.lock().unwrap().is_none());
+}
+
+#[test]
+fn stopped_chat_clear_lease_wait_expires() {
+    use std::time::{Duration, Instant};
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("live.sqlite3");
+    seed_chat(&path, 1, chat::wall_now());
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
+    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
+    let timeout = Duration::from_millis(100);
+    let started = Instant::now();
+    assert_eq!(
+        runtime.clear_chat_history_with_timeout(timeout),
+        Err("Chat history could not be cleared.".into())
+    );
+    assert!(started.elapsed() >= timeout);
+    assert!(started.elapsed() < Duration::from_secs(2));
+    drop(owner);
+    drop(lease);
+    assert_eq!(chat_count(&path), 1);
+    assert!(runtime.shared.views.chat_clear.lock().unwrap().is_none());
+}

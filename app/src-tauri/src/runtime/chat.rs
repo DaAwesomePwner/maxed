@@ -184,7 +184,29 @@ impl CaptureRuntime {
         let path = self.shared.home.live_database().ok_or("Chat unavailable")?;
         let root = path.parent().ok_or("Chat unavailable")?.to_path_buf();
         const FAILED: &str = "Chat history could not be cleared.";
-        match super::storage::namespace_lease(&root, Namespace::Live) {
+        // Stopped maintenance can own the namespace until its current work
+        // finishes. Retry without changing its lifecycle or holding runtime locks.
+        let lease = if self.is_running() {
+            super::storage::namespace_lease(&root, Namespace::Live)
+        } else {
+            let started = std::time::Instant::now();
+            loop {
+                match super::storage::namespace_lease(&root, Namespace::Live) {
+                    Ok(lease) => break Ok(lease),
+                    Err(_) => {
+                        let remaining = timeout.saturating_sub(started.elapsed());
+                        if remaining.is_zero() {
+                            return Err(FAILED.into());
+                        }
+                        std::thread::sleep(remaining.min(std::time::Duration::from_millis(10)));
+                        if started.elapsed() >= timeout {
+                            return Err(FAILED.into());
+                        }
+                    }
+                }
+            }
+        };
+        match lease {
             Ok(_lease) => {
                 while maxed_store::maintain_chat_file(&path, maxed_store::ChatMaintenance::Clear)
                     .map_err(|_| FAILED)?
