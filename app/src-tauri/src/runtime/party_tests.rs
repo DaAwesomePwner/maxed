@@ -2133,3 +2133,313 @@ fn saved_party_clears_legacy_local_count_before_parsing() {
     assert_eq!(view.counts.fail, 0);
     assert_eq!(view.counts.pass, 0);
 }
+
+#[test]
+fn stopped_party_mark_and_note_waits_for_maintenance_lease() {
+    use std::time::{Duration, Instant};
+    let (root, runtime) = command_runtime();
+    let path = root.path().join("live.sqlite3");
+    runtime
+        .set_party_mark(
+            "synthalpha".into(),
+            "SynthAlpha".into(),
+            Some(PartyMark::Banned),
+            None,
+        )
+        .unwrap();
+    let operation = super::party::PartyWrite::Mark {
+        key: "synthalpha".into(),
+        name: "SynthAlpha".into(),
+        mark: Some(PartyMark::Watched),
+        note: Some("Synthetic note".into()),
+    };
+    super::chat_tests::with_stopped_maintenance(&runtime, |finish| {
+        let timeout = Duration::from_secs(5);
+        let started = Instant::now();
+        std::thread::scope(|scope| {
+            let (send, recv) = crossbeam_channel::bounded(1);
+            let runtime = &runtime;
+            scope.spawn(move || {
+                send.send(runtime.write_party_with_timeout(operation, timeout))
+                    .unwrap();
+            });
+            assert_eq!(
+                recv.recv_timeout(Duration::from_millis(50)),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout)
+            );
+            finish();
+            recv.recv_timeout(timeout).unwrap().unwrap();
+            assert!(!runtime.shared.views.maintenance.background_halted());
+        });
+        assert!(started.elapsed() < timeout);
+    });
+    let player = maxed_store::open_reader(&path)
+        .unwrap()
+        .get_party_player("synthalpha", None)
+        .unwrap();
+    let player = player.unwrap();
+    assert_eq!(player.row.mark, Some(PartyMark::Watched));
+    assert_eq!(player.row.note.as_deref(), Some("Synthetic note"));
+    assert!(runtime.shared.views.party_write.lock().unwrap().is_none());
+}
+
+#[test]
+fn stopped_party_mark_and_note_lease_wait_expires() {
+    use std::time::{Duration, Instant};
+    let (root, runtime) = command_runtime();
+    let path = root.path().join("live.sqlite3");
+    runtime
+        .set_party_mark(
+            "synthalpha".into(),
+            "SynthAlpha".into(),
+            Some(PartyMark::Banned),
+            None,
+        )
+        .unwrap();
+    let operation = super::party::PartyWrite::Mark {
+        key: "synthalpha".into(),
+        name: "SynthAlpha".into(),
+        mark: Some(PartyMark::Watched),
+        note: Some("Synthetic note".into()),
+    };
+    super::chat_tests::with_stopped_maintenance(&runtime, |_finish| {
+        let timeout = Duration::from_millis(100);
+        let started = Instant::now();
+        assert_eq!(
+            runtime.write_party_with_timeout(operation, timeout),
+            Err(super::party::WRITE_FAILED.into())
+        );
+        assert!(started.elapsed() >= timeout);
+        assert!(started.elapsed() < Duration::from_secs(2));
+    });
+    let player = maxed_store::open_reader(&path)
+        .unwrap()
+        .get_party_player("synthalpha", None)
+        .unwrap();
+    assert_eq!(player.unwrap().row.mark, Some(PartyMark::Banned));
+    assert!(runtime.shared.views.party_write.lock().unwrap().is_none());
+}
+
+#[test]
+fn stopped_party_clear_waits_for_maintenance_lease() {
+    use std::time::{Duration, Instant};
+    let (root, runtime) = command_runtime();
+    let path = root.path().join("live.sqlite3");
+    runtime
+        .set_party_mark(
+            "synthalpha".into(),
+            "SynthAlpha".into(),
+            Some(PartyMark::Banned),
+            None,
+        )
+        .unwrap();
+    let operation = super::party::PartyWrite::Clear(ClearPartyHistory {
+        marks_and_notes: true,
+    });
+    super::chat_tests::with_stopped_maintenance(&runtime, |finish| {
+        let timeout = Duration::from_secs(5);
+        let started = Instant::now();
+        std::thread::scope(|scope| {
+            let (send, recv) = crossbeam_channel::bounded(1);
+            let runtime = &runtime;
+            scope.spawn(move || {
+                send.send(runtime.write_party_with_timeout(operation, timeout))
+                    .unwrap();
+            });
+            assert_eq!(
+                recv.recv_timeout(Duration::from_millis(50)),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout)
+            );
+            finish();
+            recv.recv_timeout(timeout).unwrap().unwrap();
+            assert!(!runtime.shared.views.maintenance.background_halted());
+        });
+        assert!(started.elapsed() < timeout);
+    });
+    let player = maxed_store::open_reader(&path)
+        .unwrap()
+        .get_party_player("synthalpha", None)
+        .unwrap();
+    assert!(player.is_none());
+    assert!(runtime.shared.views.party_write.lock().unwrap().is_none());
+}
+
+#[test]
+fn stopped_party_clear_lease_wait_expires() {
+    use std::time::{Duration, Instant};
+    let (root, runtime) = command_runtime();
+    let path = root.path().join("live.sqlite3");
+    runtime
+        .set_party_mark(
+            "synthalpha".into(),
+            "SynthAlpha".into(),
+            Some(PartyMark::Banned),
+            None,
+        )
+        .unwrap();
+    let operation = super::party::PartyWrite::Clear(ClearPartyHistory {
+        marks_and_notes: true,
+    });
+    super::chat_tests::with_stopped_maintenance(&runtime, |_finish| {
+        let timeout = Duration::from_millis(100);
+        let started = Instant::now();
+        assert_eq!(
+            runtime.write_party_with_timeout(operation, timeout),
+            Err(super::party::WRITE_FAILED.into())
+        );
+        assert!(started.elapsed() >= timeout);
+        assert!(started.elapsed() < Duration::from_secs(2));
+    });
+    let player = maxed_store::open_reader(&path)
+        .unwrap()
+        .get_party_player("synthalpha", None)
+        .unwrap();
+    assert_eq!(player.unwrap().row.mark, Some(PartyMark::Banned));
+    assert!(runtime.shared.views.party_write.lock().unwrap().is_none());
+}
+
+#[test]
+fn party_write_yields_to_capture_handoff_before_capture_takes_the_lease() {
+    use std::time::Duration;
+    let (root, runtime) = command_runtime();
+    super::chat_tests::with_stopped_maintenance(&runtime, |_finish| {
+        std::thread::scope(|scope| {
+            let (send, recv) = crossbeam_channel::bounded(1);
+            let runtime = &runtime;
+            scope.spawn(move || {
+                send.send(runtime.set_party_mark(
+                    "synthalpha".into(),
+                    "SynthAlpha".into(),
+                    Some(PartyMark::Watched),
+                    Some("Synthetic note".into()),
+                ))
+                .unwrap();
+            });
+            assert_eq!(
+                recv.recv_timeout(Duration::from_millis(50)),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout)
+            );
+            runtime.shared.views.maintenance.handoff_background();
+            assert_eq!(
+                recv.recv_timeout(Duration::from_secs(5)).unwrap(),
+                Err(super::party::WRITE_FAILED.into())
+            );
+            assert!(runtime.shared.views.party_write.lock().unwrap().is_none());
+            let options = super::RuntimeOptions::live(root.path().into(), None);
+            let mut adapter = runtime
+                .shared
+                .open_home(
+                    &options,
+                    &Default::default(),
+                    super::Bridge::default(),
+                    None,
+                )
+                .unwrap();
+            assert!(!runtime.shared.views.maintenance.background_halted());
+            paused_party_capture(runtime);
+            adapter.drain().unwrap();
+            adapter.close().unwrap();
+        });
+    });
+    let player = maxed_store::open_reader(&root.path().join("live.sqlite3"))
+        .unwrap()
+        .get_party_player("synthalpha", None)
+        .unwrap();
+    assert!(player.is_none());
+}
+
+#[test]
+fn party_write_does_not_wait_for_maintenance_waiting_behind_another_owner() {
+    use std::time::{Duration, Instant};
+    let (root, runtime) = command_runtime();
+    let _lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
+    assert_eq!(
+        runtime.compact_storage().unwrap(),
+        StorageCommandOutcome::Queued
+    );
+    let service = &runtime.shared.views.maintenance;
+    assert!(service.background_running_for_test());
+    assert!(!service.owns_stopped_namespace());
+    let started = Instant::now();
+    let result = runtime.set_party_mark(
+        "synthalpha".into(),
+        "SynthAlpha".into(),
+        Some(PartyMark::Watched),
+        None,
+    );
+    service.handoff_background();
+    assert_eq!(result, Err(super::party::WRITE_FAILED.into()));
+    assert!(started.elapsed() < Duration::from_secs(5));
+}
+
+#[test]
+fn party_write_queues_after_capture_installs_session_during_handoff() {
+    use std::sync::atomic::AtomicBool;
+    use std::time::Duration;
+    let (root, runtime) = command_runtime();
+    super::chat_tests::with_stopped_maintenance(&runtime, |_finish| {
+        std::thread::scope(|scope| {
+            let (send, recv) = crossbeam_channel::bounded(1);
+            let runtime = &runtime;
+            scope.spawn(move || {
+                send.send(runtime.write_party_with_timeout(
+                    super::party::PartyWrite::Mark {
+                        key: "synthalpha".into(),
+                        name: "SynthAlpha".into(),
+                        mark: Some(PartyMark::Watched),
+                        note: Some("Synthetic note".into()),
+                    },
+                    Duration::from_secs(5),
+                ))
+                .unwrap();
+            });
+            assert_eq!(
+                recv.recv_timeout(Duration::from_millis(50)),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout)
+            );
+
+            // Model launch installing Session while open_home performs the
+            // handoff: is_running must wait for the lifecycle lock.
+            let mut session = runtime.session.lock().unwrap();
+            let options = super::RuntimeOptions::live(root.path().into(), None);
+            let mut adapter = runtime
+                .shared
+                .open_home(
+                    &options,
+                    &AtomicBool::new(false),
+                    super::Bridge::default(),
+                    None,
+                )
+                .unwrap();
+            let (stop, stopped) = crossbeam_channel::bounded(1);
+            *session = Some(super::Session {
+                stop,
+                cancel: Arc::new(AtomicBool::new(false)),
+                worker: std::thread::spawn(move || {
+                    let _ = stopped.recv();
+                }),
+                sink: Arc::new(|_| {}),
+            });
+            drop(session);
+
+            super::maintenance_tests::eventually(|| {
+                runtime.shared.views.party_write.lock().unwrap().is_some()
+            });
+            assert!(
+                recv.try_recv().is_err(),
+                "the adapter has not drained the request"
+            );
+            adapter.drain().unwrap();
+            recv.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+            adapter.close().unwrap();
+        });
+    });
+    let player = maxed_store::open_reader(&root.path().join("live.sqlite3"))
+        .unwrap()
+        .get_party_player("synthalpha", None)
+        .unwrap()
+        .unwrap();
+    assert_eq!(player.row.mark, Some(PartyMark::Watched));
+    assert_eq!(player.row.note.as_deref(), Some("Synthetic note"));
+    assert!(runtime.shared.views.party_write.lock().unwrap().is_none());
+}

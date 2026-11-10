@@ -263,14 +263,19 @@ impl StoreReader {
         let tx = self.conn.unchecked_transaction()?;
         let mut bytes = 0;
         let (run, mut character): (RunView, Option<CharacterView>) = {
-            let mut stmt = tx.prepare("SELECT length(CAST(json AS BLOB)),json,length(CAST(entry_character_json AS BLOB)),entry_character_json FROM runs WHERE id=?1")?;
+            let mut stmt = tx.prepare("SELECT length(CAST(json AS BLOB)),json,length(CAST(entry_character_json AS BLOB)),entry_character_json,(SELECT account_id FROM characters WHERE characters.id=runs.character_id) FROM runs WHERE id=?1")?;
             let mut query = stmt.query([id])?;
             let Some(row) = query.next()? else {
                 return Ok(None);
             };
             let run = row_json(row, 0, &mut bytes, MAX_RUN_STORY_BYTES)?;
             let character = if row.get::<_, Option<i64>>(2)?.is_some() {
-                Some(row_json(row, 2, &mut bytes, MAX_RUN_STORY_BYTES)?)
+                Some({
+                    let mut entry: CharacterView =
+                        row_json(row, 2, &mut bytes, MAX_RUN_STORY_BYTES)?;
+                    entry.account_id = row.get(4)?;
+                    entry
+                })
             } else {
                 None
             };

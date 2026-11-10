@@ -1,6 +1,7 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { createClient } from './client';
+import { withSubscriptionHealth } from './subscription-health';
 import type { Events, Transport } from './client';
 
 // Keep in sync with LivePayloads::subscribe in bridge/channels.rs.
@@ -30,11 +31,15 @@ export const nativeTransport: Transport = {
     };
     try {
       const id = await invoke<number>('subscribe_live_payload', { event, channel });
-      return () => {
+      const stop = () => {
+        if (!active) return;
         active = false;
         release();
         void invoke('unsubscribe_live_payload', { id }).catch(() => {});
       };
+      return event === 'engine-event' || event === 'live-snapshot'
+        ? withSubscriptionHealth(stop, id, subscriptionIds => invoke('get_store_status', { subscriptionIds }))
+        : stop;
     } catch (error) {
       active = false;
       release();

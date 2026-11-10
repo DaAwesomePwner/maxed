@@ -287,6 +287,7 @@ fn split_tokens_retransmits_overlaps_names_keys_and_checksums_replay_correctly()
         include_bytes!("../../maxed-protocol/src/privacy.rs"),
         include_bytes!("../../maxed-protocol/src/notices.rs"),
         include_bytes!("../src/scrub.rs"),
+        include_bytes!("../src/scrub/identities.rs"),
     ] {
         schema.update(source);
     }
@@ -2201,7 +2202,7 @@ fn death_notification(message: &str) -> Vec<u8> {
 }
 
 #[test]
-fn death_notice_keeps_game_data_and_reuses_name_stat_alias() {
+fn death_notice_keeps_game_data_and_exact_name_relationships() {
     for message in [
         r#"{"k":"s.death","t":{"player":"SyntheticVictim","enemy":"Synthetic Boss","level":"20"}}"#,
         r#"{"k":"s.death","t":{"player":"syntheticvictim","level":"20","enemy":"Synthetic Boss",}}"#,
@@ -2220,7 +2221,12 @@ fn death_notice_keeps_game_data_and_reuses_name_stat_alias() {
         // test input to inspect the retained values with serde_json.
         let notice: serde_json::Value = serde_json::from_str(&text.replace(",}", "}")).unwrap();
         assert_eq!(notice["k"], "s.death");
-        assert_eq!(&notice["t"]["player"], packet_name(&out[1]));
+        let original_notice: serde_json::Value =
+            serde_json::from_str(&message.replace(",}", "}")).unwrap();
+        assert_eq!(
+            notice["t"]["player"] == *packet_name(&out[1]),
+            original_notice["t"]["player"] == "SyntheticVictim"
+        );
         assert_eq!(notice["t"]["enemy"], "Synthetic Boss");
         assert_eq!(notice["t"]["level"], "20");
         assert_eq!(text.len(), message.len());
@@ -2250,30 +2256,25 @@ fn death_notice_unknown_shapes_are_filled() {
 }
 
 #[test]
-fn death_notice_unmapped_or_ambiguous_victim_refuses() {
+fn death_notice_ambiguous_victim_refuses() {
     let notice = (
         67,
         death_notification(
             r#"{"k":"s.death","t":{"player":"SyntheticVictim","enemy":"Boss","level":"20"}}"#,
         ),
     );
-    for names in [
-        vec![],
-        vec![b"SyntheticVictim".as_slice(), b"syntheticvictim"],
-    ] {
-        let mut packets: Vec<_> = names
-            .into_iter()
-            .map(|name| (42, typed_update(768, name)))
-            .collect();
-        packets.push(notice.clone());
-        let error = scrub_failure(S, &packets);
-        assert_eq!(
-            error
-                .diagnostics
-                .count(maxed_cli::scrub::ScrubReason::VerificationFailed),
-            1
-        );
-    }
+    let packets = [
+        (42, typed_update(768, b"SyntheticVictim")),
+        (42, typed_update(768, b"syntheticvictim")),
+        notice,
+    ];
+    let error = scrub_failure(S, &packets);
+    assert_eq!(
+        error
+            .diagnostics
+            .count(maxed_cli::scrub::ScrubReason::VerificationFailed),
+        1
+    );
 }
 
 #[test]
@@ -2426,6 +2427,7 @@ fn death_notice_changes_wave_two_scrub_profile() {
         include_bytes!("../../maxed-protocol/src/privacy.rs"),
         include_bytes!("../../maxed-protocol/src/notices.rs"),
         include_bytes!("../src/scrub.rs"),
+        include_bytes!("../src/scrub/identities.rs"),
     ] {
         schema.update(source);
     }
@@ -2558,4 +2560,153 @@ fn notice_escaped_structure_cannot_certify_decoded_identity_or_credential_leaks(
             .is_err());
         }
     }
+}
+
+#[test]
+fn scrub_preserves_display_name_identity_relationships() {
+    let originals = ["SyntheticHero", "SyntheticHero,suffixSecret,extraSecret"];
+    let (_, out) = scrub_packets(
+        S,
+        &[
+            (42, typed_update(768, originals[0].as_bytes())),
+            (10, tick(originals[1].as_bytes())),
+        ],
+    );
+    let names: Vec<_> = out
+        .iter()
+        .map(|p| packet_name(p).as_str().unwrap())
+        .collect();
+    assert_eq!(
+        maxed_types::party::name_key(originals[0]) == maxed_types::party::name_key(originals[1]),
+        maxed_types::party::name_key(names[0]) == maxed_types::party::name_key(names[1])
+    );
+    assert_eq!(names[1].matches(',').count(), 2);
+    for secret in ["SyntheticHero", "suffixSecret", "extraSecret"] {
+        assert!(!format!("{out:?}").contains(secret));
+    }
+}
+
+#[test]
+fn scrub_preserves_engine_death_identity_matches() {
+    use maxed_types::{EngineEvent, InstanceEventKind};
+    let mut catalog: maxed_types::Catalog = serde_json::from_slice(include_bytes!(
+        "../../../tests/fixtures/scrubbed/maxed-demo/catalog.json"
+    ))
+    .unwrap();
+    catalog.objects[0].object_type = 768;
+    catalog.classes[0].object_type = 768;
+    let catalog = std::sync::Arc::new(catalog);
+    for (victim, matched) in [
+        ("SyntheticHero", true),
+        ("SyntheticHero,noticeSuffix", true),
+        ("synthetichero", false),
+        ("synthetichero,noticeSuffix", false),
+        ("SyntheticUnknown", false),
+    ] {
+        let message = format!(
+            r#"{{"k":"s.death","t":{{"player":"{victim}","enemy":"Synthetic Boss","level":"20"}}}}"#
+        );
+        let packets = [
+            (92, map_named(b"Snake Pit")),
+            (42, typed_update(768, b"SyntheticHero,privateSuffix")),
+            (67, death_notification(&message)),
+        ];
+        let temp = PrivateDir::new();
+        let input = temp.file("original.pcap");
+        let output = temp.file("scrubbed.pcap");
+        write(
+            &input,
+            &[
+                frame(0, S, 100, true, b""),
+                frame(1, S, 101, false, &encrypted(S, &packets)),
+            ],
+        );
+        scrub(&input, &output).unwrap();
+        let replay = |path: &Path| {
+            maxed_cli::demo::replay_engine(
+                path,
+                catalog.clone(),
+                maxed_engine::EngineConfig::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .filter_map(|e| match e.event {
+                EngineEvent::InstanceEvent(row) => match row.kind {
+                    InstanceEventKind::PlayerDeath { object_id, .. } => Some(object_id),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(replay(&input), vec![matched.then_some(7)]);
+        assert_eq!(replay(&output), replay(&input));
+        let decoded = format!("{:?}", fields(read(&output))).to_ascii_lowercase();
+        for secret in ["synthetichero", "privatesuffix", "noticesuffix"] {
+            assert!(!decoded.contains(secret));
+        }
+    }
+}
+
+#[test]
+fn scrub_empty_display_names_preserve_empty_keys_and_fill_suffixes() {
+    for raw in ["", ",", ",fe14", ",fe14,extraSecret"] {
+        let (_, player_only) = scrub_packets(S, &[(42, typed_update(768, raw.as_bytes()))]);
+        let player_alias = packet_name(&player_only[0]).as_str().unwrap();
+        assert_eq!(maxed_types::party::name_key(player_alias), "");
+        assert_eq!(player_alias.len(), raw.len());
+        assert!(!player_alias.contains("fe14"));
+        assert!(!player_alias.contains("extraSecret"));
+        let message = format!(r#"{{"k":"s.dungeon_opened_by","t":{{"player":"{raw}"}}}}"#);
+        for observe_player in [false, true] {
+            let mut packets = vec![];
+            if observe_player {
+                packets.push((42, typed_update(768, raw.as_bytes())));
+            }
+            packets.push((67, portal_notification(&message)));
+            let (_, out) = scrub_packets(S, &packets);
+            let notice: serde_json::Value =
+                serde_json::from_str(out.last().unwrap().1["message"].as_str().unwrap()).unwrap();
+            let alias = notice["t"]["player"].as_str().unwrap();
+            assert_eq!(maxed_types::party::name_key(alias), "");
+            assert_eq!(alias.len(), raw.len());
+            assert_eq!(alias.matches(',').count(), raw.matches(',').count());
+            if observe_player {
+                assert_eq!(packet_name(&out[0]), alias);
+            }
+            for secret in ["fe14", "extraSecret"] {
+                assert!(!format!("{out:?}").contains(secret));
+            }
+        }
+    }
+}
+
+#[test]
+fn scrub_case_variant_name_stats_without_notices_refuse() {
+    let error = scrub_failure(
+        S,
+        &[
+            (42, typed_update(768, b"SynthA")),
+            (42, typed_update(768, b"syntha")),
+        ],
+    );
+    assert_eq!(
+        error
+            .diagnostics
+            .count(maxed_cli::scrub::ScrubReason::VerificationFailed),
+        1
+    );
+}
+
+#[test]
+fn scrub_death_without_any_observed_player_certifies_as_unmatched() {
+    let message =
+        r#"{"k":"s.death","t":{"player":"SyntheticUnknown","enemy":"Boss","level":"20"}}"#;
+    let (_, out) = scrub_packets(S, &[(67, death_notification(message))]);
+    let notice: serde_json::Value =
+        serde_json::from_str(out[0].1["message"].as_str().unwrap()).unwrap();
+    assert_eq!(notice["k"], "s.death");
+    assert_eq!(notice["t"]["enemy"], "Boss");
+    assert_eq!(notice["t"]["level"], "20");
+    assert_ne!(notice["t"]["player"], "SyntheticUnknown");
 }

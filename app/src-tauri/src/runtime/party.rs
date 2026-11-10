@@ -781,7 +781,9 @@ impl super::CaptureRuntime {
         drop(alerts);
         let path = self.shared.home.live_database().ok_or(WRITE_FAILED)?;
         let root = path.parent().ok_or(WRITE_FAILED)?;
-        match super::storage::namespace_lease(root, super::Namespace::Live) {
+        let mut timeout = timeout;
+        let lease = super::chat::history_write_lease(self, root, &mut timeout);
+        match lease {
             Ok(_lease) => {
                 if let Some(request) = self
                     .shared

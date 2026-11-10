@@ -184,7 +184,9 @@ impl CaptureRuntime {
         let path = self.shared.home.live_database().ok_or("Chat unavailable")?;
         let root = path.parent().ok_or("Chat unavailable")?.to_path_buf();
         const FAILED: &str = "Chat history could not be cleared.";
-        match super::storage::namespace_lease(&root, Namespace::Live) {
+        let mut timeout = timeout;
+        let lease = super::chat::history_write_lease(self, &root, &mut timeout);
+        match lease {
             Ok(_lease) => {
                 while maxed_store::maintain_chat_file(&path, maxed_store::ChatMaintenance::Clear)
                     .map_err(|_| FAILED)?
@@ -265,4 +267,65 @@ impl CaptureRuntime {
             .map_err(|_| "Chat settings unavailable")? = settings;
         Ok(())
     }
+}
+
+/// Only the stopped maintenance owner is expected to release its lease without
+/// user action. Parked adapters and cold preparation must still fail promptly.
+pub(super) fn history_write_lease(
+    runtime: &CaptureRuntime,
+    root: &std::path::Path,
+    timeout: &mut std::time::Duration,
+) -> Result<std::fs::File, super::storage::LeaseError> {
+    use super::storage::{try_namespace_lease, LeaseError};
+    use std::time::{Duration, Instant};
+    let started = Instant::now();
+    let mut waited = false;
+    let service = &runtime.shared.views.maintenance;
+    // halted persists after an ordinary stop. Preserve fresh cold writes, but
+    // a command joining maintenance must not compete with its next owner.
+    let mut joined_maintenance = service.owns_stopped_namespace();
+    let attempt_lease = |joined: bool| {
+        if joined && service.background_halted() {
+            return Err(LeaseError::Contended);
+        }
+        let attempt = try_namespace_lease(root, Namespace::Live);
+        if joined && service.background_halted() {
+            // Handoff may have begun during the open. Never perform the write
+            // with a lease intended for capture or history upgrade.
+            drop(attempt);
+            return Err(LeaseError::Contended);
+        }
+        attempt
+    };
+    let result = loop {
+        // This also makes the final attempt after the last bounded sleep.
+        let attempt = attempt_lease(joined_maintenance);
+        if attempt.is_ok() {
+            break attempt;
+        }
+        // Capture may have taken over while we waited. Let the caller use its
+        // existing queue and withdrawal protocol with the remaining timeout.
+        if runtime.is_running() || !matches!(attempt, Err(LeaseError::Contended)) {
+            break attempt;
+        }
+        if joined_maintenance && service.background_halted() {
+            break attempt;
+        }
+        if !service.owns_stopped_namespace() {
+            // The owner may have released between the failed open and the flag
+            // read. Try once more; never wait for a different owner.
+            break attempt_lease(true);
+        }
+        joined_maintenance = true;
+        let remaining = timeout.saturating_sub(started.elapsed());
+        if remaining.is_zero() {
+            break attempt;
+        }
+        waited = true;
+        std::thread::sleep(remaining.min(Duration::from_millis(10)));
+    };
+    if waited {
+        *timeout = timeout.saturating_sub(started.elapsed());
+    }
+    result
 }

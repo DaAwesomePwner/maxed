@@ -2,6 +2,8 @@
 use std::{collections::VecDeque, sync::Mutex};
 use tauri::ipc::{Channel, InvokeResponseBody};
 
+pub const LIVE_SUBSCRIPTION_LOST: &str = "LIVE_SUBSCRIPTION_LOST";
+
 struct Subscription {
     id: u32,
     label: String,
@@ -45,6 +47,21 @@ impl LivePayloads {
             channel,
         });
         Ok(id)
+    }
+
+    /// Ownership is the lease: both failed sends and cap eviction remove it.
+    pub fn check_health(&self, label: &str, ids: &[u32]) -> Result<(), String> {
+        let subscriptions = self.0.lock().map_err(|_| LIVE_SUBSCRIPTION_LOST)?;
+        if ids.iter().all(|id| {
+            subscriptions
+                .rows
+                .iter()
+                .any(|row| row.id == *id && row.label == label)
+        }) {
+            Ok(())
+        } else {
+            Err(LIVE_SUBSCRIPTION_LOST.into())
+        }
     }
 
     pub fn unsubscribe(&self, label: &str, id: u32) -> Result<(), String> {
@@ -158,6 +175,11 @@ mod tests {
             .map(|row| row.id)
             .collect();
         assert_eq!(
+            payloads.check_health("main", &ids[..1]),
+            Err(LIVE_SUBSCRIPTION_LOST.into())
+        );
+        assert!(payloads.check_health("main", &ids[24..]).is_ok());
+        assert_eq!(
             retained,
             ids[24..],
             "only the oldest abandoned ownerships are evicted"
@@ -178,6 +200,9 @@ mod tests {
                 }),
             )
             .unwrap();
+        assert!(payloads.check_health("main", &[dead]).is_ok());
+        assert!(payloads.check_health("other", &[dead]).is_err());
+        assert!(payloads.check_health("main", &[]).is_ok());
         let received = Arc::new(Mutex::new(0));
         let sink = received.clone();
         payloads
@@ -191,6 +216,10 @@ mod tests {
             )
             .unwrap();
         assert!(payloads.send("engine-event", &1).is_ok());
+        assert_eq!(
+            payloads.check_health("main", &[dead]),
+            Err(LIVE_SUBSCRIPTION_LOST.into())
+        );
         assert!(payloads.send("engine-event", &2).is_ok());
         assert_eq!(*received.lock().unwrap(), 2);
         assert!(!payloads
@@ -200,6 +229,39 @@ mod tests {
             .rows
             .iter()
             .any(|row| row.id == dead));
+    }
+
+    #[test]
+    fn lost_last_event_subscription_is_unhealthy_while_snapshots_survive() {
+        let payloads = LivePayloads::default();
+        let event = payloads
+            .subscribe(
+                "main",
+                "engine-event".into(),
+                Channel::new(|_| Err(tauri::Error::Io(std::io::Error::other("closed")))),
+            )
+            .unwrap();
+        let received = Arc::new(Mutex::new(0));
+        let sink = received.clone();
+        let snapshot = payloads
+            .subscribe(
+                "main",
+                "live-snapshot".into(),
+                Channel::new(move |_| {
+                    *sink.lock().unwrap() += 1;
+                    Ok(())
+                }),
+            )
+            .unwrap();
+        assert!(payloads.check_health("main", &[event, snapshot]).is_ok());
+        payloads.send("engine-event", &1).unwrap();
+        payloads.send("live-snapshot", &1).unwrap();
+        assert_eq!(
+            payloads.check_health("main", &[event, snapshot]),
+            Err(LIVE_SUBSCRIPTION_LOST.into())
+        );
+        assert!(payloads.check_health("main", &[snapshot]).is_ok());
+        assert_eq!(*received.lock().unwrap(), 1);
     }
 
     #[test]

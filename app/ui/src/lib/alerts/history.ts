@@ -1,4 +1,5 @@
 import type { Client } from '../bridge/client';
+import { isPresentationVisible, observePresentationVisibility } from '../bridge/visibility';
 import type { AlertFilter } from '../bindings/AlertFilter';
 import type { AlertPage } from '../bindings/AlertPage';
 import type { StoreStatus } from '../bindings/StoreStatus';
@@ -17,7 +18,7 @@ export interface AlertHistoryController {
   update(input: AlertHistoryInput): void; retry(): void; dispose(): void;
 }
 
-/** One active native read, one captured waiting checkpoint, no timer or subscription.
+/** One active native read, one captured waiting checkpoint, no timer.
  * Retains only the current 50-row page; navigation retains cursors, never payloads. */
 export function createAlertHistory(client: Pick<Client, 'listAlerts'>,
   receive: (state: AlertHistoryState) => void): AlertHistoryController {
@@ -33,7 +34,7 @@ export function createAlertHistory(client: Pick<Client, 'listAlerts'>,
     emitted = { phase, page, message, retryAvailable }; receive(emitted);
   }
   function pump() {
-    if (disposed || !input) return;
+    if (disposed || !input || !isPresentationVisible()) return;
     if (control) {
       if (control === 'error') emit('error', failure);
       else { const state = historyControl(control, retryUsed); emit(control, state.message, state.retryAvailable); }
@@ -69,6 +70,14 @@ export function createAlertHistory(client: Pick<Client, 'listAlerts'>,
       control = 'error'; failure = historyFailure(error); emit('error', failure);
     }).finally(() => { active = false; if (!disposed) pump(); });
   }
+  const releaseVisibility = observePresentationVisibility(visible => {
+    if (visible) {
+      // Coalesce a durable hidden backlog without starving an older checkpoint.
+      if (!active && pending && input && latest.revision > pending.revision
+        && historyWaiting(input, latest.required) === null) pending = latest;
+      pump();
+    }
+  });
   return {
     update(next) {
       if (disposed) return;
@@ -92,6 +101,6 @@ export function createAlertHistory(client: Pick<Client, 'listAlerts'>,
       epoch++; retryUsed = false; control = null;
       pending = latest = { required: input.required, revision: ++revision }; pump();
     },
-    dispose() { disposed = true; epoch++; input = null; pending = null; page = null; emitted = undefined; },
+    dispose() { releaseVisibility(); disposed = true; epoch++; input = null; pending = null; page = null; emitted = undefined; },
   };
 }

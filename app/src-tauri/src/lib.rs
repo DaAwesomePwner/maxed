@@ -359,17 +359,27 @@ fn unsubscribe_live_payload(
 }
 
 #[tauri::command]
-async fn get_store_status(app: tauri::AppHandle) -> StoreStatus {
+async fn get_store_status(
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+    payloads: tauri::State<'_, bridge::channels::LivePayloads>,
+    subscription_ids: Option<Vec<u32>>,
+) -> Result<StoreStatus, String> {
+    if let Some(ids) = subscription_ids {
+        payloads.check_health(webview.label(), &ids)?;
+    }
     let runtime = app.state::<Arc<CaptureRuntime>>().inner().clone();
-    tauri::async_runtime::spawn_blocking(move || runtime.store_status())
-        .await
-        .unwrap_or_else(|_| StoreStatus {
-            state: maxed_types::StoreState::Failed,
-            queued: 0,
-            durable: None,
-            stream_id: None,
-            message: "Store status worker failed; restart Maxed".into(),
-        })
+    Ok(
+        tauri::async_runtime::spawn_blocking(move || runtime.store_status())
+            .await
+            .unwrap_or_else(|_| StoreStatus {
+                state: maxed_types::StoreState::Failed,
+                queued: 0,
+                durable: None,
+                stream_id: None,
+                message: "Store status worker failed; restart Maxed".into(),
+            }),
+    )
 }
 
 #[tauri::command]

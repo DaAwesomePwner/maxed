@@ -437,12 +437,25 @@ pub(super) struct StorageService {
     worker: Mutex<Option<JoinHandle<()>>>,
     copy_cancel: Mutex<Option<Arc<AtomicBool>>>,
     halted: AtomicBool,
+    owns_namespace: AtomicBool,
     online: AtomicBool,
     retry_changed: tokio::sync::Notify,
     pub(super) update_paused: AtomicBool,
     // Explicit estimates take this gate on the history thread. Admission of new
     // destructive work uses the same gate; active jobs make estimates unavailable.
     pub(super) estimate_gate: Mutex<()>,
+}
+// The flag describes actual ownership, not a worker waiting to acquire it.
+// Close the handle before clearing: a waiter observing false can acquire it.
+struct BackgroundLease<'a> {
+    lease: Option<std::fs::File>,
+    owned: &'a AtomicBool,
+}
+impl Drop for BackgroundLease<'_> {
+    fn drop(&mut self) {
+        drop(self.lease.take());
+        self.owned.store(false, Ordering::Release);
+    }
 }
 struct BackgroundRun<'a>(&'a StorageService);
 impl Drop for BackgroundRun<'_> {
@@ -455,6 +468,14 @@ impl Drop for BackgroundRun<'_> {
     }
 }
 impl StorageService {
+    pub(super) fn background_halted(&self) -> bool {
+        self.halted.load(Ordering::Acquire)
+    }
+
+    pub(super) fn owns_stopped_namespace(&self) -> bool {
+        self.owns_namespace.load(Ordering::Acquire)
+    }
+
     fn now(&self) -> Instant {
         #[cfg(test)]
         if let Some(clock) = self.clock.lock().unwrap().as_ref() {
@@ -673,6 +694,10 @@ impl StorageService {
             state.requests.push_back(Request { operation, reply });
         }
     }
+    #[cfg(test)]
+    pub(super) fn background_running_for_test(&self) -> bool {
+        self.has_background()
+    }
     fn has_background(&self) -> bool {
         self.state
             .lock()
@@ -758,7 +783,13 @@ impl StorageService {
             }
             drop(state);
             match namespace_lease(root, Namespace::Live) {
-                Ok(lease) => break lease,
+                Ok(lease) => {
+                    self.owns_namespace.store(true, Ordering::Release);
+                    break BackgroundLease {
+                        lease: Some(lease),
+                        owned: &self.owns_namespace,
+                    };
+                }
                 Err(_) => {
                     let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
                     state.requests.retain_mut(|request| {

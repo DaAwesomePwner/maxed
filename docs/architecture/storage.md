@@ -270,9 +270,13 @@ visits; runs still open at upgrade are skipped, and earlier realm/hub visits
 cannot be reconstructed.
 
 `MapEntered` closes the stream's open visit and opens one for its current session.
-It inherits the preceding visit's character within that session; character updates
+It inherits the preceding open visit's character within that session; character updates
 replace that identity and dungeon run starts attach the run ID. Session end and
-startup recovery close open visits, including sessions without runs. Character
+startup recovery close open visits, including sessions without runs. Unknown
+local identity (including connection replacement or contradictory acquisition)
+also closes the stream's visit at the loss timestamp, clamped to its start.
+The next map visit remains unattributed until positive character evidence arrives;
+normal map changes without identity loss retain continuity. Character
 alias merges also update visits. Play resumed after an idle session ends waits
 for the next map entry.
 
@@ -360,7 +364,11 @@ replacing newer snapshot fields.
 
 `accounts::attach_legacy_characters` accepts batches of exact candidate IDs and
 returns unique attached/already-attached/conflicting/unmatched counts. It only fills
-NULL membership in one immediate transaction. Use `StoreWriter::attach_legacy_characters` and
+NULL membership in one immediate transaction, updating valid character JSON alongside
+the relational column. Alias merges likewise synchronize the target character JSON.
+Run entry snapshots retain historical fields; `get_run` enriches their account ID
+from the current character column, the reader contract, rather than rewriting
+every stored entry snapshot. Use `StoreWriter::attach_legacy_characters` and
 `StoreWriter::record_recovery_progress` during capture; both flush accepted events
 before executing on the writer connection. Direct connection APIs are for the
 single writer connection or stopped capture. Recovery progress is an inclusive completed number prefix;
