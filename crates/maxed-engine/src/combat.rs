@@ -418,14 +418,18 @@ impl Engine {
             return Err(Reason::InvalidAttack);
         }
         let mut defaults = vec![];
-        let crucible = e.crucible.unwrap_or_else(|| {
-            defaults.push(Reason::AssumedCrucibleDefault);
-            1.0
-        });
-        let blood = e.blood_ritual.unwrap_or_else(|| {
-            defaults.push(Reason::AssumedBloodRitualDefault);
-            1.0
-        });
+        let crucible = self
+            .crucible_multiplier(e.crucible.as_deref())
+            .unwrap_or_else(|| {
+                defaults.push(Reason::AssumedCrucibleDefault);
+                1.0
+            });
+        let blood = self
+            .crucible_multiplier(e.blood_ritual.as_deref())
+            .unwrap_or_else(|| {
+                defaults.push(Reason::AssumedBloodRitualDefault);
+                1.0
+            });
         let mut m = (attack + 25) as f32 * 0.02;
         if condition & 0x40000 != 0 {
             m = (f64::from(m) * 1.25) as f32;

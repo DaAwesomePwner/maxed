@@ -21,6 +21,7 @@ pub use math::damage_with_defense;
 pub use reconstruction::ReconstructionReason;
 mod characters;
 mod combat;
+mod crucible;
 mod drops;
 mod engine;
 mod fights;

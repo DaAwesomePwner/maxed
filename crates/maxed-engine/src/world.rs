@@ -23,8 +23,8 @@ pub(crate) struct Entity {
     pub guild: Option<String>,
     pub account: Option<[u8; 32]>,
     pub enchants: Vec<EnchantView>,
-    pub crucible: Option<f64>,
-    pub blood_ritual: Option<f64>,
+    pub crucible: Option<String>,
+    pub blood_ritual: Option<String>,
     pub pos: (f32, f32),
     pub summoner: Option<(i32, u32)>,
     pub last_seen: Timestamp,
@@ -332,23 +332,10 @@ impl Engine {
                     entity.enchants = enchants;
                 }
                 128 | 155 => {
-                    let multiplier = stat.stringStatValue.as_deref().and_then(|s| {
-                        if s.is_empty() {
-                            // An observed empty channel means no active bonus.
-                            // Missing text or an unknown active ID remains uncertain.
-                            Some(1.0)
-                        } else {
-                            self.catalog
-                                .crucible_bonuses
-                                .iter()
-                                .find(|c| c.id == s)
-                                .map(|c| c.damage_multiplier)
-                        }
-                    });
                     if stat.statTypeNum == 128 {
-                        entity.crucible = multiplier;
+                        entity.crucible = stat.stringStatValue.clone();
                     } else {
-                        entity.blood_ritual = multiplier;
+                        entity.blood_ritual = stat.stringStatValue.clone();
                     }
                 }
                 _ if stat.stringStatValue.is_none() => {

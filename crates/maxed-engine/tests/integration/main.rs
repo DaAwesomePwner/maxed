@@ -92,3 +92,6 @@ mod account_scope;
 
 #[path = "../account_scope_transitions.rs"]
 mod account_scope_transitions;
+
+#[path = "../crucible.rs"]
+mod crucible;
