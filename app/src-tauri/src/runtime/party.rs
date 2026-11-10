@@ -781,28 +781,8 @@ impl super::CaptureRuntime {
         drop(alerts);
         let path = self.shared.home.live_database().ok_or(WRITE_FAILED)?;
         let root = path.parent().ok_or(WRITE_FAILED)?;
-        // Stopped maintenance can own the namespace until its current work
-        // finishes. Retry without changing its lifecycle or holding runtime locks.
-        let lease = if self.is_running() {
-            super::storage::namespace_lease(root, super::Namespace::Live)
-        } else {
-            let started = std::time::Instant::now();
-            loop {
-                match super::storage::namespace_lease(root, super::Namespace::Live) {
-                    Ok(lease) => break Ok(lease),
-                    Err(_) => {
-                        let remaining = timeout.saturating_sub(started.elapsed());
-                        if remaining.is_zero() {
-                            return Err(WRITE_FAILED.into());
-                        }
-                        std::thread::sleep(remaining.min(std::time::Duration::from_millis(10)));
-                        if started.elapsed() >= timeout {
-                            return Err(WRITE_FAILED.into());
-                        }
-                    }
-                }
-            }
-        };
+        let mut timeout = timeout;
+        let lease = super::chat::history_write_lease(self, root, &mut timeout);
         match lease {
             Ok(_lease) => {
                 if let Some(request) = self

@@ -184,28 +184,8 @@ impl CaptureRuntime {
         let path = self.shared.home.live_database().ok_or("Chat unavailable")?;
         let root = path.parent().ok_or("Chat unavailable")?.to_path_buf();
         const FAILED: &str = "Chat history could not be cleared.";
-        // Stopped maintenance can own the namespace until its current work
-        // finishes. Retry without changing its lifecycle or holding runtime locks.
-        let lease = if self.is_running() {
-            super::storage::namespace_lease(&root, Namespace::Live)
-        } else {
-            let started = std::time::Instant::now();
-            loop {
-                match super::storage::namespace_lease(&root, Namespace::Live) {
-                    Ok(lease) => break Ok(lease),
-                    Err(_) => {
-                        let remaining = timeout.saturating_sub(started.elapsed());
-                        if remaining.is_zero() {
-                            return Err(FAILED.into());
-                        }
-                        std::thread::sleep(remaining.min(std::time::Duration::from_millis(10)));
-                        if started.elapsed() >= timeout {
-                            return Err(FAILED.into());
-                        }
-                    }
-                }
-            }
-        };
+        let mut timeout = timeout;
+        let lease = super::chat::history_write_lease(self, &root, &mut timeout);
         match lease {
             Ok(_lease) => {
                 while maxed_store::maintain_chat_file(&path, maxed_store::ChatMaintenance::Clear)
@@ -287,4 +267,44 @@ impl CaptureRuntime {
             .map_err(|_| "Chat settings unavailable")? = settings;
         Ok(())
     }
+}
+
+/// Only the stopped maintenance owner is expected to release its lease without
+/// user action. Parked adapters and cold preparation must still fail promptly.
+pub(super) fn history_write_lease(
+    runtime: &CaptureRuntime,
+    root: &std::path::Path,
+    timeout: &mut std::time::Duration,
+) -> Result<std::fs::File, super::storage::LeaseError> {
+    use super::storage::{try_namespace_lease, LeaseError};
+    use std::time::{Duration, Instant};
+    let started = Instant::now();
+    let mut waited = false;
+    let result = loop {
+        // This also makes the final attempt after the last bounded sleep.
+        let attempt = try_namespace_lease(root, Namespace::Live);
+        if attempt.is_ok() {
+            break attempt;
+        }
+        // Capture may have taken over while we waited. Let the caller use its
+        // existing queue and withdrawal protocol with the remaining timeout.
+        if runtime.is_running() || !matches!(attempt, Err(LeaseError::Contended)) {
+            break attempt;
+        }
+        if !runtime.shared.views.maintenance.owns_stopped_namespace() {
+            // The owner may have released between the failed open and the flag
+            // read. Try once more; never wait for a different owner.
+            break try_namespace_lease(root, Namespace::Live);
+        }
+        let remaining = timeout.saturating_sub(started.elapsed());
+        if remaining.is_zero() {
+            break attempt;
+        }
+        waited = true;
+        std::thread::sleep(remaining.min(Duration::from_millis(10)));
+    };
+    if waited {
+        *timeout = timeout.saturating_sub(started.elapsed());
+    }
+    result
 }

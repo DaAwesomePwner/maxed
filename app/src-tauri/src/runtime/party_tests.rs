@@ -2153,26 +2153,25 @@ fn stopped_party_mark_and_note_waits_for_maintenance_lease() {
         mark: Some(PartyMark::Watched),
         note: Some("Synthetic note".into()),
     };
-    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
-    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
-    let timeout = Duration::from_secs(5);
-    let started = Instant::now();
-    std::thread::scope(|scope| {
-        let (send, recv) = crossbeam_channel::bounded(1);
-        let runtime = &runtime;
-        scope.spawn(move || {
-            send.send(runtime.write_party_with_timeout(operation, timeout))
-                .unwrap();
+    super::chat_tests::with_stopped_maintenance(&runtime, || {
+        let timeout = Duration::from_secs(5);
+        let started = Instant::now();
+        std::thread::scope(|scope| {
+            let (send, recv) = crossbeam_channel::bounded(1);
+            let runtime = &runtime;
+            scope.spawn(move || {
+                send.send(runtime.write_party_with_timeout(operation, timeout))
+                    .unwrap();
+            });
+            assert_eq!(
+                recv.recv_timeout(Duration::from_millis(50)),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout)
+            );
+            runtime.shared.views.maintenance.handoff_background();
+            recv.recv_timeout(timeout).unwrap().unwrap();
         });
-        assert_eq!(
-            recv.recv_timeout(Duration::from_millis(50)),
-            Err(crossbeam_channel::RecvTimeoutError::Timeout)
-        );
-        drop(owner);
-        drop(lease);
-        recv.recv_timeout(timeout).unwrap().unwrap();
+        assert!(started.elapsed() < timeout);
     });
-    assert!(started.elapsed() < timeout);
     let player = maxed_store::open_reader(&path)
         .unwrap()
         .get_party_player("synthalpha", None)
@@ -2202,18 +2201,16 @@ fn stopped_party_mark_and_note_lease_wait_expires() {
         mark: Some(PartyMark::Watched),
         note: Some("Synthetic note".into()),
     };
-    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
-    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
-    let timeout = Duration::from_millis(100);
-    let started = Instant::now();
-    assert_eq!(
-        runtime.write_party_with_timeout(operation, timeout),
-        Err(super::party::WRITE_FAILED.into())
-    );
-    assert!(started.elapsed() >= timeout);
-    assert!(started.elapsed() < Duration::from_secs(2));
-    drop(owner);
-    drop(lease);
+    super::chat_tests::with_stopped_maintenance(&runtime, || {
+        let timeout = Duration::from_millis(100);
+        let started = Instant::now();
+        assert_eq!(
+            runtime.write_party_with_timeout(operation, timeout),
+            Err(super::party::WRITE_FAILED.into())
+        );
+        assert!(started.elapsed() >= timeout);
+        assert!(started.elapsed() < Duration::from_secs(2));
+    });
     let player = maxed_store::open_reader(&path)
         .unwrap()
         .get_party_player("synthalpha", None)
@@ -2238,26 +2235,25 @@ fn stopped_party_clear_waits_for_maintenance_lease() {
     let operation = super::party::PartyWrite::Clear(ClearPartyHistory {
         marks_and_notes: true,
     });
-    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
-    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
-    let timeout = Duration::from_secs(5);
-    let started = Instant::now();
-    std::thread::scope(|scope| {
-        let (send, recv) = crossbeam_channel::bounded(1);
-        let runtime = &runtime;
-        scope.spawn(move || {
-            send.send(runtime.write_party_with_timeout(operation, timeout))
-                .unwrap();
+    super::chat_tests::with_stopped_maintenance(&runtime, || {
+        let timeout = Duration::from_secs(5);
+        let started = Instant::now();
+        std::thread::scope(|scope| {
+            let (send, recv) = crossbeam_channel::bounded(1);
+            let runtime = &runtime;
+            scope.spawn(move || {
+                send.send(runtime.write_party_with_timeout(operation, timeout))
+                    .unwrap();
+            });
+            assert_eq!(
+                recv.recv_timeout(Duration::from_millis(50)),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout)
+            );
+            runtime.shared.views.maintenance.handoff_background();
+            recv.recv_timeout(timeout).unwrap().unwrap();
         });
-        assert_eq!(
-            recv.recv_timeout(Duration::from_millis(50)),
-            Err(crossbeam_channel::RecvTimeoutError::Timeout)
-        );
-        drop(owner);
-        drop(lease);
-        recv.recv_timeout(timeout).unwrap().unwrap();
+        assert!(started.elapsed() < timeout);
     });
-    assert!(started.elapsed() < timeout);
     let player = maxed_store::open_reader(&path)
         .unwrap()
         .get_party_player("synthalpha", None)
@@ -2282,22 +2278,92 @@ fn stopped_party_clear_lease_wait_expires() {
     let operation = super::party::PartyWrite::Clear(ClearPartyHistory {
         marks_and_notes: true,
     });
-    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
-    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
-    let timeout = Duration::from_millis(100);
-    let started = Instant::now();
-    assert_eq!(
-        runtime.write_party_with_timeout(operation, timeout),
-        Err(super::party::WRITE_FAILED.into())
-    );
-    assert!(started.elapsed() >= timeout);
-    assert!(started.elapsed() < Duration::from_secs(2));
-    drop(owner);
-    drop(lease);
+    super::chat_tests::with_stopped_maintenance(&runtime, || {
+        let timeout = Duration::from_millis(100);
+        let started = Instant::now();
+        assert_eq!(
+            runtime.write_party_with_timeout(operation, timeout),
+            Err(super::party::WRITE_FAILED.into())
+        );
+        assert!(started.elapsed() >= timeout);
+        assert!(started.elapsed() < Duration::from_secs(2));
+    });
     let player = maxed_store::open_reader(&path)
         .unwrap()
         .get_party_player("synthalpha", None)
         .unwrap();
     assert_eq!(player.unwrap().row.mark, Some(PartyMark::Banned));
     assert!(runtime.shared.views.party_write.lock().unwrap().is_none());
+}
+
+#[test]
+fn party_write_queues_when_capture_starts_during_maintenance_wait() {
+    use std::time::Duration;
+    let (root, runtime) = command_runtime();
+    super::chat_tests::with_stopped_maintenance(&runtime, || {
+        std::thread::scope(|scope| {
+            let (send, recv) = crossbeam_channel::bounded(1);
+            let runtime = &runtime;
+            scope.spawn(move || {
+                send.send(runtime.set_party_mark(
+                    "synthalpha".into(),
+                    "SynthAlpha".into(),
+                    Some(PartyMark::Watched),
+                    Some("Synthetic note".into()),
+                ))
+                .unwrap();
+            });
+            assert_eq!(
+                recv.recv_timeout(Duration::from_millis(50)),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout)
+            );
+            paused_party_capture(runtime);
+            super::maintenance_tests::eventually(|| {
+                runtime.shared.views.party_write.lock().unwrap().is_some()
+            });
+            runtime.shared.views.maintenance.handoff_background();
+            let mut adapter = super::RuntimeOptions::live(root.path().into(), None)
+                .open_catalog(
+                    &Default::default(),
+                    runtime.shared.views.clone(),
+                    super::Bridge::default(),
+                    None,
+                )
+                .unwrap();
+            adapter.drain().unwrap();
+            recv.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+            adapter.close().unwrap();
+        });
+    });
+    let player = maxed_store::open_reader(&root.path().join("live.sqlite3"))
+        .unwrap()
+        .get_party_player("synthalpha", None)
+        .unwrap()
+        .unwrap();
+    assert_eq!(player.row.mark, Some(PartyMark::Watched));
+    assert_eq!(player.row.note.as_deref(), Some("Synthetic note"));
+}
+
+#[test]
+fn party_write_does_not_wait_for_maintenance_waiting_behind_another_owner() {
+    use std::time::{Duration, Instant};
+    let (root, runtime) = command_runtime();
+    let _lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
+    assert_eq!(
+        runtime.compact_storage().unwrap(),
+        StorageCommandOutcome::Queued
+    );
+    let service = &runtime.shared.views.maintenance;
+    assert!(service.has_background());
+    assert!(!service.owns_stopped_namespace());
+    let started = Instant::now();
+    let result = runtime.set_party_mark(
+        "synthalpha".into(),
+        "SynthAlpha".into(),
+        Some(PartyMark::Watched),
+        None,
+    );
+    service.handoff_background();
+    assert_eq!(result, Err(super::party::WRITE_FAILED.into()));
+    assert!(started.elapsed() < Duration::from_secs(5));
 }

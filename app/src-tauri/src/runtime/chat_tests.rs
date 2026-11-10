@@ -1055,26 +1055,25 @@ fn stopped_chat_clear_waits_for_maintenance_lease() {
     let runtime = Arc::new(CaptureRuntime::default());
     runtime.initialize_home(root.path().into()).unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
-    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
-    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
-    let timeout = Duration::from_secs(5);
-    let started = Instant::now();
-    std::thread::scope(|scope| {
-        let (send, recv) = crossbeam_channel::bounded(1);
-        let runtime = &runtime;
-        scope.spawn(move || {
-            send.send(runtime.clear_chat_history_with_timeout(timeout))
-                .unwrap();
+    super::chat_tests::with_stopped_maintenance(&runtime, || {
+        let timeout = Duration::from_secs(5);
+        let started = Instant::now();
+        std::thread::scope(|scope| {
+            let (send, recv) = crossbeam_channel::bounded(1);
+            let runtime = &runtime;
+            scope.spawn(move || {
+                send.send(runtime.clear_chat_history_with_timeout(timeout))
+                    .unwrap();
+            });
+            assert_eq!(
+                recv.recv_timeout(Duration::from_millis(50)),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout)
+            );
+            runtime.shared.views.maintenance.handoff_background();
+            recv.recv_timeout(timeout).unwrap().unwrap();
         });
-        assert_eq!(
-            recv.recv_timeout(Duration::from_millis(50)),
-            Err(crossbeam_channel::RecvTimeoutError::Timeout)
-        );
-        drop(owner);
-        drop(lease);
-        recv.recv_timeout(timeout).unwrap().unwrap();
+        assert!(started.elapsed() < timeout);
     });
-    assert!(started.elapsed() < timeout);
     assert_eq!(chat_count(&path), 0);
     assert!(runtime.shared.views.chat_clear.lock().unwrap().is_none());
 }
@@ -1088,18 +1087,118 @@ fn stopped_chat_clear_lease_wait_expires() {
     let runtime = Arc::new(CaptureRuntime::default());
     runtime.initialize_home(root.path().into()).unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
-    let lease = super::storage::namespace_lease(root.path(), super::Namespace::Live).unwrap();
-    let owner = maxed_store::maintenance::StoppedMaintenance::receipt_conversion(&path).unwrap();
-    let timeout = Duration::from_millis(100);
-    let started = Instant::now();
-    assert_eq!(
-        runtime.clear_chat_history_with_timeout(timeout),
-        Err("Chat history could not be cleared.".into())
-    );
-    assert!(started.elapsed() >= timeout);
-    assert!(started.elapsed() < Duration::from_secs(2));
-    drop(owner);
-    drop(lease);
+    super::chat_tests::with_stopped_maintenance(&runtime, || {
+        let timeout = Duration::from_millis(100);
+        let started = Instant::now();
+        assert_eq!(
+            runtime.clear_chat_history_with_timeout(timeout),
+            Err("Chat history could not be cleared.".into())
+        );
+        assert!(started.elapsed() >= timeout);
+        assert!(started.elapsed() < Duration::from_secs(2));
+    });
     assert_eq!(chat_count(&path), 1);
     assert!(runtime.shared.views.chat_clear.lock().unwrap().is_none());
+}
+
+// Hold the actual background owner before it services Compact. The estimate
+// gate is try-locked by maintenance, so handoff remains able to stop the worker.
+pub(super) fn with_stopped_maintenance(runtime: &Arc<CaptureRuntime>, test: impl FnOnce()) {
+    struct Stop<'a>(&'a maintenance::StorageService);
+    impl Drop for Stop<'_> {
+        fn drop(&mut self) {
+            self.0.handoff_background();
+            self.0.defer_requests();
+        }
+    }
+    // Cold history initialization deliberately leaves a missing database absent.
+    let path = runtime.shared.home.live_database().unwrap();
+    let mut db = rusqlite::Connection::open(path).unwrap();
+    maxed_store::migrate(&mut db).unwrap();
+    drop(db);
+    let service = &runtime.shared.views.maintenance;
+    let _gate = service.estimate_gate.lock().unwrap();
+    std::thread::scope(|scope| {
+        let command = scope.spawn(|| runtime.compact_storage());
+        let _stop = Stop(service);
+        super::maintenance_tests::eventually(|| service.owns_stopped_namespace());
+        test();
+        service.handoff_background();
+        service.defer_requests();
+        command.join().unwrap().unwrap();
+    });
+}
+
+#[test]
+fn chat_clear_does_not_wait_for_maintenance_waiting_behind_another_owner() {
+    let root = tempfile::tempdir().unwrap();
+    let runtime = super::maintenance_tests::initialized(root.path());
+    let _lease = storage::namespace_lease(root.path(), Namespace::Live).unwrap();
+    assert_eq!(
+        runtime.compact_storage().unwrap(),
+        StorageCommandOutcome::Queued
+    );
+    let service = &runtime.shared.views.maintenance;
+    assert!(service.has_background());
+    assert!(!service.owns_stopped_namespace());
+    let started = Instant::now();
+    let result = runtime.clear_chat_history();
+    service.handoff_background();
+    assert_eq!(result, Err("Chat history could not be cleared.".into()));
+    assert!(started.elapsed() < Duration::from_secs(5));
+}
+
+#[test]
+fn chat_clear_queues_when_capture_starts_during_maintenance_wait() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("live.sqlite3");
+    seed_chat(&path, 1, chat::wall_now());
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    with_stopped_maintenance(&runtime, || {
+        std::thread::scope(|scope| {
+            let (send, recv) = bounded(1);
+            let runtime = &runtime;
+            scope.spawn(move || send.send(runtime.clear_chat_history()).unwrap());
+            assert_eq!(
+                recv.recv_timeout(Duration::from_millis(50)),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout)
+            );
+            paused_capture_session(runtime);
+            wait_for_chat_clear(runtime);
+            runtime.shared.views.maintenance.handoff_background();
+            let mut adapter = RuntimeOptions::live(root.path().into(), None)
+                .open_catalog(
+                    &AtomicBool::new(false),
+                    runtime.shared.views.clone(),
+                    Bridge::default(),
+                    None,
+                )
+                .unwrap();
+            adapter.drain().unwrap();
+            recv.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+            adapter.close().unwrap();
+        });
+    });
+    assert_eq!(chat_count(&path), 0);
+}
+
+#[test]
+fn stopped_chat_clear_does_not_retry_permanent_directory_failure() {
+    let root = tempfile::tempdir().unwrap();
+    let runtime = super::maintenance_tests::initialized(root.path());
+    with_stopped_maintenance(&runtime, || {
+        let file = root.path().join("not-a-directory");
+        std::fs::write(&file, b"synthetic").unwrap();
+        let started = Instant::now();
+        let mut timeout = Duration::from_secs(60);
+        assert!(matches!(
+            chat::history_write_lease(&runtime, &file, &mut timeout),
+            Err(storage::LeaseError::Permanent(
+                "Could not prepare local summary storage"
+            ))
+        ));
+        assert!(started.elapsed() < Duration::from_secs(5));
+    });
 }
