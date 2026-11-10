@@ -1642,7 +1642,7 @@ fn stopped_namespace_ownership_ends_with_the_background_lease() {
     let runtime = initialized(root.path());
     let service = &runtime.shared.views.maintenance;
     assert!(!service.owns_stopped_namespace());
-    super::chat_tests::with_stopped_maintenance(&runtime, || {
+    super::chat_tests::with_stopped_maintenance(&runtime, |_finish| {
         assert!(service.owns_stopped_namespace());
         assert!(super::storage::namespace_lease(root.path(), Namespace::Live).is_err());
     });

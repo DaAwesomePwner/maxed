@@ -468,6 +468,10 @@ impl Drop for BackgroundRun<'_> {
     }
 }
 impl StorageService {
+    pub(super) fn background_halted(&self) -> bool {
+        self.halted.load(Ordering::Acquire)
+    }
+
     pub(super) fn owns_stopped_namespace(&self) -> bool {
         self.owns_namespace.load(Ordering::Acquire)
     }
@@ -690,7 +694,11 @@ impl StorageService {
             state.requests.push_back(Request { operation, reply });
         }
     }
-    pub(super) fn has_background(&self) -> bool {
+    #[cfg(test)]
+    pub(super) fn background_running_for_test(&self) -> bool {
+        self.has_background()
+    }
+    fn has_background(&self) -> bool {
         self.state
             .lock()
             .unwrap_or_else(|p| p.into_inner())

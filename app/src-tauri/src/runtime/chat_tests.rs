@@ -1055,7 +1055,7 @@ fn stopped_chat_clear_waits_for_maintenance_lease() {
     let runtime = Arc::new(CaptureRuntime::default());
     runtime.initialize_home(root.path().into()).unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
-    super::chat_tests::with_stopped_maintenance(&runtime, || {
+    super::chat_tests::with_stopped_maintenance(&runtime, |finish| {
         let timeout = Duration::from_secs(5);
         let started = Instant::now();
         std::thread::scope(|scope| {
@@ -1069,8 +1069,9 @@ fn stopped_chat_clear_waits_for_maintenance_lease() {
                 recv.recv_timeout(Duration::from_millis(50)),
                 Err(crossbeam_channel::RecvTimeoutError::Timeout)
             );
-            runtime.shared.views.maintenance.handoff_background();
+            finish();
             recv.recv_timeout(timeout).unwrap().unwrap();
+            assert!(!runtime.shared.views.maintenance.background_halted());
         });
         assert!(started.elapsed() < timeout);
     });
@@ -1087,7 +1088,7 @@ fn stopped_chat_clear_lease_wait_expires() {
     let runtime = Arc::new(CaptureRuntime::default());
     runtime.initialize_home(root.path().into()).unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
-    super::chat_tests::with_stopped_maintenance(&runtime, || {
+    super::chat_tests::with_stopped_maintenance(&runtime, |_finish| {
         let timeout = Duration::from_millis(100);
         let started = Instant::now();
         assert_eq!(
@@ -1103,7 +1104,10 @@ fn stopped_chat_clear_lease_wait_expires() {
 
 // Hold the actual background owner before it services Compact. The estimate
 // gate is try-locked by maintenance, so handoff remains able to stop the worker.
-pub(super) fn with_stopped_maintenance(runtime: &Arc<CaptureRuntime>, test: impl FnOnce()) {
+pub(super) fn with_stopped_maintenance(
+    runtime: &Arc<CaptureRuntime>,
+    test: impl FnOnce(&mut dyn FnMut()),
+) {
     struct Stop<'a>(&'a maintenance::StorageService);
     impl Drop for Stop<'_> {
         fn drop(&mut self) {
@@ -1117,15 +1121,23 @@ pub(super) fn with_stopped_maintenance(runtime: &Arc<CaptureRuntime>, test: impl
     maxed_store::migrate(&mut db).unwrap();
     drop(db);
     let service = &runtime.shared.views.maintenance;
-    let _gate = service.estimate_gate.lock().unwrap();
+    service.set_environment(Arc::new(super::maintenance_tests::Space(Some(u64::MAX))));
+    let mut gate = Some(service.estimate_gate.lock().unwrap());
     std::thread::scope(|scope| {
         let command = scope.spawn(|| runtime.compact_storage());
         let _stop = Stop(service);
         super::maintenance_tests::eventually(|| service.owns_stopped_namespace());
-        test();
+        test(&mut || drop(gate.take()));
         service.handoff_background();
         service.defer_requests();
-        command.join().unwrap().unwrap();
+        // Upgrade stop rejects the queued Compact; normal retirement or
+        // capture handoff accepts it or leaves it queued.
+        if let Err(error) = command.join().unwrap() {
+            assert_eq!(
+                error,
+                "Storage maintenance is unavailable; retry after storage is ready."
+            );
+        }
     });
 }
 
@@ -1139,7 +1151,7 @@ fn chat_clear_does_not_wait_for_maintenance_waiting_behind_another_owner() {
         StorageCommandOutcome::Queued
     );
     let service = &runtime.shared.views.maintenance;
-    assert!(service.has_background());
+    assert!(service.background_running_for_test());
     assert!(!service.owns_stopped_namespace());
     let started = Instant::now();
     let result = runtime.clear_chat_history();
@@ -1149,14 +1161,14 @@ fn chat_clear_does_not_wait_for_maintenance_waiting_behind_another_owner() {
 }
 
 #[test]
-fn chat_clear_queues_when_capture_starts_during_maintenance_wait() {
+fn chat_clear_yields_to_capture_handoff_before_capture_takes_the_lease() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("live.sqlite3");
     seed_chat(&path, 1, chat::wall_now());
     let runtime = Arc::new(CaptureRuntime::default());
     runtime.initialize_home(root.path().into()).unwrap();
     tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
-    with_stopped_maintenance(&runtime, || {
+    with_stopped_maintenance(&runtime, |_finish| {
         std::thread::scope(|scope| {
             let (send, recv) = bounded(1);
             let runtime = &runtime;
@@ -1165,30 +1177,33 @@ fn chat_clear_queues_when_capture_starts_during_maintenance_wait() {
                 recv.recv_timeout(Duration::from_millis(50)),
                 Err(crossbeam_channel::RecvTimeoutError::Timeout)
             );
-            paused_capture_session(runtime);
-            wait_for_chat_clear(runtime);
             runtime.shared.views.maintenance.handoff_background();
-            let mut adapter = RuntimeOptions::live(root.path().into(), None)
-                .open_catalog(
-                    &AtomicBool::new(false),
-                    runtime.shared.views.clone(),
-                    Bridge::default(),
-                    None,
-                )
+            assert_eq!(
+                recv.recv_timeout(Duration::from_secs(5)).unwrap(),
+                Err("Chat history could not be cleared.".into())
+            );
+            assert!(runtime.shared.views.chat_clear.lock().unwrap().is_none());
+            // Match open_home: handoff precedes settings/history retirement and
+            // namespace acquisition, and session installation follows startup.
+            let options = RuntimeOptions::live(root.path().into(), None);
+            let mut adapter = runtime
+                .shared
+                .open_home(&options, &AtomicBool::new(false), Bridge::default(), None)
                 .unwrap();
+            assert!(!runtime.shared.views.maintenance.background_halted());
+            paused_capture_session(runtime);
             adapter.drain().unwrap();
-            recv.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
             adapter.close().unwrap();
         });
     });
-    assert_eq!(chat_count(&path), 0);
+    assert_eq!(chat_count(&path), 1);
 }
 
 #[test]
 fn stopped_chat_clear_does_not_retry_permanent_directory_failure() {
     let root = tempfile::tempdir().unwrap();
     let runtime = super::maintenance_tests::initialized(root.path());
-    with_stopped_maintenance(&runtime, || {
+    with_stopped_maintenance(&runtime, |_finish| {
         let file = root.path().join("not-a-directory");
         std::fs::write(&file, b"synthetic").unwrap();
         let started = Instant::now();
@@ -1201,4 +1216,74 @@ fn stopped_chat_clear_does_not_retry_permanent_directory_failure() {
         ));
         assert!(started.elapsed() < Duration::from_secs(5));
     });
+}
+
+#[test]
+fn history_writes_yield_to_upgrade_handoff_before_upgrade_takes_the_lease() {
+    for party in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("live.sqlite3");
+        seed_chat(&path, 1, chat::wall_now());
+        let runtime = Arc::new(CaptureRuntime::default());
+        runtime.initialize_home(root.path().into()).unwrap();
+        tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+        with_stopped_maintenance(&runtime, |_finish| {
+            std::thread::scope(|scope| {
+                let (send, recv) = bounded(1);
+                let runtime = &runtime;
+                scope.spawn(move || {
+                    let result = if party {
+                        runtime.write_party_with_timeout(
+                            super::party::PartyWrite::Mark {
+                                key: "synthalpha".into(),
+                                name: "SynthAlpha".into(),
+                                mark: Some(PartyMark::Watched),
+                                note: None,
+                            },
+                            Duration::from_secs(5),
+                        )
+                    } else {
+                        runtime.clear_chat_history_with_timeout(Duration::from_secs(5))
+                    };
+                    send.send(result).unwrap();
+                });
+                assert_eq!(
+                    recv.recv_timeout(Duration::from_millis(50)),
+                    Err(crossbeam_channel::RecvTimeoutError::Timeout)
+                );
+                // Match backup_and_upgrade_with: stop, retire readers, then open
+                // the namespace. Leave the gap open until the waiter responds.
+                runtime.shared.views.maintenance.stop_background();
+                runtime.shared.home.invalidate_and_wait().unwrap();
+                runtime.shared.home.shutdown_reads();
+                assert_eq!(
+                    recv.recv_timeout(Duration::from_secs(5)).unwrap(),
+                    Err(if party {
+                        super::party::WRITE_FAILED
+                    } else {
+                        "Chat history could not be cleared."
+                    }
+                    .into())
+                );
+                let lease = storage::namespace_lease(root.path(), Namespace::Live).unwrap();
+                assert!(runtime.shared.views.maintenance.background_halted());
+                drop(lease);
+                runtime.shared.home.resume_reads();
+                // Exercise the actual upgrade entrypoint too (current-schema
+                // preflight needs no destructive migration).
+                runtime
+                    .backup_and_upgrade_with(
+                        &super::maintenance_tests::Space(Some(u64::MAX)),
+                        &AtomicBool::new(false),
+                    )
+                    .unwrap();
+            });
+        });
+        assert_eq!(chat_count(&path), 1);
+        assert!(maxed_store::open_reader(&path)
+            .unwrap()
+            .get_party_player("synthalpha", None)
+            .unwrap()
+            .is_none());
+    }
 }

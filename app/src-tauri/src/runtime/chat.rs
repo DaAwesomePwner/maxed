@@ -280,9 +280,26 @@ pub(super) fn history_write_lease(
     use std::time::{Duration, Instant};
     let started = Instant::now();
     let mut waited = false;
+    let service = &runtime.shared.views.maintenance;
+    // halted persists after an ordinary stop. Preserve fresh cold writes, but
+    // a command joining maintenance must not compete with its next owner.
+    let mut joined_maintenance = service.owns_stopped_namespace();
+    let attempt_lease = |joined: bool| {
+        if joined && service.background_halted() {
+            return Err(LeaseError::Contended);
+        }
+        let attempt = try_namespace_lease(root, Namespace::Live);
+        if joined && service.background_halted() {
+            // Handoff may have begun during the open. Never perform the write
+            // with a lease intended for capture or history upgrade.
+            drop(attempt);
+            return Err(LeaseError::Contended);
+        }
+        attempt
+    };
     let result = loop {
         // This also makes the final attempt after the last bounded sleep.
-        let attempt = try_namespace_lease(root, Namespace::Live);
+        let attempt = attempt_lease(joined_maintenance);
         if attempt.is_ok() {
             break attempt;
         }
@@ -291,11 +308,15 @@ pub(super) fn history_write_lease(
         if runtime.is_running() || !matches!(attempt, Err(LeaseError::Contended)) {
             break attempt;
         }
-        if !runtime.shared.views.maintenance.owns_stopped_namespace() {
+        if joined_maintenance && service.background_halted() {
+            break attempt;
+        }
+        if !service.owns_stopped_namespace() {
             // The owner may have released between the failed open and the flag
             // read. Try once more; never wait for a different owner.
-            break try_namespace_lease(root, Namespace::Live);
+            break attempt_lease(joined_maintenance);
         }
+        joined_maintenance = true;
         let remaining = timeout.saturating_sub(started.elapsed());
         if remaining.is_zero() {
             break attempt;
