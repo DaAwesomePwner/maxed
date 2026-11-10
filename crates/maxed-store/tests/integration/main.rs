@@ -121,3 +121,6 @@ use common::account_sql;
 mod account_scope_sql;
 #[path = "../account_scope_triggers.rs"]
 mod account_scope_triggers;
+
+#[path = "../crucible.rs"]
+mod crucible;

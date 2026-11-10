@@ -53,11 +53,17 @@ not delete history; active readers may keep committed pages in the WAL.
 
 ## Schema and recovery
 
-Migrations 001–019 are transactional, with their SHA-256 script checksums and `user_version`
+Migrations 001–020 are transactional, with their SHA-256 script checksums and `user_version`
 written together. Unknown existing databases, changed checksums, and future schema
 versions are rejected. Foreign keys are enabled on all connections. Readers open
 read-only and query-only, with the same bounded busy timeout, and cannot move across
 threads. Chat messages and chat alerts have the bounded retention described below; other summary history has no age-based purge.
+
+Migration 020 stores Crucible / Blood Ritual definitions as game configuration, not
+account or other-player data. IDs are 1–64 UTF-8 bytes; finite damage multipliers
+are greater than zero and at most 100. The writer keeps at most 4096 definitions,
+evicting the oldest last-observed timestamps (then IDs). First/last observations
+use integer millisecond timestamps. History clears and retention leave them intact.
 
 Migration 015 is index-only: it adds indexes for loot statistics and dry-streak
 gap reads. It does not rewrite saved fight JSON; fights recorded before the
@@ -189,6 +195,7 @@ No owner recording, client asset, gameplay, or power-loss hardware test is invol
 | 015 | `015_loot_stats_indexes.sql` | Index-only migration for loot statistics and dry-streak gaps |
 | 016 | `016_maintenance_receipts.sql` | Additive maintenance jobs, backup metadata, stream registry and binary receipts |
 | 017 | `017_accounts.sql` | Account membership, observation owners, identity spans and recovery progress |
+| 020 | `020_crucible_definitions.sql` | Bounded Crucible / Blood Ritual damage-multiplier definitions |
 
 The coordinator measured the migration 014 backfill at 0.30 s on a copy of a
 412 MB real database with 89 runs, producing 1,383 players and 2,849 member rows.
