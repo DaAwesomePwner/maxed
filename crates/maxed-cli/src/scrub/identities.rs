@@ -31,7 +31,9 @@ pub(super) fn redact(bodies: &mut [Body]) -> Result<u64, ScrubFailure> {
     }
     // Decoded notice identities join the same sorted, length-preserving namespace
     // as NAME_STAT, even if no player object (or only a later one) was observed.
-    let names = aliases(originals)?;
+    let mut names = aliases(originals)?;
+    // Empty display names are valid engine keys, including ",suffix".
+    names.insert(Vec::new(), Vec::new());
     let mut player_aliases = BTreeMap::<Vec<u8>, BTreeSet<Vec<u8>>>::new();
     for body in bodies.iter() {
         for field in body
@@ -49,6 +51,9 @@ pub(super) fn redact(bodies: &mut [Body]) -> Result<u64, ScrubFailure> {
             }
         }
     }
+    // A shared lowercase key does not imply exact death-name equality.
+    // Merging case variants would invent matches (or remove ambiguity).
+    // Refuse rather than encode source casing or split the engine's name key.
     if player_aliases.values().any(|aliases| aliases.len() != 1) {
         return refuse(ScrubReason::VerificationFailed);
     }
@@ -74,16 +79,10 @@ pub(super) fn redact(bodies: &mut [Body]) -> Result<u64, ScrubFailure> {
                     };
                     let alias = if json_identity(body, s.offset) {
                         match player_aliases.get(&key.to_ascii_lowercase()) {
-                            Some(aliases) if aliases.len() != 1 => {
-                                return refuse(ScrubReason::VerificationFailed)
-                            }
                             // Death matching is exact after suffix removal. Use the
                             // independent alias for a case-only mismatch.
                             Some(_) if field_named(body, s.offset, "deathPlayer") => names.get(key),
                             Some(aliases) => aliases.first(),
-                            None if field_named(body, s.offset, "deathPlayer") => {
-                                return refuse(ScrubReason::VerificationFailed);
-                            }
                             None => names.get(key),
                         }
                     } else {

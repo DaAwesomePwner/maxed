@@ -24,14 +24,17 @@ For PlayerDeath notifications it also keeps the exact `s.death` template:
 - Player names use the display text before the first comma. NAME_STAT and
   notice display names share a length-preserving pseudonym namespace; suffix
   contents are filled separately, preserving every comma. Suffix text is
-  treated as private, not as an allowlisted structural token.
+  treated as private, not as an allowlisted structural token. Empty display
+  parts retain an empty alias (including `,suffix` and `,`).
 - Death `player` matches NAME_STAT display names exactly, including decoded
   JSON escapes and observations later in the recording. A case-only mismatch
   gets a distinct pseudonym and remains unmatched on replay. Portal matching
   remains ASCII case-insensitive. Multiple NAME_STAT display spellings with
   the same ASCII-lowercase key refuse certification rather than merge exact
-  identities. Deaths without even a case-insensitive observed display-name
-  candidate still refuse certification.
+  identities: the engine also uses exact name equality for deaths, so one
+  shared pseudonym could invent matches or turn a unique match ambiguous.
+  Deaths with no observed display-name candidate receive independent aliases
+  and remain unmatched, just like case-only mismatches.
 - Retained fields are checked against individual display-name and suffix
   components as well as the full original identity.
 - `enemy` and `level` remain unchanged game data. Values must be bounded JSON
