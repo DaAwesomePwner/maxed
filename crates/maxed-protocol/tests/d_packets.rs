@@ -116,6 +116,13 @@ fn crucible_response_decodes_ids_and_json_strings() {
         assert_eq!(field.policy, maxed_protocol::privacy::FieldPolicy::Keep);
         assert!(field.public_literal);
     }
+    // The deepest nesting the depth limit admits is still kept.
+    let deepest = crucible_body(&[0], &[r#"{"array":[[[[[[[[]]]]]]]]}"#]);
+    let inventory = maxed_protocol::privacy::inventory(183, ServerToClient, &deepest).unwrap();
+    assert_eq!(
+        inventory.treatments[0].policy,
+        maxed_protocol::privacy::FieldPolicy::Keep
+    );
 }
 
 #[test]
@@ -155,10 +162,22 @@ fn crucible_json_outside_the_config_allowlist_is_filled() {
     let progress = CRUCIBLE_JSON.replace(r#""trials":[]"#, r#""trials":[{"progress":3}]"#);
     let escaped = CRUCIBLE_JSON.replace("Synthetic Crucible", r"Synthetic \u0043rucible");
     let extra_top = CRUCIBLE_JSON.replacen('{', r#"{"accountId":"1","#, 1);
+    // A repeated key keeps only its last value in a parsed map, so an earlier
+    // value (and its nested keys) would escape the allowlist. Any repeat fills.
+    let deep_repeat = CRUCIBLE_JSON.replace(
+        r#""stat":"VIT""#,
+        r#""stat":{"progress":"SYNTHETIC"},"stat":"VIT""#,
+    );
     for json in [
         progress.as_str(),
         escaped.as_str(),
         extra_top.as_str(),
+        r#"{"array":[{"id":"1","title":{"progress":"SYNTHETIC"},"title":"x"}]}"#,
+        r#"{"array":{"accountId":"SYNTHETIC"},"array":[]}"#,
+        r#"{"array":[],"array":[]}"#,
+        deep_repeat.as_str(),
+        r#"{"array":[{"id":"1","crucible":{"bonuses":[{"type":1,"type":1}]}}]}"#,
+        r#"{}"#,
         r#"{"array":{}}"#,
         r#"{"array":[[[[[[[[[[]]]]]]]]]]}"#,
         r#"["array"]"#,

@@ -163,7 +163,8 @@ impl<'a> Reader<'a> {
         literal: bool,
     ) -> Result<String, ProtocolError> {
         let value = self.string()?;
-        if allowed(&value) {
+        // The predicate only selects a privacy treatment; plain decoding skips it.
+        if self.privacy.is_some() && allowed(&value) {
             if let Some(inventory) = &mut self.privacy {
                 let field = inventory
                     .treatments

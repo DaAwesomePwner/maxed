@@ -118,8 +118,10 @@ retained.
   inversely paired with type 4 (0.8–1.2).
 - **Privacy:** no key carries progress or unlock state. No string contained the
   local name or account ID. The scrubber keeps a JSON string only when it parses
-  as `{"array":[...]}` with every key in the observed allowlist and contains no
-  `\u` escape; anything else is filled as unclassified. Identity and credential
+  as `{"array":[...]}` with every key in the observed allowlist, no repeated
+  key in any object and no `\u` escape; anything else is filled as
+  unclassified. A recheck with the repeated-key rule kept all 66 strings in
+  the 22 packets. Identity and credential
   collision checks still apply; player-text coincidences are listed.
 
 Unverified: that the content is the same for other accounts or regions; what
