@@ -570,6 +570,7 @@ fn every_typed_id_rejects_wrong_direction_and_arbitrary_bytes_never_panic() {
         (105, C),
         (45, S),
         (114, S),
+        (183, S),
     ] {
         let wrong = if dir == C { S } else { C };
         assert!(matches!(

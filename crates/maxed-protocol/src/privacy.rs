@@ -310,6 +310,73 @@ pub(crate) fn character_stats(value: &str) -> bool {
     decode(value).is_some()
 }
 
+/// Every object key observed in CRUCIBLE_RESPONSE JSON on the owner's recording
+/// (docs/parity/protocol-evidence.md, 2026-11-10): season crucible, weekly
+/// modifier event and Blood Ritual ladder configuration. None is per-account.
+const CRUCIBLE_CONFIG_KEYS: &[&str] = &[
+    "amount",
+    "array",
+    "bloodRitual",
+    "bonuses",
+    "chance",
+    "coverage",
+    "crucible",
+    "desc",
+    "dungeons",
+    "end",
+    "exclGrounds",
+    "exclRoomTypes",
+    "excludeLabels",
+    "fame",
+    "healMethods",
+    "id",
+    "item",
+    "jitter",
+    "labels",
+    "leavelimitation",
+    "max",
+    "min",
+    "modifierEvent",
+    "modifiers",
+    "objectIds",
+    "percent",
+    "restrictions",
+    "roomType",
+    "seasonalonly",
+    "stat",
+    "start",
+    "title",
+    "trials",
+    "type",
+    "value",
+];
+
+/// Server configuration is kept only as a `{"array":[...]}` object whose keys
+/// are all allowlisted. Any new key (for example, progress or unlock state) or
+/// `\u` escape, which could hide text from residual checks, fills the field.
+pub(crate) fn crucible_config(value: &str) -> bool {
+    use serde_json::Value;
+    fn known(value: &Value, depth: usize) -> bool {
+        match value {
+            _ if depth > 8 => false,
+            Value::Array(items) => items.iter().all(|item| known(item, depth + 1)),
+            Value::Object(fields) => fields.iter().all(|(key, item)| {
+                CRUCIBLE_CONFIG_KEYS.contains(&key.as_str()) && known(item, depth + 1)
+            }),
+            _ => true,
+        }
+    }
+    if value.contains("\\u") {
+        return false;
+    }
+    let Ok(top) = serde_json::from_str::<Value>(value) else {
+        return false;
+    };
+    top.as_object()
+        .is_some_and(|o| o.len() == 1 && o.get("array").is_some_and(Value::is_array))
+        && known(&top, 0)
+}
+
 pub(crate) fn oryx_killer_spans(text: &str) -> Option<Vec<std::ops::Range<usize>>> {
     crate::notices::parse_oryx_announcement(text).map(|notice| notice.killer_spans)
 }
