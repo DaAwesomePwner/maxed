@@ -1,5 +1,7 @@
 //! Whole-file fixture certification. No wire values are logged or serialized here.
+mod identities;
 use crate::{CliError, Pipeline};
+use identities::redact;
 use maxed_capture::parse_frame;
 use maxed_protocol::{
     decode_packet, key_bytes,
@@ -833,100 +835,6 @@ fn identity_value(body: &Body, offset: usize, len: usize) -> Result<Vec<u8>, Scr
         Ok(value.to_vec())
     }
 }
-fn redact(bodies: &mut [Body]) -> Result<u64, ScrubFailure> {
-    let mut originals = BTreeSet::new();
-    for body in bodies.iter() {
-        for s in &body.inventory.spans {
-            if s.kind == SecretKind::Identity {
-                originals.insert(identity_value(body, s.offset, s.len)?);
-            }
-        }
-    }
-    // Decoded notice identities join the same sorted, length-preserving namespace
-    // as NAME_STAT, even if no player object (or only a later one) was observed.
-    let names = aliases(originals)?;
-    let mut player_aliases = BTreeMap::<Vec<u8>, BTreeSet<Vec<u8>>>::new();
-    for body in bodies.iter() {
-        for field in body
-            .inventory
-            .treatments
-            .iter()
-            .filter(|field| field.name == "NAME_STAT" && field.policy == FieldPolicy::Pseudonym)
-        {
-            let original = &body.plain[field.offset..field.offset + field.len];
-            if let Some(alias) = names.get(original) {
-                player_aliases
-                    .entry(original.to_ascii_lowercase())
-                    .or_default()
-                    .insert(alias.clone());
-            }
-        }
-    }
-    let mut changed = 0;
-    for body in bodies {
-        if body.treatment != Treatment::Fields {
-            let prefix = alignment_prefix(body);
-            body.expected[prefix..].fill(0xff);
-            changed += u64::from(prefix < body.plain.len());
-            continue;
-        }
-        for s in &body.inventory.spans {
-            if s.len == 0 {
-                continue;
-            }
-            let replacement = match s.kind {
-                SecretKind::Identity => {
-                    let identity = identity_value(body, s.offset, s.len)?;
-                    let alias = if json_identity(body, s.offset) {
-                        // Own-pop suppression compares ASCII case-insensitively. A
-                        // unique observed player alias preserves that comparison;
-                        // conflicting NAME_STAT spellings cannot be certified.
-                        match player_aliases.get(&identity.to_ascii_lowercase()) {
-                            Some(aliases) if aliases.len() != 1 => {
-                                return refuse(ScrubReason::VerificationFailed)
-                            }
-                            Some(aliases) => aliases.first(),
-                            None if body.inventory.treatments.iter().any(|field| {
-                                field.offset == s.offset && field.name == "deathPlayer"
-                            }) =>
-                            {
-                                // A death must identify an observed player; invented
-                                // aliases would silently lose departure cancellation.
-                                return refuse(ScrubReason::VerificationFailed);
-                            }
-                            None => names.get(&identity),
-                        }
-                    } else {
-                        names.get(&identity)
-                    }
-                    .ok_or(maxed_protocol::ProtocolError::Definition)?;
-                    if json_identity(body, s.offset) {
-                        let mut encoded = serde_json::to_vec(
-                            std::str::from_utf8(alias)
-                                .map_err(|_| maxed_protocol::ProtocolError::Definition)?,
-                        )
-                        .map_err(|_| maxed_protocol::ProtocolError::Definition)?;
-                        if encoded.len() > s.len {
-                            return refuse(ScrubReason::VerificationFailed);
-                        }
-                        encoded.resize(s.len, b' ');
-                        encoded
-                    } else {
-                        alias.clone()
-                    }
-                }
-                _ if body.inventory.binary.contains(&s.offset) => {
-                    vec![0; s.len]
-                }
-                _ => vec![b'x'; s.len],
-            };
-            // Already-filler input is safe: verification checks replacement provenance.
-            body.expected[s.offset..s.offset + s.len].copy_from_slice(&replacement);
-            changed += 1;
-        }
-    }
-    Ok(changed)
-}
 fn patch(
     frames: &mut [RawFrame],
     generations: &[Generation],
@@ -1177,6 +1085,15 @@ fn verify(
     // KILLER is an identity even when JSON escapes conceal its wire spelling.
     // Retained announcement keys must be checked against the decoded value too.
     for p in plans {
+        for field in p.inventory.treatments.iter().filter(|f| {
+            f.name == "NAME_STAT" && f.policy == FieldPolicy::Pseudonym
+                || matches!(f.name, "portalPlayer" | "deathPlayer")
+        }) {
+            let identity = identity_value(p, field.offset, field.len)?;
+            for component in identity.split(|b| *b == b',').filter(|s| !s.is_empty()) {
+                secrets.insert((SecretClass::Identity, component.to_vec()));
+            }
+        }
         for field in p
             .inventory
             .treatments
@@ -1573,6 +1490,7 @@ fn scrub_inner(
     schema.update(include_bytes!("../../maxed-protocol/src/privacy.rs"));
     schema.update(include_bytes!("../../maxed-protocol/src/notices.rs"));
     schema.update(include_bytes!("scrub.rs"));
+    schema.update(include_bytes!("scrub/identities.rs"));
     let profile_hash = maxed_protocol::lower_hex(&schema.finalize());
     let (mut meta, mut file) = create_private(staging, "meta.json")?;
     serde_json::to_writer(&mut file,&serde_json::json!({"schemaProfileSha256":profile_hash,"inputSha256":input_hash,"outputSha256":output_hash,"version":env!("CARGO_PKG_VERSION"),"frames":frames.len(),"packets":plans.len(),"changedSpans":changed_spans,"filledUnclassified":diagnostics.field_count("filled-unclassified"),"pseudonymized":diagnostics.field_count("pseudonymized"),"keptAllowlisted":diagnostics.field_count("kept-allowlisted"),"verified":true,"allowUndecodable":options.allow_undecodable,"provisional":diagnostics.count(ScrubReason::UndecodableTyped)>0,"remakeAfterP1UpdateLayoutFix":diagnostics.count(ScrubReason::UndecodableTyped)>0,"coverage":diagnostics.rows()})).map_err(|_|CliError::InvalidArguments)?;

@@ -21,9 +21,19 @@ decode JSON structure and have no equivalent escaped-key acceptance path.
 
 For PlayerDeath notifications it also keeps the exact `s.death` template:
 
-- `player` receives the unique case-insensitive NAME_STAT pseudonym, including
-  escaped spellings and NAME_STAT observations later in the recording. No
-  mapping or ambiguous mappings refuse certification; no victim is invented.
+- Player names use the display text before the first comma. NAME_STAT and
+  notice display names share a length-preserving pseudonym namespace; suffix
+  contents are filled separately, preserving every comma. Suffix text is
+  treated as private, not as an allowlisted structural token.
+- Death `player` matches NAME_STAT display names exactly, including decoded
+  JSON escapes and observations later in the recording. A case-only mismatch
+  gets a distinct pseudonym and remains unmatched on replay. Portal matching
+  remains ASCII case-insensitive. Multiple NAME_STAT display spellings with
+  the same ASCII-lowercase key refuse certification rather than merge exact
+  identities. Deaths without even a case-insensitive observed display-name
+  candidate still refuse certification.
+- Retained fields are checked against individual display-name and suffix
+  components as well as the full original identity.
 - `enemy` and `level` remain unchanged game data. Values must be bounded JSON
   strings; level must contain unsigned decimal digits fitting `u16`.
 - Unknown, missing, duplicate or extra fields, wrong value types and malformed
@@ -79,7 +89,7 @@ opaque-data coincidence rule, not a decoded item schema or publication approval.
 ## Profile and existing fixtures
 
 The profile SHA-256 already covers `defs.rs`, `reader.rs`, `privacy.rs`,
-`notices.rs` and `scrub.rs`; changing the grammar or boundary rule changes the hash
+`notices.rs`, `scrub.rs` and `scrub/identities.rs`; changing these rules changes the hash
 automatically. The scrub tests verify newly written metadata against those
 sources. The metadata/source hash equality test is the current profile guard.
 Committed fixture replay tests do not require existing captures to match
