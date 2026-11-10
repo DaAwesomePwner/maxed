@@ -16,7 +16,9 @@ pub(crate) struct Definitions {
 
 impl Definitions {
     fn insert(&mut self, def: CrucibleDef, learned: bool) {
-        if def.id.len() > MAX_JSON_BYTES
+        // Match the persisted definition ID bound (64 UTF-8 bytes).
+        if def.id.is_empty()
+            || def.id.len() > 64
             || !def.damage_multiplier.is_finite()
             || def.damage_multiplier <= 0.
             || def.damage_multiplier > 100.

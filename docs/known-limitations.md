@@ -236,3 +236,9 @@ discards pending holes without marking coverage loss. Malformed frames with insu
 identity retain global invalidation so every candidate stream reports possible
 loss. Frames with readable addresses and ports affect only that active flow/direction;
 inactive, unopened or closed recipients fall back to global invalidation.
+
+Crucible definition evidence comes from one account and one recording. Blood
+Ritual (stat 155) ID matching remains unverified because it was never active in
+that recording. Bonus type 5 as damage dealt follows RealmShark and has not yet
+been checked against observed damage. Fights stored before this fix stay as
+recorded. This does not establish live Windows behavior.

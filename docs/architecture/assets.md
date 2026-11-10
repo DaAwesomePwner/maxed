@@ -87,7 +87,8 @@ Unavailable data stays unavailable:
 - Enchant IDs are data, not rarity. Reviewed bag rules supply ranks (white is
   255); excluded soulbound bags have no rank. Enum declaration order is not used as rarity evidence.
 - This client supplies no supported local crucible damage-multiplier definitions;
-  `crucible_bonuses` is empty, not a fabricated multiplier of one.
+  `crucible_bonuses` is empty, not a fabricated multiplier of one. Packet 183
+  supplies learned definitions, persisted separately for live capture.
 
 ## Character metadata: Gate X (2026-10-17)
 

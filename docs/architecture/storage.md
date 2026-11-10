@@ -415,3 +415,13 @@ Stats deaths use their explicit character, falling back to the run's character;
 death-only and drop-only activity keeps character-filtered sessions eligible.
 
 The shell exposes **Retry saving** for failed storage with queued summaries or a start refused because summaries are pending. Storage-open failures with no queued summaries direct the user to use **Start Capture** instead. Retry is a no-op when nothing needs recovery; otherwise it first retires the capture owner, then retries and closes the retained writer in original order. It never replaces pending summaries with a new capture stream. A successful retry clears the exit warning and allows capture to start again. Unsaved close offers an explicit discard action that preserves committed history; cancelling or repeating close with healthy presentation retains pending memory. During presentation delivery failure only, a native title warning accepts a later close as discard confirmation only between two and sixty seconds after the warning. Earlier or expired closes only re-warn and renew the interval, without stopping updates or capture. A valid confirmation first calls `retry_store` to retry and close the retained writer; `shutdown` alone cannot recover that writer. A successful retry proceeds to shutdown without discard, even if presentation still fails. Discard is allowed only if the storage retry fails with summaries still pending and the native confirmation remains current. Resubscription clears native confirmation and restores the normal unsaved title.
+
+Live capture loads saved Crucible/Blood Ritual definitions off the UI thread at
+open, after normal writer migration and under the namespace lease, before any
+packets. The read does not migrate or recover and errors use an empty seed. Newly
+learned packet-183 definitions use a best-effort bounded writer command with the
+batch timestamp and its own transaction. Queue-full or write failures log without
+failing event batches. Accepted commands precede subsequent flush/shutdown. The
+adapter retries on later drains after rejection or write failure, with at most
+4096 pending IDs and the latest multiplier retained. Pending saves are volatile.
+Replay/demo learn only in-stream and neither read nor write live definitions.

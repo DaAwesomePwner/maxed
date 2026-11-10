@@ -63,17 +63,29 @@ pub fn upsert_crucible_definitions(
         tx.execute(
             "INSERT INTO crucible_definitions VALUES(?1,?2,?3,?3)
              ON CONFLICT(id) DO UPDATE SET damage_multiplier=excluded.damage_multiplier,
-             last_observed_at=excluded.last_observed_at",
+             last_observed_at=max(crucible_definitions.last_observed_at,excluded.last_observed_at)",
             params![def.id, def.damage_multiplier, at],
-        )?;
-        tx.execute(
-            "DELETE FROM crucible_definitions WHERE id IN (
-             SELECT id FROM crucible_definitions ORDER BY last_observed_at,id
-             LIMIT max(0,(SELECT count(*) FROM crucible_definitions)-4096))",
-            [],
         )?;
         written += 1;
     }
+    tx.execute(
+        "DELETE FROM crucible_definitions WHERE id IN (
+         SELECT id FROM crucible_definitions ORDER BY last_observed_at,id
+         LIMIT max(0,(SELECT count(*) FROM crucible_definitions)-4096))",
+        [],
+    )?;
     tx.commit()?;
     Ok(written)
+}
+
+impl crate::StoreReader {
+    /// Best-effort startup configuration read, without migration, recovery or
+    /// waiting for SQLite locks. Usable before the current schema is installed.
+    pub fn read_crucible_definitions_file(
+        path: &std::path::Path,
+    ) -> Result<Vec<CrucibleDef>, StoreError> {
+        let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        conn.busy_timeout(std::time::Duration::ZERO)?;
+        read_crucible_definitions(&conn)
+    }
 }

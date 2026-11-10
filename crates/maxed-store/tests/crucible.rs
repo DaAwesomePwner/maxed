@@ -166,3 +166,51 @@ fn chat_retention_and_party_clears_preserve_configuration() {
     crate::common::installed_schema::assert_integrity(&db);
     assert_eq!(read(&db).unwrap(), vec![def("saved", 1.5)]);
 }
+
+#[test]
+fn observation_clock_never_moves_backwards() {
+    let mut db = db();
+    write(&mut db, &[def("saved", 1.)], Timestamp(20)).unwrap();
+    write(&mut db, &[def("saved", 2.)], Timestamp(10)).unwrap();
+    let at: i64 = db
+        .query_row(
+            "SELECT last_observed_at FROM crucible_definitions",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(at, 20);
+    assert_eq!(read(&db).unwrap(), vec![def("saved", 2.)]);
+}
+
+#[test]
+fn writer_definitions_flush_shutdown_and_failure_are_independent_of_events() {
+    use maxed_store::{start_writer, WriterConfig};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("db");
+    let writer = start_writer(path.clone(), WriterConfig::default()).unwrap();
+    let saved = writer
+        .try_save_crucible_definitions(vec![def("saved", 1.5)], Timestamp(10))
+        .unwrap();
+    writer.flush().unwrap();
+    let db = Connection::open(&path).unwrap();
+    assert_eq!(read(&db).unwrap(), vec![def("saved", 1.5)]);
+    db.execute_batch("CREATE TRIGGER fail_crucible BEFORE INSERT ON crucible_definitions BEGIN SELECT RAISE(ABORT,'synthetic'); END;").unwrap();
+    let failed = writer
+        .try_save_crucible_definitions(vec![def("failed", 2.)], Timestamp(20))
+        .unwrap();
+    writer.flush().unwrap();
+    assert!(saved.try_recv().unwrap());
+    assert!(!failed.try_recv().unwrap());
+    assert_eq!(writer.status().state, maxed_types::StoreState::Ready);
+    db.execute_batch("DROP TRIGGER fail_crucible").unwrap();
+    let saved = writer
+        .try_save_crucible_definitions(vec![def("shutdown", 1.)], Timestamp(30))
+        .unwrap();
+    writer.shutdown().unwrap();
+    assert!(saved.try_recv().unwrap());
+    assert_eq!(
+        read(&db).unwrap(),
+        vec![def("saved", 1.5), def("shutdown", 1.)]
+    );
+}
