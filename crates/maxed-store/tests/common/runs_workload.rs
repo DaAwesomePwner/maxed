@@ -630,7 +630,7 @@ impl Fixture {
         let completed_at = START + 4_000_000;
         match label {
             "story" => vec![
-                format!("SELECT length(CAST(json AS BLOB)),json,length(CAST(entry_character_json AS BLOB)),entry_character_json FROM runs WHERE id='{RUN}'"),
+                format!("SELECT length(CAST(json AS BLOB)),json,length(CAST(entry_character_json AS BLOB)),entry_character_json,(SELECT account_id FROM characters WHERE characters.id=runs.character_id) FROM runs WHERE id='{RUN}'"),
                 format!("SELECT length(CAST(json AS BLOB)),json FROM fight_summaries WHERE run_id='{RUN}' ORDER BY started,fight_id LIMIT 12001"),
                 format!("SELECT length(CAST(json AS BLOB)),json FROM drops WHERE run_id='{RUN}' ORDER BY at,id LIMIT 2001"),
                 format!("SELECT length(CAST(id AS BLOB))+coalesce(length(CAST(related_id AS BLOB)),0)+length(CAST(explanation AS BLOB))+length(CAST(kind AS BLOB)),id,at,kind,related_id,explanation FROM timeline WHERE run_id='{RUN}' AND (kind!='player_left' OR {completed_at} IS NULL OR at<{completed_at}) ORDER BY at,id LIMIT 20001"),
