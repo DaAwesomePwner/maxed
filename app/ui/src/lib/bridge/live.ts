@@ -1,4 +1,4 @@
-import { LIVE_SUBSCRIPTION_LOST, queryOwnedStore } from './subscription-health';
+import { LIVE_SUBSCRIPTION_LOST, queryOwnedStore, releaseOwnedPayloads } from './subscription-health';
 import { EVENT_BATCH_LIMIT as BATCH_LIMIT } from '../bindings/limits';
 import type { CaptureStatus } from '../bindings/CaptureStatus';
 import type { EventBatch } from '../bindings/EventBatch';
@@ -187,7 +187,14 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
       }
     }).catch((error: unknown) => {
       if (disposed || token !== generation || expected !== stream) return;
-      if (error === LIVE_SUBSCRIPTION_LOST) { releaseListeners(); fail(); return; }
+      if (error === LIVE_SUBSCRIPTION_LOST) {
+        releases = releaseOwnedPayloads(releases);
+        // Keep the registration epoch active for capture/visibility callbacks.
+        // A later lifecycle transition still needs a fresh pair of channels.
+        registered = false;
+        fail();
+        return;
+      }
       historyFailed = true;
       stale(durableTarget);
     }).finally(() => {

@@ -19,3 +19,12 @@ export function queryOwnedStore(releases: readonly Release[], fallback: () => Pr
   const owned = releases.flatMap(release => release[lease] ? [release[lease]] : []);
   return owned.length ? owned[0].query(owned.map(value => value.id)) : fallback();
 }
+
+/** Stop payload traffic without removing capture or visibility listeners. */
+export function releaseOwnedPayloads(releases: readonly Release[]): Release[] {
+  return releases.filter(release => {
+    if (!release[lease]) return true;
+    release();
+    return false;
+  });
+}

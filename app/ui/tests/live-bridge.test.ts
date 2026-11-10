@@ -520,3 +520,48 @@ test('lost subscription ownership leaves live despite healthy snapshots and reco
   h.transport.publishEngineEvent(event('31'));
   expect(h.events.at(-1)?.sequence).toBe('31');
 });
+
+test.each(['reconnect', 'dispose'] as const)('LOST preserves capture and visibility until %s, releasing every handle once', async action => {
+  vi.useFakeTimers();
+  const { LIVE_SUBSCRIPTION_LOST, withSubscriptionHealth } = await import('../src/lib/bridge/subscription-health');
+  const { isPresentationVisible } = await import('../src/lib/bridge/visibility');
+  const health = vi.fn(async () => store());
+  const handles: { topic: string; release: ReturnType<typeof vi.fn> }[] = [];
+  const handle = (topic: string, leased = false) => {
+    const release = vi.fn(); handles.push({ topic, release });
+    return leased ? withSubscriptionHealth(release, handles.length, health) : release;
+  };
+  let capture!: (value: CaptureStatus) => void;
+  let visible!: (value: boolean) => void;
+  const h = setup({
+    onSnapshot: async () => handle('snapshot', true),
+    onEngineEvent: async () => handle('event', true),
+    onCapture: async receive => { capture = receive; return handle('capture'); },
+    onPresentationVisible: async receive => { visible = receive; return handle('visibility'); },
+  });
+  await settle();
+  health.mockRejectedValueOnce(LIVE_SUBSCRIPTION_LOST);
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(h.states.at(-1)?.phase).toBe('failed');
+  expect(handles.map(row => row.release.mock.calls.length)).toEqual([1, 1, 0, 0]);
+  const failed: CaptureStatus = { ...fixture.capture, state: 'Failed', message: 'Synthetic capture failure' };
+  capture(failed);
+  expect(h.captures.at(-1)).toEqual(failed);
+  visible(false); expect(isPresentationVisible()).toBe(false);
+  visible(true); expect(isPresentationVisible()).toBe(true);
+  expect(h.states.at(-1)?.phase).toBe('failed');
+  const oldCapture = capture, oldVisible = visible;
+  h.control[action](); await settle();
+  expect(handles.slice(0, 4).map(row => row.release.mock.calls.length)).toEqual([1, 1, 1, 1]);
+  if (action === 'reconnect') {
+    expect(handles).toHaveLength(8);
+    expect(handles.slice(4).map(row => row.release.mock.calls.length)).toEqual([0, 0, 0, 0]);
+    expect(h.states.at(-1)?.phase).toBe('live');
+  }
+  const captures = h.captures.length;
+  oldCapture(failed); oldVisible(false);
+  expect(h.captures).toHaveLength(captures);
+  expect(isPresentationVisible()).toBe(true);
+  h.control.dispose(); h.control.dispose();
+  expect(handles.every(row => row.release.mock.calls.length === 1)).toBe(true);
+});

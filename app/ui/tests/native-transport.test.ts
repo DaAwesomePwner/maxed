@@ -20,6 +20,7 @@ import Shell from '../src/lib/shell/Shell.svelte';
 import PartyLive from '../src/lib/party/PartyLive.svelte';
 import { fakeHistory } from './navigation/fake-history';
 import { run } from './runs/fixtures';
+import { isPresentationVisible, setNativePresentationVisible } from '../src/lib/bridge/visibility';
 
 test.each(['live-snapshot', 'party-changed'] as const)('native %s subscriptions decode byte channels and release native ownership', async event => {
   let channel!: { onmessage(value: ArrayBuffer): void };
@@ -215,6 +216,19 @@ test('after live ownership loss Shell can retry saving and Party can read durabl
     for (const row of owned) {
       expect(mocks.invoke.mock.calls.filter(([command, args]) => command === 'unsubscribe_live_payload' && args.id === row.id)).toHaveLength(1);
     }
+    expect(listeners.get('capture-status')?.size).toBe(1);
+    expect(listeners.get('presentation-visible')?.size).toBe(1);
+    for (const receive of listeners.get('capture-status') ?? []) {
+      receive({ payload: { ...fixture.capture, state: 'Failed', message: 'Synthetic capture stopped after loss' } });
+    }
+    await flush();
+    expect(screen.getByRole('button', { name: 'Retry Capture' })).toBeTruthy();
+    for (const receive of listeners.get('presentation-visible') ?? []) receive({ payload: false });
+    await flush();
+    expect(isPresentationVisible()).toBe(false);
+    for (const receive of listeners.get('presentation-visible') ?? []) receive({ payload: true });
+    await flush();
+    expect(isPresentationVisible()).toBe(true);
     // Stale callbacks from released channels cannot revive the failed owner.
     send(owned.find(row => row.event === 'live-snapshot')!, { ...fixture, sequence: '99' });
     await flush();
@@ -245,5 +259,5 @@ test('after live ownership loss Shell can retry saving and Party can read durabl
     for (const row of owned) {
       expect(mocks.invoke.mock.calls.filter(([command, args]) => command === 'unsubscribe_live_payload' && args.id === row.id)).toHaveLength(1);
     }
-  } finally { party?.unmount(); shell.unmount(); vi.useRealTimers(); }
+  } finally { party?.unmount(); shell.unmount(); setNativePresentationVisible(true); vi.useRealTimers(); }
 });
