@@ -314,7 +314,7 @@ pub(super) fn history_write_lease(
         if !service.owns_stopped_namespace() {
             // The owner may have released between the failed open and the flag
             // read. Try once more; never wait for a different owner.
-            break attempt_lease(joined_maintenance);
+            break attempt_lease(true);
         }
         joined_maintenance = true;
         let remaining = timeout.saturating_sub(started.elapsed());

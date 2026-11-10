@@ -1121,7 +1121,10 @@ pub(super) fn with_stopped_maintenance(
     maxed_store::migrate(&mut db).unwrap();
     drop(db);
     let service = &runtime.shared.views.maintenance;
-    service.set_environment(Arc::new(super::maintenance_tests::Space(Some(u64::MAX))));
+    // Refuse backup admission deterministically after the gate opens. This
+    // lets the real owner retire normally without copy retries, checkpoints or
+    // reader contention making the lease-release tests depend on backup timing.
+    service.set_environment(Arc::new(super::maintenance_tests::Space(None)));
     let mut gate = Some(service.estimate_gate.lock().unwrap());
     std::thread::scope(|scope| {
         let command = scope.spawn(|| runtime.compact_storage());
@@ -1286,4 +1289,58 @@ fn history_writes_yield_to_upgrade_handoff_before_upgrade_takes_the_lease() {
             .unwrap()
             .is_none());
     }
+}
+
+#[test]
+fn chat_clear_queues_after_capture_installs_session_during_handoff() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("live.sqlite3");
+    seed_chat(&path, 1, chat::wall_now());
+    let runtime = Arc::new(CaptureRuntime::default());
+    runtime.initialize_home(root.path().into()).unwrap();
+    tauri::async_runtime::block_on(runtime.ensure_history_ready()).unwrap();
+    with_stopped_maintenance(&runtime, |_finish| {
+        std::thread::scope(|scope| {
+            let (send, recv) = bounded(1);
+            let runtime = &runtime;
+            scope.spawn(move || {
+                send.send(runtime.clear_chat_history_with_timeout(Duration::from_secs(5)))
+                    .unwrap();
+            });
+            assert_eq!(
+                recv.recv_timeout(Duration::from_millis(50)),
+                Err(crossbeam_channel::RecvTimeoutError::Timeout)
+            );
+
+            // launch holds this lock across spawning the open_home worker and
+            // installing Session. is_running cannot observe the handoff gap.
+            let mut session = runtime.session.lock().unwrap();
+            let options = RuntimeOptions::live(root.path().into(), None);
+            let mut adapter = runtime
+                .shared
+                .open_home(&options, &AtomicBool::new(false), Bridge::default(), None)
+                .unwrap();
+            let (stop, stopped) = bounded(1);
+            *session = Some(Session {
+                stop,
+                cancel: Arc::new(AtomicBool::new(false)),
+                worker: std::thread::spawn(move || {
+                    let _ = stopped.recv();
+                }),
+                sink: Arc::new(|_| {}),
+            });
+            drop(session);
+
+            wait_for_chat_clear(runtime);
+            assert!(
+                recv.try_recv().is_err(),
+                "the adapter has not drained the request"
+            );
+            adapter.drain().unwrap();
+            recv.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+            adapter.close().unwrap();
+        });
+    });
+    assert_eq!(chat_count(&path), 0);
+    assert!(runtime.shared.views.chat_clear.lock().unwrap().is_none());
 }
