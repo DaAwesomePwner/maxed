@@ -494,3 +494,29 @@ test('visibility restore rejects an older revision at the same watermark', async
   h.transport.publishSnapshotUpdate({ ...initial, revision: '101', map: 'fresh' });
   expect(h.seen.at(-1)?.map).toBe('fresh');
 });
+
+test('lost subscription ownership leaves live despite healthy snapshots and reconnects with a baseline', async () => {
+  vi.useFakeTimers();
+  const { LIVE_SUBSCRIPTION_LOST } = await import('../src/lib/bridge/subscription-health');
+  const queryStore = vi.fn(async () => store());
+  const h = setup({ queryStore });
+  await settle();
+  expect(h.states.at(-1)?.phase).toBe('live');
+  queryStore.mockRejectedValueOnce(LIVE_SUBSCRIPTION_LOST);
+  h.transport.publishSnapshot(snapshot('20'));
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(h.states.at(-1)).toMatchObject({ phase: 'failed', message: 'Disconnected. Reconnect.' });
+  h.transport.publishSnapshot(snapshot('30'));
+  expect(h.states.at(-1)?.phase).toBe('failed');
+  const polls = queryStore.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(queryStore).toHaveBeenCalledTimes(polls);
+  const onEngineEvent = vi.spyOn(h.client, 'onEngineEvent');
+  h.control.reconnect();
+  await settle();
+  expect(onEngineEvent).toHaveBeenCalledOnce();
+  expect(h.states.at(-1)?.phase).toBe('live');
+  expect(h.seen.at(-1)?.sequence).toBe('30');
+  h.transport.publishEngineEvent(event('31'));
+  expect(h.events.at(-1)?.sequence).toBe('31');
+});

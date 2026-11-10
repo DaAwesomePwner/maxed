@@ -12,9 +12,14 @@ function decodePayload<T>(payload: T | string): T {
   catch { throw new Error('Live payload could not be decoded'); }
 }
 
+// Track only the subscriptions required by the ordered live owner.
+const liveSubscriptions = new Set<number>();
+
 // The native command boundary returns generated DTOs, without fixture imports.
 export const nativeTransport: Transport = {
-  invoke: (command, args) => invoke(command, args),
+  invoke: (command, args) => invoke(command,
+    command === 'get_store_status' && liveSubscriptions.size
+      ? { ...args, subscriptionIds: [...liveSubscriptions] } : args),
   listen: async <K extends keyof Events>(event: K, receive: (payload: Events[K]) => void) => {
     let active = true;
     // Typed events support capture status and the perf-only original publisher.
@@ -30,7 +35,9 @@ export const nativeTransport: Transport = {
     };
     try {
       const id = await invoke<number>('subscribe_live_payload', { event, channel });
+      if (event === 'engine-event' || event === 'live-snapshot') liveSubscriptions.add(id);
       return () => {
+        liveSubscriptions.delete(id);
         active = false;
         release();
         void invoke('unsubscribe_live_payload', { id }).catch(() => {});
