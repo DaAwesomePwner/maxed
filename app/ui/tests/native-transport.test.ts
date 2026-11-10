@@ -4,7 +4,7 @@ import type { CharacterValue } from '../src/lib/bindings/CharacterValue';
 import { expect, test, vi } from 'vitest';
 import fixture from './fixtures/t0-live';
 import type { LiveSnapshot } from '../src/lib/bindings/LiveSnapshot';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import App from '../src/App.svelte';
 import { createFixtureTransport } from '../src/lib/bridge/fixture';
 import { flushHomeRender } from './home/shell-fixture';
@@ -14,6 +14,12 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke, Channel: class { 
 vi.mock('@tauri-apps/api/event', () => ({ listen: mocks.listen }));
 import { readFileSync } from 'node:fs';
 import { LIVE_PAYLOAD_EVENTS, nativeTransport } from '../src/lib/bridge/native';
+import { LIVE_SUBSCRIPTION_LOST, queryOwnedStore } from '../src/lib/bridge/subscription-health';
+import { createClient } from '../src/lib/bridge/client';
+import Shell from '../src/lib/shell/Shell.svelte';
+import PartyLive from '../src/lib/party/PartyLive.svelte';
+import { fakeHistory } from './navigation/fake-history';
+import { run } from './runs/fixtures';
 
 test.each(['live-snapshot', 'party-changed'] as const)('native %s subscriptions decode byte channels and release native ownership', async event => {
   let channel!: { onmessage(value: ArrayBuffer): void };
@@ -139,7 +145,7 @@ test('channel subscriptions match the native subscribe allowlist', () => {
   expect([...LIVE_PAYLOAD_EVENTS].sort()).toEqual(nativeEvents);
 });
 
-test('existing store polls carry active live ownership IDs and preserve the loss code', async () => {
+test('only owner health polls carry their handles, excluding fallback subscribers', async () => {
   const { LIVE_SUBSCRIPTION_LOST } = await import('../src/lib/bridge/subscription-health');
   mocks.invoke.mockReset();
   mocks.listen.mockResolvedValue(() => {});
@@ -148,17 +154,96 @@ test('existing store polls carry active live ownership IDs and preserve the loss
   const snapshotStop = await nativeTransport.listen('live-snapshot', () => {});
   const eventStop = await nativeTransport.listen('engine-event', () => {});
   const partyStop = await nativeTransport.listen('party-changed', () => {});
+  const fallbackStop = await nativeTransport.listen('engine-event', () => {});
+  const ordinary = () => nativeTransport.invoke('get_store_status', undefined);
   try {
-    await nativeTransport.invoke('get_store_status', undefined);
+    await ordinary();
+    expect(mocks.invoke).toHaveBeenLastCalledWith('get_store_status', undefined);
+    await queryOwnedStore([snapshotStop, eventStop], ordinary);
     expect(mocks.invoke).toHaveBeenLastCalledWith('get_store_status', { subscriptionIds: [100, 101] });
     mocks.invoke.mockRejectedValueOnce(LIVE_SUBSCRIPTION_LOST);
-    await expect(nativeTransport.invoke('get_store_status', undefined)).rejects.toBe(LIVE_SUBSCRIPTION_LOST);
+    await expect(queryOwnedStore([snapshotStop, eventStop], ordinary)).rejects.toBe(LIVE_SUBSCRIPTION_LOST);
     snapshotStop();
-    await nativeTransport.invoke('get_store_status', undefined);
+    await queryOwnedStore([eventStop], ordinary);
     expect(mocks.invoke).toHaveBeenLastCalledWith('get_store_status', { subscriptionIds: [101] });
-  } finally { snapshotStop(); eventStop(); partyStop(); }
+  } finally { snapshotStop(); eventStop(); partyStop(); fallbackStop(); }
   await nativeTransport.invoke('get_store_status', undefined);
   expect(mocks.invoke).toHaveBeenLastCalledWith('get_store_status', undefined);
   const rust = readFileSync('../src-tauri/src/bridge/channels.rs', 'utf8');
   expect(rust).toContain(`pub const LIVE_SUBSCRIPTION_LOST: &str = "${LIVE_SUBSCRIPTION_LOST}";`);
+});
+
+
+test('after live ownership loss Shell can retry saving and Party can read durable history', async () => {
+  vi.useFakeTimers();
+  const transport = createFixtureTransport(structuredClone(fixture));
+  const channels: { event: string; id: number; channel: { onmessage(value: ArrayBuffer): void } }[] = [];
+  const listeners = new Map<string, Set<(message: { payload: unknown }) => void>>();
+  let lost = false, storageFailed = true;
+  mocks.listen.mockImplementation(async (event, receive) => {
+    const rows = listeners.get(event) ?? new Set(); rows.add(receive); listeners.set(event, rows);
+    return () => rows.delete(receive);
+  });
+  mocks.invoke.mockReset();
+  mocks.invoke.mockImplementation(async (command, args) => {
+    if (command === 'subscribe_live_payload') {
+      const id = channels.length + 1; channels.push({ ...args, id }); return id;
+    }
+    if (command === 'unsubscribe_live_payload') return;
+    if (command === 'retry_store') { storageFailed = false; return; }
+    if (command === 'get_store_status') {
+      if (lost && args?.subscriptionIds) throw LIVE_SUBSCRIPTION_LOST;
+      return { state: storageFailed ? 'failed' : 'ready', queued: storageFailed ? 1 : 0,
+        durable: '100', stream_id: fixture.stream_id, message: '' };
+    }
+    if (command === 'get_party_run') return { status: 'ready', value: null };
+    return transport.invoke(command, args);
+  });
+  const client = createClient(nativeTransport);
+  const shell = render(Shell, { client, historyAdapter: fakeHistory('#/').adapter });
+  let party: ReturnType<typeof render> | undefined;
+  const flush = async () => { for (let i = 0; i < 5; i++) await flushHomeRender(); };
+  const send = (channel: typeof channels[number], value: unknown) =>
+    channel.channel.onmessage(new TextEncoder().encode(JSON.stringify(value)).buffer);
+  try {
+    await flush();
+    expect(screen.getByRole('button', { name: 'Retry saving' })).toBeTruthy();
+    const owned = channels.filter(row => row.event === 'engine-event' || row.event === 'live-snapshot');
+    lost = true;
+    await vi.advanceTimersByTimeAsync(1000); await flush();
+    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy();
+    for (const row of owned) {
+      expect(mocks.invoke.mock.calls.filter(([command, args]) => command === 'unsubscribe_live_payload' && args.id === row.id)).toHaveLength(1);
+    }
+    // Stale callbacks from released channels cannot revive the failed owner.
+    send(owned.find(row => row.event === 'live-snapshot')!, { ...fixture, sequence: '99' });
+    await flush();
+    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry saving' })); await flush();
+    expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull();
+    expect(screen.queryByText('Couldn’t save. Retry saving.')).toBeNull();
+    expect(mocks.invoke).toHaveBeenCalledWith('retry_store', undefined);
+    expect(mocks.invoke.mock.calls.filter(([command]) => command === 'get_store_status').at(-1))
+      .toEqual(['get_store_status', undefined]);
+
+    party = render(PartyLive, { client, runId: 'synth-run' }); await flush();
+    const fallback = channels.at(-1)!;
+    expect(fallback.event).toBe('engine-event');
+    const beforePartyRead = mocks.invoke.mock.calls.length;
+    send(fallback, { stream_id: fixture.stream_id, sequence: '30', at: '1', event: { run_ended: run({ id: 'synth-run' }) } });
+    await vi.advanceTimersByTimeAsync(1000); await flush();
+    expect(mocks.invoke.mock.calls.slice(beforePartyRead)).toContainEqual(['get_store_status', undefined]);
+    expect(mocks.invoke).toHaveBeenCalledWith('get_party_run', { runId: 'synth-run' });
+    expect(screen.queryByText('Could not load party.')).toBeNull();
+    lost = false;
+    await fireEvent.click(screen.getByRole('button', { name: 'Reconnect' })); await flush();
+    const renewed = channels.slice(channels.indexOf(fallback) + 1)
+      .filter(row => row.event === 'engine-event' || row.event === 'live-snapshot');
+    expect(renewed).toHaveLength(2);
+    expect(mocks.invoke).toHaveBeenCalledWith('get_store_status', { subscriptionIds: renewed.map(row => row.id) });
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull();
+    for (const row of owned) {
+      expect(mocks.invoke.mock.calls.filter(([command, args]) => command === 'unsubscribe_live_payload' && args.id === row.id)).toHaveLength(1);
+    }
+  } finally { party?.unmount(); shell.unmount(); vi.useRealTimers(); }
 });
