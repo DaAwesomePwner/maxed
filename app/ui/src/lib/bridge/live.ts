@@ -1,4 +1,4 @@
-import { LIVE_SUBSCRIPTION_LOST } from './subscription-health';
+import { LIVE_SUBSCRIPTION_LOST, queryOwnedStore, releaseOwnedPayloads } from './subscription-health';
 import { EVENT_BATCH_LIMIT as BATCH_LIMIT } from '../bindings/limits';
 import type { CaptureStatus } from '../bindings/CaptureStatus';
 import type { EventBatch } from '../bindings/EventBatch';
@@ -168,7 +168,7 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
     if (disposed || !visible || transitioning || !registered || stream === undefined || storeRunning || storeTimer || phase === 'failed') return;
     const token = generation, expected = stream;
     storeRunning = true;
-    void client.queryStore().then((status) => {
+    void queryOwnedStore(releases, () => client.queryStore()).then((status) => {
       if (disposed || token !== generation || expected !== stream) return;
       observer.store?.(status);
       const empty = status.state === 'closed' && status.stream_id === null && durableTarget === 0n;
@@ -187,7 +187,14 @@ export function subscribeLive(client: Client, observer: LiveObserver) {
       }
     }).catch((error: unknown) => {
       if (disposed || token !== generation || expected !== stream) return;
-      if (error === LIVE_SUBSCRIPTION_LOST) { fail(); return; }
+      if (error === LIVE_SUBSCRIPTION_LOST) {
+        releases = releaseOwnedPayloads(releases);
+        // Keep the registration epoch active for capture/visibility callbacks.
+        // A later lifecycle transition still needs a fresh pair of channels.
+        registered = false;
+        fail();
+        return;
+      }
       historyFailed = true;
       stale(durableTarget);
     }).finally(() => {
