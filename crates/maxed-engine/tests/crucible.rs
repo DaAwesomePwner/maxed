@@ -14,7 +14,7 @@ fn late_definitions_resolve_both_channels_without_rewriting_previous_hits() {
         for (body, multiplier) in [
             (r#"{"bonuses":[{"type":1,"amount":7}]}"#, 1.),
             (
-                r#"{"bonuses":[{"type":5,"amount":1.5},{"type":5,"amount":2}]}"#,
+                r#"{"bonuses":[{"type":5,"amount":1.5},{"type":5,"amount":1.5}]}"#,
                 1.5,
             ),
         ] {

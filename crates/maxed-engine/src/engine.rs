@@ -28,7 +28,7 @@ const PACKET_DIAGNOSTIC_LIMIT: usize = 64;
 fn record_packet(id: u8) -> bool {
     matches!(
         id,
-        10 | 12 | 25 | 30 | 42 | 44 | 45 | 46 | 49 | 67 | 75 | 82 | 92 | 101 | 105 | 169 | 183
+        10 | 12 | 25 | 30 | 42 | 44 | 45 | 46 | 49 | 67 | 75 | 82 | 92 | 101 | 105 | 169
     )
 }
 

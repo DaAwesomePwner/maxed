@@ -50,7 +50,7 @@ impl Definitions {
                 let Some(id) = entry.get("id").and_then(Value::as_str) else {
                     continue;
                 };
-                if let Ok(amount) = first_bonus(entry, 0) {
+                if let Ok(amount) = bonus_consensus(entry, 0) {
                     self.insert(
                         CrucibleDef {
                             id: id.into(),
@@ -64,44 +64,53 @@ impl Definitions {
     }
 }
 
-// Search bonuses in array order. An invalid first type-5 bonus rejects the
-// entry, rather than silently treating it as neutral or using a later bonus.
-fn first_bonus(value: &Value, depth: usize) -> Result<Option<f64>, ()> {
+// Require agreement across all type-5 bonuses, independent of JSON object
+// key order. Malformed types or amounts reject the whole entry.
+fn bonus_consensus(value: &Value, depth: usize) -> Result<Option<f64>, ()> {
     if depth > MAX_DEPTH {
         return Err(());
     }
+    let mut amount = None;
     match value {
         Value::Object(object) => {
             if let Some(bonuses) = object.get("bonuses") {
                 let bonuses = bonuses.as_array().ok_or(())?;
                 for bonus in bonuses {
-                    if bonus.get("type").and_then(Value::as_i64) == Some(5) {
-                        return bonus
-                            .get("amount")
-                            .and_then(Value::as_f64)
-                            .map(Some)
-                            .ok_or(());
+                    if let Some(kind) = bonus.get("type") {
+                        let kind = kind.as_f64().ok_or(())?;
+                        if kind == 5. {
+                            agree(
+                                &mut amount,
+                                Some(bonus.get("amount").and_then(Value::as_f64).ok_or(())?),
+                            )?;
+                        }
                     }
                 }
             }
             for (key, child) in object {
                 if key != "bonuses" {
-                    if let Some(amount) = first_bonus(child, depth + 1)? {
-                        return Ok(Some(amount));
-                    }
+                    agree(&mut amount, bonus_consensus(child, depth + 1)?)?;
                 }
             }
         }
         Value::Array(values) => {
             for child in values {
-                if let Some(amount) = first_bonus(child, depth + 1)? {
-                    return Ok(Some(amount));
-                }
+                agree(&mut amount, bonus_consensus(child, depth + 1)?)?;
             }
         }
         _ => {}
     }
-    Ok(None)
+    Ok(amount)
+}
+
+fn agree(amount: &mut Option<f64>, candidate: Option<f64>) -> Result<(), ()> {
+    if let Some(candidate) = candidate {
+        if amount.is_some_and(|previous| previous != candidate) {
+            return Err(());
+        }
+        *amount = Some(candidate);
+    }
+    Ok(())
 }
 
 impl Engine {
