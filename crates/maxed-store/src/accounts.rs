@@ -69,8 +69,11 @@ pub fn attach_legacy_characters(
     let mut counts = AttachCounts::default();
     {
         let mut get = tx.prepare("SELECT account_id FROM characters WHERE id=?1")?;
-        let mut set =
-            tx.prepare("UPDATE characters SET account_id=?2 WHERE id=?1 AND account_id IS NULL")?;
+        let mut set = tx.prepare(
+            "UPDATE characters SET account_id=?2,
+                json=CASE WHEN json_valid(json) THEN json_set(json,'$.account_id',?2) ELSE json END
+                WHERE id=?1 AND account_id IS NULL",
+        )?;
         for id in candidate_ids
             .iter()
             .collect::<std::collections::BTreeSet<_>>()
@@ -184,6 +187,9 @@ pub(crate) fn identity(
             register(tx, account_id)?;
             tx.execute("INSERT INTO current_account VALUES(1,?1) ON CONFLICT(singleton) DO UPDATE SET account_id=excluded.account_id", [account_id])?;
         }
+    }
+    if character.is_none() {
+        crate::visits::close_stream(tx, stream, at)?;
     }
     tx.execute(
         "UPDATE identity_spans SET ended=max(started,?2) WHERE stream_id=?1 AND ended IS NULL",

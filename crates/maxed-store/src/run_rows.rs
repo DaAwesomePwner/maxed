@@ -68,7 +68,7 @@ fn summary_sql(filter: &RunFilter) -> Result<(String, Vec<Value>), StoreError> {
         .replace("/*characters*/", &common.join(" AND "));
     Ok((
         crate::account_sql::with_accounts(&format!(
-            "WITH selected AS MATERIALIZED (SELECT * FROM runs WHERE {})\n{METRICS}\n{tail}",
+            "WITH selected AS MATERIALIZED (SELECT id,session_id,character_id,dungeon,started,ended,completed_at FROM runs WHERE {})\n{METRICS}\n{tail}",
             selected.join(" AND ")
         )),
         args,

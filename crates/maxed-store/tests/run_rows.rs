@@ -114,6 +114,8 @@ fn run_identity_backfill_and_legacy_fallback_preserve_entry_observations() {
             }
             entry.name = expected_name;
             entry.class_id = expected_class;
+            // Ownership follows the relational column even for a frozen legacy entry.
+            entry.account_id = Some(crate::common::account_scope_fixture::ACCOUNT.into());
             assert_eq!(
                 reader.get_run("demo-run").unwrap().unwrap().character,
                 Some(entry)
