@@ -116,6 +116,7 @@ pub(super) struct Adapter {
     path: PathBuf,
     writer_config: WriterConfig,
     pending: VecDeque<maxed_store::ContextualEvent>,
+    crucible_saves: crucible::PendingDefinitions,
     bridge: Bridge,
     views: Arc<Views>,
     missing_catalog: bool,
@@ -218,6 +219,7 @@ impl Adapter {
             path,
             writer_config,
             pending: VecDeque::new(),
+            crucible_saves: Default::default(),
             bridge,
             alert_policy: views.alert_policy.clone(),
             chat_policy: views.chat_policy.clone(),
@@ -338,10 +340,9 @@ impl Adapter {
         let presence = self.engine.take_roster_presence();
         let profiles = self.engine.take_roster_profiles();
         let definitions = self.engine.take_crucible_definitions();
-        if self.live && !definitions.is_empty() {
-            if let Some(writer) = &self.writer {
-                writer.try_save_crucible_definitions(definitions, at.unwrap_or(self.at));
-            }
+        if self.live {
+            self.crucible_saves
+                .drain(self.writer.as_deref(), definitions, at.unwrap_or(self.at));
         }
         if !events.is_empty() || !profiles.is_empty() || !presence.is_empty() {
             let mut party = self.views.party.lock().unwrap_or_else(|p| p.into_inner());
@@ -1347,3 +1348,6 @@ mod publication_tests;
 #[cfg(test)]
 #[path = "crucible_tests.rs"]
 mod crucible_tests;
+
+#[path = "crucible.rs"]
+mod crucible;

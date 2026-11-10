@@ -78,7 +78,7 @@ struct Shared {
 }
 type Reply = Sender<Result<FlushReceipt, StoreError>>;
 enum Command {
-    Crucible(Vec<maxed_types::CrucibleDef>, Timestamp),
+    Crucible(Vec<maxed_types::CrucibleDef>, Timestamp, Sender<bool>),
     AttachLegacy(
         String,
         Vec<String>,
@@ -271,22 +271,26 @@ pub fn start_writer_with_maintenance(
 }
 
 impl StoreWriter {
-    /// Best-effort metadata: never backpressure event delivery. Accepted commands
-    /// precede subsequent flush/shutdown commands in the bounded FIFO.
+    /// Non-blocking metadata submission. Rejection returns ownership; the reply
+    /// reports write success without changing event durability or failure state.
     pub fn try_save_crucible_definitions(
         &self,
         definitions: Vec<maxed_types::CrucibleDef>,
         at: Timestamp,
-    ) {
-        if definitions.is_empty() {
-            return;
-        }
-        if self
+    ) -> Result<Receiver<bool>, Vec<maxed_types::CrucibleDef>> {
+        let (reply, response) = bounded(1);
+        match self
             .commands
-            .try_send(Command::Crucible(definitions, at))
-            .is_err()
+            .try_send(Command::Crucible(definitions, at, reply))
         {
-            tracing::warn!("Crucible definitions not queued; writer busy or closed");
+            Ok(()) => Ok(response),
+            Err(error) => {
+                let Command::Crucible(definitions, _, _) = error.into_inner() else {
+                    unreachable!()
+                };
+                tracing::warn!("Crucible definitions not queued; writer busy or closed");
+                Err(definitions)
+            }
         }
     }
 
@@ -888,10 +892,12 @@ fn worker_loop(
             recv(commands) -> command => {
                 let Ok(command) = command else { break; };
                 let (through,reply,closing,retry) = match command {
-                    Command::Crucible(definitions, at) => {
-                        if crate::upsert_crucible_definitions(conn, &definitions, at).is_err() {
+                    Command::Crucible(definitions, at, reply) => {
+                        let saved = crate::upsert_crucible_definitions(conn, &definitions, at).is_ok();
+                        if !saved {
                             tracing::warn!("Crucible definitions could not be saved");
                         }
+                        let _ = reply.try_send(saved);
                         continue;
                     }
                     Command::Maintenance(control, reply) => {
@@ -1929,5 +1935,34 @@ mod tests {
             StoreError::WorkerFailed { pending } => assert_eq!(pending.len(), 4),
             e => panic!("{e}"),
         }
+    }
+    #[test]
+    fn rejected_crucible_submission_returns_definitions_without_waiting() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut writer = start_writer(dir.path().join("db"), WriterConfig::default()).unwrap();
+        let (commands, receiver) = bounded(1);
+        let original = std::mem::replace(&mut writer.commands, commands);
+        let definitions = vec![maxed_types::CrucibleDef {
+            id: "synthetic".into(),
+            damage_multiplier: 2.,
+        }];
+        let _accepted = writer
+            .try_save_crucible_definitions(definitions.clone(), Timestamp(1))
+            .unwrap();
+        assert_eq!(
+            writer
+                .try_save_crucible_definitions(definitions.clone(), Timestamp(2))
+                .unwrap_err(),
+            definitions
+        );
+        drop(receiver);
+        assert_eq!(
+            writer
+                .try_save_crucible_definitions(definitions.clone(), Timestamp(3))
+                .unwrap_err(),
+            definitions
+        );
+        writer.commands = original;
+        writer.shutdown().unwrap();
     }
 }

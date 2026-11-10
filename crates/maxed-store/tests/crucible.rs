@@ -189,17 +189,26 @@ fn writer_definitions_flush_shutdown_and_failure_are_independent_of_events() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("db");
     let writer = start_writer(path.clone(), WriterConfig::default()).unwrap();
-    writer.try_save_crucible_definitions(vec![def("saved", 1.5)], Timestamp(10));
+    let saved = writer
+        .try_save_crucible_definitions(vec![def("saved", 1.5)], Timestamp(10))
+        .unwrap();
     writer.flush().unwrap();
     let db = Connection::open(&path).unwrap();
     assert_eq!(read(&db).unwrap(), vec![def("saved", 1.5)]);
     db.execute_batch("CREATE TRIGGER fail_crucible BEFORE INSERT ON crucible_definitions BEGIN SELECT RAISE(ABORT,'synthetic'); END;").unwrap();
-    writer.try_save_crucible_definitions(vec![def("failed", 2.)], Timestamp(20));
+    let failed = writer
+        .try_save_crucible_definitions(vec![def("failed", 2.)], Timestamp(20))
+        .unwrap();
     writer.flush().unwrap();
+    assert!(saved.try_recv().unwrap());
+    assert!(!failed.try_recv().unwrap());
     assert_eq!(writer.status().state, maxed_types::StoreState::Ready);
     db.execute_batch("DROP TRIGGER fail_crucible").unwrap();
-    writer.try_save_crucible_definitions(vec![def("shutdown", 1.)], Timestamp(30));
+    let saved = writer
+        .try_save_crucible_definitions(vec![def("shutdown", 1.)], Timestamp(30))
+        .unwrap();
     writer.shutdown().unwrap();
+    assert!(saved.try_recv().unwrap());
     assert_eq!(
         read(&db).unwrap(),
         vec![def("saved", 1.5), def("shutdown", 1.)]

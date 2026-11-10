@@ -387,6 +387,8 @@ filled as unclassified. No RealmShark repository or golden exporter is changed.
 The engine learns definitions from 183; the runtime saves them for later live captures.
 It is not a recorded coverage packet: malformed 183 bodies never mark
 DecodeFailure. The protocol retains JSON text; the engine interprets its definitions.
+On the owner recording, the protocol-decoding change produced 22 fewer unknown
+packets. This historical packet-count evidence predates definition consumption.
 
 ## D-coverage-scope - record-local capture coverage
 

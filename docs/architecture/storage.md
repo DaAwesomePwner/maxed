@@ -421,6 +421,7 @@ open, after normal writer migration and under the namespace lease, before any
 packets. The read does not migrate or recover and errors use an empty seed. Newly
 learned packet-183 definitions use a best-effort bounded writer command with the
 batch timestamp and its own transaction. Queue-full or write failures log without
-failing event batches. Accepted commands precede subsequent flush/shutdown; they
-are not retried after failure. Replay/demo learn only in-stream and neither read
-nor write live definitions.
+failing event batches. Accepted commands precede subsequent flush/shutdown. The
+adapter retries on later drains after rejection or write failure, with at most
+4096 pending IDs and the latest multiplier retained. Pending saves are volatile.
+Replay/demo learn only in-stream and neither read nor write live definitions.

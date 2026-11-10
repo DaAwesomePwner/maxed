@@ -117,6 +117,16 @@ fn live_response_persists_and_write_failure_keeps_event_batch() {
         assert_eq!(rows.len(), usize::from(!fail));
         assert!(adapter.writer.as_ref().unwrap().status().durable.is_some());
         assert!(!adapter.rejected);
+        if fail {
+            db.execute_batch("DROP TRIGGER fail_crucible").unwrap();
+            // No new packet 183: an empty engine drain retries the failed save.
+            adapter.events(vec![]);
+            adapter.writer_flush_for_test();
+            assert_eq!(
+                maxed_store::read_crucible_definitions(&db).unwrap().len(),
+                1
+            );
+        }
         adapter.close().unwrap();
     }
 }
@@ -134,6 +144,10 @@ fn playback_neither_reads_nor_writes_live_definitions() {
         );
         learn(&mut adapter);
         adapter.writer_flush_for_test();
+        let scratch = rusqlite::Connection::open(&adapter.path).unwrap();
+        assert!(maxed_store::read_crucible_definitions(&scratch)
+            .unwrap()
+            .is_empty());
         let db = rusqlite::Connection::open(dir.path().join("live.sqlite3")).unwrap();
         assert_eq!(
             maxed_store::read_crucible_definitions(&db).unwrap(),
@@ -148,10 +162,16 @@ fn definition_read_error_does_not_stop_capture() {
     let dir = tempfile::tempdir().unwrap();
     let mut adapter = open(dir.path(), Namespace::Live);
     let db = rusqlite::Connection::open(dir.path().join("live.sqlite3")).unwrap();
+    db.execute(
+        "INSERT INTO crucible_definitions VALUES('saved',1.5,1,1)",
+        [],
+    )
+    .unwrap();
     db.execute_batch(
         "ALTER TABLE crucible_definitions RENAME COLUMN damage_multiplier TO unavailable",
     )
     .unwrap();
+    assert!(maxed_store::StoreReader::read_crucible_definitions_file(&adapter.path).is_err());
     adapter.initialize_namespace(Namespace::Live);
     hit(&mut adapter);
     assert_eq!(
@@ -160,5 +180,19 @@ fn definition_read_error_does_not_stop_capture() {
     );
     adapter.writer_flush_for_test();
     assert!(adapter.writer.as_ref().unwrap().status().durable.is_some());
+    // The same saved row resolves after repairing the read failure; this is
+    // not merely an empty database which would have returned Ok(empty).
+    db.execute_batch(
+        "ALTER TABLE crucible_definitions RENAME COLUMN unavailable TO damage_multiplier",
+    )
+    .unwrap();
+    adapter.initialize_namespace(Namespace::Live);
+    feed(&mut adapter, 7000, packets::shoot(2));
+    feed(&mut adapter, 8000, packets::hit(2));
+    assert_eq!(
+        adapter.engine.reconstruction_coverage()["assumedCrucibleDefault"],
+        1
+    );
+    assert_eq!(adapter.engine.snapshot().fights[0].total_damage, 250.);
     adapter.close().unwrap();
 }
