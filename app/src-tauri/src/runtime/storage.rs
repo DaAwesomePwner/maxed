@@ -149,14 +149,37 @@ impl RuntimeOptions {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum LeaseError {
+    Contended,
+    Permanent(&'static str),
+}
+impl LeaseError {
+    fn message(&self) -> &'static str {
+        match self {
+            Self::Contended => "Summary storage is already in use or unavailable",
+            Self::Permanent(message) => message,
+        }
+    }
+}
+
 /// Shared by capture and cold-history preparation. Directory creation must
 /// precede lease acquisition, including on a fresh installation.
 pub(super) fn namespace_lease(root: &Path, namespace: Namespace) -> Result<File, String> {
-    fs::create_dir_all(root).map_err(|_| "Could not prepare local summary storage")?;
-    exclusive(&root.join(format!("{}.lock", namespace.label())))
+    try_namespace_lease(root, namespace).map_err(|error| error.message().into())
+}
+
+pub(super) fn try_namespace_lease(root: &Path, namespace: Namespace) -> Result<File, LeaseError> {
+    fs::create_dir_all(root)
+        .map_err(|_| LeaseError::Permanent("Could not prepare local summary storage"))?;
+    try_exclusive(&root.join(format!("{}.lock", namespace.label())))
 }
 
 fn exclusive(path: &Path) -> Result<File, String> {
+    try_exclusive(path).map_err(|error| error.message().into())
+}
+
+fn try_exclusive(path: &Path) -> Result<File, LeaseError> {
     let mut options = OpenOptions::new();
     options.read(true).write(true).create(true).truncate(false);
     #[cfg(windows)]
@@ -165,11 +188,18 @@ fn exclusive(path: &Path) -> Result<File, String> {
         options.share_mode(0);
     }
     #[cfg(not(windows))]
-    return Err("Summary namespace ownership requires Windows".into());
+    return Err(LeaseError::Permanent(
+        "Summary namespace ownership requires Windows",
+    ));
     #[cfg(windows)]
-    options
-        .open(path)
-        .map_err(|_| "Summary storage is already in use or unavailable".into())
+    options.open(path).map_err(|error| {
+        // ERROR_SHARING_VIOLATION: another namespace owner has the file open.
+        if error.raw_os_error() == Some(32) {
+            LeaseError::Contended
+        } else {
+            LeaseError::Permanent("Summary storage is already in use or unavailable")
+        }
+    })
 }
 
 fn identity_key(root: &Path) -> Result<[u8; 32], String> {
@@ -355,6 +385,45 @@ impl CaptureRuntime {
 mod tests {
     use super::*;
     use maxed_types::{CoverageIssue, FightEnd, Timestamp};
+
+    #[test]
+    fn lease_attempt_distinguishes_contention_and_permanent_errors() {
+        let root = tempfile::tempdir().unwrap();
+        let lease = namespace_lease(root.path(), Namespace::Live).unwrap();
+        assert!(matches!(
+            try_namespace_lease(root.path(), Namespace::Live),
+            Err(LeaseError::Contended)
+        ));
+        drop(lease);
+        assert!(try_namespace_lease(root.path(), Namespace::Live).is_ok());
+
+        let file = root.path().join("not-a-directory");
+        fs::write(&file, b"synthetic").unwrap();
+        assert!(matches!(
+            try_namespace_lease(&file, Namespace::Live),
+            Err(LeaseError::Permanent(
+                "Could not prepare local summary storage"
+            ))
+        ));
+        assert_eq!(
+            namespace_lease(&file, Namespace::Live).unwrap_err(),
+            "Could not prepare local summary storage"
+        );
+
+        // Opening a directory as a writable lock file is a permanent failure,
+        // not ERROR_SHARING_VIOLATION.
+        fs::create_dir(root.path().join("demo.lock")).unwrap();
+        assert!(matches!(
+            try_namespace_lease(root.path(), Namespace::Demo),
+            Err(LeaseError::Permanent(
+                "Summary storage is already in use or unavailable"
+            ))
+        ));
+        assert_eq!(
+            namespace_lease(root.path(), Namespace::Demo).unwrap_err(),
+            "Summary storage is already in use or unavailable"
+        );
+    }
 
     #[test]
     fn namespaces_use_distinct_streams_databases_and_exclusive_ownership() {
