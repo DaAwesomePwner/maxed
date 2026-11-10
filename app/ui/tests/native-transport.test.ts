@@ -138,3 +138,27 @@ test('channel subscriptions match the native subscribe allowlist', () => {
   expect(nativeEvents.length).toBeGreaterThan(0);
   expect([...LIVE_PAYLOAD_EVENTS].sort()).toEqual(nativeEvents);
 });
+
+test('existing store polls carry active live ownership IDs and preserve the loss code', async () => {
+  const { LIVE_SUBSCRIPTION_LOST } = await import('../src/lib/bridge/subscription-health');
+  mocks.invoke.mockReset();
+  mocks.listen.mockResolvedValue(() => {});
+  let nextId = 100;
+  mocks.invoke.mockImplementation(async command => command === 'subscribe_live_payload' ? nextId++ : undefined);
+  const snapshotStop = await nativeTransport.listen('live-snapshot', () => {});
+  const eventStop = await nativeTransport.listen('engine-event', () => {});
+  const partyStop = await nativeTransport.listen('party-changed', () => {});
+  try {
+    await nativeTransport.invoke('get_store_status', undefined);
+    expect(mocks.invoke).toHaveBeenLastCalledWith('get_store_status', { subscriptionIds: [100, 101] });
+    mocks.invoke.mockRejectedValueOnce(LIVE_SUBSCRIPTION_LOST);
+    await expect(nativeTransport.invoke('get_store_status', undefined)).rejects.toBe(LIVE_SUBSCRIPTION_LOST);
+    snapshotStop();
+    await nativeTransport.invoke('get_store_status', undefined);
+    expect(mocks.invoke).toHaveBeenLastCalledWith('get_store_status', { subscriptionIds: [101] });
+  } finally { snapshotStop(); eventStop(); partyStop(); }
+  await nativeTransport.invoke('get_store_status', undefined);
+  expect(mocks.invoke).toHaveBeenLastCalledWith('get_store_status', undefined);
+  const rust = readFileSync('../src-tauri/src/bridge/channels.rs', 'utf8');
+  expect(rust).toContain(`pub const LIVE_SUBSCRIPTION_LOST: &str = "${LIVE_SUBSCRIPTION_LOST}";`);
+});
