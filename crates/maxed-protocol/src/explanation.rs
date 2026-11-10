@@ -409,6 +409,22 @@ impl<'a> Walk<'a> {
             169 => {
                 self.number(4)?;
             }
+            183 => {
+                for (minimum, string) in [(4, false), (2, true)] {
+                    let n = self.short()? as i16;
+                    if !(0..=crate::defs::CRUCIBLE_LIST_LIMIT).contains(&n) {
+                        self.safe_end = 0;
+                        return Err(ProtocolError::Definition);
+                    }
+                    self.list(i32::from(n), minimum, |w| {
+                        if string {
+                            w.private()
+                        } else {
+                            w.number(4).map(|_| ())
+                        }
+                    })?;
+                }
+            }
             _ => return Err(ProtocolError::Definition),
         }
         Ok(())
@@ -584,7 +600,7 @@ mod tests {
     fn structural_walk_matches_all_typed_decoders_and_notification_branches() {
         for id in [
             105, 90, 0, 25, 74, 101, 44, 30, 49, 75, 64, 103, 45, 114, 46, 42, 10, 12, 35, 92, 67,
-            82, 169,
+            82, 169, 183,
         ] {
             for byte in [0, 1, 31, 63, 64, 127, 128, 255] {
                 let body = [byte; 160];

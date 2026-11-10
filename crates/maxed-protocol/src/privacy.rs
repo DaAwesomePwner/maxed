@@ -22,7 +22,10 @@ pub struct FieldTreatment {
     pub len: usize,
     pub name: &'static str,
     pub policy: FieldPolicy,
-    /// Exact public literals/formats may explain player-text coincidences only.
+    /// Set when a kept field passed an exact public literal or a validated
+    /// server format (dotted version, allowlisted-key crucible config JSON).
+    /// A player-text collision inside it is then reported as a coincidence;
+    /// identity and credential collisions still refuse.
     pub public_literal: bool,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -308,6 +311,167 @@ pub(crate) fn character_stats(value: &str) -> bool {
         (reader.remaining() == 0).then_some(())
     }
     decode(value).is_some()
+}
+
+/// Every object key observed in CRUCIBLE_RESPONSE JSON on the owner's recording
+/// (docs/parity/protocol-evidence.md, 2026-11-10): season crucible, weekly
+/// modifier event and Blood Ritual ladder configuration. None is per-account.
+const CRUCIBLE_CONFIG_KEYS: &[&str] = &[
+    "amount",
+    "array",
+    "bloodRitual",
+    "bonuses",
+    "chance",
+    "coverage",
+    "crucible",
+    "desc",
+    "dungeons",
+    "end",
+    "exclGrounds",
+    "exclRoomTypes",
+    "excludeLabels",
+    "fame",
+    "healMethods",
+    "id",
+    "item",
+    "jitter",
+    "labels",
+    "leavelimitation",
+    "max",
+    "min",
+    "modifierEvent",
+    "modifiers",
+    "objectIds",
+    "percent",
+    "restrictions",
+    "roomType",
+    "seasonalonly",
+    "stat",
+    "start",
+    "title",
+    "trials",
+    "type",
+    "value",
+];
+
+/// Server configuration is kept only as a `{"array":[...]}` object whose keys
+/// are all allowlisted. Any new key (for example, progress or unlock state),
+/// repeated key or `\u` escape, which could hide text from residual checks,
+/// fills the field. Keys are checked while parsing: a parsed map keeps only the
+/// last value of a repeated key, so earlier values would never be inspected.
+pub(crate) fn crucible_config(value: &str) -> bool {
+    if value.contains("\\u") {
+        return false;
+    }
+    let mut parser = serde_json::Deserializer::from_str(value);
+    let seed = ConfigNode {
+        depth: 0,
+        shape: ConfigShape::Top,
+    };
+    serde::de::DeserializeSeed::deserialize(seed, &mut parser).is_ok() && parser.end().is_ok()
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ConfigShape {
+    /// The outer object: exactly one `array` key holding an array.
+    Top,
+    /// The value of the outer `array` key.
+    Array,
+    /// Any JSON value whose object keys are allowlisted and never repeated.
+    Any,
+}
+
+#[derive(Clone, Copy)]
+struct ConfigNode {
+    depth: usize,
+    shape: ConfigShape,
+}
+
+impl ConfigNode {
+    fn child(self, shape: ConfigShape) -> Self {
+        Self {
+            depth: self.depth + 1,
+            shape,
+        }
+    }
+    fn scalar<E: serde::de::Error>(self) -> Result<(), E> {
+        match self.shape {
+            ConfigShape::Any => Ok(()),
+            _ => Err(E::custom("crucible config shape")),
+        }
+    }
+}
+
+impl<'de> serde::de::DeserializeSeed<'de> for ConfigNode {
+    type Value = ();
+    fn deserialize<D: serde::Deserializer<'de>>(self, input: D) -> Result<(), D::Error> {
+        if self.depth > 8 {
+            return Err(serde::de::Error::custom("crucible config depth"));
+        }
+        input.deserialize_any(self)
+    }
+}
+
+impl<'de> serde::de::Visitor<'de> for ConfigNode {
+    type Value = ();
+    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str("allowlisted crucible configuration")
+    }
+    fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<(), E> {
+        self.scalar()
+    }
+    fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<(), E> {
+        self.scalar()
+    }
+    fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<(), E> {
+        self.scalar()
+    }
+    fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<(), E> {
+        self.scalar()
+    }
+    fn visit_str<E: serde::de::Error>(self, _: &str) -> Result<(), E> {
+        self.scalar()
+    }
+    fn visit_unit<E: serde::de::Error>(self) -> Result<(), E> {
+        self.scalar()
+    }
+    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut items: A) -> Result<(), A::Error> {
+        if self.shape == ConfigShape::Top {
+            return Err(serde::de::Error::custom("crucible config shape"));
+        }
+        while items
+            .next_element_seed(self.child(ConfigShape::Any))?
+            .is_some()
+        {}
+        Ok(())
+    }
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut fields: A) -> Result<(), A::Error> {
+        use serde::de::Error;
+        if self.shape == ConfigShape::Array {
+            return Err(A::Error::custom("crucible config shape"));
+        }
+        let mut seen: Vec<String> = Vec::new();
+        while let Some(key) = fields.next_key::<String>()? {
+            let top = self.shape == ConfigShape::Top;
+            if !CRUCIBLE_CONFIG_KEYS.contains(&key.as_str())
+                || seen.contains(&key)
+                || (top && key != "array")
+            {
+                return Err(A::Error::custom("crucible config key"));
+            }
+            let shape = if top {
+                ConfigShape::Array
+            } else {
+                ConfigShape::Any
+            };
+            fields.next_value_seed(self.child(shape))?;
+            seen.push(key);
+        }
+        if self.shape == ConfigShape::Top && seen.is_empty() {
+            return Err(A::Error::custom("crucible config shape"));
+        }
+        Ok(())
+    }
 }
 
 pub(crate) fn oryx_killer_spans(text: &str) -> Option<Vec<std::ops::Range<usize>>> {

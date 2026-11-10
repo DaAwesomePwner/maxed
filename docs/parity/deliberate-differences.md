@@ -369,6 +369,22 @@ passes unknown packets to the engine; valid 82/169 packets do not mark
 DecodeFailure, so completeCapture may differ on those inputs. This is recorded
 for evidence classification, not suppressed or corrected by changing engine coverage.
 
+## D-crucible-response — packet-parity note
+
+The quoted documentary row below is outside the executable `MAXED-####` exception table and grants no fixture-wide suppression. Actual fixture hashes and field differences require separate verification.
+
+> | id | area | Java behavior | Maxed behavior | reason | evidence |
+> |---|---|---|---|---|---|
+> | D-crucible-response-183 | packet parity | RealmShark golden output records CRUCIBLE_RESPONSE (183) as unknown with framed length | Decodes signed-short-counted big-endian `i32` `crucibleIds` and `u16`-length UTF-8 `crucibleJsons`; either count outside 0..=64 is rejected; the JSON stays undecoded text | Typed evidence for the season Crucible and Blood Ritual configuration; per-packet diagnostics instead of an opaque unknown | RealmShark CrucibleResponsePacket layout and the protocol evidence guide; synthetic d_packets and recovery tests |
+
+The ids survive scrubbing unchanged. A JSON string survives only when it is
+`{"array":[...]}` whose object keys at every depth are allowlisted server
+configuration keys, with no repeated key and no `\u` escape; any other string is
+filled as unclassified. No RealmShark repository or golden exporter is changed.
+The engine does not consume 183 and it is not a recorded coverage packet, so
+neither valid nor malformed 183 bodies mark DecodeFailure. On the owner
+recording, replay counters changed only by 22 fewer unknown packets.
+
 ## D-coverage-scope - record-local capture coverage
 
 RealmShark-compatible session-sticky issues made every later fight and drop

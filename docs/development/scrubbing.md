@@ -89,6 +89,21 @@ longer produce false refusals inside these items, and qualifying four-to-seven-
 byte matches next to `-`, `_` or `=` produce listed coincidences. This is an
 opaque-data coincidence rule, not a decoded item schema or publication approval.
 
+## Crucible configuration JSON
+
+CRUCIBLE_RESPONSE (183) `crucibleJsons` strings are server configuration for
+the season Crucible, weekly modifier event and Blood Ritual ladder. A string is
+kept unchanged only when it parses as `{"array":[...]}`, every object key at
+every depth is in the observed allowlist (`CRUCIBLE_CONFIG_KEYS` in
+`maxed-protocol` `privacy.rs`), no key repeats within an object, nesting stays
+within the depth limit and the text has no `\u` escape. Keys are checked while
+parsing, so an earlier value of a repeated key cannot escape the check. Any
+other string, including one with a new key such as progress or unlock state, is
+filled as unclassified. Kept strings still receive identity and credential
+collision checks; player-text overlaps are listed as `PublicLiteralCoincidence`.
+The allowlist comes from one owner recording; see the
+[protocol evidence](../parity/protocol-evidence.md).
+
 ## Profile and existing fixtures
 
 The profile SHA-256 already covers `defs.rs`, `reader.rs`, `privacy.rs`,
