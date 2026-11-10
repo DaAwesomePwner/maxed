@@ -78,6 +78,7 @@ struct Shared {
 }
 type Reply = Sender<Result<FlushReceipt, StoreError>>;
 enum Command {
+    Crucible(Vec<maxed_types::CrucibleDef>, Timestamp),
     AttachLegacy(
         String,
         Vec<String>,
@@ -270,6 +271,25 @@ pub fn start_writer_with_maintenance(
 }
 
 impl StoreWriter {
+    /// Best-effort metadata: never backpressure event delivery. Accepted commands
+    /// precede subsequent flush/shutdown commands in the bounded FIFO.
+    pub fn try_save_crucible_definitions(
+        &self,
+        definitions: Vec<maxed_types::CrucibleDef>,
+        at: Timestamp,
+    ) {
+        if definitions.is_empty() {
+            return;
+        }
+        if self
+            .commands
+            .try_send(Command::Crucible(definitions, at))
+            .is_err()
+        {
+            tracing::warn!("Crucible definitions not queued; writer busy or closed");
+        }
+    }
+
     pub fn list_backups(
         &self,
     ) -> Result<Vec<crate::backup::ManagedBackup>, crate::backup::BackupError> {
@@ -868,6 +888,12 @@ fn worker_loop(
             recv(commands) -> command => {
                 let Ok(command) = command else { break; };
                 let (through,reply,closing,retry) = match command {
+                    Command::Crucible(definitions, at) => {
+                        if crate::upsert_crucible_definitions(conn, &definitions, at).is_err() {
+                            tracing::warn!("Crucible definitions could not be saved");
+                        }
+                        continue;
+                    }
                     Command::Maintenance(control, reply) => {
                         let wake = matches!(control, Control::Request(_) | Control::Resume(_) | Control::AuthorizationChanged(_));
                         let result = maintenance.control(conn, control);

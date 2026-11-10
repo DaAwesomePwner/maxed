@@ -142,8 +142,7 @@ impl RuntimeOptions {
         adapter.lease = Some(lease);
         adapter.catalog_lease = cached;
         adapter.catalog_notice = notice;
-        adapter.ephemeral = self.namespace != Namespace::Live;
-        adapter.live = self.namespace == Namespace::Live;
+        adapter.initialize_namespace(self.namespace);
         adapter.refresh_store();
         Ok(adapter)
     }

@@ -11,6 +11,10 @@ typed target UPDATE has a known zero baseline. Neither case increments
 missing-input diagnostics. Unknown active bonus IDs, missing bonus channels,
 target states seen only through deltas, missing attacker stats, missing
 scaling/enchant metadata, ambiguous hits and coverage gaps remain ineligible.
+Active Crucible/Blood Ritual IDs resolved from packet 183 or the saved definition
+table are known, including entries with no type-5 bonus (known 1.0). Hits before
+definitions are first seen for an ID remain ineligible; later learning does not
+rewrite them.
 Eligibility also requires settled local pairs and the current DPS basis.
 
 The engine publishes a confirmed kill as an ended `FightUpdated` before

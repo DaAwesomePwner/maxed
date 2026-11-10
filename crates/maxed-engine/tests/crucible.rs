@@ -208,3 +208,33 @@ fn definition_capacity_is_bounded_but_existing_ids_can_update() {
     apply(&mut e, 7000, hit(1));
     assert_eq!(e.reconstruction_coverage()["assumedCrucibleDefault"], 1);
 }
+
+#[test]
+fn definition_ids_match_store_byte_bound() {
+    let mut e = engine();
+    setup(&mut e);
+    for id in [String::new(), "x".repeat(65), "é".repeat(33)] {
+        e.seed_crucible_definitions([def(&id, 2.)]);
+        apply(
+            &mut e,
+            3000,
+            response(&serde_json::json!({"array":[{"id":id}]}).to_string()),
+        );
+        assert!(e.take_crucible_definitions().is_empty());
+    }
+    let id = "x".repeat(64);
+    apply(
+        &mut e,
+        3000,
+        response(&serde_json::json!({"array":[{"id":id}]}).to_string()),
+    );
+    assert_eq!(e.take_crucible_definitions(), vec![def(&id, 1.)]);
+    apply(
+        &mut e,
+        4000,
+        tick(vec![status(1, vec![string(128, &"x".repeat(65))])]),
+    );
+    apply(&mut e, 5000, shoot(1));
+    apply(&mut e, 6000, hit(1));
+    assert_eq!(e.reconstruction_coverage()["assumedCrucibleDefault"], 1);
+}

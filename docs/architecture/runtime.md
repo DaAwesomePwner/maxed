@@ -341,3 +341,12 @@ near timestamp zero can discard less than one age budget of elapsed time; renewe
 clock progress still expires the hole within one second. The 32-segment bound
 also applies when capture timestamps stall or repeatedly move backward. The
 forced sequence advance remains bounded at 2 MiB inclusive, including wraparound.
+
+Live capture loads saved Crucible/Blood Ritual definitions off the UI thread at
+open, after normal writer migration and under the namespace lease, before any
+packets. The read does not migrate or recover and errors use an empty seed. Newly
+learned packet-183 definitions use a best-effort bounded writer command with the
+batch timestamp and its own transaction. Queue-full or write failures log without
+failing event batches. Accepted commands precede subsequent flush/shutdown; they
+are not retried after failure. Replay/demo learn only in-stream and neither read
+nor write live definitions.

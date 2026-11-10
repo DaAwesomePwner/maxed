@@ -38,7 +38,10 @@ assumption. `CrucibleBonusManager.java:25-36,219-223` treats missing/empty stats
 Maxed uses the same multiplication order and emits per-hit
 `assumedCrucibleDefault` / `assumedBloodRitualDefault` counts for missing or
 unknown evidence. Explicit empty strings are known inactive channels and do not
-count as assumptions. Condition, attack and stat 113 have no Java defaults
+count as assumptions. Packet 183 and saved definitions resolve active IDs; an
+entry without a type-5 bonus is a known 1.0 under the RealmShark rule
+(owner decision 2026-11-10). No HTTP lookup is used. Condition, attack and
+stat 113 have no Java defaults
 (`Entity.java:269-275`, `Stat.java:25-30`, `Projectile.java:141`); missing values
 remain separate counted omissions by the reconstruction policy.
 These are attacker inputs. Missing target defense and either target condition
@@ -375,15 +378,15 @@ The quoted documentary row below is outside the executable `MAXED-####` exceptio
 
 > | id | area | Java behavior | Maxed behavior | reason | evidence |
 > |---|---|---|---|---|---|
-> | D-crucible-response-183 | packet parity | RealmShark golden output records CRUCIBLE_RESPONSE (183) as unknown with framed length | Decodes signed-short-counted big-endian `i32` `crucibleIds` and `u16`-length UTF-8 `crucibleJsons`; either count outside 0..=64 is rejected; the JSON stays undecoded text | Typed evidence for the season Crucible and Blood Ritual configuration; per-packet diagnostics instead of an opaque unknown | RealmShark CrucibleResponsePacket layout and the protocol evidence guide; synthetic d_packets and recovery tests |
+> | D-crucible-response-183 | packet parity | RealmShark golden output records CRUCIBLE_RESPONSE (183) as unknown with framed length | Decodes signed-short-counted big-endian `i32` `crucibleIds` and `u16`-length UTF-8 `crucibleJsons`; either count outside 0..=64 is rejected; the protocol retains JSON text and the engine learns definitions from it for live persistence | Typed evidence for the season Crucible and Blood Ritual configuration; per-packet diagnostics instead of an opaque unknown | RealmShark CrucibleResponsePacket layout and the protocol evidence guide; synthetic d_packets and recovery tests |
 
 The ids survive scrubbing unchanged. A JSON string survives only when it is
 `{"array":[...]}` whose object keys at every depth are allowlisted server
 configuration keys, with no repeated key and no `\u` escape; any other string is
 filled as unclassified. No RealmShark repository or golden exporter is changed.
-The engine does not consume 183 and it is not a recorded coverage packet, so
-neither valid nor malformed 183 bodies mark DecodeFailure. On the owner
-recording, replay counters changed only by 22 fewer unknown packets.
+The engine learns definitions from 183; the runtime saves them for later live captures.
+It is not a recorded coverage packet: malformed 183 bodies never mark
+DecodeFailure. The protocol retains JSON text; the engine interprets its definitions.
 
 ## D-coverage-scope - record-local capture coverage
 
@@ -500,7 +503,9 @@ These explain behavior; they do not grant comparator suppressions.
   neutral defaults and counts each assumption. Missing/unknown stat 128 and 155
   configuration each contributes 1.0, like `CrucibleBonusManager.Offline`;
   explicit empty strings are observed inactive channels and contribute 1.0
-  without a fallback diagnostic.
+  without a fallback diagnostic. Learned packet-183 and saved definitions resolve
+  active IDs; an entry without a type-5 bonus is a known 1.0 under the RealmShark
+  rule (owner decision 2026-11-10). Unknown IDs retain the counted neutral default.
   Nonneutral values combine in Java's f32/f64 order. Missing
   condition, attack, or stat 113 still prevents reconstruction: Java has no
   defaults for these inputs. Each failed hit receives an omission reason.

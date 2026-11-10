@@ -147,6 +147,24 @@ pub(super) struct Adapter {
 }
 
 impl Adapter {
+    pub(super) fn initialize_namespace(&mut self, namespace: super::storage::Namespace) {
+        use super::storage::Namespace;
+        // The capture owner holds the namespace lease here, after the writer's
+        // normal migration/recovery and before any packets or maintenance hand-off.
+        // This open path runs on the native worker, never the UI thread.
+        if namespace == Namespace::Live {
+            let definitions = maxed_store::StoreReader::read_crucible_definitions_file(&self.path);
+            match definitions {
+                Ok(definitions) => self.engine.seed_crucible_definitions(definitions),
+                Err(_) => {
+                    eprintln!("Saved Crucible definitions unavailable; continuing capture")
+                }
+            }
+        }
+        self.live = namespace == Namespace::Live;
+        self.ephemeral = namespace != Namespace::Live;
+    }
+
     pub(super) fn committed(&self) -> crossbeam_channel::Receiver<()> {
         self.writer
             .as_ref()
@@ -319,6 +337,12 @@ impl Adapter {
         // Presence and roster profiles never enter the durable writer queue.
         let presence = self.engine.take_roster_presence();
         let profiles = self.engine.take_roster_profiles();
+        let definitions = self.engine.take_crucible_definitions();
+        if self.live && !definitions.is_empty() {
+            if let Some(writer) = &self.writer {
+                writer.try_save_crucible_definitions(definitions, at.unwrap_or(self.at));
+            }
+        }
         if !events.is_empty() || !profiles.is_empty() || !presence.is_empty() {
             let mut party = self.views.party.lock().unwrap_or_else(|p| p.into_inner());
             let mut presence = presence.into_iter().peekable();
@@ -1319,3 +1343,7 @@ mod account_adapter_tests;
 #[cfg(test)]
 #[path = "join_publication_tests.rs"]
 mod publication_tests;
+
+#[cfg(test)]
+#[path = "crucible_tests.rs"]
+mod crucible_tests;
