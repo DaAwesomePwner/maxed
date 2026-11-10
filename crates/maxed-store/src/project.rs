@@ -980,7 +980,9 @@ fn merge(tx: &Transaction<'_>, provisional: &str, verified: &str) -> Result<(), 
         return Err(StoreError::InvalidEvent);
     }
     tx.execute(
-        "UPDATE characters SET account_id=coalesce(account_id,?2) WHERE id=?1",
+        "UPDATE characters SET account_id=coalesce(account_id,?2),
+            json=CASE WHEN json_valid(json) THEN json_set(json,'$.account_id',coalesce(account_id,?2)) ELSE json END
+            WHERE id=?1",
         params![to, accounts[0]],
     )?;
     tx.execute(

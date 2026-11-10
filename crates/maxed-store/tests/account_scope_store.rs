@@ -695,3 +695,67 @@ fn account_scope_with_account_transaction_constraint() {
         vec![]
     );
 }
+
+#[test]
+fn attach_and_merge_keep_character_json_and_run_entry_accounts_consistent() {
+    for merge in [false, true] {
+        for account_on_source in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("accounts.sqlite");
+            let mut db = Connection::open(&path).unwrap();
+            migrate(&mut db).unwrap();
+            let mut run = demo::demo_snapshot().run.unwrap();
+            run.character_id = Some("source".into());
+            let run_id = run.id.clone();
+            let events = seed(
+                &mut db,
+                vec![
+                    character("source", (merge && account_on_source).then(|| account('a'))),
+                    character(
+                        "target",
+                        (merge && !account_on_source).then(|| account('a')),
+                    ),
+                    EngineEvent::RunStarted(run),
+                ],
+            );
+            let reader = maxed_store::open_reader(&path).unwrap();
+            let before = reader.get_run(&run_id).unwrap().unwrap().character.unwrap();
+            let canonical = if merge {
+                apply_batch(
+                    &mut db,
+                    &[envelope(
+                        events.len() as u64 + 1,
+                        EngineEvent::CharacterMerged {
+                            provisional_id: "source".into(),
+                            verified_id: "target".into(),
+                        },
+                    )],
+                )
+                .unwrap();
+                "target"
+            } else {
+                attach_legacy_characters(&mut db, &account('a'), &["source".into()]).unwrap();
+                "source"
+            };
+            let (column, json): (String, String) = db
+                .query_row(
+                    "SELECT account_id,json FROM characters WHERE id=?1",
+                    [canonical],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(column, account('a'));
+            assert_eq!(
+                serde_json::from_str::<CharacterView>(&json)
+                    .unwrap()
+                    .account_id,
+                Some(column.clone())
+            );
+            let entry = reader.get_run(&run_id).unwrap().unwrap().character.unwrap();
+            let mut expected = before;
+            expected.id = canonical.into();
+            expected.account_id = Some(column);
+            assert_eq!(entry, expected);
+        }
+    }
+}

@@ -96,6 +96,15 @@ pub(crate) fn link_run(
     Ok(())
 }
 
+/// Identity loss ends continuity without erasing the old visit's ownership.
+pub(crate) fn close_stream(tx: &Transaction<'_>, stream: &str, at: i64) -> Result<(), StoreError> {
+    tx.execute(
+        &format!("{CLOSE} WHERE stream_id=?1 AND ended IS NULL"),
+        params![stream, at],
+    )?;
+    Ok(())
+}
+
 pub(crate) fn close_session(
     tx: &Transaction<'_>,
     session: &str,

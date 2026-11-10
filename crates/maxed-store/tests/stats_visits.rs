@@ -244,3 +244,64 @@ fn recovery_closes_visit_of_interrupted_session() {
     let db = rusqlite::Connection::open(&path).unwrap();
     assert_eq!(visits(&db)[0].ended, Some(Timestamp(7 * MIN)));
 }
+
+#[test]
+fn reconnect_without_identity_does_not_inherit_previous_character() {
+    let (_dir, path, mut db) = database();
+    let mut s = start(&mut db);
+    s.apply(
+        &mut db,
+        vec![
+            map("Nexus", AreaKind::Nexus, MIN),
+            fame(C, 100, MIN),
+            EngineEvent::LocalIdentityChanged {
+                at: Timestamp(MIN),
+                character_id: Some(C.into()),
+                account_id: None,
+            },
+            // Connection replacement emits unknown identity before the new MAPINFO.
+            EngineEvent::LocalIdentityChanged {
+                at: Timestamp(2 * MIN),
+                character_id: None,
+                account_id: None,
+            },
+        ],
+    );
+    // Continuity state must survive closing and reopening the store connection.
+    drop(db);
+    let mut db = rusqlite::Connection::open(path).unwrap();
+    s.apply(
+        &mut db,
+        vec![map("Realm of the Mad God", AreaKind::Realm, 3 * MIN)],
+    );
+    let all = visits(&db);
+    assert_eq!(all[0].character_id.as_deref(), Some(C));
+    assert_eq!(all[0].ended, Some(Timestamp(2 * MIN)));
+    assert_eq!(all[1].character_id, None);
+    s.apply(&mut db, vec![map("Vault", AreaKind::OtherHub, 4 * MIN)]);
+    assert_eq!(visits(&db)[2].character_id, None);
+    s.apply(&mut db, vec![character("synth-new", "SynthBravo", 4 * MIN)]);
+    assert_eq!(visits(&db)[2].character_id.as_deref(), Some("synth-new"));
+}
+
+#[test]
+fn known_identity_keeps_normal_map_continuity() {
+    let (_dir, _path, mut db) = database();
+    let mut s = start(&mut db);
+    s.apply(
+        &mut db,
+        vec![
+            map("Nexus", AreaKind::Nexus, MIN),
+            fame(C, 100, MIN),
+            EngineEvent::LocalIdentityChanged {
+                at: Timestamp(MIN),
+                character_id: Some(C.into()),
+                account_id: None,
+            },
+            map("Realm of the Mad God", AreaKind::Realm, 2 * MIN),
+        ],
+    );
+    let all = visits(&db);
+    assert_eq!(all[0].ended, Some(Timestamp(2 * MIN)));
+    assert_eq!(all[1].character_id.as_deref(), Some(C));
+}
