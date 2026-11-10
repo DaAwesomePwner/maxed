@@ -1618,3 +1618,60 @@ fn exact_pre_maintenance_backups_can_be_deleted_without_maintenance_tables() {
         crate::common::installed_schema::assert_installed(&db, version);
     }
 }
+
+#[test]
+fn crucible_configuration_is_backed_up_and_integrity_checked() {
+    let (dir, _path, mut db, mut backups) = fixture();
+    let defs = vec![maxed_types::CrucibleDef {
+        id: "synthetic".into(),
+        damage_multiplier: 1.5,
+    }];
+    maxed_store::upsert_crucible_definitions(&mut db, &defs, maxed_types::Timestamp(10)).unwrap();
+    let (_, info) = make(&mut backups, &db, DestructiveClass::ReceiptConversion);
+    let image = dir
+        .path()
+        .join("backups/live")
+        .join(format!("backup-{:020}.sqlite3", info.id.0));
+    let restored =
+        Connection::open_with_flags(&image, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    assert_eq!(
+        maxed_store::read_crucible_definitions(&restored).unwrap(),
+        defs
+    );
+    crate::common::installed_schema::assert_integrity(&restored);
+    // A new backup (rather than reuse of the verified initial image) must
+    // reject invalid configuration through whole-database integrity checking.
+    let (_invalid_dir, _invalid_path, mut db, mut backups) = fixture();
+    maxed_store::upsert_crucible_definitions(&mut db, &defs, maxed_types::Timestamp(10)).unwrap();
+    db.execute_batch(
+        "PRAGMA ignore_check_constraints=ON;
+        UPDATE crucible_definitions SET damage_multiplier=101; PRAGMA ignore_check_constraints=OFF;",
+    )
+    .unwrap();
+    assert_eq!(
+        db.query_row(
+            "SELECT damage_multiplier FROM crucible_definitions",
+            [],
+            |r| r.get::<_, f64>(0)
+        )
+        .unwrap(),
+        101.
+    );
+    assert_ne!(
+        db.query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
+            .unwrap(),
+        "ok"
+    );
+    let request = backups
+        .request(DestructiveClass::DetailReplacement, 200)
+        .unwrap();
+    assert!(backups
+        .create(
+            &db,
+            request,
+            &Space(Some(u64::MAX)),
+            &AtomicBool::new(false),
+            &mut || {}
+        )
+        .is_err());
+}

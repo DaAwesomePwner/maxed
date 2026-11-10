@@ -1105,7 +1105,24 @@ fn readonly(path: &Path) -> Result<Connection, BackupError> {
     Ok(db)
 }
 fn validate(db: &Connection) -> Result<(), BackupError> {
-    check_schema(db).map_err(BackupError::from)?;
+    let version = check_schema(db).map_err(BackupError::from)?;
+    // Explicitly verify configuration bounds as well: read-only integrity_check
+    // does not reliably report CHECK violations on all SQLite builds.
+    if version >= 20
+        && db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM crucible_definitions WHERE
+         typeof(id)<>'text' OR length(CAST(id AS BLOB)) NOT BETWEEN 1 AND 64
+         OR typeof(damage_multiplier) NOT IN ('real','integer')
+         OR NOT (damage_multiplier>0 AND damage_multiplier<=100)
+         OR typeof(first_observed_at)<>'integer' OR first_observed_at<0
+         OR typeof(last_observed_at)<>'integer' OR last_observed_at<0)
+         OR (SELECT count(*) FROM crucible_definitions)>4096",
+            [],
+            |r| r.get::<_, bool>(0),
+        )?
+    {
+        return Err(BackupError::Invalid);
+    }
     let mut statement = db.prepare("PRAGMA integrity_check")?;
     let mut rows = statement.query([])?;
     if rows

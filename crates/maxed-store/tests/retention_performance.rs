@@ -720,6 +720,7 @@ fn assert_upgrade_history(db: &Connection, before: BTreeMap<String, (u64, [u8; 3
     // Check the exact additions, then compare the complete pre-existing map.
     // This catches deleted/added tables as well as changed, added or missing rows.
     for table in [
+        "crucible_definitions",
         "accounts",
         "current_account",
         "observation_characters",

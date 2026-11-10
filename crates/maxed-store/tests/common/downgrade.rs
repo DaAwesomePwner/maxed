@@ -14,8 +14,10 @@ pub fn remove_maintenance_schema(db: &Connection) {
     for name in triggers {
         db.execute_batch(&format!("DROP TRIGGER {name}")).unwrap();
     }
-    db.execute_batch("DROP TABLE IF EXISTS unresolved_observations")
-        .unwrap();
+    db.execute_batch(
+        "DROP TABLE IF EXISTS crucible_definitions; DROP TABLE IF EXISTS unresolved_observations",
+    )
+    .unwrap();
     if db.prepare("SELECT account_id FROM characters").is_ok() {
         db.execute_batch("DROP VIEW death_accounts; DROP VIEW fame_accounts; DROP VIEW drop_accounts; DROP VIEW fight_accounts; DROP VIEW run_accounts; DROP VIEW character_accounts;
         DROP TABLE identity_spans; DROP TABLE observation_characters; DROP TABLE account_recovery; DROP TABLE current_account;

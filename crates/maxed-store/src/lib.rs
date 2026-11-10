@@ -13,6 +13,7 @@ pub mod backup;
 mod boss_history;
 mod catalog_query;
 mod chat;
+mod crucible;
 mod dungeon_profile;
 mod error;
 mod home;
@@ -65,6 +66,7 @@ pub use chat::{
     event_fts_probe_for_tests, event_page_sql_for_tests, maintain_chat_file, ChatMaintenance,
     HiddenLists, CHAT_CLEAR_BATCH, CHAT_PRUNE_BATCH,
 };
+pub use crucible::{read_crucible_definitions, upsert_crucible_definitions};
 pub use error::StoreError;
 pub use migrate::{
     history_preflight, migrate, open_reader, upgrade_history, StoreReader, SCHEMA_VERSION,

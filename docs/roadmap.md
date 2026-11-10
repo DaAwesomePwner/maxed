@@ -255,7 +255,7 @@ answer is given.
 - **Migrations are numbered in the plans.** Loot took 008, Logs 009, Stats 010,
   excluded-bag cleanup 011, event-name search 012, player observations 013
   Party 014, Home loot-statistics indexes 015, maintenance receipts 016, accounts 017,
-  account read index 018 and attribution notice 019. The next spec claims 020 so parallel workers never collide.
+  account read index 018, attribution notice 019 and Crucible definitions 020. The next spec claims 021 so parallel workers never collide.
   Never rewrite an installed migration.
 - **Home stays the Session/Today view; Stats owns lifetime views.** Don't duplicate Home's KPI strip or
   By-dungeon section; link from Home to the matching Stats view instead. The Home redesign phase 1,

@@ -35,7 +35,7 @@ pub fn upgrade_after_confirmation(
 }
 
 // Installed scripts and their original LF-byte checksums are immutable.
-const SCRIPTS: [(&str, &str); 16] = [
+const SCRIPTS: [(&str, &str); 19] = [
     (
         include_str!("../../migrations/001_initial.sql"),
         "b3aadbd6e99610c6da10b9c9ab8d942778894b9fab7def4efa5623b39b512c77",
@@ -99,6 +99,18 @@ const SCRIPTS: [(&str, &str); 16] = [
     (
         include_str!("../../migrations/016_maintenance_receipts.sql"),
         "56c70ccc3c7bd6d80765025d4ed128916e000c45ca2259da19209a9357ee3cb0",
+    ),
+    (
+        include_str!("../../migrations/017_accounts.sql"),
+        "2cf6c0bc4a3ad5b8f902dc67bb1b8a62331d1398e9e5a7ad1bc9c6a04de11154",
+    ),
+    (
+        include_str!("../../migrations/018_account_reads.sql"),
+        "142e85b5974102bc16677af856ba36bcd5ab4679856fe004462ca7051de4c012",
+    ),
+    (
+        include_str!("../../migrations/019_attribution_notice.sql"),
+        "c25f711e938a91fcca77ac2cbe674e2602d0d5502c3c52ff700fa7c6cf91a4b4",
     ),
 ];
 
@@ -371,6 +383,16 @@ pub fn assert_additive_upgrade(
                     normalized(&pending.join("; ")),
                     normalized(include_str!("../../migrations/019_attribution_notice.sql")),
                     "unexpected work attributed to migration 019"
+                );
+            } else if version == 20 {
+                // CAST(id AS BLOB) measures UTF-8 bytes; the conservative generic
+                // checker rejects AS to forbid CREATE TABLE AS SELECT.
+                assert_eq!(
+                    normalized(&pending.join("; ")),
+                    normalized(include_str!(
+                        "../../migrations/020_crucible_definitions.sql"
+                    )),
+                    "unexpected work attributed to migration 020"
                 );
             } else if version >= 16 {
                 assert!(!pending.is_empty(), "missing additive DDL trace");
