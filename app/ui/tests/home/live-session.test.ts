@@ -98,7 +98,7 @@ describe('host live-session regressions', () => {
     const main = screen.getByRole('main');
     expect(main.textContent).not.toMatch(/Waiting for RotMG|Capture offline|No Session|Reconnecting|Ready/);
     expect(within(main).getByRole('heading', { name: 'Nexus' })).toBeTruthy();
-    expect(within(main).getByRole('group', { name: 'History Period' })).toBeTruthy();
+    expect(within(main).getByRole('group', { name: 'History period' })).toBeTruthy();
   });
 
   it('keeps Nexus Home first through Live → WaitingForGame → Live', async () => {

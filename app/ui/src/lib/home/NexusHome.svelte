@@ -77,14 +77,14 @@
 <div class="nexus-home" class:debug={$debugMode}>
   <header class="nexus-header">
     <div><h2 tabindex="-1" bind:this={heading}>{snapshot?.map ?? (snapshot?.area_kind === 'realm' || snapshot?.area_kind === 'other_hub' ? 'Realm' : snapshot?.capture.state === 'Live' && snapshot.area_kind === 'unknown' ? 'Live' : 'Nexus')}</h2><p>Session since {clockTime(snapshot?.session?.started) ?? '—'}</p></div>
-    {#if onScopeChange}<div class="scope-controls seg" role="group" aria-label="History Period"><button bind:this={sessionButton} aria-pressed={choice === 'session'} onclick={() => { if (choice !== 'session') onScopeChange?.('session'); }}>Session</button><button aria-pressed={choice === 'today'} onclick={() => { if (choice !== 'today') onScopeChange?.('today'); }}>Today</button></div>{/if}
+    {#if onScopeChange}<div class="scope-controls seg" role="group" aria-label="History period"><button bind:this={sessionButton} aria-pressed={choice === 'session'} onclick={() => { if (choice !== 'session') onScopeChange?.('session'); }}>Session</button><button aria-pressed={choice === 'today'} onclick={() => { if (choice !== 'today') onScopeChange?.('today'); }}>Today</button></div>{/if}
   </header>
   {#if error || history.phase === 'unavailable'}<div class="history-status" role="status">
     <span>{error ? "Couldn't load history" : 'No history'}</span>
     {#if error}<button class="ctl" disabled={!history.retryAvailable} onclick={retryHistory}>Retry</button>{/if}
   </div>{/if}
   {#if $debugMode}<DebugNote>{syntheticClock && choice === 'today' ? 'Demo Day · ' : ''}{choice === 'today' ? dayCaption(scope) : ''}</DebugNote>{/if}
-  <div class="kpis" aria-label={`${period} Stats`}>
+  <div class="kpis" aria-label={`${period} stats`}>
     <KpiStrip {cells} />
     {#if top}<a class="fight-link" href={routeHref({ kind: 'fight', id: top.id, runId: top.run_id ?? undefined })} aria-label={`Open fight: ${bossName}`}>
       <span class="boss-sprite"><SpriteImage sprite={boss?.sprite ?? null} sheetUrl={boss?.sprite ? resolve(boss.sprite) : null} fit={32} alt={bossName} /></span>

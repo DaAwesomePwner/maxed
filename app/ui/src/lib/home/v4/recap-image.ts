@@ -107,10 +107,12 @@ export async function loadSprite(url: string): Promise<HTMLImageElement> {
 }
 
 // The shareable PNG uses the app's contract palette (tokens.css): graphite surfaces, gold for you, neutral party.
-const displayFont = '"Segoe UI", system-ui, sans-serif';
+export const recapImageFont = '"Segoe UI", system-ui, sans-serif';
+const displayFont = recapImageFont;
 const textFont = displayFont;
-const colors = { background: '#0f0f10', panel: '#19191b', text: '#ededed', secondary: '#b4b4ba', muted: '#96969c',
-  gold: '#f2c14e', bar: '#36363a', green: '#4cc38a', red: '#f2777a', warning: '#e8a25a', border: '#2a2a2d' };
+export const recapImageColors = { background: '#0f0f10', panel: '#19191b', text: '#ededed', secondary: '#b4b4ba', muted: '#96969c',
+  gold: '#f2c14e', bar: '#36363a', green: '#4cc38a', red: '#f2777a', warning: '#e8a25a', border: '#2a2a2d' } as const;
+const colors = recapImageColors;
 
 /** Call only from the copy action. The detached canvas never captures the DOM. */
 export async function renderRecapImage(model: RecapImageModel,

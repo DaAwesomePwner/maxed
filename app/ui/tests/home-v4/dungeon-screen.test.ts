@@ -129,6 +129,13 @@ it('meter_appends_self_outside_top_six', () => {
   expect(within(table).getByRole('link', { name: /Synthetic 9/ }).getAttribute('href')).toContain('/players/');
 });
 
+it('meter_total_and_footer_keep_spaces_around_separators', () => {
+  const page = render(DungeonScreen, props());
+  const meter = page.getByRole('region', { name: 'Party damage' });
+  expect(meter.querySelector('.v4-meter-total')?.textContent).toMatch(/^100,000 damage · (—|[\d,]+) DPS$/);
+  expect(meter.querySelector('.v4-meter-footer p')?.textContent).toBe('+5 more · 10% of damage not attributed to a player');
+});
+
 it('meter_switches_to_whole_run_without_changing_the_hero_or_losing_distant_self', async () => {
   const input = props(); input.snapshot = snapshot(20, 24); input.onSelectFight = vi.fn();
   const page = render(DungeonScreen, input);
