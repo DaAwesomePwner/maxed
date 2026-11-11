@@ -265,6 +265,12 @@ impl Engine {
                         (pdef.min_damage, pdef.max_damage)
                     })
                 });
+                // The fallback cannot establish whether the client consumed a draw
+                // (the real bounds may be equal where the unscaled ones are not, or the
+                // reverse), so later rolls are untrusted until the next reseed.
+                if assumptions.contains(&Reason::AssumedWeaponEnchantDefault) {
+                    self.rng_valid = false;
+                }
                 // RealmShark Projectile(RNG,...): exclusive maximum, no roll when equal.
                 // Each received PlayerShoot consumes its own roll in packet order, including
                 // subattacks. Mapping only selects the bounds; it does not expand a volley
