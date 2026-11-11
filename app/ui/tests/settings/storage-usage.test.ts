@@ -54,7 +54,7 @@ it('shows separate counters, unavailable values, zero, and exact large bytes', a
   for (const label of ['Database', 'WAL', 'SHM', 'Reusable pages', 'Retained backups', 'Temporary backups', 'Recordings on disk', 'Recording quota']) expect(screen.getByText(label)).toBeTruthy();
   expect(compact).not.toHaveBeenCalled();
   await fireEvent.click(screen.getByRole('button', { name: 'Refresh storage' }));
-  await screen.findByText('Couldn’t read storage. Retry.');
+  await screen.findByText('Couldn’t read storage');
   expect(document.body.textContent).not.toContain('PRIVATE');
   await fireEvent.click(screen.getByRole('button', { name: 'Refresh storage' }));
   await screen.findByText('9,007,199,254,740,993 B');

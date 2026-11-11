@@ -21,23 +21,23 @@
   {/each}
 </dl>
 <style>
-  .kpi-strip { margin: 0; display: grid; background: var(--surface-panel); border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
-  .kpi-strip > div { min-width: 0; padding: 9px 14px 10px; position: relative; }
-  .kpi-strip > div + div { border-left: 1px solid var(--border); }
-  .kpi-strip dt { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); }
-  .kpi-strip .tooltip-trigger { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: help; }
+  .kpi-strip { margin: 0; display: grid; background: var(--surface-panel); border: 1px solid var(--hairline); border-radius: var(--radius-card); min-width: 0; }
+  .kpi-strip > div { min-width: 0; padding: var(--space-3) var(--space-4); position: relative; }
+  .kpi-strip > div + div { border-left: 1px solid var(--hairline); }
+  .kpi-strip dt { font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-normal); color: var(--text-muted); }
+  .kpi-strip .tooltip-trigger { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: help; }
   .kpi-strip dd { margin: 0; }
-  .kpi-strip .value { display: block; font-size: 24px; line-height: 1.15; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .kpi-strip small { font-size: 12px; color: var(--text-secondary); }
-  .kpi-strip .sub { display: block; min-height: 16px; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .kpi-strip .value { display: block; margin-top: var(--space-1); font-size: var(--text-hero); line-height: var(--leading-hero); font-weight: var(--weight-medium); white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  .kpi-strip small { font-size: var(--text-meta); font-weight: var(--weight-normal); color: var(--text-muted); }
+  .kpi-strip .sub { display: block; min-height: 16px; font-size: var(--text-meta); line-height: var(--leading-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); font-variant-numeric: tabular-nums; }
   .kpi-strip [data-tone="fame"] .value { color: var(--gold); }
   .kpi-strip [data-tone="bad"] .value { color: var(--danger); }
   .kpi-strip .sub[data-sub-tone="good"] { color: var(--success); }
   .kpi-strip .sub[data-sub-tone="bad"] { color: var(--danger); }
-  .kpi-strip .progress { display: block; height: 3px; background: var(--surface-raised); margin-top: 3px; overflow: hidden; }
-  .kpi-strip .progress i { display: block; height: 100%; background: var(--gold); }
+  .kpi-strip .progress { display: block; height: 4px; margin-top: var(--space-1); border-radius: 2px; background: var(--bar-track); overflow: hidden; }
+  .kpi-strip .progress i { display: block; height: 100%; background: var(--bar-you); }
   @media (max-width: 900px) {
-    .kpi-strip > div { padding-inline: 8px; }
-    .kpi-strip .value { font-size: 22px; }
+    .kpi-strip > div { padding-inline: var(--space-2); }
+    .kpi-strip .value { font-size: var(--text-title); line-height: var(--leading-title); }
   }
 </style>

@@ -68,7 +68,7 @@ it('Shell establishes the initial snapshot checkpoint before the writer catches 
   await vi.advanceTimersByTimeAsync(1000); await flushHomeRender();
   expect(client.queryHome).toHaveBeenCalledTimes(2);
   expect(screen.getByRole('status', { name: 'Background activity' }).textContent).not.toContain('Refreshing history');
-  expect(screen.getByText('Runs', { selector: 'dt' }).closest('[aria-label]')?.getAttribute('aria-label')).toBe('Session Stats');
+  expect(screen.getByText('Runs', { selector: 'dt' }).closest('[aria-label]')?.getAttribute('aria-label')).toBe('Session stats');
   expect(screen.getByText('Runs', { selector: 'dt' }).parentElement?.querySelector('.value')?.textContent).toBe('2');
   await vi.advanceTimersByTimeAsync(2000); await flushHomeRender();
   expect(client.queryHome).toHaveBeenCalledTimes(2);
@@ -132,7 +132,7 @@ it.each([false, true])('idle default snapshot loads saved Today and any availabl
   await fireEvent.click(screen.getByRole('button', { name: 'Today' })); await flushHomeRender();
   expect(query).toHaveBeenCalledTimes(withSession ? 2 : 1);
   expect(query).toHaveBeenLastCalledWith({ today: { range: expect.objectContaining({ start: expect.any(String), end: expect.any(String) }) } });
-  expect(screen.getByText('Runs', { selector: 'dt' }).closest('[aria-label]')?.getAttribute('aria-label')).toBe('Today Stats');
+  expect(screen.getByText('Runs', { selector: 'dt' }).closest('[aria-label]')?.getAttribute('aria-label')).toBe('Today stats');
   expect(screen.getByText('Runs', { selector: 'dt' }).parentElement?.querySelector('.value')?.textContent).toBe('3');
   expect(screen.queryByText('Waiting for saved history to catch up.')).toBeNull();
 });

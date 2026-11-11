@@ -29,6 +29,6 @@ it('keeps retry-ready history and loot errors next to their panels', () => {
   const page = render(NexusHome, { snapshot: homeSnapshot(), choice: 'session', retry: vi.fn(),
     history: { phase: 'error', summary: homeSummary(), message: 'Load failed', retryAvailable: true },
     lootStatus: { phase: 'busy', value: null, message: 'Loot busy', retryAvailable: true } });
-  expect(page.container.querySelector('.history-status')?.textContent).toContain("Couldn't load. Retry.");
-  expect(screen.getByRole('button', { name: 'Retry Loot' }).closest('.loot-status')?.textContent).toContain('Loot busy');
+  expect(page.container.querySelector('.history-status')?.textContent).toContain("Couldn't load history");
+  expect(screen.getByRole('button', { name: 'Retry loot' }).closest('.loot-status')?.textContent).toContain('Loot busy');
 });

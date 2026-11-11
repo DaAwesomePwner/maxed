@@ -30,6 +30,7 @@
   import ShowMore from '../lib/runs/ShowMore.svelte';
   import { limitRows, type RenderLimit } from '../lib/runs/render-limit';
   import EmptyState from '../lib/components/EmptyState.svelte';
+  import Badge from '../lib/components/Badge.svelte';
   import ObjectLabel from '../lib/home/ObjectLabel.svelte';
   import { createHomeVisuals, emptyHomeVisuals } from '../lib/home/visuals';
   let { client, fightId, runId, streamId = null, scopeKey = '', required = null, store = null,
@@ -146,9 +147,9 @@
   {#if history.message && history.message !== HISTORY_CATCH_UP && !/^(Refreshing|Loading)\b/.test(history.message)}<DebugNote text={history.message} />{/if}
   {#if retryShown}<button class="ctl" type="button" aria-disabled={!history.retryAvailable} onclick={() => { if (history.retryAvailable) controller?.retry(); }}>Retry</button>{/if}
   {#if !client}
-    <EmptyState state="unavailable" heading="No Fights" description="" />
+    <EmptyState state="unavailable" heading="No fights" description="" />
   {:else if mismatch}
-    <EmptyState state="unavailable" heading="Fight Unavailable" description="" />
+    <EmptyState state="unavailable" heading="Fight unavailable" description="" />
   {:else if fight}
     <div class="area-home fight-screen">
       <div class="crumbs"><Breadcrumbs items={[{ label: 'Runs', href: '#/runs' },
@@ -156,8 +157,8 @@
       <header class="area-header">
         <span class="run-icon"><SpriteImage sprite={boss?.sprite ?? null} sheetUrl={boss?.sprite ? spriteUrl(visuals.client_fingerprint, boss.sprite) : null} fit={32} alt={bossName} /></span>
         <div class="title"><h2>{bossName}</h2><p>{fight.boss_type !== null ? 'Boss' : 'Target'}{#if neighbors.index >= 0}{' · '}fight {neighbors.index + 1} of {neighbors.count}{/if}{' · '}{formatClockRange(fight.started, fight.ended)}</p></div>
-        <span class="chip" class:killed={outcome === 'killed'} class:ongoing={outcome === 'live'}>{outcome === 'killed' ? 'Killed' : outcome === 'live' ? 'In progress' : 'Ended'}</span>
-        {#if !fight.complete_capture || fight.issues.length || fight.kill?.provisional}<span class="tag">partial</span>{/if}
+        <span class="chip" class:killed={outcome === 'killed'}>{outcome === 'killed' ? 'Killed' : outcome === 'live' ? 'In progress' : 'Ended'}</span>
+        {#if !fight.complete_capture || fight.issues.length || fight.kill?.provisional}<span class="tag"><Badge label="partial" /></span>{/if}
         <nav class="neighbors" aria-label="Adjacent boss fights">
           <a class="ctl ghost" aria-label={neighbors.previous ? `Previous boss: ${stripName(neighbors.previous)}` : 'Previous boss'} aria-disabled={neighbors.previous === null} href={neighbors.previous ? fightHref(neighbors.previous.fight_id) : undefined}>‹ {neighbors.previous ? stripName(neighbors.previous) : 'Previous boss'}</a>
           <a class="ctl ghost" aria-label={neighbors.next ? `Next boss: ${stripName(neighbors.next)}` : 'Next boss'} aria-disabled={neighbors.next === null} href={neighbors.next ? fightHref(neighbors.next.fight_id) : undefined}>{neighbors.next ? stripName(neighbors.next) : 'Next boss'} ›</a>
@@ -171,12 +172,12 @@
           <div class="card-heading"><h3>Your damage sources</h3>{#if selfHref}<a class="all" href={selfHref}>All ›</a>{/if}</div>
           {#each sources as source}
             <div class="source"><div class="source-label"><ObjectLabel type={source.item_type} kind="item" {visuals} enchant={source.enchant} /><span>{formatStat(source.damage)}</span></div>
-              {#if source.estimatedDamage > 0}<span class="tag" title="Estimated share of this item's damage">~{formatShare(source.estimatedDamage / source.damage)} est.</span>{/if}
+              {#if source.estimatedDamage > 0}<span class="tag" title="Estimated share of this item's damage"><Badge label={`~${formatShare(source.estimatedDamage / source.damage)} est.`} /></span>{/if}
               <div class="source-bar"><i style:width={`${self && self.damage > 0 ? Math.max(0, Math.min(100, source.damage / self.damage * 100)) : 0}%`}></i></div>
             </div>
           {:else}<p class="muted">—</p>{/each}
         </section>
-        <section class="area-card" aria-label="You this run"><h3>You this run</h3>
+        <section class="area-card" aria-label="Bosses this run"><h3>Bosses this run</h3>
           {#if strip?.length}<div class="strip-scroll"><table><thead><tr><th>Boss</th><th>Damage</th><th>Rank</th></tr></thead><tbody>
             {#each shownStrip as row (row.fight_id)}<tr class:current={row.fight_id === fight.id}><th scope="row"><a href={fightHref(row.fight_id)} aria-current={row.fight_id === fight.id ? 'page' : undefined} title={stripName(row)}>{stripName(row)}</a></th><td>{formatStat(row.damage)}</td><td>{damageRank(row.rank)}</td></tr>{/each}
           </tbody></table></div>
@@ -195,13 +196,13 @@
       </details>{/if}
     </div>
   {:else if history.value !== null}
-    <EmptyState heading="Fight Not Found" description="">
+    <EmptyState heading="Fight not found" description="">
       {#snippet action()}<a href="#/runs">Runs</a>{/snippet}
     </EmptyState>
   {:else if history.phase === 'error'}
-    <EmptyState state="error" heading="Fight Error" description="" />
+    <EmptyState state="error" heading="Fight error" description="" />
   {:else}
-    <EmptyState state="loading" heading="Loading Fight" description="" />
+    <EmptyState state="loading" heading="Loading fight" description="" />
   {/if}
 </div>
 
@@ -211,34 +212,40 @@
   .crumbs { grid-area: crumbs; min-width: 0; }
   .area-header { flex-wrap: wrap; } .title { min-width: 0; }
   .title h2 { overflow-wrap: anywhere; }
-  .neighbors { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
-  .neighbors a { height: 26px; min-height: 26px; box-sizing: border-box; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .chip { border: 1px solid var(--border); border-radius: 99px; padding: 3px 8px; color: var(--text-muted); }
-  .chip.killed { color: var(--success); border-color: #75dfa140; background: #75dfa114; }
-  .chip.ongoing { color: var(--gold); border-color: #f2c14e55; }
-  .tag { font-size: 10px; color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
-  .side { grid-area: side; display: grid; align-self: start; align-content: start; gap: 10px; min-width: 0; padding: 0; border: 0; background: transparent; }
-  .card-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .all { color: var(--violet-text); text-decoration: none; }
-  .source + .source { margin-top: 8px; }
-  .source-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+  .neighbors { margin-left: auto; display: flex; gap: var(--space-1); flex-wrap: wrap; min-width: 0; }
+  .neighbors a { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Status words are plain semantic text. */
+  .chip { font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); color: var(--text-secondary); white-space: nowrap; }
+  .chip.killed { color: var(--success); }
+  .tag { display: inline-flex; }
+  .side { grid-area: side; display: grid; align-self: start; align-content: start; gap: var(--space-3); min-width: 0; padding: 0; border: 0; background: transparent; }
+  .side :global(.area-card) { font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .card-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+  .all { color: var(--text-secondary); text-decoration: none; }
+  .all:hover, .all:focus-visible { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+  .source + .source { margin-top: var(--space-3); }
+  .source .tag { margin-bottom: var(--space-1); }
+  .source-label { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-1); font-variant-numeric: tabular-nums; }
   .source-label :global(.object-label) { min-width: 0; }
   .source-label :global(.object-label > span:last-child) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .source-bar { height: 6px; background: #00000040; border-radius: 2px; }
-  .source-bar i { display: block; height: 100%; background: var(--gold); border-radius: inherit; }
+  /* Every row is your own source, so the fill stays neutral; the figure sits above the track. */
+  .source-bar { height: 6px; background: var(--bar-track); border-radius: 2px; overflow: hidden; }
+  .source-bar i { display: block; height: 100%; background: var(--bar-party); border-radius: inherit; }
   .strip-scroll { min-width: 0; }
   table { width: 100%; table-layout: fixed; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  th, td { text-align: right; height: 30px; padding: 0 4px; font-weight: 400; }
+  th, td { text-align: right; height: var(--row-compact); padding: 0 var(--space-1); font-weight: var(--weight-normal); }
   th:first-child { width: 52%; text-align: left; }
-  thead th { font-size: 11px; color: var(--text-muted); }
-  tbody tr { border-top: 1px solid var(--border); }
+  thead th { height: var(--space-6); font-size: var(--text-meta); color: var(--text-muted); font-weight: var(--weight-medium); border-bottom: 1px solid var(--hairline-strong); }
+  tbody tr + tr { border-top: 1px solid var(--hairline); }
   td { white-space: nowrap; }
-  table a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; text-decoration: none; line-height: 30px; }
-  .current { background: #f2c14e14; } .current th { box-shadow: inset 2px 0 var(--gold); padding-left: 6px; }
-  .current td:last-child { color: var(--gold); }
-  .facts { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 12px; }
+  table a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; text-decoration: none; line-height: var(--row-compact); }
+  table a:hover, table a:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+  /* The open fight is a selection, not a "you" highlight: neutral step plus edge. */
+  .current { background: var(--surface-selected); } .current th { box-shadow: var(--selected-edge); padding-left: var(--space-2); }
+  .current td:last-child { color: var(--text-primary); }
+  .facts { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-3); }
   .good { color: var(--success); }
   .facts dt, .muted { color: var(--text-muted); } .facts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-  .area-debug { grid-column: 1 / -1; } summary { min-height: 26px; cursor: pointer; }
+  .area-debug { grid-column: 1 / -1; } summary { min-height: var(--target-min); align-content: center; cursor: pointer; }
   @media (max-width: 1200px) { .fight-screen { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: 'crumbs' 'head' 'kpis' 'chart' 'table' 'side'; } }
 </style>

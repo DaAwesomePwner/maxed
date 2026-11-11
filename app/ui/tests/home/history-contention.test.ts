@@ -46,7 +46,7 @@ it('Home summary retries back off, release the shared queue to HUD and recap, an
   } finally { cleanup(); reads.dispose(); }
 });
 
-it('Nexus exposes Retry Loot after repeated supersession and the rendered control recovers', async () => {
+it('Nexus exposes Retry loot after repeated supersession and the rendered control recovers', async () => {
   vi.useFakeTimers();
   const snapshot = homeSnapshot({ area_kind: 'nexus', run: null });
   const client = createClient(createFixtureTransport(snapshot, undefined, homeSummary()));
@@ -54,9 +54,9 @@ it('Nexus exposes Retry Loot after repeated supersession and the rendered contro
   render(Home, { client, snapshot, store: saved(), redesign: false });
   await flush(); await vi.advanceTimersByTimeAsync(2000); await flush();
   expect(loot).toHaveBeenCalledTimes(2);
-  const retry = screen.getByRole('button', { name: 'Retry Loot' });
+  const retry = screen.getByRole('button', { name: 'Retry loot' });
   loot.mockResolvedValue({ status: 'ready', value: { items: [], next: null, total_bags: 0 } });
   await fireEvent.click(retry); await flush();
   expect(loot).toHaveBeenCalledTimes(3);
-  expect(screen.queryByRole('button', { name: 'Retry Loot' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Retry loot' })).toBeNull();
 });

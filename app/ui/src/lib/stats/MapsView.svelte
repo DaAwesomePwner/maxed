@@ -51,7 +51,7 @@
 
 <style>
   .min-runs { display: grid; gap: var(--space-1); }
-  .min-runs input { width: 70px; }
+  .min-runs input { width: 72px; }
   h3 { margin: var(--space-3) 0 var(--space-2); }
   .bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: var(--space-3); margin-bottom: var(--space-3); }
   .note { margin: var(--space-2) 0 0; color: var(--text-secondary); }

@@ -65,13 +65,13 @@ describe('structural layout contracts (no jsdom geometry claims)', () => {
     render(Shell, { client: f.client, historyAdapter: fakeHistory(`#/${route}`).adapter });
     const main = screen.getByRole('main');
     if (route === 'settings') { await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' })); }
-    const input = await within(main).findByRole('textbox', { name: 'Assets Path' }) as HTMLInputElement;
+    const input = await within(main).findByRole('textbox', { name: 'Assets path' }) as HTMLInputElement;
     if (route === 'settings') { await fireEvent.click(screen.getByRole('tab', { name: 'General' })); }
     // Saved settings arrive separately from the route mount.
     await within(main).findByRole('option', { name: /Synthetic network adapter/ });
     expect(input.value).toBe(path);
     expect(getComputedStyle(input).minWidth).toBe('0');
-    expect(getComputedStyle(within(main).getByRole('combobox', { name: 'Capture Adapter' })).minWidth).toBe('0');
+    expect(getComputedStyle(within(main).getByRole('combobox', { name: 'Capture adapter' })).minWidth).toBe('0');
     const page = main.querySelector(`.${route}-page`)!;
     expect(getComputedStyle(page).overflowWrap).toBe('anywhere');
     expect(getComputedStyle(page).minWidth).toBe('0');
@@ -81,7 +81,7 @@ describe('structural layout contracts (no jsdom geometry claims)', () => {
     styles(['lib/components/Banner.svelte']);
     const title = 'SyntheticMoment'.repeat(30);
     render(Banner, { props: { id: 'narrow', kind: 'white_bag', title, context: 'Synthetic context '.repeat(30), onDismiss: vi.fn() } });
-    const banner = screen.getByRole('region', { name: 'White Bag' });
+    const banner = screen.getByRole('region', { name: 'White bag' });
     expect(getComputedStyle(banner).flexWrap).toBe('wrap');
     expect(getComputedStyle(banner).minWidth).toBe('0');
     const copy = banner.querySelector('.copy')!;
@@ -91,6 +91,6 @@ describe('structural layout contracts (no jsdom geometry claims)', () => {
     // and squeeze the title to one character per line; a real basis wraps them.
     expect(getComputedStyle(copy).flexBasis).toBe('12rem');
     expect(screen.getByRole('heading', { name: title })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Dismiss White Bag' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Dismiss White bag' })).toBeTruthy();
   });
 });

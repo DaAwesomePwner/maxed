@@ -27,7 +27,7 @@
 
 <header class="v4-card death-banner" data-outcome="died">
   <div class="death-copy">
-    <h2>{view.title} · DIED AT {view.died?.elapsed ?? '—'}</h2>
+    <h2>{view.title} · Died at {view.died?.elapsed ?? '—'}</h2>
     <div class="killer">
       {#if killer.spriteType !== null}
         <SpriteImage sprite={killerVisual?.sprite ?? null} sheetUrl={killerVisual?.sprite ? resolveSpriteUrl(killerVisual.sprite) : null}
@@ -48,18 +48,17 @@
 </header>
 
 <style>
-  .death-banner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; padding: 24px;
-    border-color: var(--danger); background: linear-gradient(110deg, color-mix(in srgb, var(--danger) 18%, var(--surface-panel)), var(--surface-panel)); }
+  .death-banner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); padding: var(--space-6); }
   .death-copy, .death-right { min-width: 0; }
   .death-copy { overflow-wrap: anywhere; }
-  h2 { margin: 0; color: var(--danger); font: 600 18px/1.3 var(--font-home-display); }
-  .killer { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
-  .killer p { margin: 0; min-width: 0; font: 600 20px/1.3 var(--font-home-display); }
-  .unverified { color: var(--text-secondary); font-size: 11px; font-weight: 400; }
-  .death-meta { margin: 12px 0 0; color: var(--text-secondary); font-size: 12px; }
+  h2 { margin: 0; color: var(--danger); font-size: var(--text-title); line-height: var(--leading-title); font-weight: var(--weight-medium); }
+  .killer { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
+  .killer p { margin: 0; min-width: 0; font-size: var(--text-title); line-height: var(--leading-title); font-weight: var(--weight-medium); }
+  .unverified { color: var(--text-muted); font-size: var(--text-meta); font-weight: var(--weight-normal); }
+  .death-meta { margin: var(--space-3) 0 0; color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); }
   .death-right :global(.recap-tiles) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  h3 { margin: 16px 0 8px; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
-  .death-bags { height: 114px; min-width: 0; }
+  h3 { margin: var(--space-4) 0 var(--space-2); color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); }
+  .death-bags { height: 112px; min-width: 0; }
   @media (max-width: 950px) { .death-banner { grid-template-columns: minmax(0, 1fr); } }
-  @media (max-width: 540px) { .death-banner { padding: 16px; } }
+  @media (max-width: 540px) { .death-banner { padding: var(--space-4); } }
 </style>

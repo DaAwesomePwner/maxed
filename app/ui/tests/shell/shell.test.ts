@@ -135,14 +135,14 @@ describe('persistent shell', () => {
     transport.publishSnapshot({ ...fixture, sequence: '13', map: 'Still capturing' });
     await within(rail).findByText('Still capturing');
     expect(within(rail).getByRole('heading', { name: fixture.character.name })).toBeTruthy();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Retry Capture' }));
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Retry capture' }));
     await screen.findByRole('alert');
     expect(screen.getByRole('alert').textContent).toBe('Capture failed. Retry.');
     expect(screen.getByText("Couldn't save. Retry.")).toBeTruthy();
     expect(document.body.textContent).not.toContain('SECRET');
     expect(client.startCapture).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry Capture' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry capture' }));
     expect(client.startCapture).toHaveBeenCalledTimes(2);
     expect(screen.getByText("Couldn't save. Retry.")).toBeTruthy();
   });
@@ -157,17 +157,17 @@ describe('persistent shell', () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(screen.getByText('Disconnected. Reconnect.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy();
-    expect(screen.queryByText('Storage Error')).toBeNull();
+    expect(screen.queryByText('Storage error')).toBeNull();
     const rail = screen.getByRole('complementary', { name: 'Character' });
     expect(within(rail).queryByRole('alert')).toBeNull();
-    expect(within(rail).queryByRole('button', { name: 'Reconnect Capture' })).toBeNull();
-    await fireEvent.click(screen.getByRole('button', { name: 'Start Capture' }));
+    expect(within(rail).queryByRole('button', { name: 'Reconnect capture' })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Start capture' }));
     expect(client.startCapture).toHaveBeenCalledTimes(1);
-    await fireEvent.click(screen.getByRole('button', { name: 'Stop Capture' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Stop capture' }));
     expect(client.stopCapture).toHaveBeenCalledTimes(1);
     expect(within(rail).queryByRole('alert')).toBeNull();
     expect(screen.getByText('Disconnected. Reconnect.')).toBeTruthy();
-    expect(screen.queryByText('Storage Error')).toBeNull();
+    expect(screen.queryByText('Storage error')).toBeNull();
     expect(document.body.textContent).not.toContain('PRIVATE');
   });
   it('exposes an ordered registration failure without issuing dependent queries', async () => {
@@ -180,7 +180,7 @@ describe('persistent shell', () => {
     expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy();
     expect(client.querySnapshot).not.toHaveBeenCalled();
     expect(client.queryStore).not.toHaveBeenCalled();
-    expect(screen.queryByText('Storage Error')).toBeNull();
+    expect(screen.queryByText('Storage error')).toBeNull();
     expect(document.body.textContent).not.toContain('PRIVATE');
   });
   it('does not label an unread store as failed, but reports a rejected store read', async () => {
@@ -191,10 +191,10 @@ describe('persistent shell', () => {
     render(Shell, { client, historyAdapter: fakeHistory().adapter });
     await vi.advanceTimersByTimeAsync(0);
     expect(client.queryStore).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText('Storage Error')).toBeNull();
+    expect(screen.queryByText('Storage error')).toBeNull();
     rejectStore(new Error('PRIVATE storage failure'));
     await vi.advanceTimersByTimeAsync(0);
-    expect(screen.getByText('Storage Error')).toBeTruthy();
+    expect(screen.getByText('Storage error')).toBeTruthy();
     expect(document.body.textContent).not.toContain('PRIVATE');
   });
   it('shows a storage failure discovered by the slow poll after launch', async () => {
@@ -216,10 +216,10 @@ describe('persistent shell', () => {
     await screen.findByRole('heading', { name: 'Runs', level: 1 });
     const controls = [...container.querySelectorAll<HTMLAnchorElement | HTMLButtonElement>('a, button')];
     const labels = controls.map(element => element.getAttribute('aria-label') ?? element.textContent?.trim());
-    expect(labels.slice(0, 8)).toEqual(['Skip to Content', 'Back', 'Forward', 'Start Capture', 'Home', 'Runs', 'Alerts', 'Settings']);
+    expect(labels.slice(0, 8)).toEqual(['Skip to content', 'Back', 'Forward', 'Start capture', 'Home', 'Runs', 'Alerts', 'Settings']);
     expect(screen.getByRole('main').querySelector('.route-toolbar')).toBeNull();
     const user = userEvent.setup(); await user.tab();
-    expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Skip to Content' }));
+    expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Skip to content' }));
     await user.keyboard('{Enter}'); expect(document.activeElement).toBe(screen.getByRole('main'));
   });
 
@@ -303,9 +303,9 @@ describe('synthetic P4 consumption example', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }));
     await rerender({ historyAdapter: browser.adapter, runs: [] });
     await user.click(screen.getByRole('button', { name: 'Back' }));
-    await screen.findByText('Page Heading');
+    await screen.findByText('Page heading');
     expect(container.querySelector('.restoration-status')).toBe(announcement);
-    expect(announcement.textContent).toBe('Page Heading');
+    expect(announcement.textContent).toBe('Page heading');
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Runs', level: 1 }));
     await user.click(within(screen.getByRole('navigation', { name: 'Navigation' })).getByRole('link', { name: 'Home' }));
     await waitFor(() => expect(announcement.textContent).toBe(''));

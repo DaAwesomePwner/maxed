@@ -54,24 +54,24 @@
 {#snippet unavailable()}<span aria-hidden="true">—</span><span class="sr-only">Unavailable</span>{/snippet}
 
 <style>
-  .compact-hero { flex: 0 0 auto; min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: var(--hero-radial); --rail-vital-size: 12px; --rail-label-size: 12px; --rail-stat-size: 14px; }
-  .hero-body { display: grid; gap: 5px; min-width: 0; }
-  .hero-top { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: 8px; align-items: center; }
-  .avatar { width: 60px; height: 60px; display: grid; place-items: center; background: #0c0b11; border-radius: 8px; }
+  .compact-hero { flex: 0 0 auto; min-width: 0; border: 1px solid var(--hairline); border-radius: var(--radius-card); padding: var(--space-3); background: var(--surface-panel); --rail-vital-size: 12px; --rail-label-size: 12px; --rail-stat-size: 14px; }
+  .hero-body { display: grid; gap: var(--space-2); min-width: 0; }
+  .hero-top { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
+  .avatar { width: 60px; height: 60px; display: grid; place-items: center; background: var(--surface-inset); border-radius: var(--radius-control); }
   .identity { min-width: 0; }
-  .cname { overflow: hidden; text-overflow: ellipsis; margin: 0; font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .cname { overflow: hidden; text-overflow: ellipsis; margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-semibold); white-space: nowrap; }
   p { margin: 0; }
-  .cclass { overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
-  .maxed { color: var(--gold); font-size: 14px; font-weight: 700; white-space: nowrap; }
-  .maxed span { font-weight: 400; font-size: 11px; color: var(--text-secondary); }
-  .equipment { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
-  .equipment li { min-width: 0; height: 40px; display: grid; place-items: center; background: #0c0b11; border: 1px solid var(--border); border-radius: 6px; }
+  .cclass { display: flex; min-width: 0; overflow: hidden; color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); white-space: pre; }
+  .cclass > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .maxed { color: var(--gold); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .maxed span { font-weight: var(--weight-normal); font-size: var(--text-meta); color: var(--text-secondary); }
+  .equipment { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+  .equipment li { min-width: 0; height: var(--row-min); display: grid; place-items: center; background: var(--surface-inset); border: 1px solid var(--hairline); border-radius: var(--radius-sprite); }
   .stale { opacity: .7; }
-  .death { color: var(--danger); font-size: 11px; }
+  .death { color: var(--danger); font-size: var(--text-meta); }
   @media (max-width: 900px) {
-    .compact-hero { padding: 4px; --rail-vital-size: 10px; --rail-label-size: 10px; --rail-stat-size: 11px; }
-    .hero-top { gap: 5px; }
-    .cname { font-size: 10.5px; letter-spacing: -.02em; }
-    .cclass { font-size: 9px; }
+    .compact-hero { padding: var(--space-1); --rail-vital-size: 12px; --rail-label-size: 12px; --rail-stat-size: 12px; }
+    .hero-top { gap: var(--space-1); }
+    .cname { font-size: var(--text-meta); line-height: var(--leading-meta); }
   }
 </style>

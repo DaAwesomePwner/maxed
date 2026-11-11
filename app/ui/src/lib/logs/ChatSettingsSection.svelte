@@ -60,20 +60,20 @@
 </fieldset>
 
 <style>
-  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 8px; }
-  legend { padding: 0; margin-bottom: 8px; font-weight: 600; }
-  .channel-choice { padding-bottom: 8px; border-bottom: 1px solid var(--border); }
-  .check { display: flex; align-items: start; gap: 8px; line-height: 20px; }
-  input[type='checkbox'] { flex: none; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--violet); }
-  .channel-choice p { margin: 2px 0 0 24px; }
-  p { margin: 0; color: var(--text-secondary); font-size: 12px; }
-  h3 { margin: 8px 0 0; font-size: 12px; font-weight: 600; }
-  label:not(.check) { display: grid; gap: 4px; }
-  input[type='number'] { width: 100px; }
+  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: var(--space-2); }
+  legend { padding: 0; margin-bottom: var(--space-2); font-weight: var(--weight-medium); }
+  .channel-choice { padding-bottom: var(--space-2); border-bottom: 1px solid var(--hairline); }
+  .check { display: flex; align-items: start; gap: var(--space-2); line-height: var(--leading-label); }
+  input[type='checkbox'] { flex: none; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--text-primary); }
+  .channel-choice p { margin: 0 0 0 var(--space-6); }
+  p { margin: 0; color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  h3 { margin: var(--space-2) 0 0; font-size: var(--text-caption); font-weight: var(--weight-medium); }
+  label:not(.check) { display: grid; gap: var(--space-1); }
+  input[type='number'] { width: 96px; }
   input:not([type='checkbox']) { min-width: 0; max-width: 100%; box-sizing: border-box; }
-  ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
-  li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  form, .actions { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+  ul { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+  li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  form, .actions { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-2); }
   form label { flex: 1; min-width: 0; }
   .danger { color: var(--danger); }
   [role='status']:empty { display: none; }

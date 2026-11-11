@@ -91,13 +91,14 @@
 </div>
 
 <style>
-  .recap-copy { display: grid; gap: 6px; position: relative; }
-  .copy-controls { display: flex; flex-wrap: wrap; gap: 6px; }
-  button { min-height: var(--target-min); padding: 6px 12px; font: inherit; color: var(--text-primary); background: var(--surface-panel); border: 1px solid var(--border-strong); border-radius: var(--radius-control); }
-  [aria-disabled="true"] { opacity: .55; }
-  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  fieldset { margin: 0; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); }
-  legend, .copy-status { font-size: 12px; color: var(--text-secondary); }
-  label { display: flex; align-items: center; gap: 6px; min-height: var(--target-min); }
+  .recap-copy { display: grid; gap: var(--space-2); position: relative; }
+  .copy-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  button { min-height: var(--target-min); padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-label); line-height: var(--leading-label);
+    color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-control); }
+  [aria-disabled="true"] { opacity: .45; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  fieldset { margin: 0; padding: var(--space-2) var(--space-3); display: flex; flex-wrap: wrap; gap: var(--space-3); border: 1px solid var(--hairline-strong); border-radius: var(--radius-control); }
+  legend, .copy-status { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  label { display: flex; align-items: center; gap: var(--space-2); min-height: var(--target-min); font-size: var(--text-caption); }
   .copy-status { min-height: 1em; }
 </style>

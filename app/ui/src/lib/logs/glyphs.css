@@ -1,6 +1,5 @@
-:root { --ch-public: #c6bed5; --ch-guild: #75dfa1; --ch-party: #8de4e5; --ch-whisper: #f2a6cf; --ch-npc: #aaa2bc; }
-/* channel and kind tags: one shape, colour carries the meaning */
-.ch { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); }
+/* Channel and kind tags: one shape, colour carries the meaning. Channel colours come from tokens.css. */
+.ch { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); }
 .ch::before { content: ''; width: 6px; height: 6px; border-radius: 2px; background: currentColor; flex: none; }
 .ch.public { color: var(--ch-public); } .ch.guild { color: var(--ch-guild); } .ch.party { color: var(--ch-party); }
 .ch.whisper { color: var(--ch-whisper); } .ch.npc { color: var(--ch-npc); }
@@ -14,13 +13,10 @@
 .g.bubble { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Cpath d='M1 0h6v1h1v4H7v1H4v1H3v1H2V6H1V5H0V1h1z'/%3E%3C/svg%3E"); }
 .g.trophy { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Cpath d='M1 0h6v1h1v2H7v1H6v1H5v1h1v2H2V6h1V5H2V4H1V3H0V1h1z'/%3E%3C/svg%3E"); }
 .g.shield { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h8v5H7v1H6v1H5v1H3V7H2V6H1V5H0z'/%3E%3C/svg%3E"); }
-.k { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
-.k .g { width: 14px; height: 14px; }
-.k.death { color: var(--danger); } .k.left { color: var(--text-muted); } .k.realm { color: var(--gold); } .k.key { color: var(--violet-text); }
+.k { display: inline-flex; align-items: center; gap: var(--space-2); }
+/* Glyphs share one 16px size and take their colour from the text role; only game meaning adds colour. */
+.k.death { color: var(--danger); } .k.left { color: var(--text-muted); } .k.realm, .k.key { color: var(--text-secondary); }
 .k.white { color: var(--bag-white); } .k.pbk { color: var(--gold); } .k.chat { color: var(--ch-whisper); } .k.flaw { color: var(--success); }
 td .k span { color: var(--text-secondary); }
 .g.bag { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Cpath d='M3 0h2v1h1v1H5v1h2v1h1v3H7v1H1V7H0V4h1V3h2V2H2V1h1z'/%3E%3C/svg%3E"); }
-.g.portal { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Cpath d='M2 0h4v1h1v1h1v4H7v1H6v1H2V7H1V6H0V2h1V1h1zM3 2v1H2v2h1v1h2V5h1V3H5V2z'/%3E%3C/svg%3E"); color: #c4a7ff; }
-.tag { font-size: 10.5px; color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; line-height: 15px; }
-.tag.you { color: var(--gold); border-color: #f2c14e55; }
-.unconf { font-size: 10px; color: var(--estimated); border: 1px dashed #f5cf7a77; border-radius: 4px; padding: 0 4px; line-height: 14px; margin-left: 6px; }
+.g.portal { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Cpath d='M2 0h4v1h1v1h1v4H7v1H6v1H2V7H1V6H0V2h1V1h1zM3 2v1H2v2h1v1h2V5h1V3H5V2z'/%3E%3C/svg%3E"); color: var(--text-secondary); }

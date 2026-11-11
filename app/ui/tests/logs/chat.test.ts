@@ -326,7 +326,7 @@ describe('chat history interactions', () => {
     await flush();
     await fireEvent.click(screen.getByRole('button', { name: `Hide ${sender}` })); await flush();
     expect(update).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert').textContent).toBe('Could not hide sender. Use 1–32 UTF-8 bytes with no control characters.');
+    expect(screen.getByRole('alert').textContent).toBe("Couldn't hide sender. Use 1–32 UTF-8 bytes with no control characters.");
   });
   it('accepts a hidden sender at the UTF-8 byte boundary', async () => {
     const sender = 'SynthAlpha' + 'é'.repeat(11);
@@ -342,7 +342,7 @@ describe('chat history interactions', () => {
     expect(view.listChat).toHaveBeenCalledTimes(2);
     vi.spyOn(view.client, 'updateChatSettings').mockRejectedValue(new Error('private payload'));
     await fireEvent.click(screen.getByRole('button', { name: 'Hide SynthAlpha' })); await flush();
-    expect(screen.getByRole('alert').textContent).toBe('Could not hide sender. Retry.');
+    expect(screen.getByRole('alert').textContent).toBe("Couldn't hide sender. Retry.");
     expect(screen.queryByText('private payload')).toBeNull();
   });
 });
@@ -374,7 +374,7 @@ describe('stable selection and reversible spam presentation', () => {
     await fireEvent.click(toggle); await flush();
     expect(toggle.checked).toBe(true);
     expect(screen.queryByText('synthgold-shop.com delivery')).toBeNull();
-    expect(screen.getByRole('alert').textContent).toBe('Could not update spam filter. Retry.');
+    expect(screen.getByRole('alert').textContent).toBe("Couldn't update spam filter. Retry.");
   });
   it('persists filtering, shows the hidden count and restores ads when disabled', async () => {
     const view = mount({ listChat: () => ({ rows: [row(1, 'synthgold-shop.com delivery', { channel: 'public' }), row(2, 'ready'), row(3, 'ready')], next: null }) });

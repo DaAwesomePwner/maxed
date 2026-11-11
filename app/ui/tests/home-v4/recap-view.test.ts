@@ -101,7 +101,7 @@ function announcement(id: string, at: string, object_type = 300) {
 
 it('outcome_labels_and_clear_time_only_when_cleared', () => {
   const data = runData();
-  for (const [outcome, label] of [['cleared', 'CLEARED'], ['died', 'DIED'], ['left', 'LEFT EARLY'],
+  for (const [outcome, label] of [['cleared', 'Cleared'], ['died', 'Died'], ['left', 'Left early'],
     ['unknown', 'Outcome not established'], [null, 'Outcome not established']] as const) {
     data.story.run.outcome = outcome;
     const view = runRecapView(data);

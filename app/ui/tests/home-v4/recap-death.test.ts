@@ -46,7 +46,7 @@ const banner = (container: HTMLElement) => within(container.querySelector('.deat
 
 it('death_banner_heading_and_killer', () => {
   const input = props(), page = render(RecapScreen, input), region = banner(page.container);
-  expect(region.getByRole('heading', { name: 'Synthetic Sanctum · DIED AT 1:00' })).toBeTruthy();
+  expect(region.getByRole('heading', { name: 'Synthetic Sanctum · Died at 1:00' })).toBeTruthy();
   expect(region.getByText('Killed by Synthetic Catalog Guardian')).toBeTruthy();
   expect(region.queryByText(/Synthetic raw guardian/)).toBeNull();
   expect(region.queryByRole('img', { name: 'Synthetic Catalog Guardian' })).toBeNull();
@@ -139,7 +139,7 @@ it('no_hp_samples_message', () => {
   const page = render(RecapScreen, props(input)), region = banner(page.container);
   expect(region.getByText('No HP readings before death')).toBeTruthy();
   expect(region.getByText('Final 5 seconds')).toBeTruthy();
-  expect(region.queryByRole('img', { name: /observed HP/ })).toBeNull();
+  expect(region.queryByRole('img', { name: /observed HP/i })).toBeNull();
   expect(page.container.querySelector('.hp-trace .sr-only')).toBeNull();
 });
 
@@ -175,14 +175,14 @@ it('death_banner_right_side_has_dps_and_rank', () => {
 it('cleared_then_died_keeps_cleared_banner', () => {
   const input = data(); input.story.run.outcome = 'cleared'; input.story.run.completed_at = '60000000';
   const page = render(RecapScreen, props(input));
-  expect(page.getByRole('heading', { name: 'Synthetic Sanctum · CLEARED' })).toBeTruthy();
+  expect(page.getByRole('heading', { name: 'Synthetic Sanctum · Cleared' })).toBeTruthy();
   expect(page.container.querySelector('.death-banner')).toBeNull();
   expect(page.queryByText(/Killed by/)).toBeNull();
 });
 
 it('trace_is_labelled_observed_hp_not_damage', () => {
   const page = render(RecapScreen, props()), region = banner(page.container);
-  expect(region.getByText('observed HP')).toBeTruthy();
+  expect(region.getByText('Observed HP')).toBeTruthy();
   expect(region.getByText('Final 5 seconds')).toBeTruthy();
   expect(page.container.querySelector('.hp-trace svg')).toBeTruthy();
   expect(page.container.innerHTML.toLowerCase()).not.toContain('damage taken');
@@ -230,7 +230,7 @@ it('died_without_time_keeps_death_banner', () => {
   const rendered = props(input);
   expect(rendered.view.died).toEqual({ at: null, elapsed: '—' });
   const page = render(RecapScreen, rendered);
-  expect(banner(page.container).getByRole('heading', { name: 'Synthetic Sanctum · DIED AT —' })).toBeTruthy();
+  expect(banner(page.container).getByRole('heading', { name: 'Synthetic Sanctum · Died at —' })).toBeTruthy();
   expect([...page.container.querySelectorAll('.death-banner [data-drop-id]')].map(row => row.getAttribute('data-drop-id')).sort())
     .toEqual(['synthetic-drop-0', 'synthetic-drop-1', 'synthetic-drop-2']);
 });

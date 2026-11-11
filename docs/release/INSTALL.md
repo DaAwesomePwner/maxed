@@ -42,7 +42,7 @@ and ask your administrator. Exact prompt wording is to be verified in the checkl
 
 Open Maxed normally. Setup checks Npcap compatibility, access, the selected network
 adapter and live traffic. Select your local game assets if discovery needs help.
-After fixing a dependency or selection, choose **Retry Checks** in Setup.
+After fixing a dependency or selection, choose **Retry checks** in Setup.
 Demo and history work without Npcap; live capture needs it.
 
 ## Updates

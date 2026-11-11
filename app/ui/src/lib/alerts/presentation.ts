@@ -27,9 +27,9 @@ export interface AlertController {
 
 const rank: Record<AlertLoudness, number> = { off: 0, quiet_log_only: 1, toast: 2, banner: 3 };
 const titles: Record<AlertKind, string> = {
-  whisper: 'Whisper', guild_message: 'Guild Message', party_message: 'Party Message',
-  white_bag: 'White Bag', personal_best: 'Personal Best',
-  flawless_run: 'Flawless Run', death: 'Death', key_popped: 'Key Popped',
+  whisper: 'Whisper', guild_message: 'Guild message', party_message: 'Party message',
+  white_bag: 'White bag', personal_best: 'Personal best',
+  flawless_run: 'Flawless run', death: 'Death', key_popped: 'Key popped',
 };
 const dwell = (value: AlertPresentation) => value.loudness === 'banner' ? 8000 : 5000;
 

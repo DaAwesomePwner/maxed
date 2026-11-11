@@ -10,8 +10,8 @@
   <span>{enchantLabel(enchant)}</span>
 </span>
 <style>
-  .enchant { display: inline-flex; gap: 5px; align-items: center; min-width: 0; max-width: 100%; }
+  .enchant { display: inline-flex; gap: var(--space-1); align-items: center; min-width: 0; max-width: 100%; }
   .enchant > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pips { display: inline-flex; gap: 2px; flex: none; }
-  i { width: 3px; height: 3px; background: var(--gold); }
+  i { width: 4px; height: 4px; background: var(--text-secondary); }
 </style>

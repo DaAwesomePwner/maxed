@@ -281,7 +281,7 @@ it('new_realm_white_banners_with_no_streak_line_in_persistent_live_region', asyn
   expect(region).toBeTruthy(); expect(region.textContent).toBe('');
   h.homeWindow.update(window => ({ ...window, drops: [...window.drops, { ...window.drops[0], id: 'synthetic-new-white' }] }));
   await settle();
-  expect(within(region).getByText('WHITE BAG')).toBeTruthy();
+  expect(within(region).getByText('White bag')).toBeTruthy();
   expect(region.getAttribute('aria-live')).toBe('polite');
   expect(region.textContent).not.toMatch(/dry streak|runs before this/);
   expect(h.page.container.querySelector('.v4-hero-content')?.getAttribute('aria-hidden')).toBe('true');

@@ -8,5 +8,5 @@
     <button class="ctl ghost" type="button" onclick={onmore}>Show more</button></p>
 {/if}
 <style>
-  .show-more { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 6px 0 0; color: var(--text-muted); font-size: 11px; }
+  .show-more { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); margin: var(--space-2) 0 0; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
 </style>

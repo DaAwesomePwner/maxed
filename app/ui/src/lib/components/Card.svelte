@@ -11,8 +11,8 @@
 </section>
 
 <style>
-  section { min-width: 0; padding: var(--space-6); color: var(--text-primary); background: var(--surface-panel); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--elevation-card); overflow-wrap: anywhere; }
-  .hero { background: var(--hero-radial); }
-  h2 { margin: 0; font-size: var(--text-title); line-height: var(--leading-title); font-weight: var(--weight-semibold); }
+  /* The hero tone keeps its semantics but shares the plain panel surface. */
+  section { min-width: 0; padding: var(--space-5); color: var(--text-primary); background: var(--surface-panel); border: 1px solid var(--hairline); border-radius: var(--radius-card); overflow-wrap: anywhere; }
+  h2 { margin: 0; font-size: var(--text-title); line-height: var(--leading-title); font-weight: var(--weight-medium); }
   .content { margin-top: var(--space-4); }
 </style>

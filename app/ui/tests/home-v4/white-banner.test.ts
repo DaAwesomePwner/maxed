@@ -132,7 +132,7 @@ it('banner_is_a_polite_status', () => {
   const page = render(WhiteBanner, { ...props, state: { current: item(), overflow: 0 } });
   expect(page.getByRole('status').getAttribute('aria-live')).toBe('polite');
   expect(page.getByRole('status').getAttribute('aria-atomic')).toBe('true');
-  expect(page.getByText('WHITE BAG')).toBeTruthy();
+  expect(page.getByText('White bag')).toBeTruthy();
   expect(page.getByText('Ended a 23-run Synthetic dungeon dry streak')).toBeTruthy();
   expect(page.getByText('Synthetic boss (estimated) · 7:00 AM')).toBeTruthy();
 });
@@ -162,8 +162,9 @@ it('missing_item_source_time_and_sprites_stay_unknown', () => {
   expect(page.container.textContent).not.toMatch(/NaN|undefined/);
 });
 
-it('reduced_motion_disables_banner_rays_and_glow_animation', () => {
+it('reduced_motion_disables_the_banner_entrance_and_nothing_loops_or_glows', () => {
   // jsdom cannot emulate CSS media queries; guard the stylesheet contract.
   const source = readFileSync('src/lib/home/v4/WhiteBanner.svelte', 'utf8');
-  expect(source).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*\.white-banner,\s*\.rays::before,\s*\.bag-glow\s*\{\s*animation:\s*none;/);
+  expect(source).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*\.white-banner\s*\{\s*animation:\s*none;/);
+  expect(source).not.toMatch(/infinite|--glow-white|box-shadow/);
 });

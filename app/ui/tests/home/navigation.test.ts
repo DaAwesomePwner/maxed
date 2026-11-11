@@ -78,7 +78,7 @@ describe('Home death destination and restoration', () => {
       await vi.advanceTimersByTimeAsync(249); await flushHomeRender();
       expectWaiting();
       await vi.advanceTimersByTimeAsync(1); await flushHomeRender();
-      expect(pane.querySelector('.restoration-status')?.textContent).toBe('Page Heading');
+      expect(pane.querySelector('.restoration-status')?.textContent).toBe('Page heading');
       expect(document.activeElement).toBe(homeHeading);
       expect(focus.mock.instances).toContain(homeHeading);
     }

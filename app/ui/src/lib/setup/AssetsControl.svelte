@@ -21,21 +21,20 @@
   <p role="status" aria-live="polite" aria-atomic="true">{assetsText($session.setup)}</p>
   {#if $session.previousAssets && $session.setup?.assets !== 'ready'}<DebugNote text="Previously loaded assets are not verified for the current selection. A failed replacement keeps the last valid cache." />{/if}
   <form onsubmit={(event) => { event.preventDefault(); void submit(); }}>
-    <label for={`${id}-path`}>Assets Path</label>
+    <label for={`${id}-path`}>Assets path</label>
     <input id={`${id}-path`} type="text" bind:value={path} oninput={() => { editing = true; revision++; }} placeholder="resources.assets" spellcheck="false" autocomplete="off" disabled={preview || $session.busy} />
     <div class="actions">
       <button type="submit" aria-disabled={preview || $session.busy || !path.trim()}>{working ? 'Replace' : 'Extract'}</button>
       <button type="button" disabled={!editing} onclick={() => { editing = false; revision++; path = $session.settings?.assets_path ?? ''; }}>Cancel</button>
-      <button type="button" onclick={() => session.refreshSetup({ retry: true })}>Retry Detection</button>
+      <button type="button" onclick={() => session.refreshSetup({ retry: true })}>Retry detection</button>
     </div>
   </form>
 </div>
 <style>
   .assets-control { display: grid; gap: var(--space-3); }
-  form { display: grid; gap: var(--space-2); }
-  label { font-weight: var(--weight-semibold); }
-  p { color: var(--text-secondary); }
-  input { min-width: 0; width: 100%; padding: var(--space-3); font: inherit; color: var(--text-primary); background: var(--surface-canvas); border: 1px solid var(--border-strong); border-radius: var(--radius-control); }
-  .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-  button { min-height: var(--target-min); font-size: var(--text-label); }
+  form { display: grid; gap: var(--space-1); }
+  label { color: var(--text-secondary); font-size: var(--text-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); }
+  p { margin: 0; color: var(--text-secondary); }
+  input { min-width: 0; width: 100%; }
+  .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 </style>

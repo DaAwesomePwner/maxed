@@ -29,7 +29,7 @@ describe('document keyboard order', () => {
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
     expect(screen.queryByText('Details')).toBeNull();
     await tabOrder([
-      screen.getByRole('link', { name: 'Skip to Content' }), button('Start Capture'),
+      screen.getByRole('link', { name: 'Skip to content' }), button('Start capture'),
       nav.getByRole('link', { name: 'Home' }), nav.getByRole('link', { name: 'Runs' }),
       ...(lootBrowsing ? [nav.getByRole('link', { name: 'Loot' })] : []),
       nav.getByRole('link', { name: 'Alerts' }), screen.getByRole('link', { name: 'Settings' }),
@@ -42,10 +42,10 @@ describe('document keyboard order', () => {
     render(Setup, { client: setupFixture().client });
     await screen.findByRole('option', { name: 'Synthetic Ethernet' });
     await tabOrder([
-      button('Retry Checks'), screen.getByRole('link', { name: 'Settings' }), button('Check Access'),
-      screen.getByRole('combobox', { name: 'Capture Adapter' }), button('Apply Adapter'), button('Retry Adapters'),
-      screen.getByRole('textbox', { name: 'Assets Path' }), button('Extract'), button('Retry Detection'),
-      button('Start Capture'), button('Stop Capture'),
+      button('Retry checks'), screen.getByRole('link', { name: 'Settings' }), button('Check access'),
+      screen.getByRole('combobox', { name: 'Capture adapter' }), button('Apply adapter'), button('Retry adapters'),
+      screen.getByRole('textbox', { name: 'Assets path' }), button('Extract'), button('Retry detection'),
+      button('Start capture'), button('Stop capture'),
     ]);
   });
 
@@ -56,10 +56,10 @@ describe('document keyboard order', () => {
     const nativeDetailsStyle = document.createElement('style');
     nativeDetailsStyle.textContent = 'details:not([open]) > :not(summary) { display: none; }';
     container.append(nativeDetailsStyle);
-    await screen.findByRole('combobox', { name: 'Update Channel' });
+    await screen.findByRole('combobox', { name: 'Update channel' });
     const setupLink = screen.getByRole('link', { name: 'Setup' });
     const delivery = screen.getByText('Delivery', { selector: 'summary' });
-    const assets = screen.getByText('Assets Path', { selector: 'summary' });
+    const assets = screen.getByText('Assets path', { selector: 'summary' });
     const recovery = screen.getByText('Recovery', { selector: 'summary' });
     const user = userEvent.setup();
     for (const expanded of [false, true]) {
@@ -74,23 +74,23 @@ describe('document keyboard order', () => {
         const tab = screen.getByRole('tab', { name });
         await user.click(tab);
         const content = name === 'General' ? [
-          screen.getByRole('combobox', { name: 'Capture Adapter' }), button('Retry Adapters'),
-          screen.getByRole('checkbox', { name: 'Hardware Acceleration' }),
-          screen.getByRole('combobox', { name: 'Update Channel' }), button('Check Updates'), button('Retry Updates'),
-          screen.getByRole('switch', { name: 'Demo Mode' }), screen.getByRole('checkbox', { name: /Debug [Mm]ode/ }),
+          screen.getByRole('combobox', { name: 'Capture adapter' }), button('Retry adapters'),
+          screen.getByRole('checkbox', { name: 'Hardware acceleration' }),
+          screen.getByRole('combobox', { name: 'Update channel' }), button('Check updates'), button('Retry updates'),
+          screen.getByRole('switch', { name: 'Demo mode' }), screen.getByRole('checkbox', { name: /Debug [Mm]ode/ }),
         ] : name === 'Data & history' ? [
-          button('Refresh storage'), button('Estimate receipt storage'), screen.getByRole('checkbox', { name: 'Save Recordings' }), button('Retry Recording'),
+          button('Refresh storage'), button('Estimate receipt storage'), screen.getByRole('checkbox', { name: 'Save recordings' }), button('Retry recording'),
           ...['All', 'Guild', 'Party', 'Whisper'].map(channel => screen.getByRole('checkbox', { name: `Store ${channel} chat` })),
           screen.getByRole('spinbutton', { name: 'Keep chat for (days)' }),
           screen.getByRole('checkbox', { name: 'Filter spam ads and repeated public messages' }),
           screen.getByRole('textbox', { name: 'Add keyword' }), button('Add'),
           button('Save chat settings'), button('Clear chat history'), button('Clear party history'),
         ] : name === 'Game assets' ? [
-          assets, ...(expanded ? [screen.getByRole('textbox', { name: 'Assets Path' }), button('Extract'), button('Retry Detection')] : []),
+          assets, ...(expanded ? [screen.getByRole('textbox', { name: 'Assets path' }), button('Extract'), button('Retry detection')] : []),
         ] : [delivery];
         const order = [setupLink, tab, ...content, button('Apply'),
           screen.getByRole('link', { name: 'Alert history' }), recovery,
-          ...(expanded ? [button('Retry Settings'), button('Retry Checks')] : [])];
+          ...(expanded ? [button('Retry settings'), button('Retry checks')] : [])];
         order[0].focus();
         for (const element of order.slice(1)) {
           await user.tab(); expect(document.activeElement).toBe(element);
@@ -105,7 +105,7 @@ describe('document keyboard order', () => {
     await user.click(screen.getByRole('tab', { name: 'Game assets' }));
     expect((button('Cancel') as HTMLButtonElement).disabled).toBe(true);
     await user.click(screen.getByRole('tab', { name: 'Data & history' }));
-    expect((screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByRole('checkbox', { name: 'Save recordings' }) as HTMLInputElement).disabled).toBe(false);
   });
 
   it('enters a drill-down by keyboard and restores row focus using Alt+Left/Right', async () => {

@@ -1,18 +1,12 @@
 :root {
-  --motion-fast: 100ms;
+  --motion-fast: 120ms;
   --motion-standard: 180ms;
-  --motion-page: 240ms;
-  --motion-shimmer: 650ms;
-  --motion-ease: cubic-bezier(.2,0,0,1);
+  --motion-page: 320ms;
+  --motion-ease: cubic-bezier(.22,1,.36,1);
 }
 @keyframes maxed-enter {
   from { opacity: 0; transform: translateY(.25rem); }
   to { opacity: 1; transform: translateY(0); }
-}
-@keyframes maxed-shimmer {
-  from { transform: translateX(-150%) skewX(-18deg); opacity: 0; }
-  30% { opacity: .4; }
-  to { transform: translateX(450%) skewX(-18deg); opacity: 0; }
 }
 .page-enter { animation: maxed-enter var(--motion-page) var(--motion-ease) both; }
 @media (prefers-reduced-motion: reduce) {

@@ -9,21 +9,21 @@ describe('three-step setup', () => {
   it('keeps capture and access blocked until the independent upgrade status is known', async () => {
     const f = setupFixture(), status = await f.client.queryHistoryUpgradeStatus();
     const pending = deferred<typeof status>(); f.client.queryHistoryUpgradeStatus = () => pending.promise;
-    render(Setup, { client: f.client }); await screen.findByText('Assets Ready');
-    for (const name of ['Start Capture', 'Check Access']) {
+    render(Setup, { client: f.client }); await screen.findByText('Assets ready');
+    for (const name of ['Start capture', 'Check access']) {
       const button = screen.getByRole('button', { name });
       expect(button.getAttribute('aria-disabled')).toBe('true'); await fireEvent.click(button);
     }
     expect(f.client.startCapture).not.toHaveBeenCalled();
     pending.resolve(status);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('false'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('false'));
   });
   it.each([
     [{ npcap: 'missing' }, 'Install Npcap'],
     [{ npcap: 'incompatible' }, 'Repair Npcap'],
-    [{ npcap: 'permission_denied', access: 'denied' }, 'Access Denied'],
-    [{ npcap: 'compatible', access: 'unknown' }, 'Checking Access'],
-    [{ npcap: 'failed' }, 'Couldn’t check Npcap. Retry.'],
+    [{ npcap: 'permission_denied', access: 'denied' }, 'Access denied'],
+    [{ npcap: 'compatible', access: 'unknown' }, 'Checking access'],
+    [{ npcap: 'failed' }, 'Couldn’t check Npcap'],
     [{ npcap: 'unchecked' }, 'Unchecked'],
   ] satisfies [Partial<SetupStatus>, string][])('shows actionable Npcap evidence %j', async (state, text) => {
     const { client } = setupFixture(state);
@@ -40,11 +40,11 @@ describe('three-step setup', () => {
   });
 
   it.each([
-    [{ assets: 'missing', client_found: false }, 'Select Client'],
-    [{ assets: 'finding' }, 'Finding Client'],
-    [{ assets: 'unsupported' }, 'Unsupported Client'],
-    [{ assets: 'failed' }, 'Couldn’t extract assets. Retry.'],
-    [{ assets: 'ready', client_found: false }, 'Select Client'],
+    [{ assets: 'missing', client_found: false }, 'Select client'],
+    [{ assets: 'finding' }, 'Finding client'],
+    [{ assets: 'unsupported' }, 'Unsupported client'],
+    [{ assets: 'failed' }, 'Couldn’t extract assets'],
+    [{ assets: 'ready', client_found: false }, 'Select client'],
   ] satisfies [Partial<SetupStatus>, string][])('handles client and asset evidence %j', async (state, text) => {
     const { client } = setupFixture(state);
     render(Setup, { client });
@@ -55,7 +55,7 @@ describe('three-step setup', () => {
   it.each(['fingerprinting', 'reading', 'catalog', 'sprites', 'publishing'] as const)('announces %s without invented percentages', async (stage) => {
     const { client } = setupFixture({ assets: 'extracting', extraction_stage: stage });
     render(Setup, { client });
-    const status = await screen.findByText(`Extracting: ${stage[0].toUpperCase()}${stage.slice(1)}.`);
+    const status = await screen.findByText(`Extracting: ${stage[0].toUpperCase()}${stage.slice(1)}`);
     expect(status.getAttribute('role')).toBe('status');
     expect(screen.queryByRole('progressbar')).toBeNull();
     expect(screen.getByRole('button', { name: 'Replace' })).toBeTruthy();
@@ -65,11 +65,11 @@ describe('three-step setup', () => {
     const { client } = setupFixture({ access: 'unknown' });
     client.listAdapters = vi.fn().mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('PRIVATE adapter'));
     render(Setup, { client });
-    await screen.findByText('No Adapters');
+    await screen.findByText('No adapters');
     expect(screen.getByRole('option', { name: 'Auto' })).toBeTruthy();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Check Access' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Check access' }));
     expect(client.startCapture).toHaveBeenCalledOnce();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry Adapters' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry adapters' }));
     await screen.findByText(/Couldn.t list adapters/);
     expect(document.body.textContent).not.toContain('PRIVATE');
     expect(screen.queryByText('Connected')).toBeNull();
@@ -78,14 +78,14 @@ describe('three-step setup', () => {
   it('requires decoded live evidence, revokes confirmation on recovery and stop, and labels only observed locations', async () => {
     const f = setupFixture();
     render(Setup, { client: f.client });
-    await screen.findByText('Assets Ready');
+    await screen.findByText('Assets ready');
     expect(screen.queryByText('Connected')).toBeNull();
     expect(screen.queryByText('Location not yet observed.')).toBeNull();
     f.capture('Live');
     await screen.findByText('Capture: Live');
     expect(screen.queryByText('Connected')).toBeNull();
     f.setSetup({ live_confirmed: true });
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry Checks' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry checks' }));
     await screen.findByText('Connected');
     f.capture('Recovering');
     await screen.findByText('Reconnecting');
@@ -109,7 +109,7 @@ describe('three-step setup', () => {
     f.client.querySetup = vi.fn().mockRejectedValue(new Error('PRIVATE path'));
     render(Setup, { client: f.client });
     await screen.findByText(/Couldn.t check setup/);
-    const retry = screen.getByRole('button', { name: 'Retry Checks' });
+    const retry = screen.getByRole('button', { name: 'Retry checks' });
     await userEvent.setup().click(retry);
     expect(document.activeElement).toBe(retry);
     expect(screen.getAllByRole('alert')).toHaveLength(1);
@@ -120,14 +120,14 @@ describe('three-step setup', () => {
   it('applies an explicit adapter and Auto without re-extracting assets', async () => {
     const f = setupFixture(); render(Setup, { client: f.client });
     await screen.findByRole('option', { name: 'Synthetic Ethernet' });
-    const adapter = screen.getByRole('combobox', { name: 'Capture Adapter' });
+    const adapter = screen.getByRole('combobox', { name: 'Capture adapter' });
     const user = userEvent.setup();
     await user.selectOptions(adapter, 'synthetic-ethernet');
-    await user.click(screen.getByRole('button', { name: 'Apply Adapter' }));
+    await user.click(screen.getByRole('button', { name: 'Apply adapter' }));
     await waitFor(() => expect(f.client.setAdapter).toHaveBeenCalledWith('synthetic-ethernet'));
     await waitFor(() => expect((adapter as HTMLSelectElement).disabled).toBe(false));
     await user.selectOptions(adapter, '');
-    await user.click(screen.getByRole('button', { name: 'Apply Adapter' }));
+    await user.click(screen.getByRole('button', { name: 'Apply adapter' }));
     await waitFor(() => expect(f.client.setAdapter).toHaveBeenLastCalledWith(null));
     expect(f.client.setAssetsPath).not.toHaveBeenCalled();
   });
@@ -139,17 +139,17 @@ describe('three-step setup', () => {
     f.client.stopCapture = vi.fn().mockRejectedValueOnce(new Error('PRIVATE Stop')).mockImplementation(stop);
     render(Setup, { client: f.client });
     const user = userEvent.setup();
-    const startButton = screen.getByRole('button', { name: 'Start Capture' });
+    const startButton = screen.getByRole('button', { name: 'Start capture' });
     await waitFor(() => expect(startButton.getAttribute('aria-disabled')).toBe('false'));
     await user.click(startButton);
     await screen.findByText(/Couldn.t start capture/);
     await waitFor(() => expect(startButton.getAttribute('aria-disabled')).toBe('false'));
     await user.click(startButton);
     await screen.findByText('Capture: Waiting for Game');
-    const stopButton = screen.getByRole('button', { name: 'Stop Capture' });
+    const stopButton = screen.getByRole('button', { name: 'Stop capture' });
     await waitFor(() => expect(stopButton.getAttribute('aria-disabled')).toBe('false'));
     await user.click(stopButton);
-    await screen.findByText('Couldn’t stop capture. Retry.');
+    await screen.findByText('Couldn’t stop capture');
     await waitFor(() => expect(stopButton.getAttribute('aria-disabled')).toBe('false'));
     await user.click(stopButton);
     await screen.findByText('Capture: Stopped');
@@ -163,7 +163,7 @@ describe('three-step setup', () => {
     f.client.queryCapture = vi.fn().mockResolvedValue({ state: 'Failed', message: 'Capture worker failed; restart Maxed', dropped_frames: 0, unknown_packets: 0, decode_failures: 0 });
     render(Setup, { client: f.client });
     await screen.findByText('Restart required');
-    for (const name of ['Start Capture', 'Stop Capture']) expect(screen.getByRole('button', { name }).getAttribute('aria-disabled')).toBe('true');
+    for (const name of ['Start capture', 'Stop capture']) expect(screen.getByRole('button', { name }).getAttribute('aria-disabled')).toBe('true');
   });
 
   it('cancels path edits without clearing saved assets and replaces a pending extraction without stale errors', async () => {
@@ -172,7 +172,7 @@ describe('three-step setup', () => {
     const old = deferred<void>(), next = deferred<void>();
     f.client.setAssetsPath = vi.fn().mockReturnValueOnce(old.promise).mockReturnValueOnce(next.promise);
     render(Setup, { client: f.client });
-    const input = await screen.findByRole('textbox', { name: 'Assets Path' });
+    const input = await screen.findByRole('textbox', { name: 'Assets path' });
     await waitFor(() => expect((input as HTMLInputElement).value).toContain('Synthetic'));
     await fireEvent.input(input, { target: { value: 'C:\\Changed\\resources.assets' } });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Cancel' }));

@@ -25,9 +25,10 @@
 {/if}
 
 <style>
-  nav { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
-  a { display: flex; align-items: center; min-height: var(--target-min); padding: var(--space-1) var(--space-3); border-radius: var(--radius-control); color: var(--text-secondary); text-decoration: none; }
-  a:hover { background: var(--surface-hover); }
-  a[aria-current] { background: var(--surface-raised); color: var(--violet-text); }
+  /* View switch: unselected is quiet text, selected is a neutral surface step. */
+  nav { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-4); }
+  a { display: flex; align-items: center; min-height: var(--control-dense); padding: 0 var(--space-3); border-radius: var(--radius-control); color: var(--text-secondary); font-size: var(--text-label); text-decoration: none; transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease); }
+  a:hover { background: var(--surface-hover); color: var(--text-primary); }
+  a[aria-current] { background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--highlight-top); }
   p { color: var(--text-secondary); }
 </style>

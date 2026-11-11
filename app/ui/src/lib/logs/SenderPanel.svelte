@@ -19,11 +19,13 @@
   {:else}<p>Select a line to see its sender.</p>{/if}
 </section>
 <style>
-  .card { min-width: 0; padding: 10px 12px; background: var(--surface-panel); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
-  header { display: flex; justify-content: space-between; margin-bottom: 12px; } h3 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
-  strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; } p, small { color: var(--text-muted); } p { margin: 4px 0; }
-  .who { display: flex; gap: 10px; align-items: center; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); } .who > div { min-width: 0; } .avatar { display: grid; place-items: center; width: 30px; height: 30px; flex: none; color: var(--ch-guild); font-weight: 700; font-size: 22px; }
-  blockquote { margin: 12px 0; padding: 8px 10px; border-left: 2px solid var(--violet); background: #ffffff04; overflow-wrap: anywhere; max-height: 200px; overflow-y: auto; } blockquote small { display: block; margin-top: 5px; }
-  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px; } dt { color: var(--text-muted); } dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
-  .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; } .buttons .ctl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; } .danger { color: var(--danger); }
+  .card { min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); } h3 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-body); line-height: var(--leading-body); font-weight: var(--weight-medium); }
+  p, small { color: var(--text-muted); } small { font-size: var(--text-meta); } p { margin: 0; }
+  .who { display: flex; gap: var(--space-3); align-items: center; padding: var(--space-2); border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-raised); } .who > div { min-width: 0; }
+  .avatar { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: var(--radius-sprite); background: var(--surface-panel); color: var(--text-secondary); font-weight: var(--weight-medium); font-size: var(--text-label); }
+  blockquote { margin: var(--space-3) 0; padding: var(--space-2) var(--space-3); border-left: 2px solid var(--hairline-strong); background: var(--surface-inset); overflow-wrap: anywhere; max-height: 200px; overflow-y: auto; } blockquote small { display: block; margin-top: var(--space-1); }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2); margin: 0; } dt { color: var(--text-muted); } dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+  .buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); } .buttons .ctl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; } .danger { color: var(--danger); }
 </style>

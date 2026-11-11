@@ -50,7 +50,7 @@ it('labels paging actions and exposes loading text', async () => {
   await fireEvent.click(screen.getByRole('button', { name: 'Older lines' }));
   expect(onOlder).toHaveBeenCalledOnce();
   await result.rerender({ loading: true });
-  expect(screen.getByText('Loading older…')).toBeTruthy();
+  expect(screen.getByText('Loading older lines')).toBeTruthy();
 });
 it('hides an empty new-data pill and caps the visible count', async () => {
   const result = render(NewDataPill, { count: 0, noun: 'lines', onClick: vi.fn() });

@@ -20,8 +20,8 @@ it('mounts storage without maintenance and disables Demo Mode during an upgrade'
   await f.client.backupAndUpgradeHistory();
   const compact = vi.spyOn(f.client, 'compactStorage');
   render(Settings, { client: f.client });
-  await screen.findByText('Demo Mode is unavailable while the history upgrade is running.');
-  const demo = screen.getByRole('switch', { name: 'Demo Mode' });
+  await screen.findByText('Demo mode is unavailable while the history upgrade is running.');
+  const demo = screen.getByRole('switch', { name: 'Demo mode' });
   expect(demo.getAttribute('aria-disabled')).toBe('true');
   await fireEvent.click(demo);
   expect(f.client.setDemo).not.toHaveBeenCalled(); expect(compact).not.toHaveBeenCalled();
@@ -31,10 +31,10 @@ it('mounts storage without maintenance and disables Demo Mode during an upgrade'
 it('settings_apply_preserves_recap_image', async () => {
   const f = setupFixture();
   render(Settings, { client: f.client });
-  await screen.findByRole('checkbox', { name: 'Hardware Acceleration' });
+  await screen.findByRole('checkbox', { name: 'Hardware acceleration' });
   const recap_image = { names: false, loot: false, fights: false };
   f.setSettings({ recap_image });
-  await fireEvent.click(screen.getByRole('checkbox', { name: 'Hardware Acceleration' }));
+  await fireEvent.click(screen.getByRole('checkbox', { name: 'Hardware acceleration' }));
   await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
   await waitFor(() => expect(f.client.updateSettings).toHaveBeenCalledWith(expect.objectContaining({ recap_image, hardware_acceleration: true })));
 });
@@ -69,7 +69,7 @@ it('cancels Party clear and shows a safe error with retry and success feedback',
   expect(clear).not.toHaveBeenCalled();
   await fireEvent.click(trigger);
   await fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-  const message = 'Could not clear party history. Retry to clear it.';
+  const message = 'Couldn’t clear party history. Retry to clear it.';
   await screen.findByText(message, { selector: '[role=status]' });
   expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toBe(message);
   expect(document.body.textContent).not.toContain('PRIVATE');
@@ -99,7 +99,7 @@ it.each(['success', 'failure'] as const)('keeps Settings Party clear disabled wh
   else pending.reject(new Error('PRIVATE'));
   if (outcome === 'success') await waitFor(() => expect(button.disabled).toBe(false));
   else {
-    const hint = await screen.findByText('Could not check Demo Mode. Reload to try again.');
+    const hint = await screen.findByText('Couldn’t check demo mode. Reload to try again.');
     expect(button.disabled).toBe(true); expect(hint.hidden).toBe(false);
     expect(button.getAttribute('aria-describedby')).toBe(hint.id);
     expect(document.body.textContent).not.toContain('PRIVATE');
@@ -113,7 +113,7 @@ it('disables Party clearing in Demo Mode until Demo Mode is turned off', async (
   await switchTab('Data & history');
   const trigger = screen.getByRole('button', { name: 'Clear party history' }) as HTMLButtonElement;
   await waitFor(() => expect(trigger.disabled).toBe(true));
-  const hint = screen.getByText('Turn off Demo Mode to clear your party history.');
+  const hint = screen.getByText('Turn off demo mode to clear your party history.');
   expect(hint.hidden).toBe(false);
   expect(trigger.getAttribute('aria-describedby')).toBe(hint.id);
   const user = userEvent.setup();
@@ -121,11 +121,11 @@ it('disables Party clearing in Demo Mode until Demo Mode is turned off', async (
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(clear).not.toHaveBeenCalled();
   await switchTab('General');
-  const demo = screen.getByRole('switch', { name: 'Demo Mode' });
+  const demo = screen.getByRole('switch', { name: 'Demo mode' });
   await waitFor(() => expect(demo.getAttribute('aria-disabled')).toBe('false'));
   await user.click(demo);
   await waitFor(() => expect(trigger.disabled).toBe(false));
-  expect(screen.queryByText('Turn off Demo Mode to clear your party history.')).toBeNull();
+  expect(screen.queryByText('Turn off demo mode to clear your party history.')).toBeNull();
   expect(trigger.hasAttribute('aria-describedby')).toBe(false);
   await switchTab('Data & history');
   await user.click(trigger);
@@ -140,7 +140,7 @@ it.each(['Cancel', 'Escape'])('clears a failed Party clear message when closed w
   const trigger = screen.getByRole('button', { name: 'Clear party history' });
   await fireEvent.click(trigger);
   await fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-  const message = 'Could not clear party history. Retry to clear it.';
+  const message = 'Couldn’t clear party history. Retry to clear it.';
   await screen.findByText(message, { selector: '[role=status]' });
   if (action === 'Cancel') await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
   else await fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }));
@@ -154,7 +154,7 @@ describe('local Settings', () => {
   it('keeps both acceleration choices persisted and identifies the test laptop behind the memory estimate', async () => {
     const f = setupFixture(); f.setSettings({ hardware_acceleration: false });
     render(Settings, { client: f.client });
-    const toggle = await screen.findByRole('checkbox', { name: 'Hardware Acceleration' }) as HTMLInputElement;
+    const toggle = await screen.findByRole('checkbox', { name: 'Hardware acceleration' }) as HTMLInputElement;
     const note = document.getElementById(toggle.getAttribute('aria-describedby')!)!;
     expect(note.textContent).toMatch(/Restart required/);
     expect(note.textContent).toMatch(/Maxed.s tests/i);
@@ -176,7 +176,7 @@ describe('local Settings', () => {
   it('persists acceleration for the next launch, supports reverting, and disables preview edits', async () => {
     const f = setupFixture(); f.setSettings({ hardware_acceleration: false });
     const view = render(Settings, { client: f.client });
-    const toggle = await screen.findByRole('checkbox', { name: 'Hardware Acceleration' }) as HTMLInputElement;
+    const toggle = await screen.findByRole('checkbox', { name: 'Hardware acceleration' }) as HTMLInputElement;
     expect(toggle.checked).toBe(false);
     expect(screen.getByText('Restart required')).toBeTruthy();
     expect(screen.queryByText(/more memory/)).toBeNull();
@@ -192,17 +192,17 @@ describe('local Settings', () => {
     expect(f.client.startCapture).not.toHaveBeenCalled();
     view.unmount();
     render(Settings, { client: f.client, preview: true });
-    const persisted = await screen.findByRole('checkbox', { name: 'Hardware Acceleration' }) as HTMLInputElement;
+    const persisted = await screen.findByRole('checkbox', { name: 'Hardware acceleration' }) as HTMLInputElement;
     expect(persisted.checked).toBe(true);
     expect(persisted.disabled).toBe(true);
   });
 
   it('loads persisted adapter/channel, explains off recordings and fixed 1 GB cap, and reverts edits', async () => {
     const f = setupFixture(); render(Settings, { client: f.client });
-    const channel = await screen.findByRole('combobox', { name: 'Update Channel' });
+    const channel = await screen.findByRole('combobox', { name: 'Update channel' });
     expect((channel as HTMLSelectElement).value).toBe('stable');
     await switchTab('Data & history');
-    const recordings = screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement;
+    const recordings = screen.getByRole('checkbox', { name: 'Save recordings' }) as HTMLInputElement;
     expect(recordings.checked).toBe(false); expect(recordings.disabled).toBe(false);
     expect(screen.queryByText(/Recording files can contain/)).toBeNull();
     expect(screen.getByText('Limit: 1 GB')).toBeTruthy();
@@ -210,10 +210,10 @@ describe('local Settings', () => {
     await switchTab('General');
     const user = userEvent.setup();
     await user.selectOptions(channel, 'beta');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Capture Adapter' }), 'synthetic-ethernet');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Capture adapter' }), 'synthetic-ethernet');
     await user.click(within(screen.getByRole('button', { name: 'Apply' }).closest('form')!).getByRole('button', { name: 'Revert' }));
     expect((channel as HTMLSelectElement).value).toBe('stable');
-    expect((screen.getByRole('combobox', { name: 'Capture Adapter' }) as HTMLSelectElement).value).toBe('');
+    expect((screen.getByRole('combobox', { name: 'Capture adapter' }) as HTMLSelectElement).value).toBe('');
     expect(f.client.updateSettings).not.toHaveBeenCalled();
   });
 
@@ -222,7 +222,7 @@ describe('local Settings', () => {
     const persist = f.client.updateSettings;
     f.client.updateSettings = vi.fn().mockRejectedValueOnce(new Error('PRIVATE settings')).mockImplementation(persist);
     render(Settings, { client: f.client });
-    const channel = await screen.findByRole('combobox', { name: 'Update Channel' });
+    const channel = await screen.findByRole('combobox', { name: 'Update channel' });
     const user = userEvent.setup(); await user.selectOptions(channel, 'beta');
     await user.click(screen.getByRole('button', { name: 'Apply' }));
     await screen.findByText(/Couldn.t save/);
@@ -240,7 +240,7 @@ describe('local Settings', () => {
     const f = setupFixture(); f.setSettings({ save_recordings: true });
     render(Settings, { client: f.client });
     await switchTab('Data & history');
-    const recordings = await screen.findByRole('checkbox', { name: 'Save Recordings' });
+    const recordings = await screen.findByRole('checkbox', { name: 'Save recordings' });
     await userEvent.setup().click(recordings);
     f.setSettings({ assets_path: 'C:\\NewSynthetic\\resources.assets' });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Apply' }));
@@ -253,9 +253,9 @@ describe('local Settings', () => {
     f.client.querySettings = vi.fn().mockRejectedValueOnce(new Error('PRIVATE settings')).mockImplementation(read);
     render(Settings, { client: f.client });
     await screen.findByText(/Couldn.t load settings/);
-    expect(screen.queryByRole('combobox', { name: 'Update Channel' })).toBeNull();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry Settings' }));
-    await screen.findByRole('combobox', { name: 'Update Channel' });
+    expect(screen.queryByRole('combobox', { name: 'Update channel' })).toBeNull();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry settings' }));
+    await screen.findByRole('combobox', { name: 'Update channel' });
     expect(document.body.textContent).not.toContain('PRIVATE');
     expect(f.client.updateSettings).not.toHaveBeenCalled();
   });
@@ -263,14 +263,14 @@ describe('local Settings', () => {
   it('does not edit newer settings versions', async () => {
     const f = setupFixture(); f.setSettings({ version: 2 });
     render(Settings, { client: f.client });
-    await screen.findByText('Update Required');
-    expect((screen.getByRole('combobox', { name: 'Update Channel' }) as HTMLSelectElement).disabled).toBe(true);
+    await screen.findByText('Update required');
+    expect((screen.getByRole('combobox', { name: 'Update channel' }) as HTMLSelectElement).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Apply' }).getAttribute('aria-disabled')).toBe('true');
   });
 
   it('changes demo only through the bridge and displays confirmed mode', async () => {
     const f = setupFixture(); render(Settings, { client: f.client });
-    const control = screen.getByRole('switch', { name: 'Demo Mode' });
+    const control = screen.getByRole('switch', { name: 'Demo mode' });
     await waitFor(() => expect(control.getAttribute('aria-disabled')).toBe('false'));
     await userEvent.setup().click(control);
     await waitFor(() => expect(control.getAttribute('aria-checked')).toBe('true'));
@@ -284,12 +284,12 @@ describe('local Settings', () => {
 
   it('keeps fixture mutations disabled and exposes the setup route', async () => {
     const f = setupFixture(); render(Settings, { client: f.client, preview: true });
-    await screen.findByRole('combobox', { name: 'Update Channel' });
+    await screen.findByRole('combobox', { name: 'Update channel' });
     expect(screen.getByRole('link', { name: 'Setup' }).getAttribute('href')).toBe('#/setup');
-    expect(screen.getByRole('switch', { name: 'Demo Mode' }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('switch', { name: 'Demo mode' }).getAttribute('aria-disabled')).toBe('true');
     await switchTab('Game assets');
-    await userEvent.setup().click(screen.getByText('Assets Path', { selector: 'summary' }));
-    expect((screen.getByRole('textbox', { name: 'Assets Path' }) as HTMLInputElement).disabled).toBe(true);
+    await userEvent.setup().click(screen.getByText('Assets path', { selector: 'summary' }));
+    expect((screen.getByRole('textbox', { name: 'Assets path' }) as HTMLInputElement).disabled).toBe(true);
     expect(f.client.updateSettings).not.toHaveBeenCalled();
   });
 
@@ -298,14 +298,14 @@ describe('local Settings', () => {
     f.client.setAssetsPath = vi.fn().mockRejectedValue(new Error('PRIVATE secret path'));
     render(Settings, { client: f.client });
     await switchTab('Game assets');
-    await userEvent.setup().click(screen.getByText('Assets Path', { selector: 'summary' }));
-    const path = screen.getByRole('textbox', { name: 'Assets Path' });
+    await userEvent.setup().click(screen.getByText('Assets path', { selector: 'summary' }));
+    const path = screen.getByRole('textbox', { name: 'Assets path' });
     await fireEvent.input(path, { target: { value: 'C:\\Synthetic\\resources.assets' } });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Extract' }));
     await screen.findByText(/Couldn.t extract assets/);
-    expect(screen.getByText('Assets Ready')).toBeTruthy();
+    expect(screen.getByText('Assets ready')).toBeTruthy();
     await userEvent.setup().click(screen.getByText('Recovery', { selector: 'summary' }));
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry Checks' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry checks' }));
     expect(screen.getByRole('alert').textContent).toContain('Couldn’t extract assets');
     expect((path as HTMLInputElement).value).toBe('C:\\Synthetic\\resources.assets');
     expect(document.body.textContent).not.toContain('PRIVATE');
@@ -316,7 +316,7 @@ describe('local Settings', () => {
     const f = setupFixture();
     f.client.updateSettings = vi.fn().mockRejectedValue(new Error('PRIVATE settings'));
     render(Settings, { client: f.client });
-    const channel = await screen.findByRole('combobox', { name: 'Update Channel' }) as HTMLSelectElement;
+    const channel = await screen.findByRole('combobox', { name: 'Update channel' }) as HTMLSelectElement;
     await switchTab('General');
     const user = userEvent.setup();
     await user.selectOptions(channel, 'beta');
@@ -371,7 +371,7 @@ it.each(['armed', 'disabled'] as const)('uses past wording after recording stops
   expect(await screen.findByText('37 packets were skipped during traffic bursts or recording changes; the recording continues.')).toBeTruthy();
   await switchTab('Data & history');
   state = stopped;
-  await fireEvent.click(screen.getByRole('button', { name: 'Retry Recording' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry recording' }));
   expect(await screen.findByText('37 packets were skipped in the last recording.')).toBeTruthy();
   expect(screen.queryByText(/the recording continues/)).toBeNull();
 });
@@ -382,7 +382,7 @@ it('applies Debug immediately without editing or saving app settings', async () 
   vi.stubGlobal('localStorage', { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key) });
   const f = setupFixture();
   render(Settings, { client: f.client });
-  await screen.findByRole('combobox', { name: 'Update Channel' });
+  await screen.findByRole('combobox', { name: 'Update channel' });
   const toggle = screen.getByRole('checkbox', { name: 'Debug mode' }) as HTMLInputElement;
   const apply = screen.getByRole('button', { name: 'Apply' });
   expect(toggle.checked).toBe(false);
@@ -393,7 +393,7 @@ it('applies Debug immediately without editing or saving app settings', async () 
   expect(window.localStorage.getItem('maxed.debug')).toBe('1');
   expect(await screen.findByText('Disk usage is not inventoried.')).toBeTruthy();
   expect(apply.getAttribute('aria-disabled')).toBe('true');
-  expect(screen.queryByText('Unsaved Changes')).toBeNull();
+  expect(screen.queryByText('Unsaved changes')).toBeNull();
   expect(f.client.updateSettings).not.toHaveBeenCalled();
   await fireEvent.click(toggle);
   expect(isDebugMode()).toBe(false);
@@ -405,7 +405,7 @@ it('applies Debug immediately without editing or saving app settings', async () 
 it('shows Chat with either Logs flag state while gating alert preferences', async () => {
   const f = setupFixture();
   const view = render(Settings, { client: f.client, features: { lootBrowsing: true, logs: false, stats: false, party: false, character: false, homeRedesign: false } });
-  await screen.findByRole('checkbox', { name: 'Hardware Acceleration' });
+  await screen.findByRole('checkbox', { name: 'Hardware acceleration' });
   await switchTab('Data & history');
   expect(screen.getByRole('heading', { name: 'Chat' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Clear chat history' })).toBeTruthy();
@@ -432,8 +432,8 @@ it('defaults key-pop alerts to Off and prompts for an empty dungeon selection', 
   const session = createAlertSession(f.client);
   await session.refresh();
   const view = render(AlertPreferences, { client: f.client, session });
-  const section = await screen.findByRole('region', { name: 'Key Popped' });
-  const loudness = within(section).getByLabelText('Key Popped') as HTMLSelectElement;
+  const section = await screen.findByRole('region', { name: 'Key popped' });
+  const loudness = within(section).getByLabelText('Key popped') as HTMLSelectElement;
   await waitFor(() => expect(loudness.value).toBe('off'));
   expect(within(section).getByText('Key-pop alerts are off. Choose dungeons, then select Toast or Banner and save to enable them.')).toBeTruthy();
   expect(within(section).getByText('Choose dungeons to receive key-pop alerts. None selected means no alerts.')).toBeTruthy();

@@ -563,7 +563,7 @@
 </script>
 
 <svelte:window onclick={click} />
-<a class="skip-link" href="#main-content" onclick={(event) => { event.preventDefault(); pane.focus(); }}>Skip to Content</a>
+<a class="skip-link" href="#main-content" onclick={(event) => { event.preventDefault(); pane.focus(); }}>Skip to content</a>
 <div class="app-frame">
   <CharacterRail {view} {capture} missingCatalog={!preview && catalogAvailable === false && ['WaitingForGame', 'Live', 'Recovering'].includes(capture?.state ?? '')} resolveSpriteUrl={resolveVisualSprite} route={navigation?.entry.route ?? { kind: 'home' }} {features} {preview} {busy} error={captureError} snapshotError={errors.snapshot} onStart={() => action(true)} onStop={() => action(false)} onRetry={connect}
     canBack={navigation?.canBack ?? false} canForward={navigation?.canForward ?? false}
@@ -593,9 +593,9 @@
         {#if pendingSummaries || (store?.queued ?? 0) > 0}
           <p class="store-warning" role="status">Couldn't save. Retry.</p>
           {#if !unsavedClose}<button disabled={busy || preview} onclick={() => recoverStore()}>Retry saving</button>{/if}
-        {:else if !unsavedClose}<p class="store-warning" role="status">Couldn't save. Storage is unavailable; use Start Capture to try again.</p>{/if}
+        {:else if !unsavedClose}<p class="store-warning" role="status">Couldn't save. Storage is unavailable; use Start capture to try again.</p>{/if}
         <DebugNote text={`Latest durable sequence: ${store?.durable ?? "unavailable"}`} />
-      {:else if liveState.historyFailed || errors.store}<p class="storage-note">Storage Error</p>
+      {:else if liveState.historyFailed || errors.store}<p class="storage-note">Storage error</p>
       {/if}
       <h1 class:sr-only={homeRoute || ['runs', 'run', 'fight', 'player', 'run-player', 'loot', 'item', 'logs', 'alerts'].includes(navigation.entry.route.kind)} tabindex="-1">{routeTitle(navigation.entry.route)}</h1>
       <div class:home-content={homeRoute} class:route-content={!homeRoute}>
@@ -611,14 +611,14 @@
       {/key}
       </div>
     {/if}
-    <p class="restoration-status" role="status" aria-live="polite" aria-atomic="true">{missingRow ? 'Page Heading' : ''}</p>
+    <p class="restoration-status" role="status" aria-live="polite" aria-atomic="true">{missingRow ? 'Page heading' : ''}</p>
   </main>
   </div>
   <ItemHoverCard {client} />
 </div>
 
 <BusyStatus message={liveState.phase === 'resyncing' ? 'Refreshing' : null} />
-<BusyStatus message={historyRoute && liveState.historyLagging && store?.state !== 'failed' && !liveState.historyFailed && !errors.store && store ? 'Loading History' : null} />
+<BusyStatus message={historyRoute && liveState.historyLagging && store?.state !== 'failed' && !liveState.historyFailed && !errors.store && store ? 'Loading history' : null} />
 <StatusOverlay registry={statusRegistry} />
 
 {#snippet railStatusExtra()}
@@ -627,8 +627,8 @@
 
 <style>
   .app-frame { height: 100vh; height: 100dvh; min-width: 0; display: grid; grid-template-columns: 15rem minmax(0, 1fr); overflow: hidden; background: var(--surface-canvas); }
-  .content-pane { position: relative; min-width: 0; min-height: 0; display: grid; overflow: hidden; }
-  main { min-width: 0; min-height: 0; overflow: auto; display: block; place-items: normal; text-align: left; padding: var(--space-8); background: radial-gradient(ellipse at 0 0, #241934 0%, var(--surface-canvas) 65%); }
+  .content-pane { position: relative; min-width: 0; min-height: 0; display: grid; overflow: hidden; background: var(--surface-page); }
+  main { min-width: 0; min-height: 0; overflow: auto; display: block; place-items: normal; text-align: left; padding: var(--space-8); background: var(--surface-page); }
   /* Home uses the space left by real, in-flow chrome. Overflow remains on main
      for expanded evidence, long names and smaller effective viewports. */
   main.home-page { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); }
@@ -641,13 +641,13 @@
   .route-content { display: contents; }
   .restoration-status:empty { margin: 0; }
   .recording-indicator { color: var(--text-secondary); font-size: var(--text-label); white-space: nowrap; }
-  .recording-indicator a { color: inherit; }
+  .recording-indicator a { color: inherit; text-underline-offset: 3px; }
   .recording-stopped { color: var(--warning); }
-  h1 { padding: 0; margin: var(--space-6) 0; font-size: var(--text-hero); line-height: var(--leading-hero); }
-  .preview-note, .store-warning, .storage-note { margin: var(--space-3) 0; font-size: var(--text-label); overflow-wrap: anywhere; }
+  h1 { padding: 0; margin: var(--space-6) 0; font-size: var(--text-hero); line-height: var(--leading-hero); font-weight: var(--weight-medium); }
+  .preview-note, .store-warning, .storage-note { margin: var(--space-3) 0; font-size: var(--text-label); line-height: var(--leading-label); overflow-wrap: anywhere; }
   .preview-note, .storage-note { color: var(--text-secondary); }
   .store-warning { color: var(--warning); padding: var(--space-3); border: 1px solid var(--warning); border-radius: var(--radius-control); }
-  .skip-link { position: fixed; z-index: 10; top: var(--space-2); left: var(--space-2); transform: translateY(-200%); background: var(--surface-raised); color: var(--text-primary); padding: var(--space-3); }
+  .skip-link { position: fixed; z-index: 10; top: var(--space-2); left: var(--space-2); transform: translateY(-200%); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary); padding: var(--space-3); }
   .skip-link:focus { transform: none; }
   @media (max-width: 900px) { .app-frame { grid-template-columns: 12rem minmax(0, 1fr); } main { padding: var(--space-4); } }
 </style>

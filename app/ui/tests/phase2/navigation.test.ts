@@ -16,7 +16,7 @@ it('phase2_navigation_windows_and_bounds', async () => {
   await fireEvent.click(main().getAllByRole('tab')[1]); await flush(); await follow('#/runs/run-6/fights/fight-1', region('Fight damage'));
   // The fixture's fight relationship must agree with the selected parent.
   // Override before the player read, without fabricating a run label on Fight.
-  expect(main().getByRole('heading', { name: 'Fight Unavailable' })).toBeTruthy();
+  expect(main().getByRole('heading', { name: 'Fight unavailable' })).toBeTruthy();
   await click('Back', history()); await click('Back', history());
   expect(document.activeElement?.getAttribute('data-row-id')).toBe('run-6');
   expect(page.browser.adapter.state).not.toHaveProperty('runsWindow');
@@ -62,7 +62,7 @@ it('death anchor waits for saved rows and a removed focused row falls back once'
   page.event({ run_ended: run() }, '13'); page.setStore(saved('13', page.snapshot.stream_id)); await advance();
   await click('Back', history());
   expect(document.activeElement).toBe(main().getByRole('heading', { level: 1, name: 'Runs' }));
-  expect(screen.getAllByText(/Page Heading/)).toHaveLength(1);
+  expect(screen.getAllByText(/Page heading/)).toHaveLength(1);
 });
 
 it('navigation cancels obsolete Alerts readiness and keeps one mounted rail', async () => {

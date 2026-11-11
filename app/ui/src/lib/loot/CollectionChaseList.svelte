@@ -58,18 +58,19 @@
 </EmptyState>{/if}
 
 <style>
-  .table-scroll { max-height: 270px; overflow: auto; }
-  table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
-  th { text-align: left; color: var(--text-secondary); font-size: 11px; font-weight: 500; position: sticky; top: 0; background: var(--surface-panel); z-index: 1; }
-  th, td { height: 30px; box-sizing: border-box; padding: 1px 6px; border-bottom: 1px solid var(--border-soft); }
-  a { display: flex; align-items: center; gap: 8px; color: var(--text-primary); text-decoration: none; min-width: 0; font-weight: 600; }
-  .tile { border: 1px solid currentColor; border-radius: 4px; display: inline-flex; flex: none; }
+  .table-scroll { max-height: 272px; overflow: auto; }
+  table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--text-caption); line-height: var(--leading-caption); }
+  th { text-align: left; color: var(--text-muted); font-size: var(--text-meta); font-weight: var(--weight-medium); position: sticky; top: 0; background: var(--surface-panel); z-index: 1; }
+  th, td { height: var(--row-default); box-sizing: border-box; padding: 0 var(--space-2); border-bottom: 1px solid var(--hairline); }
+  thead th { border-bottom-color: var(--hairline-strong); }
+  a { display: flex; align-items: center; gap: var(--space-2); color: var(--text-primary); text-decoration: none; min-width: 0; font-weight: var(--weight-medium); }
+  .tile { border: 1px solid currentColor; border-radius: var(--radius-sprite); display: inline-flex; flex: none; }
   .ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .place { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .place { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
   .number { text-align: right; font-variant-numeric: tabular-nums; }
-  .ut { color: var(--violet-text); } .st { color: var(--bag-orange); }
-  .streak { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 11px; }
-  .bar { flex: 1; min-width: 24px; max-width: 180px; height: 4px; background: var(--surface-raised); }
+  .ut { color: var(--tier-ut); } .st { color: var(--tier-st); }
+  .streak { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--text-meta); color: var(--text-secondary); }
+  .bar { flex: 1; min-width: 24px; max-width: 180px; height: 4px; background: var(--bar-track); }
   .bar i { display: block; height: 100%; background: var(--text-muted); }
   .amber { color: var(--estimated); } .amber i { background: var(--estimated); }
   a:focus-visible, .table-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
