@@ -89,6 +89,7 @@ fn export_bindings() {
     CatalogSupport::export_all_to(&directory).unwrap();
     WeaponSchedule::export_all_to(&directory).unwrap();
     EnchantRegenDef::export_all_to(&directory).unwrap();
+    EnchantWeaponDamageDef::export_all_to(&directory).unwrap();
     RegenEffect::export_all_to(&directory).unwrap();
 
     SpriteTrim::export_all_to(&directory).unwrap();

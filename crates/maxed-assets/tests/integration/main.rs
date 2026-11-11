@@ -20,3 +20,5 @@ mod reference_ids;
 mod sprites;
 #[path = "../toast_icons.rs"]
 mod toast_icons;
+#[path = "../weapon_damage.rs"]
+mod weapon_damage;

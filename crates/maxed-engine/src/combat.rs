@@ -1,3 +1,4 @@
+use crate::weapon_enchant::scaled_bounds;
 use crate::ReconstructionReason as Reason;
 use crate::{damage_with_defense, parse_enchant, Engine};
 use maxed_protocol::Packet;
@@ -249,16 +250,30 @@ impl Engine {
                     Reason::MissingSeed
                 });
                 let mut assumptions = vec![];
+                // D-weapon-enchant: weapon shots scale the projectile's bounds by the
+                // equipped weapon's enchant multipliers before the roll. Unknown or
+                // unsupported evidence keeps the unscaled bounds as a counted assumption.
+                let bounds = projectile.map(|pdef| {
+                    let scale = if source_kind == SourceKind::Weapon {
+                        self.weapon_enchant_scale(owner, p.weaponId)
+                    } else {
+                        Some((1.0, 1.0))
+                    };
+                    let scaled = scale.and_then(|scale| scaled_bounds(pdef, scale));
+                    scaled.unwrap_or_else(|| {
+                        assumptions.push(Reason::AssumedWeaponEnchantDefault);
+                        (pdef.min_damage, pdef.max_damage)
+                    })
+                });
                 // RealmShark Projectile(RNG,...): exclusive maximum, no roll when equal.
                 // Each received PlayerShoot consumes its own roll in packet order, including
                 // subattacks. Mapping only selects the bounds; it does not expand a volley
                 // or reorder rolls. Missing definitions still invalidate RNG continuity.
-                if let (Some(pdef), Some(rng)) = (projectile, self.rng.as_mut()) {
-                    let base = if pdef.min_damage == pdef.max_damage {
-                        pdef.min_damage
+                if let (Some((min, max)), Some(rng)) = (bounds, self.rng.as_mut()) {
+                    let base = if min == max {
+                        min
                     } else {
-                        pdef.min_damage
-                            + (rng.next() % i64::from(pdef.max_damage - pdef.min_damage)) as i32
+                        min + (rng.next() % i64::from(max - min)) as i32
                     };
                     damage = Ok(base);
                 }

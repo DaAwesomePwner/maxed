@@ -63,6 +63,50 @@ omissions. Malformed codes use Java's neutral Totals
 retain invalid source evidence. Re-extracting the catalog resolves missing
 combat metadata; an omitted field never claims a neutral multiplier.
 
+**D-weapon-enchant (beyond RealmShark):** local weapon shots scale the
+projectile's `MinDamage`/`MaxDamage` by the equipped weapon's enchant
+`MultiplyMinDamage`/`MultiplyMaxDamage` products **before** the RNG roll. RealmShark
+reads these mutators (`ParseEnchants.java:112-123,700-747`) only for its DPS display
+and never applies them to hit reconstruction (owner decision 2026-11-10).
+The catalog stores per-enchant f32 products in XML order
+([assets](../architecture/assets.md#enchant-weapon-damage-mutators)); the engine
+multiplies the applied weapon-slot (enchant slot 0) IDs in slot order with an f32
+accumulator, multiplies each bound by the product and truncates toward zero.
+Only shot-time evidence for the same item in inventory slot 0 is used. Explicitly
+empty evidence is a known 1.0. Missing or invalid evidence, another item in the
+slot, an unknown ID, a catalog without `weapon_damage`, an `unsupported` enchant, or
+scaled bounds that are unusable (minimum above maximum, negative, non-finite or
+above `i32::MAX`) keeps the unscaled bounds, which still roll, and increments
+`assumedWeaponEnchantDefault` once per hit. Scaled bounds that become equal (for
+example 10–11 × 0.8 = 8–8) skip the roll like any equal-bounds projectile, so the
+next shot takes the draw an unscaled roll would have used.
+Enchant ID 0 counts as applied, as in the observation parser and the character
+panel, so it is resolved like any ID and is an unknown, counted assumption without
+a catalog definition. D-scaling's older ability path skips ID 0 instead; skipping
+it here would turn recorded evidence into an uncounted 1.0.
+The hit is then estimated and not personal-best eligible; it is never omitted.
+Ability scaling, rate of fire and Crucible handling are unchanged.
+
+Evidence (one owner recording, offline replay, 2026-11-10; live behavior not
+verified): every Crucible-active local weapon hit came from one weapon whose enchant
+has `MultiplyMinDamage`/`MultiplyMaxDamage` of 0.8 in the installed client XML. On
+clean single-hit intervals of non-regenerating targets, using lag-aware assignment
+(63–299 ms observed), the previous model matched the server HP drop in 0 of 83
+intervals and the pre-roll scaling in 82 of 83; decoy factors 0.75–0.9 matched at
+most 3 of 83. Unenchanted weapon hits stayed exact (5 of 5).
+Remaining ambiguity: 0.7 × 1.15 = 0.805 gives the same integer range on that
+weapon (⌊135·0.805⌋ = 108, ⌊175·0.805⌋ = 140), so the recording alone cannot
+attribute the 0.8 to the enchant rather than the Crucible. The independent evidence
+is the client XML value of exactly 0.8 for that enchant. Truncation versus rounding,
+f32 versus f64 and the roll skip when scaled bounds become equal are not
+distinguished by the recording (every variant gives 108–140); truncation of the f32
+product is unverified. Whether the client skips the roll when scaled bounds become
+equal is untested: no recorded weapon reaches equal scaled bounds. Combining several
+damage enchants on one weapon (one f32 product, then one truncation per bound,
+rather than truncating after each enchant) cannot be checked against the recording,
+whose weapon has only one damage enchant. Mutators scoped to one projectile and
+enchants that replace or add subattacks are `unsupported` rather than modeled.
+
 These are behavior/coverage decisions, not executable parity suppressions.
 Defaults and source locations are specified in [Reconstruction defaults](#reconstruction-defaults)
 and [Additional engine rationales](#additional-engine-rationales). The engine's
@@ -78,7 +122,13 @@ and `scaling_only_requires_enchant_multiplier_for_matching_ability` in
 [review.rs](../../crates/maxed-engine/tests/review.rs), plus
 `default_counts_are_per_hit_survive_finish_and_known_bonuses_multiply` and
 `ability_enchant_products_are_applied_and_unknown_ids_or_legacy_metadata_are_counted`
-in [reconstruction.rs](../../crates/maxed-engine/tests/reconstruction.rs).
+in [reconstruction.rs](../../crates/maxed-engine/tests/reconstruction.rs), and
+`bounds_are_scaled_before_the_roll_with_the_same_draw`,
+`missing_or_unusable_weapon_enchant_evidence_is_a_counted_neutral_assumption`,
+`scaled_bounds_that_become_equal_skip_the_roll_and_shift_later_draws`,
+`unusable_scaled_bounds_keep_the_unscaled_roll_as_a_counted_assumption` and
+`enchant_id_zero_is_an_applied_weapon_enchant` in
+[weapon_enchant.rs](../../crates/maxed-engine/tests/weapon_enchant.rs).
 `typed_reentry_clears_omitted_stats_and_only_secondary_condition_defaults_known`
 in [reconstruction_trust.rs](../../crates/maxed-engine/tests/reconstruction_trust.rs)
 covers the typed-UPDATE distinction. The [historical numerical comparison](README.md#historical-numerical-evidence-2026-10-02)

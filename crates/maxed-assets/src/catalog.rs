@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(test)]
 mod d_tests;
+mod weapon_damage;
 
 enum ConsumableUtRule {
     NameSuffix(&'static str),
@@ -884,6 +885,7 @@ pub(crate) fn build_cancellable(
                     name: name(&n, &assets.english)?,
                     description: n.value("Description").unwrap_or("").into(),
                     stat_damage_multiplier: Some(enchant_stat_multiplier(&n)?),
+                    weapon_damage: Some(weapon_damage::parse(&n)),
                 };
                 if enchants.insert(id, def).is_some() {
                     return Err(duplicate("enchantments", i64::from(id)));
@@ -1160,6 +1162,9 @@ pub fn validate_catalog(c: &Catalog) -> Result<(), AssetError> {
             || e.regeneration
                 .as_ref()
                 .is_some_and(|r| !validate_regeneration(r))
+            || e.weapon_damage
+                .as_ref()
+                .is_some_and(|d| !weapon_damage::validate(d))
     }) {
         return Err(invalid());
     }

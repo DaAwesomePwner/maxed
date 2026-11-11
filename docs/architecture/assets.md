@@ -149,6 +149,46 @@ Catalog format stays at 1. Rebuild errors preserve the prior publication; native
 errors with an unavailable catalog and missing-assets coverage (`app/src-tauri/src/runtime/storage.rs:101–110`).
 This extraction change does not alter that fallback or claim live capture verification.
 
+### Enchant weapon damage mutators
+
+Observed in the owner's installed client XML (2026-11-10; 1,016 enchantments, no XML copied):
+
+```xml
+<Enchantment type="0x…" id="…">
+  <Mutators>
+    <MultiplyMinDamage projectileId="-1">0.8</MultiplyMinDamage>
+    <MultiplyMaxDamage projectileId="-1">0.8</MultiplyMaxDamage>
+    <MultiplyRateOfFire subAttackIndex="-1">1.35</MultiplyRateOfFire>
+  </Mutators>
+</Enchantment>
+```
+
+- The multiplier is element text. 31 enchantments carry exactly one `MultiplyMinDamage` and one
+  `MultiplyMaxDamage`, always with equal values (16 distinct values from 0.8 to 1.35) and always the single
+  attribute `projectileId="-1"` (all projectiles). No other mutator changes a projectile's damage range.
+- `SetSubAttack`/`AddSubAttack` (74 enchantments) replace or add a weapon's subattacks with another object's
+  projectiles, so the item's own projectile bounds no longer describe the shot.
+- Other observed mutators (`MultiplyRateOfFire`, `MultiplySpeed`, `MultiplyLifetimeMS`, `MultiplySize`,
+  `MultiplyMPCost`, `AddOn…Activate` procs and `ActivateOnEquip` stat, loot, regen, `StatModMult` and incoming
+  `DamageMultSelf` effects) do not change a weapon projectile's bounds; equip stat changes reach the engine as
+  observed player stats.
+
+`EnchantDef.weapon_damage` stores `supported` f32 products of each bound's values in XML order (1.0 when absent).
+It is `unsupported`, with no multipliers and a controlled reason, for a scoped or extra attribute or child
+(`unsupported_damage_scope`), an unparseable, negative, non-finite or overflowing value
+(`invalid_damage_multiplier`), a subattack mutator (`unsupported_subattack`), or an unreviewed mutator, container
+attribute or `ActivateOnEquip` kind (`unsupported_weapon_mutator`). Validation rejects non-finite, negative or
+above-f32 multipliers and any other support/reason combination. No description text is interpreted. The engine use
+is [D-weapon-enchant](../parity/deliberate-differences.md#reconstruction-defaults).
+
+Cache version 14 adds this field and invalidates version 13 fingerprints, so an installed app re-extracts its catalog
+from the client on the first load after updating. Older generations are never served as current, and a failed
+rebuild keeps the existing unavailable-catalog fallback. A catalog JSON without `weapon_damage` (an older
+generation or export) still loads: the field is absent, never neutral. A local weapon hit whose weapon-slot
+evidence lists an applied enchant then counts `assumedWeaponEnchantDefault` and is estimated. A weapon recorded with
+no applied enchants (empty evidence) needs no catalog lookup and stays exact; missing or invalid evidence is counted
+whatever the catalog.
+
 ## History classification metadata
 
 The asset bridge retains one immutable, shared `CatalogQueryData` per published
@@ -170,7 +210,7 @@ classification rules. Counts and stat grouping still come from the native catalo
 ## Cache and cancellation
 
 Generations live at `<app_data>/assets/v1/<fingerprint>/`. Fingerprints cover
-reader/catalog versions, cache format version 12, the SHA-256 of `rules.rs`,
+reader/catalog versions, cache format version 14, the SHA-256 of `rules.rs`,
 and sorted relative input names, sizes and SHA-256
 content hashes, including selected referenced companion resources. Extraction
 hashes inputs before and after; a client patched during extraction is rejected.

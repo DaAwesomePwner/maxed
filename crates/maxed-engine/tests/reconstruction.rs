@@ -178,6 +178,7 @@ fn ability_enchant_products_are_applied_and_unknown_ids_or_legacy_metadata_are_c
                 name: "Synthetic".into(),
                 description: String::new(),
                 stat_damage_multiplier: Some(1.25),
+                weapon_damage: None,
             });
             if mode != 1 {
                 cat.enchants.push(EnchantDef {
@@ -186,6 +187,7 @@ fn ability_enchant_products_are_applied_and_unknown_ids_or_legacy_metadata_are_c
                     name: "Synthetic".into(),
                     description: String::new(),
                     stat_damage_multiplier: (mode == 0).then_some(1.5),
+                    weapon_damage: None,
                 });
             }
             let mut e = Engine::new(config(), Arc::new(cat)).unwrap();

@@ -98,3 +98,6 @@ mod crucible;
 
 #[path = "../crucible_validation.rs"]
 mod crucible_validation;
+
+#[path = "../weapon_enchant.rs"]
+mod weapon_enchant;
