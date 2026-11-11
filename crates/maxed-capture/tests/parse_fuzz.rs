@@ -6,7 +6,7 @@
 //! for every generated frame, and the final test checks that the generator
 //! actually exercises the IPv4 and TCP branches.
 use maxed_capture::{parse_frame, ParseError};
-use maxed_types::{Direction, RawFrame, Timestamp};
+use maxed_types::{Direction, Endpoint, FlowKey, RawFrame, Timestamp};
 
 struct Rng(u64);
 
@@ -41,6 +41,8 @@ struct Spec {
     src_port: u16,
     dst_port: u16,
     payload_len: usize,
+    seq: u32,
+    flags: u8,
     truncate_to: Option<usize>,
     short_original_len: bool,
 }
@@ -112,6 +114,12 @@ fn random_spec(rng: &mut Rng) -> Spec {
         src_port,
         dst_port,
         payload_len,
+        seq: if rng.chance(10) {
+            u32::MAX - rng.below(4) as u32
+        } else {
+            rng.next() as u32
+        },
+        flags: rng.next() as u8,
         truncate_to: None,
         short_original_len: rng.chance(5),
     }
@@ -148,10 +156,10 @@ fn build(rng: &mut Rng, spec: &mut Spec, index: u64) -> RawFrame {
     }
     bytes.extend(spec.src_port.to_be_bytes());
     bytes.extend(spec.dst_port.to_be_bytes());
-    bytes.extend((rng.next() as u32).to_be_bytes());
+    bytes.extend(spec.seq.to_be_bytes());
     bytes.extend((rng.next() as u32).to_be_bytes());
     bytes.push(spec.tcp_words << 4);
-    bytes.push(rng.next() as u8);
+    bytes.push(spec.flags);
     bytes.extend((rng.next() as u16).to_be_bytes());
     bytes.extend((rng.next() as u16).to_be_bytes());
     bytes.extend((rng.next() as u16).to_be_bytes());
@@ -179,8 +187,34 @@ fn build(rng: &mut Rng, spec: &mut Spec, index: u64) -> RawFrame {
     }
 }
 
+/// What `parse_frame` must return for an accepted TCP segment.
+#[derive(Debug, PartialEq, Eq)]
+struct Expected {
+    flow: FlowKey,
+    dir: Direction,
+    seq: u32,
+    syn: bool,
+    fin: bool,
+    rst: bool,
+    /// Offset of the payload in the frame: IPv4 start + IHL + TCP header length.
+    offset: usize,
+    payload_len: usize,
+}
+
+const SOURCE_IP: [u8; 4] = [10, 0, 0, 1];
+const DEST_IP: [u8; 4] = [10, 0, 0, 2];
+
 /// Independent prediction from the generator's own fields and the final length.
-fn model(spec: &Spec, frame: &RawFrame) -> (Result<Option<(Direction, usize)>, ParseError>, Stage) {
+///
+/// No document defines which error wins when a frame has several faults, so
+/// the model relies on the precedence `parse_frame` implements today: frame
+/// length vs `original_len`, then link layer (VLAN chain, ethertype), then the 20-byte IPv4 base header
+/// (version and IHL), then IHL and total length against the captured bytes,
+/// then protocol (non-TCP is skipped before fragment checks), then
+/// fragmentation, then TCP header sizes, then the 2050 port rule. A parser
+/// change that reorders these will fail here and must be reviewed, not
+/// silently followed.
+fn model(spec: &Spec, frame: &RawFrame) -> (Result<Option<Expected>, ParseError>, Stage) {
     let len = frame.bytes.len();
     if len > frame.original_len as usize {
         return (Err(ParseError::InvalidHeader), Stage::Link);
@@ -224,13 +258,76 @@ fn model(spec: &Spec, frame: &RawFrame) -> (Result<Option<(Direction, usize)>, P
     if tcp_len < 20 || ihl + tcp_len > total {
         return (Err(ParseError::InvalidHeader), Stage::Tcp);
     }
-    let dir = match (spec.src_port == 2050, spec.dst_port == 2050) {
+    let source = |port| Endpoint {
+        ip: SOURCE_IP,
+        port,
+    };
+    let dest = |port| Endpoint { ip: DEST_IP, port };
+    let (flow, dir) = match (spec.src_port == 2050, spec.dst_port == 2050) {
         (true, true) => return (Err(ParseError::InvalidHeader), Stage::Tcp),
         (false, false) => return (Ok(None), Stage::Tcp),
-        (false, true) => Direction::ClientToServer,
-        (true, false) => Direction::ServerToClient,
+        (false, true) => (
+            FlowKey {
+                client: source(spec.src_port),
+                server: dest(spec.dst_port),
+            },
+            Direction::ClientToServer,
+        ),
+        (true, false) => (
+            FlowKey {
+                client: dest(spec.dst_port),
+                server: source(spec.src_port),
+            },
+            Direction::ServerToClient,
+        ),
     };
-    (Ok(Some((dir, total - ihl - tcp_len))), Stage::Tcp)
+    let expected = Expected {
+        flow,
+        dir,
+        seq: spec.seq,
+        syn: spec.flags & 2 != 0,
+        fin: spec.flags & 1 != 0,
+        rst: spec.flags & 4 != 0,
+        offset: ip + ihl + tcp_len,
+        payload_len: total - ihl - tcp_len,
+    };
+    (Ok(Some(expected)), Stage::Tcp)
+}
+
+/// Compare `parse_frame` with the model, panicking with `context` on a mismatch.
+fn assert_matches_model(spec: &Spec, raw: &RawFrame, context: &str) -> Stage {
+    let (expected, stage) = model(spec, raw);
+    let actual = parse_frame(raw);
+    match (&expected, &actual) {
+        (Ok(Some(want)), Ok(Some(segment))) => {
+            assert_eq!(segment.flow, want.flow, "{context}");
+            assert_eq!(segment.dir, want.dir, "{context}");
+            assert_eq!(segment.seq, want.seq, "{context}");
+            assert_eq!(
+                (segment.syn, segment.fin, segment.rst),
+                (want.syn, want.fin, want.rst),
+                "{context}"
+            );
+            assert_eq!(segment.at, raw.at, "{context}");
+            assert_eq!(segment.origin.frame_index, raw.index, "{context}");
+            assert_eq!(segment.origin.offset, want.offset, "{context}");
+            assert_eq!(segment.origin.len, want.payload_len, "{context}");
+            assert_eq!(segment.bytes.len(), want.payload_len, "{context}");
+            assert_eq!(
+                segment.bytes,
+                raw.bytes[want.offset..want.offset + want.payload_len],
+                "{context}"
+            );
+        }
+        (Ok(None), Ok(None)) => {}
+        (Err(want), Err(got)) => assert_eq!(got, want, "{context}"),
+        _ => panic!(
+            "{context}: expected {:?}, got {:?}",
+            expected.as_ref().map(|segment| segment.is_some()),
+            actual.as_ref().map(|segment| segment.is_some())
+        ),
+    }
+    stage
 }
 
 fn check_invariants(raw: &RawFrame, context: &str) {
@@ -268,22 +365,12 @@ fn structured_frames_match_the_documented_outcome() {
         let mut spec = random_spec(&mut rng);
         let raw = build(&mut rng, &mut spec, index);
         let context = format!("seed={SEED:#x} index={index} spec={spec:?}");
-        let (expected, stage) = model(&spec, &raw);
+        let stage = assert_matches_model(&spec, &raw, &context);
         let actual = parse_frame(&raw);
-        match (&expected, &actual) {
-            (Ok(Some((dir, payload))), Ok(Some(segment))) => {
-                assert_eq!(segment.dir, *dir, "{context}");
-                assert_eq!(segment.bytes.len(), *payload, "{context}");
-                segments += 1;
-            }
-            (Ok(None), Ok(None)) => {}
-            (Err(want), Err(got)) => assert_eq!(got, want, "{context}"),
-            _ => panic!(
-                "{context}: expected {expected:?}, got {:?}",
-                actual.as_ref().map(|segment| segment.is_some())
-            ),
-        }
         check_invariants(&raw, &context);
+        if matches!(actual, Ok(Some(_))) {
+            segments += 1;
+        }
         match stage {
             Stage::Link => link += 1,
             Stage::Ip => ip += 1,
@@ -344,6 +431,8 @@ fn mutated_valid_frames_never_panic() {
             src_port: 50000,
             dst_port: 2050,
             payload_len: rng.below(24) as usize,
+            seq: rng.next() as u32,
+            flags: rng.next() as u8,
             truncate_to: None,
             short_original_len: false,
         };
@@ -374,7 +463,7 @@ fn mutated_valid_frames_never_panic() {
 }
 
 #[test]
-fn every_prefix_of_structured_frames_never_panics() {
+fn every_prefix_of_structured_frames_matches_the_model() {
     const SEED: u64 = 0x5eed_0000_0000_0042;
     let mut rng = Rng::new(SEED);
     for index in 0..300u64 {
@@ -386,6 +475,7 @@ fn every_prefix_of_structured_frames_never_panics() {
             cut.bytes.truncate(size);
             cut.original_len = raw.original_len.max(size as u32);
             let context = format!("seed={SEED:#x} index={index} size={size} spec={spec:?}");
+            assert_matches_model(&spec, &cut, &context);
             check_invariants(&cut, &context);
         }
     }

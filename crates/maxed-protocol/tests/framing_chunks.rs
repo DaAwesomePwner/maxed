@@ -135,22 +135,29 @@ fn an_impossible_length_reports_after_every_earlier_frame_at_any_chunking() {
         for style in 0..5 {
             let mut framer = Framer::default();
             let mut got = Vec::new();
-            let mut seen = 0;
+            // Stream byte range [before, after) of the chunk that reported the error.
+            let mut before = 0;
             let mut error = None;
             for piece in chunks(&mut rng, &stream, style) {
-                seen += piece.len();
+                let after = before + piece.len();
                 let output = framer.push(&piece);
                 got.extend(output.frames);
                 if let Some(e) = output.error {
-                    error = Some((e, seen));
+                    error = Some((e, before, after));
                     break;
                 }
+                before = after;
             }
             let context = format!("seed={SEED:#x} case={case} style={style} bad={bad}");
             assert_eq!(got, frames, "{context}");
-            let (e, seen) = error.unwrap_or_else(|| panic!("{context}: no error"));
+            let (e, before, after) = error.unwrap_or_else(|| panic!("{context}: no error"));
             assert_eq!(e, ProtocolError::Framing, "{context}");
-            assert!(seen >= header_end, "{context}: reported before header");
+            // Reported by the chunk holding the header's last byte, not earlier or later.
+            let last_header_byte = header_end - 1;
+            assert!(
+                before <= last_header_byte && last_header_byte < after,
+                "{context}: error from chunk {before}..{after}, header ends at {header_end}"
+            );
             // The rejected header is dropped, so the framer is usable again.
             assert!(!framer.has_pending(), "{context}");
             let ok = frame(&mut rng);
