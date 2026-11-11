@@ -26,4 +26,6 @@
   [data-kind="fame"] .value { left: 32px; right: 32px; }
   [data-tone="max"] .value { color: var(--stat-maxed); }
   [data-tone="boosted"] .value { color: var(--stat-boosted); }
+  /* Narrow rail: keep 12px figures and give the value the bar's free width, right-aligned. */
+  @media (max-width: 900px) { .value, [data-kind="fame"] .value { right: var(--space-1); justify-content: flex-end; } }
 </style>
