@@ -124,13 +124,6 @@
   --focus-ring: var(--text-primary);
   --muted: var(--text-muted);
 
-  /* Deprecated during migration; do not use in new code. */
-  --violet: var(--bar-party);
-  --violet-text: var(--text-primary);
-  --accent-gradient: none;
-  --hero-radial: var(--surface-panel);
-  --glow-white: none;
-  --weight-bold: 600;
 }
 
 .stat-value { font-variant-numeric: tabular-nums lining-nums; }

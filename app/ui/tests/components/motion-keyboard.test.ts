@@ -63,14 +63,14 @@ describe('motion and component keyboard regressions', () => {
     await tick();
     const heroNode = hero.container.querySelector('section');
     const bannerNode = banner.container.querySelector('.banner');
-    const announce = screen.getByText('White Bag: Synthetic drop');
+    const announce = screen.getByText('White bag: Synthetic drop');
     for (let i = 1; i <= 5; i++) {
       await live.rerender({ ...props, capture: { ...capture, unknown_packets: i } });
       await hero.rerender({ view: { ...props.view, name: `Updated name ${i}` } });
       await banner.rerender({ id: 'same-moment', context: `Updated context ${i}` });
       expect(hero.container.querySelector('section')).toBe(heroNode);
       expect(banner.container.querySelector('.banner')).toBe(bannerNode);
-      expect(announce.textContent).toBe('White Bag: Synthetic drop');
+      expect(announce.textContent).toBe('White bag: Synthetic drop');
     }
     expect(vi.getTimerCount()).toBe(1); expect(raf).not.toHaveBeenCalled();
     await live.rerender({ capture: { ...capture, state: 'Stopped' } });
@@ -85,7 +85,10 @@ describe('motion and component keyboard regressions', () => {
     expect(reduced).toMatch(/\*,\s*\*::before,\s*\*::after/);
     for (const property of ['animation', 'transition']) expect(reduced).toContain(`${property}: none !important`);
     expect(reduced).toContain('scroll-behavior: auto !important');
-    expect(read('lib/components/Banner.svelte')).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.celebrate::before\s*\{\s*display: none/);
+    // The celebration pseudo-element was removed; its reduced-motion rule must not return.
+    const bannerSource = read('lib/components/Banner.svelte');
+    expect(bannerSource).not.toContain('.celebrate::before');
+    expect(bannerSource).not.toMatch(/::before|::after|prefers-reduced-motion/);
     expect(read('lib/navigation/state.ts')).not.toMatch(/behavior:\s*['"]smooth['"]|requestAnimationFrame/);
     const shell = read('lib/shell/Shell.svelte').replace(/\r\n/g, '\n');
     expect(shell).not.toMatch(/behavior:\s*['"]smooth['"]/);
@@ -122,7 +125,7 @@ describe('motion and component keyboard regressions', () => {
   it('dismisses a banner using the keyboard', async () => {
     const onDismiss = vi.fn(); render(BannerHost, { onDismiss });
     const user = userEvent.setup(); await user.tab();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Dismiss White Bag' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Dismiss White bag' }));
     await user.keyboard('{Enter}'); expect(onDismiss).toHaveBeenCalledOnce();
   });
 });
