@@ -77,7 +77,9 @@ empty evidence is a known 1.0. Missing or invalid evidence, another item in the
 slot, an unknown ID, a catalog without `weapon_damage`, an `unsupported` enchant, or
 scaled bounds that are unusable (minimum above maximum, negative, non-finite or
 above `i32::MAX`) keeps the unscaled bounds, which still roll, and increments
-`assumedWeaponEnchantDefault` once per hit. Scaled bounds that become equal (for
+`assumedWeaponEnchantDefault` once per hit. Because the fallback cannot establish
+whether the client consumed a draw, it also marks RNG continuity untrusted until the
+next reseed, so later hits count `untrustedRng` and stay estimated. Scaled bounds that become equal (for
 example 10–11 × 0.8 = 8–8) skip the roll like any equal-bounds projectile, so the
 next shot takes the draw an unscaled roll would have used.
 Enchant ID 0 counts as applied, as in the observation parser and the character

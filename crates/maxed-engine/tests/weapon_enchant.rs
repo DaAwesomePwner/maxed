@@ -297,6 +297,36 @@ fn unusable_scaled_bounds_keep_the_unscaled_roll_as_a_counted_assumption() {
 }
 
 #[test]
+fn weapon_enchant_fallback_leaves_later_rolls_untrusted() {
+    // A fallback shot may or may not have consumed a draw on the client, so a
+    // later shot with known evidence must not be reported as exact.
+    let run = |first: &str| {
+        let mut e = Engine::new(config(), Arc::new(weapon_catalog())).unwrap();
+        setup(&mut e);
+        for (bullet, code) in [(1, first), (2, "")] {
+            apply(
+                &mut e,
+                2500,
+                tick(vec![status(
+                    1,
+                    vec![stat(8, 211), string(80, &format!("{code},,,"))],
+                )]),
+            );
+            apply(&mut e, 3000, shoot_with(bullet, 211));
+            apply(&mut e, 4000, hit(bullet));
+        }
+        let counts = e.reconstruction_coverage();
+        (
+            counts["assumedWeaponEnchantDefault"],
+            counts["untrustedRng"],
+        )
+    };
+    assert_eq!(run(""), (0, 0));
+    // Both hits resolve after the fallback shot, so both carry the untrusted roll.
+    assert_eq!(run(E16), (1, 2));
+}
+
+#[test]
 fn enchant_id_zero_is_an_applied_weapon_enchant() {
     // parse_enchant counts ID 0 as applied (state Recorded), so the weapon path
     // resolves it like any other ID instead of treating it as empty.
