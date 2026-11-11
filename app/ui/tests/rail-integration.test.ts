@@ -93,9 +93,9 @@ it('offers Reconnect for an interrupted live delivery because reconnecting clear
   render(Shell, { client, historyAdapter: fakeHistory().adapter });
   await screen.findByRole('heading', { name: fixture.character.name });
   transport.publishCapture({ ...fixture.capture, state: 'Failed', message: 'Live updates interrupted; reconnect or restart Maxed' });
-  const reconnect = await screen.findByRole('button', { name: 'Reconnect Capture' });
+  const reconnect = await screen.findByRole('button', { name: 'Reconnect capture' });
   expect(reconnect.getAttribute('aria-disabled')).not.toBe('true');
-  expect(screen.queryByRole('button', { name: 'Start Capture' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Start capture' })).toBeNull();
 });
 
 it('keeps a capture worker failure sticky: restart required and capture retry disabled', async () => {
@@ -104,8 +104,8 @@ it('keeps a capture worker failure sticky: restart required and capture retry di
   await screen.findByRole('heading', { name: fixture.character.name });
   transport.publishCapture({ ...fixture.capture, state: 'Failed', message: 'Capture worker failed; restart Maxed' });
   await screen.findAllByText(/Restart Maxed/);
-  expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('true');
-  expect(screen.queryByRole('button', { name: 'Reconnect Capture' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.queryByRole('button', { name: 'Reconnect capture' })).toBeNull();
 });
 
 it.each([Setup, Settings])('passes explicit checks and detection retries while mount calls remain passive', async (component) => {
@@ -174,7 +174,7 @@ it('shows catch-up only on history routes after a checkpoint waits more than fiv
     expect(within(rail).getByText('Snapshot-only location')).toBeTruthy();
     await vi.advanceTimersByTimeAsync(lagThresholdMs + pollIntervalMs); await flush();
     expect(screen.getByRole('heading', { name: 'Runs', level: 1 })).toBeTruthy();
-    expect(screen.getByRole('status', { name: 'Background activity' }).textContent).not.toContain('Loading History');
+    expect(screen.getByRole('status', { name: 'Background activity' }).textContent).not.toContain('Loading history');
     expect(screen.queryByText(/Changes not saved yet/)).toBeNull();
     // Initial join + one snapshot-expedited poll, then the healthy 10 s idle
     // interval: ordinary snapshots do not force one-second catch-up polling.
@@ -188,21 +188,21 @@ it('shows catch-up only on history routes after a checkpoint waits more than fiv
       event: { run_updated: { ...fixture.run, party_size: 2 } } });
     await vi.advanceTimersByTimeAsync(0); await flush();
     await vi.advanceTimersByTimeAsync(lagThresholdMs); await flush();
-    expect(screen.getByRole('status', { name: 'Background activity' }).textContent).not.toContain('Loading History');
+    expect(screen.getByRole('status', { name: 'Background activity' }).textContent).not.toContain('Loading history');
     expect(client.queryStore).toHaveBeenCalledTimes(pollsBeforeCheckpoint + lagThresholdMs / pollIntervalMs);
 
     await fireEvent.click(within(rail).getByRole('link', { name: 'Settings' }));
     await vi.advanceTimersByTimeAsync(1); await flush();
     expect(screen.getByRole('heading', { name: 'Settings', level: 1 })).toBeTruthy();
-    expect(screen.getByRole('status', { name: 'Background activity' }).textContent).not.toContain('Loading History');
+    expect(screen.getByRole('status', { name: 'Background activity' }).textContent).not.toContain('Loading history');
     await fireEvent.click(within(rail).getByRole('link', { name: 'Runs' }));
     await vi.advanceTimersByTimeAsync(0); await flush();
-    expect(screen.getByRole('status', { name: 'Background activity' }).textContent).toContain('Loading History');
+    expect(screen.getByRole('status', { name: 'Background activity' }).textContent).toContain('Loading history');
 
     caughtUp = true;
     await vi.advanceTimersByTimeAsync(pollIntervalMs); await flush();
     expect(client.queryStore).toHaveBeenCalledTimes(pollsBeforeCheckpoint + lagThresholdMs / pollIntervalMs + 1);
-    expect(screen.getByRole('status', { name: 'Background activity' }).textContent).not.toContain('Loading History');
+    expect(screen.getByRole('status', { name: 'Background activity' }).textContent).not.toContain('Loading history');
     expect(within(rail).getByRole('heading', { name: fixture.character.name })).toBeTruthy();
   } finally {
     unmount();

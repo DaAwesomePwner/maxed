@@ -87,8 +87,11 @@ it('keeps icon history in the rail and removes the old content navigation row', 
   const rail = screen.getByRole('complementary', { name: 'Character' });
   const history = within(rail).getByRole('group', { name: 'History' });
   expect(history.closest('.rail-top')).toBeTruthy();
-  expect(within(history).getByRole('button', { name: 'Back' }).textContent?.trim()).toBe('←');
-  expect(within(history).getByRole('button', { name: 'Forward' }).textContent?.trim()).toBe('→');
+  for (const name of ['Back', 'Forward']) {
+    const icon = within(history).getByRole('button', { name });
+    expect(icon.textContent?.trim()).toBe('');
+    expect(icon.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+  }
   expect(screen.getByRole('main').querySelector('.route-toolbar')).toBeNull();
   expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
   await fireEvent.click(within(rail).getByRole('link', { name: 'Runs' })); await flushHomeRender();

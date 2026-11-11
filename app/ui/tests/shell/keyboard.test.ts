@@ -29,7 +29,7 @@ describe('document keyboard order', () => {
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
     expect(screen.queryByText('Details')).toBeNull();
     await tabOrder([
-      screen.getByRole('link', { name: 'Skip to Content' }), button('Start Capture'),
+      screen.getByRole('link', { name: 'Skip to content' }), button('Start capture'),
       nav.getByRole('link', { name: 'Home' }), nav.getByRole('link', { name: 'Runs' }),
       ...(lootBrowsing ? [nav.getByRole('link', { name: 'Loot' })] : []),
       nav.getByRole('link', { name: 'Alerts' }), screen.getByRole('link', { name: 'Settings' }),
@@ -45,7 +45,7 @@ describe('document keyboard order', () => {
       button('Retry Checks'), screen.getByRole('link', { name: 'Settings' }), button('Check Access'),
       screen.getByRole('combobox', { name: 'Capture Adapter' }), button('Apply Adapter'), button('Retry Adapters'),
       screen.getByRole('textbox', { name: 'Assets Path' }), button('Extract'), button('Retry Detection'),
-      button('Start Capture'), button('Stop Capture'),
+      button('Start capture'), button('Stop capture'),
     ]);
   });
 

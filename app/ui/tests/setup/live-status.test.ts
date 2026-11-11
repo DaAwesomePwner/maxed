@@ -13,8 +13,8 @@ describe('capture error recovery actions', () => {
       onStart: vi.fn(), onStop: vi.fn(), onRetry: vi.fn(),
     });
     expect(screen.getByRole('alert').textContent).toContain('Capture could not change state');
-    expect(screen.queryByRole('button', { name: 'Reconnect Capture' })).toBeNull();
-    const retry = screen.getByRole('button', { name: state === 'Stopped' ? 'Start Capture' : 'Stop Capture' });
+    expect(screen.queryByRole('button', { name: 'Reconnect capture' })).toBeNull();
+    const retry = screen.getByRole('button', { name: state === 'Stopped' ? 'Start capture' : 'Stop capture' });
     expect(retry.getAttribute('aria-disabled')).toBe('false');
   });
 
@@ -25,7 +25,7 @@ describe('capture error recovery actions', () => {
       error: 'Capture status is unavailable. Reconnect status to retry.',
       onStart: vi.fn(), onStop: vi.fn(), onRetry,
     });
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Reconnect Capture' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Reconnect capture' }));
     expect(onRetry).toHaveBeenCalledOnce();
   });
 });

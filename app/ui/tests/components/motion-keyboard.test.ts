@@ -18,7 +18,7 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), `src/${path}`
 describe('motion and component keyboard regressions', () => {
   it('gives native and aria-disabled buttons the same dimming while preserving the focused ring', () => {
     const style = document.createElement('style');
-    style.textContent = read('app.css').replace(/@import[^;]+;/g, '');
+    style.textContent = read('lib/styles/controls.css');
     const controls = document.createElement('div');
     controls.innerHTML = '<button disabled>Native unavailable</button><button aria-disabled="true">Focusable unavailable</button>';
     document.head.append(style); document.body.append(controls);
@@ -30,7 +30,7 @@ describe('motion and component keyboard regressions', () => {
       // Pin the authored focus rule; WebView2 painting remains an owner check.
       const rules = [...style.sheet!.cssRules].filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule);
       expect(rules.find((rule) => rule.selectorText === 'button[aria-disabled="true"]:focus-visible')?.style.opacity).toBe('1');
-      expect(rules.find((rule) => rule.selectorText === 'button:focus-visible')?.style.outline).toBe('2px solid var(--gold)');
+      expect(rules.find((rule) => rule.selectorText === 'button:focus-visible')?.style.outline).toBe('2px solid var(--focus-ring)');
     } finally { controls.remove(); style.remove(); }
   });
 
@@ -98,7 +98,7 @@ describe('motion and component keyboard regressions', () => {
     render(ContentHarness);
     const user = userEvent.setup();
     const evidence = screen.getByRole('button', { name: 'Evidence' });
-    await user.tab(); expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Retry Capture' }));
+    await user.tab(); expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Retry capture' }));
     await user.tab(); expect(document.activeElement).toBe(screen.getByRole('link', { name: /The Shatters/ }));
     await user.tab(); expect(document.activeElement).toBe(evidence);
     expect(screen.getByRole('tooltip').id).toBe(evidence.getAttribute('aria-describedby'));

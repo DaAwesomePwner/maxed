@@ -222,7 +222,7 @@ test('after live ownership loss Shell can retry saving and Party can read durabl
       receive({ payload: { ...fixture.capture, state: 'Failed', message: 'Synthetic capture stopped after loss' } });
     }
     await flush();
-    expect(screen.getByRole('button', { name: 'Retry Capture' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Retry capture' })).toBeTruthy();
     for (const receive of listeners.get('presentation-visible') ?? []) receive({ payload: false });
     await flush();
     expect(isPresentationVisible()).toBe(false);

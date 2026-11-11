@@ -1,18 +1,40 @@
-/* Opt-in Runs controls. Values follow the approved Runs mockup. */
-.ctl { height: 26px; min-height: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid var(--border);
-  border-radius: 6px; background: #ffffff06; color: var(--text-primary); font: inherit; font-size: 12px; white-space: nowrap; text-decoration: none; }
-.ctl:hover:not(:disabled):not([aria-disabled="true"]) { border-color: #c9b0fc; background: #8b5cf630; }
+/* Default buttons are secondary: raised surface, solid control boundary, sentence-case label.
+   Components restyle their own buttons with scoped rules; these keep every unstyled button usable. */
+button {
+  min-height: var(--target-min); padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-control);
+  background: var(--surface-raised); color: var(--text-primary);
+  font: inherit; font-size: var(--text-label); line-height: var(--leading-label); cursor: pointer;
+  transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
+}
+button:hover:enabled:not([aria-disabled="true"]) { background: var(--surface-hover); }
+/* Zero specificity: components that position buttons with transforms keep them. */
+:where(button:active:enabled:not([aria-disabled="true"])) { transform: scale(.98); }
+button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+button:disabled, button[aria-disabled="true"] { opacity: .45; cursor: default; }
+button[aria-disabled="true"]:focus-visible { opacity: 1; }
+
+/* Dense controls (toolbars, filters, inputs). Secondary by default; ghost and primary variants. */
+.ctl { box-sizing: border-box; height: var(--control-dense); min-height: 0; display: inline-flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary);
+  font: inherit; font-size: var(--text-caption); line-height: var(--leading-caption); white-space: nowrap; text-decoration: none; }
+.ctl:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--border-strong); background: var(--surface-hover); }
 .ctl.ghost { border-color: transparent; background: transparent; color: var(--text-secondary); }
-.ctl.ghost:hover:not(:disabled):not([aria-disabled="true"]) { color: var(--text-primary); background: #ffffff0a; border-color: transparent; }
-.ctl.sq { width: 26px; padding: 0; justify-content: center; }
+.ctl.ghost:hover:not(:disabled):not([aria-disabled="true"]) { color: var(--text-primary); background: var(--surface-hover); border-color: transparent; }
+:is(button, .ctl).primary { border-color: var(--gold); background: var(--gold); color: var(--accent-ink); font-weight: var(--weight-medium); }
+:is(button, .ctl).primary:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 88%, var(--text-primary)); }
+.ctl.sq { width: var(--control-dense); padding: 0; justify-content: center; }
 .ctl[aria-disabled="true"], .ctl:disabled, .seg button[aria-disabled="true"], .seg button:disabled { opacity: .4; cursor: default; }
-.ctl .caret { opacity: .6; font-size: 9px; }
-.seg { display: inline-flex; height: 26px; border: 1px solid var(--border); border-radius: 6px; padding: 2px; gap: 2px; background: #ffffff04; }
-.seg button { min-height: 0; border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 12px; padding: 0 9px; border-radius: 4px; display: inline-flex; gap: 5px; align-items: center; }
-.seg button:hover:enabled:not([aria-disabled="true"]):not(.on):not([aria-pressed="true"]) { background: #8b5cf630; }
+.ctl .caret { color: var(--text-muted); font-size: var(--text-meta); }
+
+/* Segmented control: selected is a neutral surface step, never gold or violet. */
+.seg { box-sizing: border-box; display: inline-flex; height: var(--control-dense); border: 1px solid var(--hairline-strong); border-radius: var(--radius-control); padding: 2px; gap: 2px; background: var(--surface-inset); }
+.seg button { min-height: 0; border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-caption); line-height: var(--leading-caption);
+  padding: 0 var(--space-3); border-radius: calc(var(--radius-control) - 2px); display: inline-flex; gap: var(--space-1); align-items: center; }
+.seg button:hover:enabled:not([aria-disabled="true"]):not(.on):not([aria-pressed="true"]) { background: var(--surface-hover); color: var(--text-primary); }
 .seg button.on, .seg button[aria-pressed="true"],
 .seg button.on:hover:enabled:not([aria-disabled="true"]), .seg button[aria-pressed="true"]:hover:enabled:not([aria-disabled="true"]) {
-  border-color: transparent; background: var(--surface-hover); color: var(--text-primary); box-shadow: inset 0 0 0 1px #c4a7ff55; }
-.seg button span { color: var(--text-muted); font-variant-numeric: tabular-nums; font-size: 11px; }
-.ctl:focus-visible, .seg button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+  border-color: transparent; background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--highlight-top); }
+.seg button span { color: var(--text-muted); font-variant-numeric: tabular-nums; font-size: var(--text-meta); }
+.ctl:focus-visible, .seg button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ctl[aria-disabled="true"]:focus-visible, .seg button[aria-disabled="true"]:focus-visible { opacity: 1; }

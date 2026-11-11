@@ -62,7 +62,7 @@ it('death anchor waits for saved rows and a removed focused row falls back once'
   page.event({ run_ended: run() }, '13'); page.setStore(saved('13', page.snapshot.stream_id)); await advance();
   await click('Back', history());
   expect(document.activeElement).toBe(main().getByRole('heading', { level: 1, name: 'Runs' }));
-  expect(screen.getAllByText(/Page Heading/)).toHaveLength(1);
+  expect(screen.getAllByText(/Page heading/)).toHaveLength(1);
 });
 
 it('navigation cancels obsolete Alerts readiness and keeps one mounted rail', async () => {

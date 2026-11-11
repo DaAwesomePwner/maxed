@@ -61,7 +61,7 @@
   <div class="actions">
     <button onclick={() => session.refreshSetup({ retry: true })}>Retry Checks</button>
     {#if $session.errors.settings}<button onclick={() => session.refreshSettings()}>Retry Settings</button>{/if}
-    {#if $session.errors.capture}<button onclick={() => session.connectCapture()}>Reconnect Capture</button>{/if}
+    {#if $session.errors.capture}<button onclick={() => session.connectCapture()}>Reconnect capture</button>{/if}
     <a href="#/settings">Settings</a>
   </div>
   <ol aria-label="Setup">
@@ -94,14 +94,14 @@
       {#if map && !preview && !$session.setup?.demo}<p>Location: {map}</p>{:else}<DebugNote text="Location not yet observed." />{/if}
 
       <div class="actions">
-        <button aria-disabled={startUnavailable} onclick={() => !startUnavailable && session.action(() => client.startCapture(), 'Couldn’t start capture. Retry.', { captureAction: true })}>Start Capture</button>
-        <button aria-disabled={stopUnavailable} onclick={() => !stopUnavailable && session.action(() => client.stopCapture(), 'Couldn’t stop capture. Retry.', { duringExtraction: true, captureAction: true })}>Stop Capture</button>
+        <button aria-disabled={startUnavailable} onclick={() => !startUnavailable && session.action(() => client.startCapture(), 'Couldn’t start capture. Retry.', { captureAction: true })}>Start capture</button>
+        <button aria-disabled={stopUnavailable} onclick={() => !stopUnavailable && session.action(() => client.stopCapture(), 'Couldn’t stop capture. Retry.', { duringExtraction: true, captureAction: true })}>Stop capture</button>
       </div>
       {#if $session.capture}
-        <dl aria-label="Capture Diagnostics">
-          <div><dt>Dropped Frames</dt><dd>{$session.capture.dropped_frames}</dd></div>
-          <div><dt>Unknown Packets</dt><dd>{$session.capture.unknown_packets}</dd></div>
-          <div><dt>Decode Failures</dt><dd>{$session.capture.decode_failures}</dd></div>
+        <dl aria-label="Capture diagnostics">
+          <div><dt>Dropped frames</dt><dd>{$session.capture.dropped_frames}</dd></div>
+          <div><dt>Unknown packets</dt><dd>{$session.capture.unknown_packets}</dd></div>
+          <div><dt>Decode failures</dt><dd>{$session.capture.decode_failures}</dd></div>
         </dl>
       {/if}
     </SetupStep>
