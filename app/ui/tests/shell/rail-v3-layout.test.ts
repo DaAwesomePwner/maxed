@@ -29,7 +29,7 @@ it('uses mockup text sizes at full width and readable minimums in the narrow rai
     expect(heroRule(narrow)).toContain(`${property}: ${compact}px`);
   }
   const bar = read('components/VitalBar.svelte');
-  expect(bar).toContain('font: 700 var(--rail-vital-size,');
+  expect(bar).toContain('font: var(--weight-semibold) var(--rail-vital-size,');
   expect(bar).toContain('font-size: var(--rail-label-size,');
   const stats = read('shell/StatPanel.svelte');
   expect(stats).toContain('font: var(--weight-medium) var(--rail-stat-size, 14px)');
