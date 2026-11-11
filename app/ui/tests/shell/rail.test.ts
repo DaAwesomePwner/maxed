@@ -112,6 +112,16 @@ describe('rail projection split', () => {
     expect(reads.count).toBe(1);
     expect(focus.fight?.id).toBe(known().fights[0].id);
   });
+  it('counts a fight toward stale in the focus projection only', () => {
+    const base = known(), fight = { ...base.fights[0], run_id: null, last_hit: String(BigInt(base.at) - 1000n), ended: null, kill: null };
+    const snapshot: LiveSnapshot = { ...base, area_kind: 'realm', run: null, run_totals: null, map: null, character: null, fights: [fight] };
+    const character = characterRailView(snapshot, [], true), focus = focusRailView(character);
+    expect(focus.fight?.id).toBe(fight.id); // the case under test: a fight and nothing else
+    expect(focus.stale).toBe(true);
+    expect(character.stale).toBe(false);
+    expect(railView(snapshot, [], true).stale).toBe(true);
+    expect(focusRailView(characterRailView(snapshot, [], false)).stale).toBe(false);
+  });
   it('keeps the merged railView identical to its two projections', () => {
     const snapshot = known(), character = characterRailView(snapshot, [], true);
     expect(railView(snapshot, [], true)).toEqual({ ...character, ...focusRailView(character) });

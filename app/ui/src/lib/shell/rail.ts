@@ -143,12 +143,19 @@ export function verifiedRunSelf(snapshot: LiveSnapshot | null): RunPlayerTotal |
   return totals.local ?? candidates[0];
 }
 
-/** Character projection: identity, class and equipment only. It never selects a fight. */
+/**
+ * Character projection: identity, class and equipment only. It never selects a fight.
+ * Its `stale` therefore no longer counts a fight: with no character, map or run the
+ * hero card is not dimmed even when paused over a fight. Selecting the fight here
+ * would repeat the focus work per snapshot; the hero card shows nothing from a fight.
+ * The raw `paused` flag is kept so the focus projection can apply its own fight-aware rule.
+ */
 export function characterRailView(snapshot: LiveSnapshot | null, visuals: ObjectVisual[] = [], stale = false) {
   const character = snapshot?.character ?? null;
   const classVisual = objectVisual(visuals, character?.class_id);
   return {
     stale: stale && Boolean(character || snapshot?.map || snapshot?.run),
+    paused: stale,
     character, snapshot, visuals,
     name: character?.name ?? (character ? 'Character' : 'No Character'),
     className: classVisual?.name ?? 'Class',
@@ -174,7 +181,8 @@ export function focusRailView(base: CharacterRailView, previousId: string | null
   const local = wholeRun ? verifiedRunSelf(snapshot) : verifiedSelf(character, fight);
   const targetType = fight?.target_type ?? fight?.boss_type;
   return {
-    stale: base.stale,
+    // Same rule the whole rail used before the split, with the window-aware fight.
+    stale: base.paused && Boolean(character || fight || snapshot?.map || snapshot?.run),
     snapshot,
     map: snapshot?.map ?? 'Location',
     fight, wholeRun,

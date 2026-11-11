@@ -119,14 +119,57 @@ it('coalesces refreshes requested during an in-flight read into one trailing rea
   } finally { unsubscribe(); session.dispose(); }
 });
 
-it('does not run the trailing recording read after dispose', async () => {
-  const f = setupFixture();
-  let resolve: (status: RecordingStatus) => void = () => {};
-  const query = vi.spyOn(f.client, 'queryRecording').mockImplementation(() => new Promise<RecordingStatus>(r => { resolve = r; }));
+// One controllable queryRecording: each call parks until the test settles it.
+function parked(f: ReturnType<typeof setupFixture>) {
+  const calls: Array<{ resolve: (status: RecordingStatus) => void; reject: (error: Error) => void }> = [];
+  const query = vi.spyOn(f.client, 'queryRecording').mockImplementation(() => new Promise<RecordingStatus>((resolve, reject) => { calls.push({ resolve, reject }); }));
+  return { calls, query };
+}
+
+it('runs the trailing recording read unless the session was disposed', async () => {
+  const f = setupFixture(), { calls, query } = parked(f);
+  const kept = createRecordingSession(f.client), disposed = createRecordingSession(f.client);
+  try {
+    const keptFirst = kept.refresh(), disposedFirst = disposed.refresh();
+    expect(query).toHaveBeenCalledTimes(2);
+    void kept.refresh(); void disposed.refresh(); // both requested mid-read
+    disposed.dispose();
+    calls[0].resolve(reply('disabled')); calls[1].resolve(reply('disabled'));
+    await keptFirst; await disposedFirst; await flush();
+    expect(query).toHaveBeenCalledTimes(3); // only the live session read again
+  } finally { kept.dispose(); disposed.dispose(); }
+});
+
+it('defers the trailing recording read while hidden and resumes once when visible', async () => {
+  const f = setupFixture(), { calls, query } = parked(f);
   const session = createRecordingSession(f.client);
-  const first = session.refresh();
-  void session.refresh();
-  session.dispose();
-  resolve(reply('disabled')); await first; await flush();
-  expect(query).toHaveBeenCalledTimes(1);
+  try {
+    const first = session.refresh();
+    void session.refresh(); // visible and busy: pending
+    setNativePresentationVisible(false);
+    calls[0].resolve(reply('disabled')); await first; await flush();
+    expect(query).toHaveBeenCalledTimes(1); // finally must not read while hidden
+    await advance(60_000);
+    expect(query).toHaveBeenCalledTimes(1);
+    setNativePresentationVisible(true); await flush();
+    expect(query).toHaveBeenCalledTimes(2); // resumed exactly once
+    calls[1].resolve(reply('disabled')); await flush(); await advance(60_000);
+    expect(query).toHaveBeenCalledTimes(2);
+  } finally { session.dispose(); }
+});
+
+it('retries once after a failed read with a pending refresh, without looping', async () => {
+  const f = setupFixture(), { calls, query } = parked(f);
+  const session = createRecordingSession(f.client);
+  let latest: { error: string } | null = null;
+  const unsubscribe = session.subscribe(value => { latest = value; });
+  try {
+    const first = session.refresh();
+    void session.refresh(); void session.refresh();
+    calls[0].reject(new Error('query failed')); await first; await flush();
+    expect(query).toHaveBeenCalledTimes(2); // exactly one retry
+    calls[1].reject(new Error('query failed')); await flush(); await advance(60_000);
+    expect(query).toHaveBeenCalledTimes(2); // the retry's failure does not loop
+    expect(latest).toMatchObject({ error: expect.stringContaining('recording') });
+  } finally { unsubscribe(); session.dispose(); }
 });
