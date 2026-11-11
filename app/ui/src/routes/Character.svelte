@@ -161,7 +161,7 @@
     {#if catalogAvailable === false}
       <p>Weapon calculations unavailable — extract game assets</p><a href={settingsHref('assets')}>Settings</a>
     {:else if catalogError}<p>{catalogError} <a href={settingsHref('assets')}>Settings</a></p>{/if}
-    <p class="note">Excludes exalt damage, Crucible, Blood Ritual, enchant damage and rate changes, unsupported
+    <p class="note exclusions">Excludes exalt damage, Crucible, Blood Ritual, enchant damage and rate changes, unsupported
       special effects, Berserk, Dazed, Stunned and other firing limits; enemy conditions, armor break and
       vulnerability; misses, range falloff, repeat hits and target downtime. Assumes sustained fire with every
       projectile hitting one target once. Observed boosts already in ATT/DEX stay included.</p>

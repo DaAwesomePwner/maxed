@@ -35,7 +35,7 @@
     return () => { disposed = true; };
   });
   let clearHint = $derived(preview ? 'Clearing is not available in preview.' : setupError
-    || (setup?.demo ? 'Turn off Demo Mode to clear your party history.' : ''));
+    || (setup?.demo ? 'Turn off demo mode to clear your party history.' : ''));
   const droppedRows = new Map<string, PartyPlayerRow>();
   const filters: [PartyPlayerFilter, string][] = [['all', 'All'], ['watched', 'Watched'], ['banned', 'Banned'], ['with_notes', 'With notes']];
   const columns: [PartyPlayerSort, string][] = [['runs_together', 'Runs together'], ['deaths', 'Deaths'], ['left_early', 'Left early'], ['avg_share', 'Avg share'], ['last_seen', 'Last seen']];

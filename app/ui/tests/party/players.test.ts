@@ -437,7 +437,7 @@ it.each([[true, false], [false, true], [false, false]])('gates Players clear wit
   await flush();
   const button = screen.getByRole('button', { name: 'Clear party history…' }) as HTMLButtonElement;
   expect(button.disabled).toBe(demo || preview);
-  const hint = screen.queryByText(preview ? 'Clearing is not available in preview.' : 'Turn off Demo Mode to clear your party history.');
+  const hint = screen.queryByText(preview ? 'Clearing is not available in preview.' : 'Turn off demo mode to clear your party history.');
   expect(hint !== null).toBe(demo || preview);
   expect(button.getAttribute('aria-describedby')).toBe(hint?.id ?? null);
   if (hint) expect(hint.hidden).toBe(false);

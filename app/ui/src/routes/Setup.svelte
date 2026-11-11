@@ -8,7 +8,7 @@
   import AdapterControl from '../lib/settings/AdapterControl.svelte';
   import { createSetupSession } from '../lib/setup/session';
   import HistoryUpgrade from '../lib/setup/HistoryUpgrade.svelte';
-  import { historyRunning } from '../lib/settings/storage-state';
+  import { historyRunning, historyUpgradeRequired } from '../lib/settings/storage-state';
   import { errorLine, npcapText, setupProgress } from '../lib/setup/presentation';
   import { captureLabels } from '../lib/shell/rail';
   let { client, preview = false }: { client: Client; preview?: boolean } = $props();
@@ -21,7 +21,11 @@
   let progress = $derived(setupProgress($session.setup, $session.capture, preview, $session.busy || $session.extracting));
   let active = $derived(['Live', 'WaitingForGame', 'Recovering'].includes($session.capture?.state ?? ''));
   let restartRequired = $derived($session.capture?.state === 'Failed' && ['Capture worker failed; restart Maxed'].includes($session.capture.message));
-  let errors = $derived(Object.entries($session.errors).filter(([, message]) => message));
+  // Setup, adapter and history failures sit beside their own retry buttons when those are on screen.
+  let historyInline = $derived(!preview && $session.history?.phase !== 'ready'
+    && !(historyUpgradeRequired($session.history) && $session.historyDeferred));
+  let inline = $derived(new Set(['setup', ...(preview ? [] : ['adapters']), ...(historyInline ? ['history'] : [])]));
+  let errors = $derived(Object.entries($session.errors).filter(([key, message]) => message && !inline.has(key)));
   let map = $state<string | null>(null);
   $effect(() => {
     const connectedClient = client;
@@ -64,6 +68,7 @@
   <HistoryUpgrade {session} {preview} />
   <div class="actions">
     <button onclick={() => session.refreshSetup({ retry: true })}>Retry checks</button>
+    <span class="inline-error" aria-live="assertive" aria-atomic="true">{$session.errors.setup ? errorLine($session.errors.setup) : ''}</span>
     <a href="#/settings">Settings</a>
   </div>
   <ol aria-label="Setup">
@@ -82,7 +87,8 @@
       </div>
       <div class="actions">
         <button aria-disabled={adapterUnavailable} onclick={applyAdapter}>Apply adapter</button>
-        {#if !preview}<button onclick={() => session.refreshAdapters()}>Retry adapters</button>{/if}
+        {#if !preview}<button onclick={() => session.refreshAdapters()}>Retry adapters</button>
+          <span class="inline-error" aria-live="assertive" aria-atomic="true">{$session.errors.adapters ? errorLine($session.errors.adapters) : ''}</span>{/if}
       </div>
       <DebugNote text="Adapter changes may stop and restart capture. An empty list or Auto selection does not verify access." />
     </SetupStep>
@@ -115,6 +121,8 @@
   p { margin: var(--space-2) 0; color: var(--text-secondary); }
   .notice { color: var(--warning); }
   .error-summary:empty { display: none; }
+  .inline-error { color: var(--danger); }
+  .inline-error:empty { display: none; }
   .error-summary ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
   .error-summary li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-height: var(--control-dense); color: var(--danger); }
   .actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }

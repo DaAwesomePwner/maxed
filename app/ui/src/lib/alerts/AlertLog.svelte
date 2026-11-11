@@ -26,7 +26,7 @@
       <article data-row-id={row.id} tabindex="-1" aria-label={alertKindLabels[row.kind]}>
         <div class="row-actions">
         <details>
-          <summary aria-label={`${alertKindLabels[row.kind]} Details`}><strong>{alertKindLabels[row.kind]}</strong> <span class="number" title={alertTime(row.at)}>{shortTime(row.at)}</span></summary>
+          <summary aria-label={`${alertKindLabels[row.kind]} details`}><strong>{alertKindLabels[row.kind]}</strong> <span class="number" title={alertTime(row.at)}>{shortTime(row.at)}</span></summary>
           <p>Time: <span class="number">{alertTime(row.at)}</span></p>
           <p>Presentation: {row.presentation ? loudnessLabels[row.presentation] : '—'}</p>
           {#if !detail}<DebugNote text="Legacy details unavailable. The saved explanation is retained." />

@@ -2,6 +2,7 @@
   import type { SetupSession } from './session';
   import type { StorageFailure } from '../bindings/StorageFailure';
   import { backupSpaceReason, historyRunning, historyUpgradeRequired, storageBytes, storageReasons } from '../settings/storage-state';
+  import { errorLine } from './presentation';
   let { session, preview = false }: { session: SetupSession; preview?: boolean } = $props();
   let running = $derived($session.upgrading || historyRunning($session.history));
   let required = $derived(historyUpgradeRequired($session.history));
@@ -15,11 +16,16 @@
   }
 </script>
 
+{#snippet retryError()}<span class="inline-error" aria-live="assertive" aria-atomic="true">{$session.errors.history ? errorLine($session.errors.history) : ''}</span>{/snippet}
+
 {#if !preview && $session.history?.phase !== 'ready'}
   <section aria-label="History upgrade" class="history-upgrade">
     <h2>{required ? 'History upgrade required' : $session.history || $session.errors.history ? 'Couldn’t check saved history' : 'Checking history status'}</h2>
     {#if !required}
-      <button class="ctl" disabled={$session.historyChecking} onclick={() => session.retryHistory()}>Retry history status and space</button>
+      <div class="actions">
+        <button class="ctl" disabled={$session.historyChecking} onclick={() => session.retryHistory()}>Retry history status and space</button>
+        {@render retryError()}
+      </div>
     {:else if $session.historyDeferred}
       <p>History is unchanged. Live capture stays blocked until the upgrade succeeds.</p>
       <button class="ctl" onclick={() => session.reviewHistory()}>Review history upgrade</button>
@@ -35,12 +41,13 @@
       {#if $session.history?.last_failure}<p role="status">Previous attempt: {failureText($session.history.last_failure)}</p>{/if}
       {#if running}
         <p role="status">{$session.history?.phase === 'upgrading' ? 'Upgrading history after the verified backup.' : 'Backing up history before upgrading.'}</p>
-        <p>Capture, Stop, and Demo Mode are unavailable while the history upgrade is running.</p>
+        <p>Capture, Stop, and demo mode are unavailable while the history upgrade is running.</p>
       {/if}
       <div class="actions">
         <button class="ctl" disabled={unavailable} onclick={() => session.upgradeHistory()}>Back up and upgrade</button>
         <button class="ctl" disabled={running} onclick={() => session.deferHistory()}>Not now</button>
         <button class="ctl" disabled={$session.historyChecking} onclick={() => session.retryHistory()}>Retry history status and space</button>
+        {@render retryError()}
       </div>
       <p>Insufficient or unavailable space keeps history unchanged and live capture blocked. Free space, then retry.</p>
     {/if}
@@ -52,5 +59,7 @@
   p, dt { color: var(--text-secondary); } p { margin: var(--space-2) 0; }
   dt { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
   dl { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); margin: var(--space-3) 0; } dd { margin: 0; font-variant-numeric: tabular-nums; }
-  .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: var(--space-3) 0; }
+  .inline-error { color: var(--danger); }
+  .inline-error:empty { display: none; }
 </style>

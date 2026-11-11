@@ -68,7 +68,10 @@
   });
   let readUnavailable = $derived(preview || $session.extracting || !!$session.errors.settings || $session.settings?.version !== 1);
   let unavailable = $derived(readUnavailable || $session.busy);
-  let errors = $derived([...Object.entries($session.errors), ['policy', policyError] as [string, string]].filter(([, message]) => message));
+  // An adapter failure sits beside Retry adapters whenever that button is on screen.
+  let adaptersInline = $derived(!!draft && !preview);
+  let errors = $derived([...Object.entries($session.errors), ['policy', policyError] as [string, string]]
+    .filter(([key, message]) => message && !(key === 'adapters' && adaptersInline)));
   function changed() { revision++; edited = true; saved = ''; }
   function revert() {
     revision++; edited = false; saved = '';
@@ -135,7 +138,8 @@
             <div oninput={changed} onchange={changed}>
               <div class="adapter-row">
                 <AdapterControl adapters={$session.adapters} {preview} bind:value={adapter} disabled={readUnavailable} />
-                {#if !preview}<button class="ctl" type="button" disabled={$session.busy} onclick={() => session.refreshAdapters()}>Retry adapters</button>{/if}
+                {#if !preview}<div class="adapter-retry"><button class="ctl" type="button" disabled={$session.busy} onclick={() => session.refreshAdapters()}>Retry adapters</button>
+                  <span class="inline-error" aria-live="assertive" aria-atomic="true">{$session.errors.adapters ? errorLine($session.errors.adapters) : ''}</span></div>{/if}
                 <p>Current adapter: {savedAdapter}</p>
               </div>
             </div>
@@ -240,7 +244,9 @@
   .actions > span { margin-right: auto; color: var(--text-secondary); }
   .adapter-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-2); align-items: end; }
   .adapter-row :global(label), .adapter-row :global(p) { grid-column: 1 / -1; }
-  .adapter-row button { justify-self: start; }
+  .adapter-retry { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); grid-column: 1 / -1; }
+  .inline-error { color: var(--danger); }
+  .inline-error:empty { display: none; }
   .setup-link, .retry { justify-self: start; }
   a { color: var(--text-primary); text-decoration: none; text-underline-offset: 3px; }
   a:hover, a:focus-visible { text-decoration: underline; }
