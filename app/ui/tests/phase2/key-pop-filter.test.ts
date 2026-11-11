@@ -18,13 +18,13 @@ it.each([
   } });
   page.setSettings({ alerts: preferences({ key_popped: 'banner', key_pop_dungeons: only ? ['Lost Halls'] : null }) });
   await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
-  await fireEvent.change(main().getByRole('combobox', { name: 'White Bag' }), { target: { value: 'off' } });
-  await fireEvent.change(main().getByRole('combobox', { name: 'Key Popped dungeons' }), { target: { value: only ? 'all' : 'selected' } });
+  await fireEvent.change(main().getByRole('combobox', { name: 'White bag' }), { target: { value: 'off' } });
+  await fireEvent.change(main().getByRole('combobox', { name: 'Key popped dungeons' }), { target: { value: only ? 'all' : 'selected' } });
   if (!only) await fireEvent.click(main().getByRole('checkbox', { name: 'Lost Halls' }));
   page.event({ alert_fired: pop() }, '13'); await flush();
   await fireEvent.click(within(screen.getByRole('group', { name: 'Alert' })).getByRole('button', { name: 'Mute Lost Halls' })); await flush();
   expect(screen.getByText('Muted Lost Halls.')).toBeTruthy();
-  expect((main().getByRole('combobox', { name: 'Key Popped dungeons' }) as HTMLSelectElement).value).toBe(only ? 'except' : 'selected');
+  expect((main().getByRole('combobox', { name: 'Key popped dungeons' }) as HTMLSelectElement).value).toBe(only ? 'except' : 'selected');
   expect(Boolean(main().queryByRole('button', { name: 'Remove Lost Halls' }))).toBe(only);
   if (undoBeforeSave) { await fireEvent.click(screen.getByRole('button', { name: 'Undo' })); await flush(); }
   await fireEvent.click(main().getByRole('button', { name: 'Save' })); await flush();
@@ -45,7 +45,7 @@ it('blocks Save when translating a mute into the draft mode exceeds the combined
     client.listCatalogDungeonOptions = vi.fn(async () => names.map(name => dungeonDef({ name, aliases: [], portal_type: null })));
   } });
   page.setSettings({ alerts: preferences({ key_pop_dungeons: ['Lost Halls'] }) }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
-  await fireEvent.change(main().getByRole('combobox', { name: 'Key Popped dungeons' }), { target: { value: 'except' } });
+  await fireEvent.change(main().getByRole('combobox', { name: 'Key popped dungeons' }), { target: { value: 'except' } });
   await fireEvent.click(main().getByRole('button', { name: 'Select all' }));
   page.event({ alert_fired: pop() }, '13'); await flush();
   await fireEvent.click(within(screen.getByRole('group', { name: 'Alert' })).getByRole('button', { name: 'Mute Lost Halls' })); await flush();
@@ -67,7 +67,7 @@ it.each([false, true])('queues a dirty form save behind a pending mute and Undo 
   page.setSettings({ alerts: preferences({ key_pop_dungeons: only ? ['Lost Halls', 'The Void'] : null,
     key_pop_excluded_dungeons: only ? [] : ['The Void'] }) });
   await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
-  await fireEvent.change(main().getByRole('combobox', { name: 'White Bag' }), { target: { value: 'off' } });
+  await fireEvent.change(main().getByRole('combobox', { name: 'White bag' }), { target: { value: 'off' } });
   await fireEvent.click(main().getByRole('checkbox', { name: 'Extra dungeon' }));
   const muteWrite = deferred<void>();
   const persist = vi.mocked(page.client.updateAlertPreferences).getMockImplementation()!;
@@ -99,7 +99,7 @@ it('searches names and aliases, edits chips and visible results, and retains mod
       dungeonDef({ name: 'The Void', aliases: ['Void'] }),
     ]);
   } }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
-  const mode = main().getByRole('combobox', { name: 'Key Popped dungeons' });
+  const mode = main().getByRole('combobox', { name: 'Key popped dungeons' });
   await fireEvent.change(mode, { target: { value: 'selected' } }); await flush();
   const emptySelection = 'Choose dungeons to receive key-pop alerts. None selected means no alerts.';
   expect(within(main().getByRole('group', { name: 'Chosen dungeons' })).getByText(emptySelection)).toBeTruthy();
@@ -139,7 +139,7 @@ it.each(['banner', 'toast', 'log'] as const)('mutes from %s, saves immediately a
   expect(page.settings.alerts.key_pop_excluded_dungeons).toEqual(['Lost Halls']);
   expect(screen.getByText('Muted Lost Halls.')).toBeTruthy();
   await follow('#/settings', primary()); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
-  expect((main().getByRole('combobox', { name: 'Key Popped dungeons' }) as HTMLSelectElement).value).toBe('except');
+  expect((main().getByRole('combobox', { name: 'Key popped dungeons' }) as HTMLSelectElement).value).toBe('except');
   expect(main().getByRole('button', { name: 'Remove Lost Halls' })).toBeTruthy();
   await fireEvent.click(screen.getByRole('button', { name: 'Undo' })); await flush();
   expect(page.settings.alerts.key_pop_excluded_dungeons).toEqual([]);
@@ -186,7 +186,7 @@ it('Undo preserves unrelated saved preferences and another excluded dungeon', as
   await flush();
   await fireEvent.click(main().getByRole('button', { name: 'Mute Lost Halls' })); await flush();
   await follow('#/settings', primary()); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
-  await fireEvent.change(main().getByRole('combobox', { name: 'White Bag' }), { target: { value: 'off' } });
+  await fireEvent.change(main().getByRole('combobox', { name: 'White bag' }), { target: { value: 'off' } });
   await fireEvent.click(main().getByRole('button', { name: 'Save' })); await flush();
   await fireEvent.click(screen.getByRole('button', { name: 'Undo' })); await flush();
   expect(page.settings.alerts.white_bag).toBe('off');
@@ -212,7 +212,7 @@ it('retry follows a newly saved filter mode and Undo reverses that retry', async
   vi.mocked(page.client.updateAlertPreferences).mockRejectedValueOnce(new Error('Synthetic failure'));
   await fireEvent.click(main().getByRole('button', { name: 'Mute Lost Halls' })); await flush();
   await follow('#/settings', primary()); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
-  await fireEvent.change(main().getByRole('combobox', { name: 'Key Popped dungeons' }), { target: { value: 'all' } });
+  await fireEvent.change(main().getByRole('combobox', { name: 'Key popped dungeons' }), { target: { value: 'all' } });
   await fireEvent.click(main().getByRole('button', { name: 'Save' })); await flush();
   await fireEvent.click(screen.getByRole('button', { name: 'Retry mute' })); await flush();
   expect(page.settings.alerts.key_pop_excluded_dungeons).toEqual(['Lost Halls']);
@@ -237,14 +237,14 @@ it.each([false, true])('rebases dirty settings onto a log mute (Only=%s)', async
     configure: client => { client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void'].map(name => dungeonDef({ name, aliases: [] }))); } });
   page.setSettings({ alerts: preferences({ key_pop_dungeons: only ? ['Lost Halls', 'The Void'] : null }) });
   await flush();
-  await fireEvent.change(main().getByRole('combobox', { name: 'White Bag' }), { target: { value: 'off' } });
+  await fireEvent.change(main().getByRole('combobox', { name: 'White bag' }), { target: { value: 'off' } });
   if (only) {
     // Equal arrays with new identities are not local edits.
     await fireEvent.click(main().getByRole('checkbox', { name: 'The Void' }));
     await fireEvent.click(main().getByRole('checkbox', { name: 'The Void' }));
   }
   await fireEvent.click(main().getByRole('button', { name: 'Mute Lost Halls' })); await flush();
-  const mode = main().getByRole('combobox', { name: 'Key Popped dungeons' }) as HTMLSelectElement;
+  const mode = main().getByRole('combobox', { name: 'Key popped dungeons' }) as HTMLSelectElement;
   expect(mode.value).toBe(only ? 'selected' : 'except');
   expect(Boolean(main().queryByRole('button', { name: 'Remove Lost Halls' }))).toBe(!only);
   await fireEvent.click(main().getByRole('button', { name: 'Save' })); await flush();
@@ -257,7 +257,7 @@ it('preserves a saved block list when mounting in Only then switching to All exc
   const page = mountPhase2({ hash: '#/settings' });
   page.setSettings({ alerts: preferences({ key_pop_dungeons: ['Lost Halls'], key_pop_excluded_dungeons: ['The Void'] }) });
   await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
-  await fireEvent.change(main().getByRole('combobox', { name: 'Key Popped dungeons' }), { target: { value: 'except' } });
+  await fireEvent.change(main().getByRole('combobox', { name: 'Key popped dungeons' }), { target: { value: 'except' } });
   expect(main().getByRole('button', { name: 'Remove The Void' })).toBeTruthy();
   await fireEvent.click(main().getByRole('button', { name: 'Save' })); await flush();
   expect(page.settings.alerts.key_pop_excluded_dungeons).toEqual(['The Void']);
@@ -317,7 +317,7 @@ it.each([false, true])('blocks saving an over-cap rebase until a selection is re
 it('retains mute retry after a failed pending write while the queued form save succeeds', async () => {
   const page = mountPhase2({ hash: '#/settings' });
   await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
-  await fireEvent.change(main().getByRole('combobox', { name: 'White Bag' }), { target: { value: 'off' } });
+  await fireEvent.change(main().getByRole('combobox', { name: 'White bag' }), { target: { value: 'off' } });
   const muteWrite = deferred<void>();
   vi.mocked(page.client.updateAlertPreferences).mockImplementationOnce(async () => {
     await muteWrite.promise; throw new Error('Synthetic persistence failure');

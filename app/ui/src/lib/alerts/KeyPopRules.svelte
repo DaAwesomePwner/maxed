@@ -45,9 +45,11 @@
     {:else}Dungeon preview unavailable until the catalog loads.{/if}</p>
 </section>
 <style>
-  section { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-card); padding: var(--space-2); margin-block: var(--space-2); }
-  h4 { margin: 0; } fieldset { border: 0; padding: 0; min-width: 0; } legend, p { color: var(--text-secondary); font-size: var(--text-label); }
-  label { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-height: var(--target-min); }
-  select { color: var(--text-primary); background: var(--surface-panel); border: 1px solid var(--border-strong); border-radius: var(--radius-control); min-height: var(--target-min); font: inherit; max-width: 100%; }
-  input { accent-color: var(--violet); } .slider input { flex: 1; min-width: 5rem; } output { min-width: 4rem; }
+  section { background: var(--surface-inset); border: 1px solid var(--hairline); border-radius: var(--radius-control); padding: var(--space-3); margin-block: var(--space-2); }
+  h4 { margin: 0; font-size: var(--text-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); color: var(--text-secondary); }
+  fieldset { border: 0; padding: 0; min-width: 0; } legend, p { color: var(--text-secondary); font-size: var(--text-label); }
+  label { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-height: var(--target-min); font-size: var(--text-label); }
+  select { max-width: 100%; }
+  input { accent-color: var(--text-secondary); } input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; }
+  .slider input { flex: 1; min-width: 5rem; } output { min-width: 4rem; font-variant-numeric: tabular-nums; }
 </style>

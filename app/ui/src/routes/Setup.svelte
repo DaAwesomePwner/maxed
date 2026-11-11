@@ -8,8 +8,8 @@
   import AdapterControl from '../lib/settings/AdapterControl.svelte';
   import { createSetupSession } from '../lib/setup/session';
   import HistoryUpgrade from '../lib/setup/HistoryUpgrade.svelte';
-  import { historyRunning } from '../lib/settings/storage-state';
-  import { npcapText, setupProgress } from '../lib/setup/presentation';
+  import { historyRunning, historyUpgradeRequired } from '../lib/settings/storage-state';
+  import { errorLine, npcapText, setupProgress } from '../lib/setup/presentation';
   import { captureLabels } from '../lib/shell/rail';
   let { client, preview = false }: { client: Client; preview?: boolean } = $props();
   const connection = getContext<ShellConnection | undefined>(SHELL_CONNECTION);
@@ -21,7 +21,11 @@
   let progress = $derived(setupProgress($session.setup, $session.capture, preview, $session.busy || $session.extracting));
   let active = $derived(['Live', 'WaitingForGame', 'Recovering'].includes($session.capture?.state ?? ''));
   let restartRequired = $derived($session.capture?.state === 'Failed' && ['Capture worker failed; restart Maxed'].includes($session.capture.message));
-  let errorText = $derived(Object.values($session.errors).filter(Boolean).join(' '));
+  // Setup, adapter and history failures sit beside their own retry buttons when those are on screen.
+  let historyInline = $derived(!preview && $session.history?.phase !== 'ready'
+    && !(historyUpgradeRequired($session.history) && $session.historyDeferred));
+  let inline = $derived(new Set(['setup', ...(preview ? [] : ['adapters']), ...(historyInline ? ['history'] : [])]));
+  let errors = $derived(Object.entries($session.errors).filter(([key, message]) => message && !inline.has(key)));
   let map = $state<string | null>(null);
   $effect(() => {
     const connectedClient = client;
@@ -56,12 +60,15 @@
 
 <div class="setup-page">
   {#if preview || $session.setup?.demo}<p class="notice">Demo</p>{/if}
-  <p class="error-summary" role="alert" aria-atomic="true">{errorText}</p>
+  <div class="error-summary" role="alert" aria-atomic="true">{#if errors.length}<ul>
+    {#each errors as [key, message] (key)}<li><span>{errorLine(message)}</span>
+      {#if key === 'settings'}<button class="ctl" onclick={() => session.refreshSettings()}>Retry settings</button>{/if}
+      {#if key === 'capture'}<button class="ctl" onclick={() => session.connectCapture()}>Reconnect capture</button>{/if}</li>{/each}
+  </ul>{/if}</div>
   <HistoryUpgrade {session} {preview} />
   <div class="actions">
-    <button onclick={() => session.refreshSetup({ retry: true })}>Retry Checks</button>
-    {#if $session.errors.settings}<button onclick={() => session.refreshSettings()}>Retry Settings</button>{/if}
-    {#if $session.errors.capture}<button onclick={() => session.connectCapture()}>Reconnect capture</button>{/if}
+    <button onclick={() => session.refreshSetup({ retry: true })}>Retry checks</button>
+    <span class="inline-error" aria-live="assertive" aria-atomic="true">{$session.errors.setup ? errorLine($session.errors.setup) : ''}</span>
     <a href="#/settings">Settings</a>
   </div>
   <ol aria-label="Setup">
@@ -69,26 +76,27 @@
       <p role="status" aria-live="polite" aria-atomic="true">{npcapText($session.setup)}</p>
       {#if $session.setup?.npcap === 'missing' || $session.setup?.npcap === 'incompatible' || $session.setup?.npcap === 'permission_denied' || $session.setup?.access === 'denied'}
 
-        <label class="official-url">Npcap Installer<input readonly value="https://npcap.com/#download" aria-label="Npcap URL" /></label>
+        <label class="official-url">Npcap installer<input readonly value="https://npcap.com/#download" aria-label="Npcap URL" /></label>
       {/if}
       {#if $session.setup?.npcap === 'compatible' && $session.setup.access === 'unknown'}
-        <DebugNote text="Finding Npcap does not prove this user can open an adapter. Start Capture to check access." />
+        <DebugNote text="Finding Npcap does not prove this user can open an adapter. Start capture to check access." />
       {/if}
-      <button aria-disabled={checkUnavailable} onclick={() => !checkUnavailable && session.action(() => client.startCapture(), 'Couldn’t check access. Retry.', { captureAction: true })}>Check Access</button>
+      <button aria-disabled={checkUnavailable} onclick={() => !checkUnavailable && session.action(() => client.startCapture(), 'Couldn’t check access. Retry.', { captureAction: true })}>Check access</button>
       <div class="adapter" oninput={() => { adapterEdited = true; }}>
         <AdapterControl adapters={$session.adapters} {preview} bind:value={adapter} disabled={preview || $session.busy || $session.extracting} />
       </div>
       <div class="actions">
-        <button aria-disabled={adapterUnavailable} onclick={applyAdapter}>Apply Adapter</button>
-        {#if !preview}<button onclick={() => session.refreshAdapters()}>Retry Adapters</button>{/if}
+        <button aria-disabled={adapterUnavailable} onclick={applyAdapter}>Apply adapter</button>
+        {#if !preview}<button onclick={() => session.refreshAdapters()}>Retry adapters</button>
+          <span class="inline-error" aria-live="assertive" aria-atomic="true">{$session.errors.adapters ? errorLine($session.errors.adapters) : ''}</span>{/if}
       </div>
       <DebugNote text="Adapter changes may stop and restart capture. An empty list or Auto selection does not verify access." />
     </SetupStep>
-    <SetupStep number={2} heading="Game Assets" current={progress.current === 2} complete={progress.assets && !preview && !$session.setup?.demo}>
+    <SetupStep number={2} heading="Game assets" current={progress.current === 2} complete={progress.assets && !preview && !$session.setup?.demo}>
       <AssetsControl {session} {preview} />
     </SetupStep>
-    <SetupStep number={3} heading="Live Capture" current={progress.current === 3} complete={progress.live}>
-      <p role="status" aria-live="polite" aria-atomic="true">{progress.live ? 'Connected' : $session.capture?.state === 'Recovering' ? 'Reconnecting' : 'Waiting for Game'}</p>
+    <SetupStep number={3} heading="Live capture" current={progress.current === 3} complete={progress.live}>
+      <p role="status" aria-live="polite" aria-atomic="true">{progress.live ? 'Connected' : $session.capture?.state === 'Recovering' ? 'Reconnecting' : 'Waiting for game'}</p>
       <p>Capture: {$session.capture ? captureLabels[$session.capture.state] : 'Unavailable'}</p>
       {#if restartRequired}<p>Restart required</p>{/if}
       {#if map && !preview && !$session.setup?.demo}<p>Location: {map}</p>{:else}<DebugNote text="Location not yet observed." />{/if}
@@ -108,18 +116,23 @@
   </ol>
 </div>
 <style>
-  .setup-page { display: grid; gap: var(--space-4); max-width: 65rem; min-width: 0; overflow-wrap: anywhere; font-size: var(--text-body); line-height: var(--leading-body); }
-  ol { display: grid; gap: var(--space-6); margin: 0; padding: 0; }
+  .setup-page { display: grid; gap: var(--space-4); max-width: 65rem; min-width: 0; overflow-wrap: anywhere; font-size: var(--text-label); line-height: var(--leading-label); }
+  ol { display: grid; gap: var(--space-4); margin: 0; padding: 0; }
   p { margin: var(--space-2) 0; color: var(--text-secondary); }
   .notice { color: var(--warning); }
-  .error-summary { color: var(--danger); margin: 0; }
   .error-summary:empty { display: none; }
+  .inline-error { color: var(--danger); }
+  .inline-error:empty { display: none; }
+  .error-summary ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+  .error-summary li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-height: var(--control-dense); color: var(--danger); }
   .actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
-  button { min-height: var(--target-min); }
-  a { color: var(--violet-text); }
+  a { color: var(--text-primary); text-decoration: none; text-underline-offset: 3px; }
+  a:hover, a:focus-visible { text-decoration: underline; }
+  .actions > a { display: inline-flex; align-items: center; min-height: var(--target-min); padding: 0 var(--space-2); color: var(--text-secondary); }
+  .actions > a:hover { color: var(--text-primary); }
   .adapter { margin-top: var(--space-4); }
-  .official-url { display: grid; gap: var(--space-2); }
-  input { min-width: 0; width: 100%; font: inherit; color: var(--text-primary); background: var(--surface-canvas); border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: var(--space-3); }
-  dl { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-bottom: 0; }
-  dt { color: var(--text-secondary); } dd { margin: 0; }
+  .official-url { display: grid; gap: var(--space-1); color: var(--text-secondary); font-size: var(--text-caption); }
+  input { min-width: 0; width: 100%; }
+  dl { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); margin: var(--space-3) 0 0; }
+  dt { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); } dd { margin: 0; font-variant-numeric: tabular-nums; }
 </style>

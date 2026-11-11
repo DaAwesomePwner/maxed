@@ -5,6 +5,7 @@
   import type { HomeVisuals } from '../home/visuals';
   import ItemTile from '../components/ItemTile.svelte';
   import SpriteImage from '../components/SpriteImage.svelte';
+  import Badge from '../components/Badge.svelte';
   import { itemHover } from '../components/item-hover';
   import { objectVisual } from '../bridge/visual-index';
   import { effectiveMaxed, maxedClaimsSupported } from '../players/maxed-evidence';
@@ -37,12 +38,12 @@
           aria-selected={named ? selected === key : undefined}
           onclick={() => { if (named) onSelect(member); }} ondblclick={() => { if (named) onRun(member); }}
           onkeydown={event => { if (event.target === event.currentTarget && named && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onSelect(member, true); } }}>
-          {#if parseVisible}<td><span class="pill {member.parse?.result ?? 'not_seen'}">{labels[member.parse?.result ?? 'not_seen']}</span></td>{/if}
+          {#if parseVisible}<td><span class="result {member.parse?.result ?? 'not_seen'}">{labels[member.parse?.result ?? 'not_seen']}</span></td>{/if}
           <td class="player">
             {#if classVisual?.sprite}<SpriteImage sprite={classVisual.sprite} sheetUrl={resolveSpriteUrl(classVisual.sprite)} alt={classVisual.name ?? 'Class'} fit={18} />{/if}
             <strong>{member.name ?? 'No name yet'}</strong>
             {#if member.is_local}<span class="you">You</span>{/if}
-            {#if named && member.mark}<span class="mark {member.mark}">{member.mark === 'watched' ? 'Watched' : 'Banned'}</span>{/if}
+            {#if named && member.mark}<Badge label={member.mark === 'watched' ? 'Watched' : 'Banned'} tone={member.mark === 'watched' ? 'warning' : 'danger'} />{/if}
             {#if named && member.runs_together >= 1}<span class="seen" title="Earlier saved runs together">{member.runs_together}×</span>{/if}
             {#if member.departed_at != null}<small>Left</small>
             {:else if !saved && member.present === false}<small>Out of view{member.out_of_view_since != null ? ` since ${presenceTime(member.out_of_view_since)}` : ''}</small>{/if}
@@ -76,16 +77,17 @@
 </div>
 {#if !members.length}<p class="muted">No players match this filter.</p>{/if}
 <style>
-  .table-scroll { overflow-x: auto; } table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
-  th { text-align: left; color: var(--text-muted); font-size: 11px; font-weight: 500; }
-  th, td { padding: 5px 6px; white-space: nowrap; } td { border-top: 1px solid var(--border); } .number { text-align: right; }
-  tr[tabindex] { cursor: pointer; } tr[tabindex]:hover { background: var(--surface-hover); }
-  tr.selected { background: #f2c14e14; box-shadow: inset 2px 0 var(--gold); } tr:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-  .out-of-view { opacity: .55; } .player small { display: block; color: var(--text-secondary); }
-  .pill { font-size: 11px; border: 1px solid currentColor; padding: 1px 5px; border-radius: var(--radius-control); }
+  .table-scroll { overflow-x: auto; } table { width: 100%; border-collapse: collapse; font-size: var(--text-caption); line-height: var(--leading-caption); font-variant-numeric: tabular-nums; }
+  th { text-align: left; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); }
+  th, td { padding: var(--space-2); white-space: nowrap; } td { border-top: 1px solid var(--hairline); } .number { text-align: right; }
+  tr[tabindex] { cursor: pointer; transition: background-color var(--motion-fast) var(--motion-ease); } tr[tabindex]:hover { background: var(--surface-hover); }
+  tr.selected, tr.selected:hover { background: var(--surface-selected); box-shadow: var(--selected-edge); } tr:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .out-of-view { opacity: .55; } .player strong { font-weight: var(--weight-medium); } .player small { display: block; color: var(--text-muted); font-size: var(--text-meta); }
+  /* Parse results are plain semantic words, not outline pills. */
+  .result { font-weight: var(--weight-medium); }
   .pass { color: var(--success); } .fail, .failing { color: var(--danger); } .check, .warning, .watched { color: var(--estimated); }
-  .not_seen, .muted { color: var(--text-muted); } .you { color: var(--gold); } .seen { color: var(--violet-text); }
-  .mark, .you, .seen { margin-left: 5px; font-size: 10px; } .mark { border: 1px solid currentColor; padding: 0 4px; border-radius: 4px; } .banned { color: var(--danger); }
-  .gear { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; } .notes { white-space: normal; min-width: 130px; }
+  .not_seen, .muted { color: var(--text-muted); } .you { color: var(--gold); } .seen { color: var(--text-muted); }
+  .player :global(.badge), .you, .seen { margin-left: var(--space-1); } .you, .seen { font-size: var(--text-meta); } .banned { color: var(--danger); }
+  .gear { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-meta); } .notes { white-space: normal; min-width: 130px; }
   .notes > span { display: block; }
 </style>

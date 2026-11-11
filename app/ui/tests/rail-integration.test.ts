@@ -112,13 +112,13 @@ it.each([Setup, Settings])('passes explicit checks and detection retries while m
   const { client } = setupFixture({ assets: 'failed' });
   render(component, { client });
   if (component === Settings) { await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' })); }
-  await screen.findByRole('button', { name: 'Retry Detection' }); await flush();
+  await screen.findByRole('button', { name: 'Retry detection' }); await flush();
   expect(vi.mocked(client.querySetup).mock.calls.every(args => args.length === 0)).toBe(true);
   vi.mocked(client.querySetup).mockClear();
-  await fireEvent.click(screen.getByRole('button', { name: 'Retry Checks' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry checks' }));
   await waitFor(() => expect(client.querySetup).toHaveBeenCalledWith({ retry: true }));
   vi.mocked(client.querySetup).mockClear();
-  await fireEvent.click(screen.getByRole('button', { name: 'Retry Detection' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry detection' }));
   await waitFor(() => expect(client.querySetup).toHaveBeenCalledWith({ retry: true }));
 });
 
@@ -142,7 +142,7 @@ it('shares the ordered capture and snapshot subscription with mounted Setup and 
   const captures = vi.spyOn(f.client, 'onCapture');
   const events = vi.spyOn(f.client, 'onEngineEvent');
   render(Shell, { client: f.client, historyAdapter: fakeHistory('#/setup').adapter });
-  await screen.findByRole('button', { name: 'Retry Checks' }); await flush();
+  await screen.findByRole('button', { name: 'Retry checks' }); await flush();
   expect(snapshots).toHaveBeenCalledOnce(); expect(captures).toHaveBeenCalledOnce(); expect(events).toHaveBeenCalledOnce();
   const rail = screen.getByRole('complementary', { name: 'Character' });
   await fireEvent.click(within(rail).getByRole('link', { name: 'Settings' }));

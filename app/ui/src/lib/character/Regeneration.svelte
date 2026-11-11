@@ -60,11 +60,16 @@
 </section>
 <style>
   section, .resource { min-width: 0; overflow-wrap: anywhere; }
-  .resource { border-top: 1px solid var(--border); padding-block: 12px; }
+  .resource { border-top: 1px solid var(--hairline); padding-block: var(--space-3); }
+  h2 { margin: 0 0 var(--space-3); font-size: var(--text-title); line-height: var(--leading-title); font-weight: var(--weight-medium); }
+  h3 { margin: 0 0 var(--space-2); font-size: var(--text-body); line-height: var(--leading-body); font-weight: var(--weight-medium); }
+  h4 { margin: var(--space-3) 0 var(--space-1); font-size: var(--text-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); color: var(--text-muted); }
   dl { margin: 0; }
-  dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px; padding-block: 6px; }
+  dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-3); padding-block: var(--space-2); border-bottom: 1px solid var(--hairline); font-size: var(--text-label); line-height: var(--leading-label); }
+  dt { color: var(--text-secondary); }
   dd { margin: 0; font-variant-numeric: tabular-nums; }
-  small { display: block; color: var(--text-secondary); }
-  p { color: var(--text-secondary); }
-  summary { cursor: pointer; min-height: var(--target-min, 32px); align-content: center; color: var(--violet-text); }
+  small { display: block; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  p { margin-block: 0 var(--space-2); color: var(--text-secondary); font-size: var(--text-label); line-height: var(--leading-label); }
+  summary { cursor: pointer; min-height: var(--target-min); align-content: center; font-size: var(--text-label); color: var(--text-secondary); }
+  summary:hover { color: var(--text-primary); }
 </style>

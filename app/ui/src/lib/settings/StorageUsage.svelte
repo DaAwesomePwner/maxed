@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { errorLine } from '../setup/presentation';
   import type { Client } from '../bridge/client';
   import { createStorageState, storageBytes, storageCount, storageTime, storageReasons, backupSpaceReason, historyUpgradeRequired } from './storage-state';
   import type { StorageFailure } from '../bindings/StorageFailure';
@@ -108,18 +109,19 @@
     </div>
   {/if}
   {#if $session.notice}<p role="status">{$session.notice}</p>{/if}
-  {#if $session.error}<p role="alert">{$session.error}</p>{/if}
+  {#if $session.error}<p role="alert">{errorLine($session.error)}</p>{/if}
   {#if $session.subscriptionError}<p role="status">{$session.subscriptionError}</p>{/if}
 </div>
 <style>
   .storage-card { min-width: 0; overflow-wrap: anywhere; }
   .measures { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: var(--space-3); margin: 0; }
-  dt, .note { color: var(--text-secondary); font-size: 12px; }
-  dd { margin: 2px 0 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  p { font-size: 13px; margin: 8px 0; }
-  h3 { font-size: 14px; margin: var(--space-4) 0 var(--space-2); }
+  dt, .note { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  dd { margin: var(--space-1) 0 0; font-size: var(--text-body); line-height: var(--leading-body); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+  p { font-size: var(--text-caption); line-height: var(--leading-caption); margin: var(--space-2) 0; }
+  h3 { font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); margin: var(--space-4) 0 var(--space-2); }
   .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
-  .review, .backup, .progress { border-top: 1px solid var(--border-subtle); margin-top: var(--space-3); padding-top: var(--space-3); }
+  .review, .backup, .progress { border-top: 1px solid var(--hairline); margin-top: var(--space-3); padding-top: var(--space-3); }
   .progress span { margin-left: var(--space-2); color: var(--warning); }
   [role=alert] { color: var(--danger); }
+  strong { font-weight: var(--weight-medium); color: var(--text-primary); }
 </style>

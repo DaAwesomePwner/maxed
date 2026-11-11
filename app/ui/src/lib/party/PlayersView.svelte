@@ -19,6 +19,7 @@
   import { invalidatesParty } from './invalidation';
   import { partyDate } from './party-screen';
   import SpriteImage from '../components/SpriteImage.svelte';
+  import Badge from '../components/Badge.svelte';
   import PlayerSidePanel from './PlayerSidePanel.svelte';
   import ClearHistoryDialog from './ClearHistoryDialog.svelte';
   import '../styles/controls.css';
@@ -30,11 +31,11 @@
     let disposed = false;
     setup = null; setupError = '';
     void owner.querySetup().then(reply => { if (!disposed) setup = reply; })
-      .catch(() => { if (!disposed) setupError = 'Could not check Demo Mode. Reload to try again.'; });
+      .catch(() => { if (!disposed) setupError = 'Couldn’t check demo mode. Reload to try again.'; });
     return () => { disposed = true; };
   });
   let clearHint = $derived(preview ? 'Clearing is not available in preview.' : setupError
-    || (setup?.demo ? 'Turn off Demo Mode to clear your party history.' : ''));
+    || (setup?.demo ? 'Turn off demo mode to clear your party history.' : ''));
   const droppedRows = new Map<string, PartyPlayerRow>();
   const filters: [PartyPlayerFilter, string][] = [['all', 'All'], ['watched', 'Watched'], ['banned', 'Banned'], ['with_notes', 'With notes']];
   const columns: [PartyPlayerSort, string][] = [['runs_together', 'Runs together'], ['deaths', 'Deaths'], ['left_early', 'Left early'], ['avg_share', 'Avg share'], ['last_seen', 'Last seen']];
@@ -85,7 +86,7 @@
           next = reply.value.next ?? null;
           pages = cursor ? pages + 1 : 1;
         }
-      } catch { if (!disposed) error = 'Could not load players. Retry to refresh them.'; }
+      } catch { if (!disposed) error = 'Couldn’t load players. Retry to refresh them.'; }
       finally { reading = false; if (!disposed) busy = false; }
     }
     loadMore = () => { if (next) void read(next); };
@@ -107,7 +108,7 @@
         if (disposed) return;
         waiting = message ?? '';
         if (!message && pending === required) { pending = null; revision++; detailRevision++; }
-      } catch { if (!disposed) waiting = 'Could not check saved history. Retry to refresh it.'; }
+      } catch { if (!disposed) waiting = 'Couldn’t check saved history. Retry to refresh it.'; }
       finally {
         checking = false;
         if (!disposed && isPresentationVisible() && pending && ++retries <= 3) timer = setTimeout(() => { timer = undefined; void check(); }, 1000);
@@ -147,7 +148,7 @@
   <a bind:this={navigationLink} href="#/party/players" hidden tabindex="-1">Player history</a>
   <header>
     <label>Find a player<input class="ctl" type="search" bind:value={search} /></label>
-    <div class="filters" role="group" aria-label="Player filters">{#each filters as [value, label]}<button class="ctl" aria-pressed={filter === value} onclick={() => { filter = value; }}>{label}</button>{/each}</div>
+    <div class="filters seg" role="group" aria-label="Player filters">{#each filters as [value, label]}<button aria-pressed={filter === value} onclick={() => { filter = value; }}>{label}</button>{/each}</div>
     <button class="ctl clear" bind:this={clearButton} disabled={preview || !setup || setup.demo}
       aria-describedby={clearHint ? 'players-clear-hint' : undefined} onclick={() => { clearError = ''; clearOpen = true; }}>Clear party history…</button>
   </header>
@@ -166,7 +167,7 @@
           {@const visual = objectVisual(visuals.objects, row.last_class_id)}
           <tr tabindex="0" aria-selected={playerKey === row.key} onclick={() => navigate(row.key)} onkeydown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); navigate(row.key); } }}>
             <td><span class="player">{#if visual?.sprite}<SpriteImage sprite={visual.sprite} sheetUrl={spriteUrl(visuals.client_fingerprint, visual.sprite)} alt={visual.name ?? 'Class'} fit={18} />{/if}<strong>{row.name}</strong>
-              {#if row.mark}<span class="mark {row.mark}">{row.mark === 'watched' ? 'Watched' : 'Banned'}</span>{/if}</span></td>
+              {#if row.mark}<Badge label={row.mark === 'watched' ? 'Watched' : 'Banned'} tone={row.mark === 'watched' ? 'warning' : 'danger'} />{/if}</span></td>
             <td>{visual?.name ?? 'Unknown class'}</td><td>{row.last_maxed == null ? 'Not seen' : `${row.last_maxed}/8`}</td>
             <td class="number">{row.runs_together}</td><td class="number">{row.deaths}</td><td class="number">{row.left_early}</td><td class="number">{formatShare(row.avg_share ?? null)}</td>
             <td>{partyDate(row.last_seen)}<small>{row.last_map ?? 'Map not seen'}</small></td><td class="note" title={row.note ?? undefined}>{row.note ?? ''}</td>
@@ -198,12 +199,20 @@
   {#if clearOpen}<ClearHistoryDialog {client} onCancel={closeClear} onError={message => { clearError = message; }} onCleared={() => { closeClear(); clearError = ''; droppedRows.clear(); revision++; detailReset++; }} />{/if}
 </section>
 <style>
-  header, .filters, .player { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); } header { margin-bottom: var(--space-3); } header label { display: grid; gap: 4px; font-size: 12px; } .clear { margin-left: auto; }
-  section { min-width: 0; } .layout { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--space-3); align-items: start; } .with-panel { grid-template-columns: minmax(0, 1fr) 290px; }
-  .panel { min-width: 0; padding: var(--space-3); background: var(--surface-panel); border: 1px solid var(--border); border-radius: var(--radius-card); } .table-scroll { max-width: 100%; overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; } th, td { text-align: left; padding: 6px; white-space: nowrap; } td { border-top: 1px solid var(--border); } th { color: var(--text-secondary); } .number { text-align: right; }
-  .sort { color: inherit; background: none; border: 0; font: inherit; cursor: pointer; min-height: var(--target-min); } th[aria-sort=descending] .sort { color: var(--gold); } th[aria-sort=descending] .sort::after { content: ' ↓'; }
-  tr[tabindex] { cursor: pointer; } tr[tabindex]:hover { background: var(--surface-hover); } tr[aria-selected=true] { background: #f2c14e14; } tr:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-  .note { max-width: 160px; overflow: hidden; text-overflow: ellipsis; } small { display: block; } small, .hint { color: var(--text-secondary); } .hint { font-size: 12px; } .mark { font-size: 10px; border: 1px solid currentColor; border-radius: 4px; padding: 1px 4px; } .watched { color: var(--gold); } .banned, [role=alert] { color: var(--danger); }
-  button[aria-pressed=true] { border-color: var(--gold); } @media (max-width: 1050px) { .with-panel { grid-template-columns: minmax(0, 1fr); } }
+  header, .player { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); } header { margin-bottom: var(--space-4); }
+  header label { display: grid; gap: var(--space-1); color: var(--text-secondary); font-size: var(--text-caption); } .clear { margin-left: auto; }
+  section { min-width: 0; } .layout { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--space-4); align-items: start; } .with-panel { grid-template-columns: minmax(0, 1fr) 290px; }
+  .panel { min-width: 0; padding: var(--space-4); background: var(--surface-panel); border: 1px solid var(--hairline); border-radius: var(--radius-card); } .table-scroll { max-width: 100%; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: var(--text-caption); line-height: var(--leading-caption); font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: var(--space-2); white-space: nowrap; } td { border-top: 1px solid var(--hairline); }
+  th { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); } .number { text-align: right; }
+  .sort { min-height: var(--target-min); padding: 0; color: inherit; background: none; border: 0; font: inherit; font-weight: inherit; cursor: pointer; }
+  .sort:hover:enabled { background: none; color: var(--text-primary); }
+  th[aria-sort=descending] .sort { color: var(--text-primary); } th[aria-sort=descending] .sort::after { content: ' ↓'; }
+  tr[tabindex] { cursor: pointer; transition: background-color var(--motion-fast) var(--motion-ease); } tr[tabindex]:hover { background: var(--surface-hover); }
+  tr[aria-selected=true], tr[aria-selected=true]:hover { background: var(--surface-selected); box-shadow: var(--selected-edge); } tr:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .player strong { font-weight: var(--weight-medium); }
+  .note { max-width: 160px; overflow: hidden; text-overflow: ellipsis; } small { display: block; } small, .hint { color: var(--text-muted); } .hint { font-size: var(--text-meta); } small { font-size: var(--text-meta); }
+  [role=alert] { color: var(--danger); }
+  @media (max-width: 1050px) { .with-panel { grid-template-columns: minmax(0, 1fr); } }
 </style>

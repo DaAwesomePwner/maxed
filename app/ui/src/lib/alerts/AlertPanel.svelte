@@ -35,5 +35,14 @@
   <section aria-label="Why it fired"><h2>Why it fired</h2><p>{whyItFired(alert)}</p><DebugNote text={alert.explanation} /></section>
 {:else}<section><h2>Alert details</h2><p>Select an alert to see its details.</p></section>{/if}
 <style>
-  section { padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); min-width: 0; overflow-wrap: anywhere; max-height: 550px; overflow: auto; } h2 { font-size: 13px; margin: 0 0 8px; } p, dl { font-size: 12px; color: var(--text-secondary); } .time { font-size: 11px; color: var(--text-muted); } strong { font-size: 14px; } dl { display: grid; grid-template-columns: 85px minmax(0, 1fr); gap: 7px; } dd { margin: 0; } dt { color: var(--text-muted); } .est { color: var(--estimated); font-size: 10px; } .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  section { padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); min-width: 0; overflow-wrap: anywhere; max-height: 550px; overflow: auto; }
+  h2 { margin: 0 0 var(--space-1); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  p, dl { margin: 0; font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--text-secondary); }
+  .time { margin-bottom: var(--space-2); font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); }
+  strong { display: block; margin-bottom: var(--space-2); font-size: var(--text-label); font-weight: var(--weight-medium); color: var(--text-primary); }
+  dl { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: var(--space-2); margin-top: var(--space-3); }
+  dd { margin: 0; } dt { color: var(--text-muted); }
+  .est { color: var(--estimated); font-size: var(--text-meta); }
+  .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+  .actions:empty { display: none; }
 </style>

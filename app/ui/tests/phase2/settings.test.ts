@@ -23,14 +23,14 @@ it('phase2_settings_save_race_and_opt_in', async () => {
   fixture.client.updateSettings = vi.fn(() => pending.promise);
   render(Settings, { client: fixture.client }); await flush();
   await fireEvent.click(screen.getByRole('tab', { name: 'Data & history' }));
-  const recording = screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement;
+  const recording = screen.getByRole('checkbox', { name: 'Save recordings' }) as HTMLInputElement;
   expect(recording.checked).toBe(false);
   const warning = screen.getByText(/passwords and other players' data/i);
   expect(recording.getAttribute('aria-describedby')).toContain(warning.id);
   await fireEvent.click(screen.getByRole('tab', { name: 'General' }));
-  const acceleration = screen.getByRole('checkbox', { name: 'Hardware Acceleration' }) as HTMLInputElement;
+  const acceleration = screen.getByRole('checkbox', { name: 'Hardware acceleration' }) as HTMLInputElement;
   await fireEvent.click(acceleration); await microtasks();
-  await fireEvent.change(screen.getByRole('combobox', { name: 'Capture Adapter' }), { target: { value: 'synthetic-ethernet' } });
+  await fireEvent.change(screen.getByRole('combobox', { name: 'Capture adapter' }), { target: { value: 'synthetic-ethernet' } });
   fixture.setSettings({ assets_path: 'C:\\Invented\\resources.assets', alerts: preferences({ muted: true }) });
   await fireEvent.click(screen.getByRole('button', { name: 'Apply' })); await microtasks();
   expect(fixture.client.updateSettings).toHaveBeenCalledWith(expect.objectContaining({ hardware_acceleration: true,
@@ -51,12 +51,12 @@ it('failed Apply preserves a newer draft and does not report success', async () 
   fixture.client.updateSettings = vi.fn(() => pending.promise);
   render(Settings, { client: fixture.client }); await flush();
   await fireEvent.click(screen.getByRole('tab', { name: 'General' }));
-  const acceleration = screen.getByRole('checkbox', { name: 'Hardware Acceleration' }) as HTMLInputElement;
+  const acceleration = screen.getByRole('checkbox', { name: 'Hardware acceleration' }) as HTMLInputElement;
   await fireEvent.click(acceleration); await fireEvent.click(screen.getByRole('button', { name: 'Apply' })); await microtasks();
   await fireEvent.click(screen.getByRole('tab', { name: 'Data & history' }));
-  await fireEvent.click(screen.getByRole('checkbox', { name: 'Save Recordings' }));
+  await fireEvent.click(screen.getByRole('checkbox', { name: 'Save recordings' }));
   pending.reject(new Error('PRIVATE failure')); await flush();
-  expect((screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement).checked).toBe(true);
+  expect((screen.getByRole('checkbox', { name: 'Save recordings' }) as HTMLInputElement).checked).toBe(true);
   expect(screen.getByText(/Couldn.t save/)).toBeTruthy();
   expect(screen.queryByText('Saved', { selector: 'p[role="status"]' })).toBeNull(); expect(document.body.textContent).not.toContain('PRIVATE');
   expect(disabled(screen.getByRole('button', { name: 'Apply' }))).toBe(false);
@@ -74,7 +74,7 @@ it('general Settings Apply refreshes shared alert policy only after a successful
   render(Settings, { props: { client: fixture.client }, context: new Map([[SHELL_CONNECTION, connection]]) });
   await flush();
   expect(refresh).not.toHaveBeenCalled();
-  await fireEvent.click(screen.getByRole('checkbox', { name: 'Hardware Acceleration' }));
+  await fireEvent.click(screen.getByRole('checkbox', { name: 'Hardware acceleration' }));
   await fireEvent.click(screen.getByRole('button', { name: 'Apply' })); await flush();
   expect(fixture.client.updateSettings).toHaveBeenCalledTimes(1);
   expect(refresh).toHaveBeenCalledTimes(1);
@@ -82,7 +82,7 @@ it('general Settings Apply refreshes shared alert policy only after a successful
 
   refresh.mockClear();
   vi.mocked(fixture.client.updateSettings).mockRejectedValueOnce(new Error('PRIVATE save failure'));
-  await fireEvent.click(screen.getByRole('checkbox', { name: 'Hardware Acceleration' }));
+  await fireEvent.click(screen.getByRole('checkbox', { name: 'Hardware acceleration' }));
   await fireEvent.click(screen.getByRole('button', { name: 'Apply' })); await flush();
   expect(fixture.client.updateSettings).toHaveBeenCalledTimes(2);
   expect(screen.getByText(/Couldn.t save/)).toBeTruthy();
@@ -142,8 +142,8 @@ it('phase2_settings_assets_update_and_demo_isolation', async () => {
   expect(check).not.toHaveBeenCalled(); expect(download).not.toHaveBeenCalled(); expect(install).not.toHaveBeenCalled();
   expect(document.querySelector('form form')).toBeNull();
   await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' }));
-  await open(/Assets Path/i);
-  expect(screen.getByRole('textbox', { name: 'Assets Path' })).toBeTruthy();
+  await open(/Assets path/i);
+  expect(screen.getByRole('textbox', { name: 'Assets path' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Extract' })).toBeTruthy();
   await fireEvent.click(screen.getByRole('tab', { name: 'Data & history' }));
   expect(screen.getByRole('heading', { name: 'Recording quota' })).toBeTruthy();
@@ -151,13 +151,13 @@ it('phase2_settings_assets_update_and_demo_isolation', async () => {
   expect(screen.getByText('Oldest recordings auto-delete at the limit.')).toBeTruthy();
   expect(screen.queryByText(/Installed version.*1\b/i)).toBeNull();
   view.unmount(); await microtasks();
-  render(Settings, { client: fixture.client, preview: true }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' })); await open(/Assets Path/i);
+  render(Settings, { client: fixture.client, preview: true }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' })); await open(/Assets path/i);
   await fireEvent.click(screen.getByRole('tab', { name: 'Data & history' }));
-  expect(disabled(screen.getByRole('checkbox', { name: 'Save Recordings' }))).toBe(true);
+  expect(disabled(screen.getByRole('checkbox', { name: 'Save recordings' }))).toBe(true);
   expect(disabled(screen.getByRole('button', { name: 'Apply' }))).toBe(true);
   await fireEvent.click(screen.getByRole('tab', { name: 'General' }));
-  expect(disabled(screen.getByRole('switch', { name: 'Demo Mode' }))).toBe(true);
+  expect(disabled(screen.getByRole('switch', { name: 'Demo mode' }))).toBe(true);
   await fireEvent.click(screen.getByRole('tab', { name: 'Game assets' }));
-  expect(disabled(screen.getByRole('textbox', { name: 'Assets Path' }))).toBe(true);
+  expect(disabled(screen.getByRole('textbox', { name: 'Assets path' }))).toBe(true);
   expect(fixture.client.updateSettings).not.toHaveBeenCalled(); expect(fixture.client.setDemo).not.toHaveBeenCalled();
 });

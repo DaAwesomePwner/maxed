@@ -53,7 +53,7 @@
       } else detail = fresh;
       if (!preserveDraft) { mark = detail?.row.mark ?? null; note = detail?.row.note ?? ''; savedNote = note; }
       loaded = true;
-    }).catch(() => { if (current) error = 'Could not load player history.'; })
+    }).catch(() => { if (current) error = 'Couldn’t load player history'; })
       .finally(() => { if (current) historyLoading = false; });
     return () => { current = false; if (generation === request) generation++; };
   });
@@ -74,7 +74,7 @@
       if (reply.status !== 'ready') { runsError = 'Player history is busy. Retry to load more runs.'; return; }
       if (!reply.value || !detail) { runsError = 'Player history changed. Reopen this player to refresh it.'; return; }
       detail = { ...detail, runs: [...new Map([...detail.runs, ...reply.value.runs].map(run => [run.run_id, run])).values()], next: reply.value.next };
-    } catch { if (request === generation) runsError = 'Could not load more runs. Retry to load them.'; }
+    } catch { if (request === generation) runsError = 'Couldn’t load more runs. Retry to load them.'; }
     finally { if (request === generation) paging = false; }
   }
   function save(nextMark: PartyMark | null = mark) {
@@ -85,7 +85,7 @@
     writes = writes.then(async () => {
       error = '';
       try { await owner.setPartyMark(key, name, nextMark, text); savedNote = text ?? ''; onChanged({ key, mark: nextMark, note: text }); }
-      catch { failedAction = 'save'; error = 'Could not save marks and note.'; }
+      catch { failedAction = 'save'; error = 'Couldn’t save marks and note'; }
     });
     return writes;
   }
@@ -96,7 +96,7 @@
   async function openRealmeye() {
     if (!validName || !member.name) return;
     error = '';
-    try { await client.openRealmeye(member.name); } catch { failedAction = 'realmeye'; error = 'Could not open RealmEye.'; }
+    try { await client.openRealmeye(member.name); } catch { failedAction = 'realmeye'; error = 'Couldn’t open RealmEye'; }
   }
 </script>
 <aside aria-label="Player details">
@@ -140,16 +140,26 @@
       <a href={routeHref({ kind: 'party-run', runId: run.run_id })}>{run.dungeon}</a>
       <small>{partyDate(run.started)} · {run.died ? 'Died' : run.left_early ? 'Left early' : run.share != null ? formatShare(run.share) : run.outcome ?? 'Unknown'}</small>
     </li>{/each}</ul>{/if}
-    {#if fullRuns && detail?.next}<button class="ctl" disabled={paging || historyLoading} onclick={loadMore}>{paging ? 'Loading runs…' : 'Load more'}</button>{/if}
+    {#if fullRuns && detail?.next}<button class="ctl" disabled={paging || historyLoading} onclick={loadMore}>{paging ? 'Loading runs' : 'Load more'}</button>{/if}
     {#if runsError}<p role="alert">{runsError}</p>{/if}
   </section>
 </aside>
 <style>
-  aside { display: grid; gap: var(--space-3); min-width: 0; } .panel { background: var(--surface-panel); border: 1px solid var(--border); border-radius: var(--radius-card); padding: var(--space-3); }
-  header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); } h3 { margin: 0; font-size: 13px; }
-  dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; font-size: 12px; } dt, .muted, small { color: var(--text-secondary); } dd { margin: 0; text-align: right; }
-  .actions { display: flex; flex-wrap: wrap; gap: 6px; } .actions a { text-decoration: none; } button[aria-pressed=true] { border-color: var(--gold); color: var(--gold); }
-  .note { display: grid; gap: 4px; margin-top: var(--space-3); font-size: 12px; } textarea { width: 100%; min-height: 72px; box-sizing: border-box; resize: vertical; background: var(--surface-raised); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 6px; font: inherit; }
-  ul { list-style: none; padding: 0; margin-bottom: 0; } li { border-top: 1px solid var(--border); padding: 6px 0; } li small { display: block; } a { color: var(--violet-text); }
+  /* The aside is only a stack; each panel is a contract card (dense padding, hairline, card radius). */
+  aside { display: grid; gap: var(--space-3); min-width: 0; padding: 0; margin: 0; border: 0; background: none; }
+  .panel { min-width: 0; padding: var(--space-4); background: var(--surface-panel); border: 1px solid var(--hairline); border-radius: var(--radius-card); overflow-wrap: anywhere; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  h3 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  section > h3 { margin-bottom: var(--space-2); }
+  p { margin: var(--space-2) 0; font-size: var(--text-caption); line-height: var(--leading-caption); }
+  dl { display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-2); margin: var(--space-3) 0; font-size: var(--text-caption); line-height: var(--leading-caption); }
+  dt, .muted, small { color: var(--text-muted); } dd { margin: 0; text-align: right; color: var(--text-primary); }
+  .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); } .actions a { text-decoration: none; }
+  .actions button[aria-pressed=true], .actions button[aria-pressed=true]:hover { background: var(--surface-selected); box-shadow: var(--highlight-top); border-color: var(--text-secondary); }
+  .note { display: grid; gap: var(--space-1); margin-top: var(--space-3); color: var(--text-secondary); font-size: var(--text-caption); }
+  textarea { width: 100%; min-height: 72px; box-sizing: border-box; resize: vertical; }
+  ul { list-style: none; padding: 0; margin: 0; } li { border-top: 1px solid var(--hairline); padding: var(--space-2) 0; font-size: var(--text-caption); } li small { display: block; font-size: var(--text-meta); }
+  a { color: var(--text-primary); text-decoration: none; text-underline-offset: 3px; }
+  a:hover, a:focus-visible { text-decoration: underline; }
   [role=status]:empty { display: none; } [role=alert] { color: var(--danger); }
 </style>
