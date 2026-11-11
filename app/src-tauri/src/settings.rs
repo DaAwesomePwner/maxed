@@ -123,6 +123,7 @@ impl SettingsStore {
             next.loot = current.loot;
             next.chat = current.chat;
             next.party = current.party;
+            next.recap_image = current.recap_image;
             next
         })
     }
@@ -138,6 +139,15 @@ impl SettingsStore {
     pub fn put_party(&self, party: maxed_types::PartySettings) -> Result<(), String> {
         self.patch(|mut current| {
             current.party = party;
+            current
+        })
+    }
+    pub fn put_recap_image(
+        &self,
+        recap_image: maxed_types::RecapImageSettings,
+    ) -> Result<(), String> {
+        self.patch(|mut current| {
+            current.recap_image = recap_image;
             current
         })
     }
@@ -263,7 +273,7 @@ mod tests {
                         },
                         ..defaults.clone()
                     };
-                    store.put(&settings).unwrap();
+                    store.put_recap_image(settings.recap_image.clone()).unwrap();
                     assert_eq!(store.get().unwrap(), settings);
                 }
             }
