@@ -31,6 +31,12 @@ describe('motion and component keyboard regressions', () => {
       const rules = [...style.sheet!.cssRules].filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule);
       expect(rules.find((rule) => rule.selectorText === 'button[aria-disabled="true"]:focus-visible')?.style.opacity).toBe('1');
       expect(rules.find((rule) => rule.selectorText === 'button:focus-visible')?.style.outline).toBe('2px solid var(--focus-ring)');
+      // Bare buttons must not force a height: explicitly sized buttons (timeline pips, inline triggers) keep their own.
+      const bare = rules.find((rule) => rule.selectorText === 'button');
+      expect(bare).toBeTruthy();
+      expect(bare!.style.getPropertyValue('min-height')).toBe('');
+      expect(bare!.style.getPropertyValue('height')).toBe('');
+      expect(rules.filter((rule) => rule.selectorText.startsWith(':where(input')).map((rule) => rule.style.getPropertyValue('height'))).toContain('var(--control-dense)');
     } finally { controls.remove(); style.remove(); }
   });
 
