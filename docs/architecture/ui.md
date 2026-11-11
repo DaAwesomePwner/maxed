@@ -43,6 +43,20 @@ Current fame comes from fresh stat 57 samples. Core values and boosts use typed 
 
 [Debug notes](../../app/ui/src/lib/debug/README.md) keep technical caveats behind `maxed.debug` without changing the underlying evidence. The dev-only [preview harness](../development/ui-preview.md) mounts the real shell with synthetic data. jsdom tests establish content and state, while browser/WebView testing establishes geometry, keyboard behavior and DPI handling.
 
+## Visual language
+
+Tokens in `app/ui/src/lib/styles/tokens.css` and `motion.css` are the contract; screens use token names, not raw values.
+
+- **Surfaces:** graphite steps with no tint: canvas (rail), page (main), panel (cards), raised (inputs, active nav), hover, selected and inset (bar tracks). Cards separate with `--hairline`; `--border-strong` marks control boundaries only. Cards carry no shadow and nothing glows; there are no gradients or radial washes.
+- **Gold means you:** `--gold`/`--accent` is your row, your number, your line and the one primary action per view. Other players are neutral steps (`--bar-party`, `--chart-party`, grey series). Selection and active states are a neutral surface step with an inset highlight, never gold or violet. The focus ring is `--text-primary`.
+- **Game colors carry meaning:** bag tones, enchant rarity, UT/ST tiers, chat channels, HP/MP/fame hues and client stat colors (`--stat-maxed`, `--stat-boosted`) stay as defined and are never reused for players. Tiles of notable items take a 1px ring in their color.
+- **Type and spacing:** Segoe UI on one scale (12, 13, 14, 16, 20, 28, 40px) with weights 400, 500 and 600; sentence case, no uppercase transforms or tracking below 20px; tabular figures for numbers. Spacing is a 4px grid; radii are 4 (sprites, tags), 8 (controls), 12 (cards) and 16 (banners).
+- **Controls:** unstyled buttons default to the secondary style (raised, `--border-strong`, 36px); `.ctl` is the dense 32px control with `ghost` and `primary` variants; `.seg` is the segmented control.
+- **Badges:** one style for every tag (PB, partial, est., live, you, rarity): 18px tall, 4px radius, hairline border, 12px medium text. Meaning comes from text color only where it is semantic; status words such as Cleared or Died are plain colored text.
+- **Tables:** 12px muted sentence-case headers, hairline row rules, hover and selected surface steps, and `--accent-soft` for your row.
+- **Bars and charts:** a 6px inset track with a party or gold fill; numbers sit in their own right-aligned tabular column, never on the bar. Charts use a muted grid, one gold line for you and `--chart-party` for the party, with no gradient fills.
+- **Motion:** 120/180/320ms on one ease curve, transitions on named color, opacity and transform properties only, no looping or glowing animation, and none under reduced motion. Tokens marked deprecated in `tokens.css` are migration aliases for unconverted screens.
+
 ## Home redesign phases 1 and 2
 
 `homeRedesign` selects the v4 Home in `routes/Home.svelte`; it is on in

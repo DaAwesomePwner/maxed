@@ -10,13 +10,13 @@ describe('three-step setup', () => {
     const f = setupFixture(), status = await f.client.queryHistoryUpgradeStatus();
     const pending = deferred<typeof status>(); f.client.queryHistoryUpgradeStatus = () => pending.promise;
     render(Setup, { client: f.client }); await screen.findByText('Assets Ready');
-    for (const name of ['Start Capture', 'Check Access']) {
+    for (const name of ['Start capture', 'Check Access']) {
       const button = screen.getByRole('button', { name });
       expect(button.getAttribute('aria-disabled')).toBe('true'); await fireEvent.click(button);
     }
     expect(f.client.startCapture).not.toHaveBeenCalled();
     pending.resolve(status);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('false'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('false'));
   });
   it.each([
     [{ npcap: 'missing' }, 'Install Npcap'],
@@ -139,14 +139,14 @@ describe('three-step setup', () => {
     f.client.stopCapture = vi.fn().mockRejectedValueOnce(new Error('PRIVATE Stop')).mockImplementation(stop);
     render(Setup, { client: f.client });
     const user = userEvent.setup();
-    const startButton = screen.getByRole('button', { name: 'Start Capture' });
+    const startButton = screen.getByRole('button', { name: 'Start capture' });
     await waitFor(() => expect(startButton.getAttribute('aria-disabled')).toBe('false'));
     await user.click(startButton);
     await screen.findByText(/Couldn.t start capture/);
     await waitFor(() => expect(startButton.getAttribute('aria-disabled')).toBe('false'));
     await user.click(startButton);
     await screen.findByText('Capture: Waiting for Game');
-    const stopButton = screen.getByRole('button', { name: 'Stop Capture' });
+    const stopButton = screen.getByRole('button', { name: 'Stop capture' });
     await waitFor(() => expect(stopButton.getAttribute('aria-disabled')).toBe('false'));
     await user.click(stopButton);
     await screen.findByText('Couldn’t stop capture. Retry.');
@@ -163,7 +163,7 @@ describe('three-step setup', () => {
     f.client.queryCapture = vi.fn().mockResolvedValue({ state: 'Failed', message: 'Capture worker failed; restart Maxed', dropped_frames: 0, unknown_packets: 0, decode_failures: 0 });
     render(Setup, { client: f.client });
     await screen.findByText('Restart required');
-    for (const name of ['Start Capture', 'Stop Capture']) expect(screen.getByRole('button', { name }).getAttribute('aria-disabled')).toBe('true');
+    for (const name of ['Start capture', 'Stop capture']) expect(screen.getByRole('button', { name }).getAttribute('aria-disabled')).toBe('true');
   });
 
   it('cancels path edits without clearing saved assets and replaces a pending extraction without stale errors', async () => {

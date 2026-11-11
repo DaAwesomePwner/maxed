@@ -16,7 +16,7 @@ it.each(['pending', 'failed'] as const)('does not claim an upgrade is required w
   expect(screen.getByRole('button', { name: 'Retry history status and space' })).toBeTruthy();
   expect(screen.queryByText(/needs an upgrade|initial backup slot|Free space is unavailable/)).toBeNull();
   expect(screen.queryByRole('heading', { name: 'History upgrade required' })).toBeNull();
-  expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('true');
 });
 
 it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])('offers a backup-required upgrade for v%s without mutation on mount or retry', async schemaVersion => {
@@ -27,7 +27,7 @@ it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])('offers a backup-required upgrade for v
   await screen.findByRole('heading', { name: 'History upgrade required' });
   expect(screen.getByText(/initial backup slot/)).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Upgrade without backup' })).toBeNull();
-  expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('true');
   await fireEvent.click(screen.getByRole('button', { name: 'Retry history status and space' }));
   await fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
   expect(upgrade).not.toHaveBeenCalled();
@@ -46,7 +46,7 @@ it.each(['0', null])('refuses insufficient or unknown space (%s)', async freeByt
 it.each([0, 11, 12, 14, 15, 16])('bypasses the upgrade prompt for v%s', async schemaVersion => {
   const f = setupFixture(); f.transport.setHistoryUpgradeFixture({ schemaVersion, freeBytes: '1000000000' });
   render(Setup, { client: f.client });
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('false'));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('false'));
   expect(screen.queryByRole('heading', { name: 'History upgrade required' })).toBeNull();
 });
 
@@ -59,17 +59,17 @@ it('upgrades only after confirmation, prevents repeated clicks, and enables capt
   await fireEvent.click(button); await fireEvent.click(button);
   expect(f.client.backupAndUpgradeHistory).toHaveBeenCalledOnce();
   await screen.findByText('Backing up history before upgrading.');
-  expect(screen.getByRole('button', { name: 'Stop Capture' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Stop capture' }).getAttribute('aria-disabled')).toBe('true');
   view.unmount(); render(Setup, { client: f.client });
   await screen.findByText('Backing up history before upgrading.');
   expect(f.client.backupAndUpgradeHistory).toHaveBeenCalledOnce();
   f.transport.advanceHistoryUpgrade();
   await fireEvent.click(screen.getByRole('button', { name: 'Retry history status and space' }));
   await screen.findByText('Upgrading history after the verified backup.');
-  expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('true');
   f.transport.advanceHistoryUpgrade();
   await fireEvent.click(screen.getByRole('button', { name: 'Retry history status and space' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('false'));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('false'));
   expect(f.client.startCapture).not.toHaveBeenCalled();
   expect(native).not.toHaveBeenCalled();
   expect((await f.client.listStorageBackups()).map(backup => backup.role)).toEqual(['initial']);
@@ -115,7 +115,7 @@ it('discards command replies from a retired client', async () => {
   await tick();
   expect(screen.getByRole('region', { name: 'History upgrade' }).innerHTML).toBe(before);
   expect(screen.getByRole('heading', { name: 'History upgrade required' })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('true');
   expect(b.client.startCapture).not.toHaveBeenCalled();
 });
 it('makes no native upgrade reads or mutations in preview', async () => {

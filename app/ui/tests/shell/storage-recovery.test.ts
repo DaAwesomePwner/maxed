@@ -17,7 +17,7 @@ it('retries failed storage before capture can start', async () => {
   await fireEvent.click(await screen.findByRole('button', { name: 'Retry saving' }));
   await waitFor(() => expect(client.retryStore).toHaveBeenCalledOnce());
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull());
-  await fireEvent.click(screen.getByRole('button', { name: 'Start Capture' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Start capture' }));
   await waitFor(() => expect(client.startCapture).toHaveBeenCalledOnce());
   expect(failed).toBe(false);
 });
@@ -47,7 +47,7 @@ it('offers retry saving when capture refuses pending summaries before status cat
   });
   client.retryStore = vi.fn(async () => { pending = false; });
   render(Shell, { client, historyAdapter: fakeHistory('#/').adapter });
-  const start = await screen.findByRole('button', { name: 'Start Capture' });
+  const start = await screen.findByRole('button', { name: 'Start capture' });
   await waitFor(() => expect(start.getAttribute('aria-disabled')).not.toBe('true'));
   expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull();
   await fireEvent.click(start);
@@ -64,8 +64,8 @@ it('does not offer saving retry for storage that failed to open without pending 
   const ready = await client.queryStore();
   client.queryStore = vi.fn(async () => ({ ...ready, state: 'failed' as const, queued: 0 }));
   render(Shell, { client, historyAdapter: fakeHistory('#/').adapter });
-  await screen.findByText("Couldn't save. Storage is unavailable; use Start Capture to try again.");
+  await screen.findByText("Couldn't save. Storage is unavailable; use Start capture to try again.");
   expect(screen.queryByRole('button', { name: 'Retry saving' })).toBeNull();
   expect(screen.queryByText("Couldn't save. Retry.")).toBeNull();
-  expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).not.toBe('true');
+  expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).not.toBe('true');
 });

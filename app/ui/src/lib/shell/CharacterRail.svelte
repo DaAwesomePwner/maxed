@@ -27,7 +27,7 @@
 
 <aside class="character-rail" aria-label="Character">
   <div class="rail-top">
-    <div class="brand">Maxed <span aria-hidden="true">&#10022;</span></div>
+    <div class="brand">Maxed</div>
     <NavigationControls {canBack} {canForward} {back} {forward} />
   </div>
   <div class="rail-cards">
@@ -38,7 +38,7 @@
     <LiveStatusCard view={focusedView} {capture} {preview} {busy} {error} {onStart} {onStop} {onRetry} />
     {#if statusExtra}<div class="rail-status-extra">{@render statusExtra()}</div>{/if}
     {#if missingCatalog}
-      <p class="data-unavailable"><a href="#/setup">Open Setup</a></p>
+      <p class="data-unavailable"><a href="#/setup">Open setup</a></p>
     {/if}
   </div>
   <nav aria-label="Navigation">
@@ -56,18 +56,18 @@
 
 <style>
   /* Only cards surrender space. Navigation never enters a scrolling ancestor. */
-  .character-rail { min-height: 0; min-width: 0; height: 100%; overflow: hidden; padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); border-right: 1px solid var(--border); background: var(--surface-canvas); }
-  .rail-cards > button { min-height: var(--target-min); flex: 0 0 auto; font-size: var(--text-label); }
-  .brand { flex: 0 0 auto; font-size: var(--text-title); line-height: var(--leading-body); font-weight: var(--weight-bold); }
-  .brand span { color: var(--gold); }
+  .character-rail { min-height: 0; min-width: 0; height: 100%; overflow: hidden; padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); border-right: 1px solid var(--hairline); background: var(--surface-canvas); }
+  .rail-cards > button { flex: 0 0 auto; }
+  .brand { flex: 0 0 auto; padding-inline: var(--space-1); font-size: var(--text-body); line-height: var(--leading-body); font-weight: var(--weight-semibold); color: var(--text-primary); }
   .data-unavailable { flex: 0 0 auto; margin: 0; color: var(--text-secondary); font-size: var(--text-label); line-height: var(--leading-label); }
-  .rail-cards { flex: 0 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: var(--space-1); }
-  nav { flex: 0 0 auto; display: grid; gap: 0; }
-  a { display: flex; align-items: center; min-height: var(--target-min); padding: var(--space-1) var(--space-3); border-radius: var(--radius-control); color: var(--text-secondary); text-decoration: none; font-size: var(--text-body); line-height: var(--leading-body); }
-  a:hover { background: var(--surface-hover); }
-  a[aria-current] { background: var(--surface-raised); color: var(--violet-text); box-shadow: inset 3px 0 var(--violet); }
+  .rail-cards { flex: 0 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: var(--space-2); }
+  nav { flex: 0 0 auto; display: grid; gap: 2px; }
+  a { display: flex; align-items: center; min-height: var(--row-default); padding: 0 var(--space-3); border-radius: var(--radius-control); color: var(--text-secondary); text-decoration: none; font-size: var(--text-label); line-height: var(--leading-label); transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease); }
+  .data-unavailable a { display: inline; min-height: 0; padding: 0; color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+  a:hover { background: var(--surface-hover); color: var(--text-primary); }
+  a[aria-current] { background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--highlight-top); }
   .settings-link { flex: 0 0 auto; margin-top: auto; }
-  .rail-top { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 28px; }
-  .rail-status-extra { flex: 0 0 auto; display: grid; gap: 4px; min-width: 0; }
-  @media (max-width: 900px) { .character-rail { padding: 8px; } }
+  .rail-top { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--space-8); }
+  .rail-status-extra { flex: 0 0 auto; display: grid; gap: var(--space-1); min-width: 0; padding-inline: var(--space-1); }
+  @media (max-width: 900px) { .character-rail { padding: var(--space-2); } }
 </style>

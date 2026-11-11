@@ -43,7 +43,7 @@ it.each([
   heading.focus();
   expect(document.activeElement).toBe(heading);
   expect(main.textContent).toContain('TestMage');
-  expect(main.textContent).not.toMatch(/Not Found|Storage Error/);
+  expect(main.textContent).not.toMatch(/Not Found|Storage error/);
 });
 
 it.each(['default', 'stress'] as const)('serves linked, internally consistent %s stories and honest missing rows', async variant => {

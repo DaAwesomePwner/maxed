@@ -127,10 +127,10 @@ describe('rail presentation', () => {
       expect(help.closest('details')?.open).toBe(true);
     }
     expect(screen.getByText(nativeMessages[state])).toBeTruthy();
-    expect(screen.getByText('Dropped Frames')).toBeTruthy();
+    expect(screen.getByText('Dropped frames')).toBeTruthy();
     expect(screen.getByRole('status').textContent).not.toContain('150');
     const active = ['Live', 'Recovering', 'WaitingForGame'].includes(state);
-    const button = screen.getByRole('button', { name: active ? 'Stop Capture' : /Start Capture|Retry Capture/ });
+    const button = screen.getByRole('button', { name: active ? 'Stop capture' : /Start capture|Retry capture/ });
     expect(button.getAttribute('aria-disabled')).toBe('false');
     expect(screen.getAllByRole('button')).toHaveLength(1);
   });
@@ -143,11 +143,11 @@ describe('rail presentation', () => {
     const message = screen.getByText('Restart Maxed');
     expect(screen.queryByText('Capture worker failed; restart Maxed')).toBeNull();
     expect(message.closest('details')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Retry Capture' })).toBeNull();
-    const button = screen.getByRole('button', { name: 'Start Capture' });
+    expect(screen.queryByRole('button', { name: 'Retry capture' })).toBeNull();
+    const button = screen.getByRole('button', { name: 'Start capture' });
     expect(button.getAttribute('aria-disabled')).toBe('true');
     await userEvent.setup().click(button);
-    expect(screen.queryByRole('button', { name: 'Stop Capture' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Stop capture' })).toBeNull();
     expect(start).not.toHaveBeenCalled(); expect(stop).not.toHaveBeenCalled();
   });
 });

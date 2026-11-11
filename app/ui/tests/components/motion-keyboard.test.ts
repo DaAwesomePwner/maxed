@@ -18,7 +18,7 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), `src/${path}`
 describe('motion and component keyboard regressions', () => {
   it('gives native and aria-disabled buttons the same dimming while preserving the focused ring', () => {
     const style = document.createElement('style');
-    style.textContent = read('app.css').replace(/@import[^;]+;/g, '');
+    style.textContent = read('lib/styles/controls.css');
     const controls = document.createElement('div');
     controls.innerHTML = '<button disabled>Native unavailable</button><button aria-disabled="true">Focusable unavailable</button>';
     document.head.append(style); document.body.append(controls);
@@ -30,7 +30,20 @@ describe('motion and component keyboard regressions', () => {
       // Pin the authored focus rule; WebView2 painting remains an owner check.
       const rules = [...style.sheet!.cssRules].filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule);
       expect(rules.find((rule) => rule.selectorText === 'button[aria-disabled="true"]:focus-visible')?.style.opacity).toBe('1');
-      expect(rules.find((rule) => rule.selectorText === 'button:focus-visible')?.style.outline).toBe('2px solid var(--gold)');
+      expect(rules.find((rule) => rule.selectorText === 'button:focus-visible')?.style.outline).toBe('2px solid var(--focus-ring)');
+      // Bare buttons must not force a height: explicitly sized buttons (timeline pips, inline triggers) keep their own.
+      const bare = rules.find((rule) => rule.selectorText === 'button');
+      expect(bare).toBeTruthy();
+      expect(bare!.style.getPropertyValue('min-height')).toBe('');
+      expect(bare!.style.getPropertyValue('height')).toBe('');
+      // The input/select base reaches 32px through padding, so inputs with their own padding keep their own height.
+      const inputs = rules.filter((rule) => rule.selectorText.startsWith(':where(input'));
+      expect(inputs.length).toBeGreaterThan(0);
+      for (const rule of inputs) {
+        expect(rule.style.getPropertyValue('height')).toBe('');
+        expect(rule.style.getPropertyValue('min-height')).toBe('');
+      }
+      expect(inputs[0].style.getPropertyValue('border')).toBe('1px solid var(--border-strong)');
     } finally { controls.remove(); style.remove(); }
   });
 
@@ -98,7 +111,7 @@ describe('motion and component keyboard regressions', () => {
     render(ContentHarness);
     const user = userEvent.setup();
     const evidence = screen.getByRole('button', { name: 'Evidence' });
-    await user.tab(); expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Retry Capture' }));
+    await user.tab(); expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Retry capture' }));
     await user.tab(); expect(document.activeElement).toBe(screen.getByRole('link', { name: /The Shatters/ }));
     await user.tab(); expect(document.activeElement).toBe(evidence);
     expect(screen.getByRole('tooltip').id).toBe(evidence.getAttribute('aria-describedby'));

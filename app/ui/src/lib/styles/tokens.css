@@ -1,24 +1,56 @@
+/* Maxed visual contract: graphite surfaces, gold means you, game colors carry meaning. */
 :root {
-  --surface-canvas: #0e0d14;
-  --surface-panel: #191620;
-  --surface-raised: #221c2e;
-  --surface-hover: #2a2238;
-  --border: #494052;
-  --border-strong: #71647f;
-  --text-primary: #ece8f5;
-  --text-secondary: #c6bed5;
-  --text-muted: #aaa2bc;
-  --text-disabled: #aaa2bc;
+  /* Surfaces: graphite steps, no tint. */
+  --surface-canvas: #0f0f10;
+  --surface-page: #141415;
+  --surface-panel: #19191b;
+  --surface-raised: #232325;
+  --surface-hover: #2a2a2d;
+  --surface-selected: #262628;
+  --surface-inset: #0f0f10;
+  --hairline: rgb(237 237 237 / 8%);
+  --hairline-strong: rgb(237 237 237 / 14%);
+  --border: var(--hairline);
+  /* Solid; control boundaries only. */
+  --border-strong: #707076;
+  /* Selection and active rows are neutral, never gold. */
+  --selected-edge: inset 2px 0 0 var(--text-secondary);
+  --highlight-top: inset 0 1px 0 rgb(255 255 255 / 6%);
+
+  /* Text */
+  --text-primary: #ededed;
+  --text-secondary: #b4b4ba;
+  --text-muted: #96969c;
+  --text-disabled: #6c6c72;
+
+  /* Accent: you and the one primary action. */
   --gold: #f2c14e;
-  --violet: #8b5cf6;
-  --violet-text: #c4a7ff;
-  --accent-gradient: linear-gradient(90deg, #8b5cf6, #f2c14e);
-  --hero-radial: radial-gradient(ellipse at 30% 0%, #302047, #191620 75%);
-  --success: #75dfa1;
-  --danger: #ff9b9b;
-  --estimated: #f5cf7a;
-  --warning: var(--estimated);
-  --information: #a9c9ff;
+  --accent: var(--gold);
+  --accent-ink: #1a1408;
+  --accent-soft: #f2c14e1f;
+
+  /* Data viz */
+  --bar-party: #4a4a50;
+  --bar-party-muted: #36363a;
+  --bar-you: var(--gold);
+  --bar-track: var(--surface-inset);
+  --chart-grid: var(--hairline);
+  --chart-label: var(--text-muted);
+  --chart-party: #8a8a90;
+  --chart-you: var(--gold);
+  --series-1: #d0d0d4;
+  --series-2: #a0a0a6;
+  --series-3: #78787e;
+  --series-4: #5a5a60;
+
+  /* Semantic */
+  --success: #4cc38a;
+  --danger: #f2777a;
+  --warning: #e8a25a;
+  --estimated: var(--warning);
+  --information: #8fb3e8;
+
+  /* Game meaning: loot bags, enchant rarity, tiers, chat channels, client stat colors. */
   --bag-brown: #c99a70;
   --bag-pink: #f2a6cf;
   --bag-purple: #bda0ff;
@@ -33,10 +65,23 @@
   --rarity-rare: #3fa9e0;
   --rarity-legendary: #ce79ff;
   --rarity-divine: #ffcf29;
-  --glow-white: 0 0 14px 2px #ffffff40;
+  --tier-ut: var(--bag-purple);
+  --tier-st: var(--bag-orange);
+  --ch-public: #b4b4ba;
+  --ch-guild: #75dfa1;
+  --ch-party: #8de4e5;
+  --ch-whisper: #f2a6cf;
+  --ch-npc: #96969c;
+  --stat-maxed: #ffe04a;
+  --stat-boosted: #5cff5c;
+
+  /* Type: Segoe UI, one scale. */
   --font-ui: "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
   --text-meta: .75rem;
   --leading-meta: 1rem;
+  --text-caption: .8125rem;
+  --leading-caption: 1.25rem;
   --text-label: .875rem;
   --leading-label: 1.25rem;
   --text-body: 1rem;
@@ -44,30 +89,48 @@
   --text-title: 1.25rem;
   --leading-title: 1.75rem;
   --text-hero: 1.75rem;
-  --leading-hero: 2.125rem;
+  --leading-hero: 2.25rem;
   --text-number: 2.5rem;
   --leading-number: 2.75rem;
   --weight-normal: 400;
+  --weight-medium: 500;
   --weight-semibold: 600;
-  --weight-bold: 700;
+
+  /* Spacing: 4px grid. */
   --space-1: .25rem;
   --space-2: .5rem;
   --space-3: .75rem;
   --space-4: 1rem;
+  --space-5: 1.25rem;
   --space-6: 1.5rem;
   --space-8: 2rem;
+  --space-10: 2.5rem;
   --space-12: 3rem;
+  --row-compact: 2rem;
+  --row-default: 2.25rem;
   --row-min: 2.5rem;
   --target-min: 2.25rem;
+  --control-dense: 2rem;
+
+  /* Radius and depth */
   --radius-sprite: .25rem;
-  --radius-control: .375rem;
-  --radius-card: .625rem;
-  --radius-banner: .875rem;
+  --radius-tag: .25rem;
+  --radius-control: .5rem;
+  --radius-card: .75rem;
+  --radius-banner: 1rem;
   --radius-pill: 999px;
-  --elevation-card: 0 1px 2px #00000030;
+  --elevation-card: none;
   --elevation-popover: 0 2px 4px #00000040, 0 12px 28px #00000045;
-  --focus-ring: var(--gold);
+  --focus-ring: var(--text-primary);
   --muted: var(--text-muted);
+
+  /* Deprecated during migration; do not use in new code. */
+  --violet: var(--bar-party);
+  --violet-text: var(--text-primary);
+  --accent-gradient: none;
+  --hero-radial: var(--surface-panel);
+  --glow-white: none;
+  --weight-bold: 600;
 }
 
 .stat-value { font-variant-numeric: tabular-nums lining-nums; }
@@ -77,7 +140,7 @@
   overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
 }
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--focus-ring); outline-offset: 3px;
+  outline: 2px solid var(--focus-ring); outline-offset: 2px;
 }
 [data-bag-tone="brown"] { --bag-color: var(--bag-brown); }
 [data-bag-tone="pink"] { --bag-color: var(--bag-pink); }
@@ -89,8 +152,7 @@
 [data-bag-tone="white"] { --bag-color: var(--bag-white); }
 [data-bag-tone="unknown"] { --bag-color: var(--bag-unknown); }
 [data-bag-tone] { color: var(--bag-color); }
-/* Opt in only on visible notable cards; ordinary drops never glow. */
-.bag-glow:is([data-bag-tone="purple"], [data-bag-tone="blue"], [data-bag-tone="cyan"], [data-bag-tone="red"], [data-bag-tone="orange"]) {
+/* Notable visible cards opt in to a 1px ring in their bag color; ordinary drops get none, nothing glows. */
+.bag-glow:is([data-bag-tone="purple"], [data-bag-tone="blue"], [data-bag-tone="cyan"], [data-bag-tone="red"], [data-bag-tone="orange"], [data-bag-tone="white"]) {
   box-shadow: 0 0 0 1px var(--bag-color);
 }
-.bag-glow[data-bag-tone="white"] { box-shadow: var(--glow-white); }

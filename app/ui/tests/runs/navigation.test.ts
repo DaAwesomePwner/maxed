@@ -147,7 +147,7 @@ it.each(['removed', 'timeout'] as const)('restoration_missing_row_and_five_secon
   if (mode === 'removed') pending.resolve(ready(runPage([]))); else await advance(1);
   await flush();
   expect(document.activeElement).toBe(main().getByRole('heading', { name: 'Runs', level: 1 }));
-  expect(screen.getByText(mode === 'removed' ? 'Row Removed' : 'Page Heading')).toBeTruthy();
+  expect(screen.getByText(mode === 'removed' ? 'Row Removed' : 'Page heading')).toBeTruthy();
   expect(pane.scrollTop).toBe(0);
   if (mode === 'timeout') {
     const focused = document.activeElement; pending.resolve(ready(runPage())); await flush();
