@@ -371,6 +371,101 @@ fn settings_put_preserves_loot() {
 }
 
 #[test]
+fn settings_put_preserves_recap_image() {
+    use maxed_types::RecapImageSettings;
+    let dir = tempfile::tempdir().unwrap();
+    let store = SettingsStore::new(dir.path().into()).unwrap();
+    let mut stale = store.get().unwrap();
+    let saved = RecapImageSettings {
+        names: false,
+        loot: true,
+        fights: false,
+    };
+    store.put_recap_image(saved.clone()).unwrap();
+    stale.save_recordings = true;
+    stale.recap_image = RecapImageSettings {
+        names: true,
+        loot: false,
+        fights: true,
+    };
+    store.put(&stale).unwrap();
+    let now = SettingsStore::new(dir.path().into())
+        .unwrap()
+        .get()
+        .unwrap();
+    assert_eq!(now.recap_image, saved);
+    assert!(now.save_recordings);
+}
+
+#[test]
+fn put_recap_image_patches_only_recap_image() {
+    use maxed_types::{ChaseItem, RecapImageSettings, Timestamp};
+    let dir = tempfile::tempdir().unwrap();
+    let store = SettingsStore::new(dir.path().into()).unwrap();
+    let pin = ChaseItem {
+        item_type: 3180,
+        dungeon: None,
+        pinned_at: Timestamp(1),
+    };
+    store
+        .put(&AppSettings {
+            update_channel: UpdateChannel::Beta,
+            save_recordings: true,
+            ..Default::default()
+        })
+        .unwrap();
+    store.put_chase(vec![pin.clone()]).unwrap();
+    let before = store.get().unwrap();
+    for names in [false, true] {
+        for loot in [false, true] {
+            for fights in [false, true] {
+                let recap_image = RecapImageSettings {
+                    names,
+                    loot,
+                    fights,
+                };
+                store.put_recap_image(recap_image.clone()).unwrap();
+                let now = SettingsStore::new(dir.path().into())
+                    .unwrap()
+                    .get()
+                    .unwrap();
+                assert_eq!(
+                    now,
+                    AppSettings {
+                        recap_image,
+                        ..before.clone()
+                    }
+                );
+            }
+        }
+    }
+    assert_eq!(store.get().unwrap().loot.chase, vec![pin]);
+    assert!(!dir.path().join("settings.pending").exists());
+}
+
+#[test]
+fn put_recap_image_never_overwrites_unreadable_settings() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    let mut newer = serde_json::to_value(AppSettings::default()).unwrap();
+    newer["version"] = 2.into();
+    let bytes = serde_json::to_vec(&newer).unwrap();
+    fs::write(&path, &bytes).unwrap();
+    let store = SettingsStore::new(dir.path().into()).unwrap();
+    assert_eq!(
+        store
+            .put_recap_image(maxed_types::RecapImageSettings {
+                names: false,
+                loot: false,
+                fights: false,
+            })
+            .unwrap_err(),
+        maxed_app::settings::SETTINGS_ERROR
+    );
+    assert_eq!(fs::read(&path).unwrap(), bytes);
+}
+
+#[test]
 fn put_chase_rejects_duplicates_and_oversize() {
     use maxed_app::settings::SETTINGS_ERROR;
     use maxed_types::{ChaseItem, Timestamp, MAX_CHASE_ITEMS};

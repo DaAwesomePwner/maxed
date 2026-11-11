@@ -36,6 +36,7 @@ import type { ChatPage } from '../bindings/ChatPage';
 import type { EventFilter } from '../bindings/EventFilter';
 import type { EventPage } from '../bindings/EventPage';
 import type { ChatSettings } from '../bindings/ChatSettings';
+import type { RecapImageSettings } from '../bindings/RecapImageSettings';
 import type { DropFilter } from '../bindings/DropFilter';
 import type { DropPage } from '../bindings/DropPage';
 import type { ItemHistoryRequest } from '../bindings/ItemHistoryRequest';
@@ -191,6 +192,7 @@ export interface Commands {
   set_demo: { args: { enabled: boolean }; result: void };
   get_settings: { args: undefined; result: AppSettings };
   update_settings: { args: { settings: AppSettings }; result: void };
+  update_recap_image_settings: { args: { settings: RecapImageSettings }; result: void };
   get_store_status: { args: undefined; result: StoreStatus };
   get_item_details: { args: { objectTypes: number[]; enchantIds: number[] }; result: ItemDetailPage };
   get_object_visuals: { args: { objectTypes: number[] }; result: VisualPage };
@@ -336,6 +338,7 @@ export function createClient(transport: Transport) {
     setAssetsPath: (path: string) => assetsChange(() => transport.invoke('set_assets_path', { path })),
     setDemo: (enabled: boolean) => assetsChange(() => transport.invoke('set_demo', { enabled })),
     updateSettings: (settings: AppSettings) => assetsChange(() => transport.invoke('update_settings', { settings })),
+    updateRecapImageSettings: (settings: RecapImageSettings) => transport.invoke('update_recap_image_settings', { settings }),
     getItemDetails: (type: number, enchantIds: number[]) => itemDetails.get(type, enchantIds),
     getObjectVisuals: (objectTypes: number[]) => visuals.get(objectTypes),
     listCatalogDungeonOptions: () => transport.invoke('list_catalog_dungeon_options', undefined),

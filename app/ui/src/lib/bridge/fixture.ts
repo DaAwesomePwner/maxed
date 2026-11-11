@@ -263,6 +263,7 @@ export function createFixtureTransport(initial: LiveSnapshot, visuals?: VisualPa
       return { status: 'ready', value: { rows: [], next: null, entered_runs: [] } };
     },
     update_chat_settings: async ({ settings: next }) => { settings.chat = structuredClone(next); return undefined; },
+    update_recap_image_settings: async ({ settings: next }) => { settings.recap_image = structuredClone(next); return undefined; },
     clear_chat_history: async () => undefined,
     get_drop_summary: async ({ request }) => {
       if (loot?.getDropSummary) return { status: 'ready', value: structuredClone(loot.getDropSummary(structuredClone(request))) };
