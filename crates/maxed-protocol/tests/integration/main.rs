@@ -9,6 +9,8 @@ mod d_packets;
 mod explanation_context;
 #[path = "../framing.rs"]
 mod framing;
+#[path = "../framing_chunks.rs"]
+mod framing_chunks;
 #[path = "../layout_qualification.rs"]
 mod layout_qualification;
 #[path = "../packets.rs"]
