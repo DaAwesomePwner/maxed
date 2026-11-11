@@ -89,5 +89,7 @@
   @media (max-width: 900px) {
     .recent-runs .row { gap: var(--space-1); padding-inline: 2px; }
     .recent-runs { padding: var(--space-3); }
+    /* The narrow card cannot fit long dungeon names at 13px; wrap them rather than clip. */
+    .recent-runs .name { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
   }
 </style>

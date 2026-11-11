@@ -61,7 +61,8 @@
   .identity { min-width: 0; }
   .cname { overflow: hidden; text-overflow: ellipsis; margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-semibold); white-space: nowrap; }
   p { margin: 0; }
-  .cclass { overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); white-space: nowrap; }
+  .cclass { display: flex; min-width: 0; overflow: hidden; color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); white-space: pre; }
+  .cclass > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .maxed { color: var(--gold); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .maxed span { font-weight: var(--weight-normal); font-size: var(--text-meta); color: var(--text-secondary); }
   .equipment { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
@@ -69,7 +70,8 @@
   .stale { opacity: .7; }
   .death { color: var(--danger); font-size: var(--text-meta); }
   @media (max-width: 900px) {
-    .compact-hero { padding: var(--space-2); --rail-vital-size: 12px; --rail-label-size: 12px; --rail-stat-size: 12px; }
-    .cname { font-size: var(--text-caption); }
+    .compact-hero { padding: var(--space-1); --rail-vital-size: 12px; --rail-label-size: 12px; --rail-stat-size: 12px; }
+    .hero-top { gap: var(--space-1); }
+    .cname { font-size: var(--text-meta); line-height: var(--leading-meta); }
   }
 </style>
