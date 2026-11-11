@@ -326,10 +326,9 @@ fn bucket(
     let at = c.at.0 / 1_000_000 * 1_000_000;
     let local_known = v.players.iter().any(|p| p.is_local);
     let local = c.player.as_ref().is_some_and(|p| p.is_local);
-    if let Some(b) = v
-        .buckets
-        .iter_mut()
-        .find(|b| b.from.0 <= at && at < b.until.0)
+    if let Some(b) =
+        crate::engine::series::find_bucket(&v.buckets, Timestamp(at), |b| (b.from, b.until))
+            .map(|index| &mut v.buckets[index])
     {
         b.total += c.source.damage;
         if local_known && b.local.is_none() {
@@ -1127,5 +1126,60 @@ mod tests {
         f.pending.clear();
         assert!(f.series_budget.disabled);
         assert!(f.project().player_series.is_none());
+    }
+
+    #[test]
+    fn bucket_picks_same_bucket_for_every_position() {
+        const S: u64 = 1_000_000;
+        let base = maxed_types::demo::demo_snapshot().fights.remove(0);
+        let source = base.players[0].sources[0].clone();
+        let make = |from: u64, until: u64| DamageBucket {
+            from: Timestamp(from * S),
+            until: Timestamp(until * S),
+            total: 1.,
+            local: None,
+            others_damage: None,
+            others_presence: None,
+        };
+        let ranges = [(10, 11), (11, 13), (20, 21)];
+        let probes = [
+            ("newest bucket", 20 * S + 500_000, Some(2)),
+            ("newest bucket at from", 20 * S, Some(2)),
+            ("newest bucket at until", 21 * S, None),
+            ("older bucket", 11 * S + 500_000, Some(1)),
+            ("older bucket at from", 11 * S, Some(1)),
+            ("older bucket at until", 13 * S, None),
+            ("first bucket", 10 * S + 1, Some(0)),
+            ("before first", 5 * S, None),
+            ("gap between", 15 * S, None),
+            ("after last", 30 * S, None),
+        ];
+        for (label, at, index) in probes {
+            let mut v = base.clone();
+            v.players.clear();
+            v.buckets = ranges.iter().map(|(a, b)| make(*a, *b)).collect();
+            let c = Contribution {
+                player: None,
+                source: SourceDamage {
+                    damage: 5.,
+                    ..source.clone()
+                },
+                at: Timestamp(at),
+                active_at: Timestamp(at),
+            };
+            bucket(&mut v, &c, None, None);
+            let mut expected: Vec<_> = ranges.iter().map(|(a, b)| make(*a, *b)).collect();
+            match index {
+                Some(i) => expected[i].total += 5.,
+                None => {
+                    let rounded = at / S;
+                    let mut added = make(rounded, rounded + 1);
+                    added.total = 5.;
+                    expected.push(added);
+                    expected.sort_by_key(|b| b.from);
+                }
+            }
+            assert_eq!(v.buckets, expected, "{label}");
+        }
     }
 }

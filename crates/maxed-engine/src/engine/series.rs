@@ -2,6 +2,26 @@
 use maxed_types::{PlayerDamage, Timestamp};
 use std::collections::BTreeMap;
 pub(crate) const SERIES_CELL_LIMIT: usize = 200_000;
+/// Index of the bucket containing `at`. Buckets are sorted and non-overlapping,
+/// so live hits resolve against the newest bucket and the rest by binary search.
+pub(crate) fn find_bucket<T>(
+    buckets: &[T],
+    at: Timestamp,
+    span: impl Fn(&T) -> (Timestamp, Timestamp),
+) -> Option<usize> {
+    let contains = |bucket: &T| {
+        let (from, until) = span(bucket);
+        from <= at && at < until
+    };
+    let last = buckets.len().checked_sub(1)?;
+    if contains(&buckets[last]) {
+        return Some(last);
+    }
+    let index = buckets
+        .partition_point(|bucket| span(bucket).0 <= at)
+        .checked_sub(1)?;
+    contains(&buckets[index]).then_some(index)
+}
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PlayerSeries {
     pub player_id: String,
@@ -22,10 +42,7 @@ impl Series {
             return;
         }
         let at = Timestamp(at.0 / 1_000_000 * 1_000_000);
-        let mut index = self
-            .buckets
-            .iter()
-            .position(|(from, until)| *from <= at && at < *until);
+        let mut index = find_bucket(&self.buckets, at, |b| *b);
         if index.is_none() {
             let insert = self.buckets.partition_point(|(from, _)| *from < at);
             if insert < self.buckets.len() {
@@ -94,9 +111,7 @@ impl Series {
         totals
     }
     pub fn has_cell(&self, at: Timestamp, player_id: &str) -> bool {
-        self.buckets
-            .iter()
-            .position(|(from, until)| *from <= at && at < *until)
+        find_bucket(&self.buckets, at, |b| *b)
             .is_some_and(|index| self.cells.contains_key(&(player_id.into(), index)))
     }
     pub fn is_disabled(&self) -> bool {
@@ -167,11 +182,7 @@ impl SeriesBudget {
             return;
         }
         let at = Timestamp(at.0 / 1_000_000 * 1_000_000);
-        if !self
-            .buckets
-            .iter()
-            .any(|(from, until)| *from <= at && at < *until)
-        {
+        if find_bucket(&self.buckets, at, |b| *b).is_none() {
             let index = self.buckets.partition_point(|(from, _)| *from < at);
             self.buckets
                 .insert(index, (at, Timestamp(at.0.saturating_add(1_000_000))));
@@ -242,5 +253,118 @@ mod tests {
         let rows = s.project().unwrap();
         assert_eq!(rows[0].points[0], 5.);
         assert_eq!(rows[0].points.iter().sum::<f64>(), 1804.);
+    }
+
+    const S: u64 = 1_000_000;
+    fn secs(range: std::ops::Range<u64>) -> (Timestamp, Timestamp) {
+        (Timestamp(range.start * S), Timestamp(range.end * S))
+    }
+    // Contiguous 10..13 (one merged bucket 11..13), then a gap, then 20..21.
+    fn gapped() -> Vec<(Timestamp, Timestamp)> {
+        vec![secs(10..11), secs(11..13), secs(20..21)]
+    }
+    /// (label, timestamp in micros, expected bucket index)
+    fn probes() -> Vec<(&'static str, u64, Option<usize>)> {
+        vec![
+            ("newest bucket", 20 * S + 500_000, Some(2)),
+            ("newest bucket at from", 20 * S, Some(2)),
+            ("newest bucket at until", 21 * S, None),
+            ("older bucket", 11 * S + 500_000, Some(1)),
+            ("older bucket at from", 11 * S, Some(1)),
+            ("older bucket at until", 13 * S, None),
+            ("first bucket", 10 * S + 1, Some(0)),
+            ("before first", 5 * S, None),
+            ("gap between", 15 * S, None),
+            ("after last", 30 * S, None),
+        ]
+    }
+    #[test]
+    fn find_bucket_matches_linear_scan() {
+        let buckets = gapped();
+        for at in (0..25 * S).step_by(250_000) {
+            let expected = buckets
+                .iter()
+                .position(|(from, until)| *from <= Timestamp(at) && Timestamp(at) < *until);
+            assert_eq!(find_bucket(&buckets, Timestamp(at), |b| *b), expected);
+        }
+        assert_eq!(
+            find_bucket(&[], Timestamp(1), |b: &(Timestamp, Timestamp)| *b),
+            None
+        );
+    }
+    #[test]
+    fn has_cell_resolves_every_position() {
+        let p = player(1);
+        let mut s = Series::default();
+        for (from, _) in gapped() {
+            s.add(from, Some(&p), 1.);
+        }
+        s.add(Timestamp(12 * S), Some(&p), 1.);
+        s.add(Timestamp(11 * S), Some(&player(2)), 1.);
+        for (label, at, index) in probes() {
+            assert_eq!(
+                s.has_cell(Timestamp(at), "synthetic-1"),
+                index.is_some(),
+                "{label}"
+            );
+        }
+        assert!(s.has_cell(Timestamp(11 * S), "synthetic-2"));
+        assert!(!s.has_cell(Timestamp(10 * S), "synthetic-2"));
+        assert!(!s.has_cell(Timestamp(20 * S), "synthetic-2"));
+    }
+    #[test]
+    fn add_picks_same_bucket_for_every_position() {
+        let p = player(1);
+        for (label, at, index) in probes() {
+            let mut s = Series::default();
+            for (from, _) in gapped() {
+                s.add(from, Some(&p), 1.);
+            }
+            // Series buckets are built from single seconds; install the merged one.
+            s.buckets = gapped();
+            s.cells = [
+                ((p.player_id.clone(), 0), 1.),
+                ((p.player_id.clone(), 1), 1.),
+                ((p.player_id.clone(), 2), 1.),
+            ]
+            .into_iter()
+            .collect();
+            s.add(Timestamp(at), Some(&p), 5.);
+            let rounded = at / S * S;
+            match index {
+                Some(i) => {
+                    assert_eq!(s.buckets, gapped(), "{label}");
+                    assert_eq!(s.cells[&(p.player_id.clone(), i)], 6., "{label}");
+                    assert_eq!(s.cells.len(), 3, "{label}");
+                }
+                None => {
+                    let mut expected = gapped();
+                    let at_index = expected.partition_point(|(from, _)| from.0 < rounded);
+                    expected.insert(at_index, secs(rounded / S..rounded / S + 1));
+                    assert_eq!(s.buckets, expected, "{label}");
+                    assert_eq!(s.cells[&(p.player_id.clone(), at_index)], 5., "{label}");
+                    assert_eq!(s.cells.len(), 4, "{label}");
+                    assert_eq!(s.cells.values().sum::<f64>(), 8., "{label}");
+                }
+            }
+        }
+    }
+    #[test]
+    fn budget_observe_picks_same_bucket_for_every_position() {
+        for (label, at, index) in probes() {
+            let mut budget = SeriesBudget {
+                buckets: gapped(),
+                ..Default::default()
+            };
+            budget.observe(Timestamp(at), Some(&player(1)));
+            let mut expected = gapped();
+            if index.is_none() {
+                let rounded = at / S * S;
+                let at_index = expected.partition_point(|(from, _)| from.0 < rounded);
+                expected.insert(at_index, secs(rounded / S..rounded / S + 1));
+            }
+            assert_eq!(budget.buckets, expected, "{label}");
+            assert!(!budget.disabled, "{label}");
+        }
     }
 }
