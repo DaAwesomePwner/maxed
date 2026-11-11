@@ -184,8 +184,10 @@ is [D-weapon-enchant](../parity/deliberate-differences.md#reconstruction-default
 Cache version 14 adds this field and invalidates version 13 fingerprints, so an installed app re-extracts its catalog
 from the client on the first load after updating. Older generations are never served as current, and a failed
 rebuild keeps the existing unavailable-catalog fallback. A catalog JSON without `weapon_damage` (an older
-generation or export) still loads: the field is absent, never neutral, and every local weapon hit then counts
-`assumedWeaponEnchantDefault` and is estimated.
+generation or export) still loads: the field is absent, never neutral. A local weapon hit whose weapon-slot
+evidence lists an applied enchant then counts `assumedWeaponEnchantDefault` and is estimated. A weapon recorded with
+no applied enchants (empty evidence) needs no catalog lookup and stays exact; missing or invalid evidence is counted
+whatever the catalog.
 
 ## History classification metadata
 

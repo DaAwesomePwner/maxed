@@ -15,6 +15,10 @@ const E13: &str = "AAIEDQA=";
 const E14: &str = "AAIEDgA=";
 const E15: &str = "AAIEDwA=";
 const E16: &str = "AAIEEAA=";
+const E17: &str = "AAIEEQA=";
+const E19: &str = "AAIEEwA=";
+const E20: &str = "AAIEFAA=";
+const E0: &str = "AAIEAAA=";
 
 fn supported(m: f64) -> Option<EnchantWeaponDamageDef> {
     Some(EnchantWeaponDamageDef {
@@ -50,6 +54,7 @@ fn weapon_catalog() -> Catalog {
         weapon(210, 135, 135),
         weapon(211, 135, 175),
         weapon(212, 108, 140),
+        weapon(213, 10, 11),
     ]);
     c.enchants = vec![
         enchant(11, supported(0.8)),
@@ -65,6 +70,19 @@ fn weapon_catalog() -> Catalog {
             }),
         ),
         enchant(15, supported(f64::from(1.05f32))),
+        // Valid catalog products whose scaled bounds are unusable: min above max,
+        // above i32::MAX, or non-finite. Negative products are rejected by catalog
+        // validation; the unit tests in src/weapon_enchant.rs cover that fallback.
+        enchant(
+            17,
+            Some(EnchantWeaponDamageDef {
+                min_multiplier: Some(2.0),
+                max_multiplier: Some(0.5),
+                ..supported(1.0).unwrap()
+            }),
+        ),
+        enchant(19, supported(1e10)),
+        enchant(20, supported(f64::from(f32::MAX))),
     ];
     c
 }
@@ -80,7 +98,11 @@ fn shoot_with(bullet: i16, weapon: u16) -> Packet {
 /// Equips `weapon` with weapon-slot enchant evidence `code` (None: no stat 80),
 /// fires `bullets` shots and returns (fight total, weapon-enchant assumptions, estimated).
 fn run(weapon: u16, code: Option<&str>, bullets: i16) -> (f64, u64, bool) {
-    let mut e = Engine::new(config(), Arc::new(weapon_catalog())).unwrap();
+    run_in(weapon_catalog(), weapon, code, bullets)
+}
+
+fn run_in(catalog: Catalog, weapon: u16, code: Option<&str>, bullets: i16) -> (f64, u64, bool) {
+    let mut e = Engine::new(config(), Arc::new(catalog)).unwrap();
     apply(&mut e, 0, map("The Void"));
     apply(&mut e, 1000, create(1, 1));
     let mut p = player();
@@ -207,4 +229,81 @@ fn ability_shots_ignore_weapon_enchant_evidence() {
         e.reconstruction_coverage()["assumedWeaponEnchantDefault"],
         0
     );
+}
+
+/// Fires one shot per `(weapon, code)`, re-equipping slot 0 with that weapon and
+/// weapon-slot enchant evidence before each shot. Returns each hit's damage.
+fn shots(sequence: &[(u16, &str)]) -> Vec<f64> {
+    let mut e = Engine::new(config(), Arc::new(weapon_catalog())).unwrap();
+    setup(&mut e);
+    let mut damages = vec![];
+    let mut total = 0.;
+    for (bullet, &(weapon, code)) in (1..).zip(sequence) {
+        apply(
+            &mut e,
+            2500,
+            tick(vec![status(
+                1,
+                vec![
+                    stat(8, i32::from(weapon)),
+                    string(80, &format!("{code},,,")),
+                ],
+            )]),
+        );
+        apply(&mut e, 3000, shoot_with(bullet, weapon));
+        apply(&mut e, 4000, hit(bullet));
+        let now = e.snapshot().fights[0].total_damage;
+        damages.push(now - total);
+        total = now;
+    }
+    assert_eq!(
+        e.reconstruction_coverage()["assumedWeaponEnchantDefault"],
+        0
+    );
+    damages
+}
+
+#[test]
+fn scaled_bounds_that_become_equal_skip_the_roll_and_shift_later_draws() {
+    // 10-11 scaled by 0.8 truncates to 8-8: the shot deals 8 and, as for any
+    // equal-bounds projectile, consumes no RNG draw. Unscaled 10-11 still draws
+    // (and always deals 10, since the maximum is exclusive).
+    let skipped = shots(&[(213, E11), (211, "")]);
+    let drawn = shots(&[(213, ""), (211, "")]);
+    assert_eq!(skipped[0], 8.);
+    assert_eq!(drawn[0], 10.);
+    // The next shot therefore takes the first draw after a skipped roll, and the
+    // second draw after an unscaled 10-11 roll.
+    assert_eq!(skipped[1], shots(&[(211, "")])[0]);
+    assert_eq!(drawn[1], shots(&[(211, ""), (211, "")])[1]);
+    assert_ne!(skipped[1], drawn[1]);
+}
+
+#[test]
+fn unusable_scaled_bounds_keep_the_unscaled_roll_as_a_counted_assumption() {
+    for (code, label) in [
+        (E17, "scaled minimum above scaled maximum"),
+        (E19, "bounds above i32::MAX"),
+        (E20, "non-finite bounds"),
+    ] {
+        assert_eq!(run(200, Some(code), 2), (200., 2, true), "{label}");
+        // The fallback still draws: each shot matches the unscaled weapon's roll.
+        for bullets in 1..=3 {
+            let (fallback, defaults, estimated) = run(211, Some(code), bullets);
+            assert_eq!((defaults, estimated), (bullets as u64, true), "{label}");
+            assert_eq!(fallback, run(211, Some(""), bullets).0, "{label}");
+        }
+    }
+}
+
+#[test]
+fn enchant_id_zero_is_an_applied_weapon_enchant() {
+    // parse_enchant counts ID 0 as applied (state Recorded), so the weapon path
+    // resolves it like any other ID instead of treating it as empty.
+    let mut known = weapon_catalog();
+    known.enchants.insert(0, enchant(0, supported(0.8)));
+    assert_eq!(run_in(known, 200, Some(E0), 1), (80., 0, false));
+    // Without a catalog definition it is unknown: neutral, counted and estimated,
+    // never a silent known 1.0.
+    assert_eq!(run(200, Some(E0), 1), (100., 1, true));
 }
