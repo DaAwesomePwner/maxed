@@ -6,7 +6,7 @@ Use Windows 10 or 11, x64, and the stock Realm of the Mad God client.
 Maxed installs for the current Windows user. Run Maxed without elevation.
 Npcap is a separate dependency; its installer may need administrator approval.
 
-These instructions describe the configured 0.2.0 installer. Clean-machine results,
+These instructions describe the configured 0.3.0 installer. Clean-machine results,
 including exact Windows prompt text, must be recorded in the [release checklist](CHECKLIST.md).
 
 ## Check the download

@@ -2,7 +2,7 @@
 resolver = "2"
 members = ["crates/maxed-types", "crates/maxed-engine", "crates/maxed-store", "crates/maxed-assets", "crates/maxed-capture", "crates/maxed-stream", "crates/maxed-recording", "crates/maxed-protocol", "crates/maxed-cli", "app/src-tauri"]
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/DaAwesomePwner/maxed"
