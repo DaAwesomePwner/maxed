@@ -80,12 +80,13 @@
   .amount { display: flex; align-items: center; gap: var(--space-2); }
   .track { position: relative; flex: 1; min-width: 0; height: 6px; border-radius: 2px; background: var(--bar-track); overflow: hidden; }
   .damage-fill { position: absolute; inset: 0 auto 0 0; background: var(--bar-party); border-radius: inherit; }
-  .amount b { flex: 0 0 4.5rem; text-align: right; font-weight: var(--weight-normal); color: var(--text-primary); }
+  /* Sized in ch so an eight-digit total (12,345,678) fits; larger figures grow the slot, never overlap DPS. */
+  .amount b { flex: none; min-width: 10ch; text-align: right; font-weight: var(--weight-normal); color: var(--text-primary); }
   .self, .linked.self:hover, .linked.self:focus-within { background: var(--accent-soft); }
   .self th { color: var(--gold); } .self .damage-fill { background: var(--bar-you); }
   .other { color: var(--text-muted); } .other .damage-fill { background: var(--bar-party-muted); } .other .amount b { color: var(--text-muted); }
   .gap td { height: 24px; text-align: left; padding-left: 4.5rem; color: var(--text-muted); }
   .more { display: inline-flex; align-items: center; min-height: 24px; color: var(--text-secondary); padding: var(--space-1) 0 0 2.5rem; text-decoration: none; }
   .more:hover, .more:focus-visible { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
-  @media (max-width: 950px) { .damage-table { font-size: var(--text-meta); } .amount b { flex-basis: 4rem; } }
+  @media (max-width: 950px) { .damage-table { font-size: var(--text-meta); } }
 </style>

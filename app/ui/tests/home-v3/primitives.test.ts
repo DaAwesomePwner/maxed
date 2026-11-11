@@ -50,7 +50,7 @@ it('features an unknown-content bag on every shared-card surface', async () => {
   setDebugMode(true); await tick();
   expect(page.container.textContent).toContain('Contents unknown');
 });
-it('glows once in tier colour for a new best bag and respects reduced motion', async () => {
+it('tints once in tier colour for a new best bag and respects reduced motion', async () => {
   const animate = vi.fn(() => ({ cancel: vi.fn() }));
   vi.stubGlobal('getComputedStyle', () => ({ color: '#ffb347' }));
   vi.stubGlobal('matchMedia', () => ({ matches: false }));
@@ -62,7 +62,7 @@ it('glows once in tier colour for a new best bag and respects reduced motion', a
   const second = { ...first, id: 'second' };
   await page.rerender({ best: bestDrop([second], visuals) });
   expect(animate).toHaveBeenCalledExactlyOnceWith([
-    { backgroundColor: 'color-mix(in srgb, #ffb347 16%, transparent)' }, {},
+    { backgroundColor: 'color-mix(in srgb, #ffb347 16%, var(--surface-raised))' }, {},
   ], { duration: 600, iterations: 1 });
   await page.rerender({ best: bestDrop([second], visuals), meta: 'updated clock' });
   expect(animate).toHaveBeenCalledOnce();
@@ -70,7 +70,7 @@ it('glows once in tier colour for a new best bag and respects reduced motion', a
   await page.rerender({ best: bestDrop([{ ...first, id: 'third' }], visuals) });
   expect(animate).toHaveBeenCalledOnce();
 });
-it('does not glow when a scope first loads or is switched, only on a new best within it', async () => {
+it('does not tint when a scope first loads or is switched, only on a new best within it', async () => {
   const animate = vi.fn(() => ({ cancel: vi.fn() }));
   vi.stubGlobal('getComputedStyle', () => ({ color: '#ffb347' }));
   vi.stubGlobal('matchMedia', () => ({ matches: false }));

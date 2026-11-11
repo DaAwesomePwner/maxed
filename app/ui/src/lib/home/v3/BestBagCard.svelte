@@ -40,7 +40,7 @@
     const colour = getComputedStyle(node).color;
     // A one-shot tint in the tier colour that settles back to the card surface; no glow.
     animation = node.animate?.([
-      { backgroundColor: `color-mix(in srgb, ${colour} 16%, transparent)` },
+      { backgroundColor: `color-mix(in srgb, ${colour} 16%, var(--surface-raised))` },
       {},
     ], { duration: 600, iterations: 1 });
   });
