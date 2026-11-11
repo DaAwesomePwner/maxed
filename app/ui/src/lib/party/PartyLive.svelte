@@ -81,7 +81,7 @@
           message = control.message;
           if (control.retry) { busyRetried = true; dirty = true; }
         }
-      } catch { if (!disposed) { error = 'Could not load party.'; message = ''; } }
+      } catch { if (!disposed) { error = "Couldn't load party"; message = ''; } }
       finally { reading = false; if (!disposed && dirty) schedule(); }
     }
     function schedule(notice?: PartyChangedNotice) {

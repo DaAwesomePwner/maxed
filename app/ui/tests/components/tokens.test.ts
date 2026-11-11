@@ -54,19 +54,16 @@ describe('unslop design tokens', () => {
     expect(tokens).not.toMatch(/@import|https?:|backdrop-filter|gradient\(|8b5cf6|c4a7ff/i);
     expect(tokens).not.toMatch(/--weight-[a-z]+:\s*(?:650|700|800|900)\b/);
   });
-  it('keeps deprecated aliases resolving to the contract values during migration', () => {
-    expect(token('violet')).toBe('var(--bar-party)');
-    expect(token('violet-text')).toBe('var(--text-primary)');
-    expect(token('accent-gradient')).toBe('none');
-    expect(token('hero-radial')).toBe('var(--surface-panel)');
-    expect(token('glow-white')).toBe('none');
-    expect(token('weight-bold')).toBe('600');
-    expect(motion).toContain('--motion-shimmer: 0ms');
+  it('does not reintroduce the retired migration aliases', () => {
+    for (const alias of ['violet', 'violet-text', 'accent-gradient', 'hero-radial', 'glow-white', 'weight-bold', 'motion-shimmer']) {
+      expect(tokens, `--${alias} in tokens.css`).not.toMatch(new RegExp(`--${alias}(?![\\w-])`));
+      expect(motion, `--${alias} in motion.css`).not.toMatch(new RegExp(`--${alias}(?![\\w-])`));
+    }
   });
   for (const surface of ['surface-canvas', 'surface-page', 'surface-panel', 'surface-raised', 'surface-hover', 'surface-selected', 'surface-inset']) {
     it(`keeps text and control boundaries readable on ${surface}`, () => {
       // Disabled text is intentionally below 4.5:1 and never carries required information.
-      for (const foreground of ['text-primary', 'text-secondary', 'text-muted', 'gold', 'violet-text', 'success', 'danger', 'estimated', 'warning', 'information']) {
+      for (const foreground of ['text-primary', 'text-secondary', 'text-muted', 'gold', 'success', 'danger', 'estimated', 'warning', 'information']) {
         expect(contrast(foreground, surface), `${foreground} on ${surface}`).toBeGreaterThanOrEqual(4.5);
       }
       expect(contrast('gold', surface)).toBeGreaterThanOrEqual(3);

@@ -1,6 +1,6 @@
 <script module lang="ts">
   import type { AlertKind } from '../bindings/AlertKind';
-  export const bannerLabels: Record<AlertKind, string> = { whisper: 'Whisper', guild_message: 'Guild Message', party_message: 'Party Message', white_bag: 'White Bag', personal_best: 'Personal Best', flawless_run: 'Flawless Run', death: 'Death', key_popped: 'Key Popped' };
+  export const bannerLabels: Record<AlertKind, string> = { whisper: 'Whisper', guild_message: 'Guild message', party_message: 'Party message', white_bag: 'White bag', personal_best: 'Personal best', flawless_run: 'Flawless run', death: 'Death', key_popped: 'Key popped' };
 </script>
 
 <script lang="ts">
@@ -79,5 +79,4 @@
   .toast .copy { display: block; }
   @media (max-width: 900px) { .copy { display: block; } }
   @media (max-width: 440px) { .copy { flex-basis: 7rem; } .banner { padding: var(--space-1) var(--space-2); } }
-  @media (prefers-reduced-motion: reduce) { .celebrate::before { display: none; } }
 </style>
