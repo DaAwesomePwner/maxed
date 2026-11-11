@@ -29,11 +29,11 @@ describe('P4 cold schema recovery protection (NON-RED)', () => {
       if (Date.now() - start < 5000) throw new Error(message);
       return { status: 'ready', value: homeSummary() };
     } }); await flushHomeRender();
-    expect(within(screen.getByRole('main')).getByText("Couldn't load. Retry.")).toBeTruthy();
+    expect(within(screen.getByRole('main')).getByText("Couldn't load history")).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Synthetic Sanctum/ })).toBeNull();
     expect(screen.getByRole('main').querySelector('[data-kpi="runs"] .value')?.textContent).toBe('—');
     await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flushHomeRender();
-    expect(within(screen.getByRole('main')).getByText("Couldn't load. Retry.")).toBeTruthy();
+    expect(within(screen.getByRole('main')).getByText("Couldn't load history")).toBeTruthy();
     expect(page.query).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(5000); await flushHomeRender();
     expect(page.query).toHaveBeenCalledTimes(2);
@@ -212,7 +212,7 @@ describe('durable Nexus story in the real Shell', () => {
     const main = screen.getByRole('main');
     expect(main.innerHTML).not.toMatch(/NaN|Infinity/);
     if (fame.length) {
-      const chart = within(main).getByRole('img', { name: /Fame over Time/ });
+      const chart = within(main).getByRole('img', { name: /Fame over time/ });
       expect(chart.querySelector('title')?.textContent).toBeTruthy();
       expect(chart.querySelector('desc')?.textContent).toBeTruthy();
       expect(chart.closest('[aria-live]')).toBeNull();
@@ -233,7 +233,7 @@ describe('durable Nexus story in the real Shell', () => {
     expect(screen.getByRole('link', { name: /Synthetic dungeon 9/i }).getAttribute('href')).toBe('#/runs/run-9');
     expect(screen.queryByRole('button', { name: 'Next Runs' })).toBeNull();
     expect(page.query).toHaveBeenCalledOnce();
-    const chart = within(main).getByRole('img', { name: /Fame over Time/ });
+    const chart = within(main).getByRole('img', { name: /Fame over time/ });
     expect(chart.querySelectorAll('circle').length).toBeLessThanOrEqual(120);
     expect(chart.innerHTML).not.toMatch(/NaN|Infinity|<animate/);
   });

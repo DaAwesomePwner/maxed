@@ -10,7 +10,7 @@ export function runView(): RunRecapView {
   const tile = (key: RunRecapView['tiles'][number]['key'], value: string, detail: string | null = null) =>
     ({ key, label: 'Deliberately unrelated label', value, detail, tone: null, partial: false, comparison: null });
   const drop = { ...homeSnapshot().drops[0], id: 'synthetic-drop', bag_type: 20, contents: [], items: [21], contents_known: true };
-  return { kind: 'run', runId: 'synthetic-run', title: 'Synthetic Sanctum', outcome: 'cleared', outcomeLabel: 'CLEARED',
+  return { kind: 'run', runId: 'synthetic-run', title: 'Synthetic Sanctum', outcome: 'cleared', outcomeLabel: 'Cleared',
     clearTime: '1:00', pb: true, meta: [], chain: null, best: { drop }, streakNote: null, streak: null, streakEnded: null,
     tiles: [tile('fame', '+12'), tile('party', '+99%'), tile('dps', '1,234'), tile('rank', '#2 of 8', '25% of damage')],
     fights: [{ fightId: 'synthetic-fight', targetType: 30, name: 'Synthetic Guardian', kill: '0:30', dps: 100,

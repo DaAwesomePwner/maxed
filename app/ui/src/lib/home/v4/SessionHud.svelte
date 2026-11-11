@@ -61,24 +61,24 @@
 </dl>
 
 <style>
-  .session-hud { display: flex; align-items: center; gap: 18px; box-sizing: border-box; height: 38px;
-    flex: 0 0 38px; min-width: 0; margin: 0; padding: 0 12px; overflow-x: auto; white-space: nowrap;
-    border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-panel);
-    font: 12px/1.2 var(--font-home); font-variant-numeric: tabular-nums; }
-  [data-hud], dd, a, .potion { display: flex; align-items: center; gap: 6px; }
-  [data-hud] { flex: none; }
-  dt, .rank { color: var(--text-secondary); }
+  .session-hud { display: flex; align-items: center; gap: var(--space-5); box-sizing: border-box; height: 40px;
+    flex: 0 0 40px; min-width: 0; margin: 0; padding: 0 var(--space-3); overflow-x: auto; white-space: nowrap;
+    border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-panel);
+    font: var(--text-meta)/var(--leading-meta) var(--font-home); font-variant-numeric: tabular-nums; }
+  [data-hud], dd, a, .potion { display: flex; align-items: center; gap: var(--space-1); }
+  [data-hud] { flex: none; gap: var(--space-2); }
+  dt, .rank { color: var(--text-muted); }
   dd { margin: 0; color: var(--text-primary); }
-  strong { font-weight: 600; }
+  strong { font-weight: var(--weight-medium); }
   .positive { color: var(--success); }
   .negative { color: var(--danger); }
-  a { color: inherit; text-decoration: none; min-height: 28px; }
+  a { color: inherit; text-decoration: none; text-underline-offset: 3px; min-height: 28px; }
   a:hover { color: var(--text-primary); text-decoration: underline; }
   a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
   [data-hud="session"] { margin-left: auto; }
   @media (max-width: 950px) {
-    .session-hud { flex-wrap: wrap; height: auto; min-height: 38px; flex-basis: auto; gap: 4px 12px; padding: 4px 8px; }
-    [data-hud], dd, a, .potion { gap: 4px; }
+    .session-hud { flex-wrap: wrap; height: auto; min-height: 40px; flex-basis: auto; gap: var(--space-1) var(--space-3); padding: var(--space-1) var(--space-2); }
+    [data-hud], dd, a, .potion { gap: var(--space-1); }
     [data-hud] { flex-direction: column; align-items: flex-start; gap: 2px; }
     dd { min-height: 28px; }
   }

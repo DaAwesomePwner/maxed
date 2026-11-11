@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { SpriteRef } from '../../bindings/SpriteRef';
   import { objectVisual } from '../../bridge/visual-index';
+  import Badge from '../../components/Badge.svelte';
   import SpriteImage from '../../components/SpriteImage.svelte';
   import { routeHref } from '../../navigation/routes';
   import { formatDps, formatShare } from '../../styles/format';
@@ -42,7 +43,7 @@
             {#if row.state === 'announced'}
               <td colspan="4" class="recap-note">Announced · you weren't there</td>
             {:else}
-              <td>{formatDps(row.dps)}{#if row.best}<span class="recap-tag">BEST DPS</span>{/if}</td>
+              <td>{formatDps(row.dps)}{#if row.best}<span class="recap-badge"><Badge label="Best DPS" tone="success" /></span>{/if}</td>
               <PartyComparison value={row.vsParty} />
               <td>{fightRank(row.rank, row.players)}{#if row.share !== null}<span class="recap-row-detail">{formatShare(row.share)} of damage</span>{/if}</td>
               <td>{#if row.buckets}<PartySparkline buckets={row.buckets} width={96} height={28} />{:else}<span class="sr-only">Party average line not recorded for this fight</span><span class="recap-note" aria-hidden="true">Not recorded</span>{/if}</td>

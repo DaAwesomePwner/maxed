@@ -58,19 +58,20 @@
 </section>
 
 <style>
-  h3 { display: flex; align-items: center; gap: 8px; }
-  .event-count { padding: 1px 6px; border-radius: var(--radius-pill); background: var(--surface-raised); color: var(--text-secondary); }
-  .event-list { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
-  .event-row { display: flex; align-items: start; gap: 8px; min-width: 0; }
-  .announced { opacity: .55; }
+  h3 { display: flex; align-items: center; gap: var(--space-2); }
+  .event-count { color: var(--text-muted); font-weight: var(--weight-normal); font-variant-numeric: tabular-nums; }
+  .event-list { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-3); }
+  .event-row { display: flex; align-items: start; gap: var(--space-2); min-width: 0; }
+  .announced { opacity: .6; }
   .event-detail { flex: 1; min-width: 0; }
-  .event-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 12px; }
-  strong { overflow-wrap: anywhere; }
-  time { margin-left: auto; white-space: nowrap; color: var(--text-secondary); font-size: 10px; }
-  p { margin: 4px 0 0; color: var(--text-secondary); font-size: 11px; }
+  .event-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  strong { overflow-wrap: anywhere; font-weight: var(--weight-medium); }
+  time { margin-left: auto; white-space: nowrap; color: var(--text-muted); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
+  p { margin: var(--space-1) 0 0; color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); font-variant-numeric: tabular-nums; }
   .empty { margin: 0; }
-  .event-bags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-  a { display: flex; gap: 3px; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; border-radius: var(--radius-control); color: var(--text-secondary); text-decoration: none; }
-  .bag-count { font-size: 10px; }
+  .event-bags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
+  a { display: flex; gap: 2px; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; border-radius: var(--radius-tag); color: var(--text-secondary); text-decoration: none; }
+  a:hover { background: var(--surface-hover); }
+  .bag-count { font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
   a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 </style>

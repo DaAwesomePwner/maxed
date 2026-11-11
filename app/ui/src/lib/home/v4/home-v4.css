@@ -1,12 +1,12 @@
 .home-v4 {
-    --font-home: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-    --font-home-display: "Segoe UI Variable Display", "Segoe UI", sans-serif;
-    --party-avg: #9b86e0;
+    --font-home: var(--font-ui);
+    --font-home-display: var(--font-ui);
     font-family: var(--font-home);
 }
 
 .home-v4 .last-recap { display: flex; justify-content: flex-end; min-width: 0; }
-.home-v4 .last-recap button { min-height: var(--target-min); max-width: 100%; padding: 6px 12px;
+.home-v4 .last-recap button { box-sizing: border-box; min-height: var(--control-dense); max-width: 100%; padding: var(--space-1) var(--space-3);
   border: 1px solid var(--border-strong); border-radius: var(--radius-control);
-  background: var(--surface-panel); color: var(--text-primary); font: inherit; overflow-wrap: anywhere; }
+  background: var(--surface-raised); color: var(--text-primary); font: inherit; font-size: var(--text-caption); line-height: var(--leading-caption);
+  overflow-wrap: anywhere; }
 .home-v4 .last-recap button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }

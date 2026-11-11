@@ -47,13 +47,13 @@ export const v4Cases: ReadonlyArray<{
     root: '.nexus-home', target: 'Nexus', stress: false, rank: null, participants: 0,
     partyRecorded: false, debugText: debugText.nexus },
   { mode: 'home-v4-recap', label: 'home-v4-recap', query: '?preview=home-v4-recap',
-    root: '.recap-screen', target: 'CLEARED', stress: false, rank: null, participants: 8,
+    root: '.recap-screen', target: 'Cleared', stress: false, rank: null, participants: 8,
     partyRecorded: false, debugText: [] },
   { mode: 'home-v4-recap-died', label: 'home-v4-recap-died', query: '?preview=home-v4-recap-died',
-    root: '.recap-screen .death-banner', target: 'DIED AT', stress: false, rank: null, participants: 8,
+    root: '.recap-screen .death-banner', target: 'Died at', stress: false, rank: null, participants: 8,
     partyRecorded: false, debugText: [] },
   { mode: 'home-v4-recap-realm', label: 'home-v4-recap-realm', query: '?preview=home-v4-recap-realm',
-    root: '.visit-recap-screen', target: 'REALM VISIT', stress: false, rank: null, participants: 8,
+    root: '.visit-recap-screen', target: 'Realm visit', stress: false, rank: null, participants: 8,
     partyRecorded: false, debugText: [] },
 ];
 

@@ -134,7 +134,7 @@ it.each(['loading', 'busy', 'superseded', 'error'] as const)('retains ready summ
   expect(page.container.querySelector('.best-card')).toBeTruthy();
   expect(screen.getByText('PB')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
-  expect(Boolean(screen.queryByRole('button', { name: 'Retry Loot' }))).toBe(phase === 'error' || phase === 'busy');
+  expect(Boolean(screen.queryByRole('button', { name: 'Retry loot' }))).toBe(phase === 'error' || phase === 'busy');
 });
 it('keeps unknown scope, fame, art and fight values explicit and never invents a PB', async () => {
   const input = props();
