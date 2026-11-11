@@ -164,8 +164,9 @@
     <EmptyState state="unavailable" heading="Loot unavailable" description="" />
   {:else}
     {#if history.message && history.message !== HISTORY_CATCH_UP && !/^(Refreshing|Loading)\b/.test(history.message)}<p>{history.message}</p>{/if}
-    {#if history.retryAvailable && (history.phase === 'error' || history.phase === 'busy')}<div class="error" role="alert"><span>Couldn't load bags</span><button class="ctl" type="button" onclick={() => controller?.retry()}>Retry</button></div>{/if}
-    {#if history.phase === 'error'}<EmptyState state="error" heading="Couldn't load item history" description="" />
+    {#if history.retryAvailable && (history.phase === 'error' || history.phase === 'busy')}<div class="error" role="alert"><span>Couldn't load item history</span><button class="ctl" type="button" onclick={() => controller?.retry()}>Retry</button></div>{/if}
+    <!-- A retryable failure is already explained once by the alert above; the card only repeats it when there is no Retry. -->
+    {#if history.phase === 'error'}{#if !history.retryAvailable}<EmptyState state="error" heading="Couldn't load item history" description="" />{/if}
     {:else if history.phase === 'busy' && history.retryAvailable}<EmptyState state="unavailable" heading="Loot history busy" description="" />
     {:else if !page}<EmptyState state="loading" heading="Loading item history" description="" />{/if}
     {#if item && page}

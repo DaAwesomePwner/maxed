@@ -123,7 +123,9 @@ it('offers Retry after busy and shows an error instead of an empty feed after a 
   expect(screen.queryByText('No bags yet')).toBeNull();
   busy.unmount();
   const failure = mount({ error: true }); await flush();
-  expect(screen.getByRole('heading', { name: "Couldn't load bags" })).toBeTruthy();
+  expect(within(screen.getByRole('alert')).getByText(/^Couldn't load bags/)).toBeTruthy();
+  expect(screen.getAllByText(/Couldn't load bags/)).toHaveLength(1);
+  expect(screen.queryByRole('heading', { name: "Couldn't load bags" })).toBeNull();
   expect(screen.queryByText('No bags yet')).toBeNull();
   vi.mocked(failure.client.listDrops).mockResolvedValue({ status: 'ready', value: { rows: [], next: null } });
   await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();

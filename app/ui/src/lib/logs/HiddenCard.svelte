@@ -11,5 +11,5 @@
   .card { min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); font-size: var(--text-caption); line-height: var(--leading-caption); }
   header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); } h3 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
   header a { color: var(--text-secondary); text-decoration: none; } header a:hover, header a:focus-visible { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
-  dl { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2); margin: 0; } dd { margin: 0; font-variant-numeric: tabular-nums; } dt, p { color: var(--text-muted); } p { margin: var(--space-3) 0 0; }
+  dl { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2); margin: 0; } dd { margin: 0; font-variant-numeric: tabular-nums; } dt, p { color: var(--text-muted); } b { font-weight: var(--weight-medium); color: var(--text-secondary); } p { margin: var(--space-3) 0 0; }
 </style>

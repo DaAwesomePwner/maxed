@@ -123,7 +123,7 @@
   {:else}
     {#if history.message && history.message !== HISTORY_CATCH_UP && !/^(Refreshing|Loading)\b/.test(history.message)}<p>{history.message}</p>{/if}
     {#if history.retryAvailable && (history.phase === 'error' || history.phase === 'busy')}<button class="ctl" type="button" onclick={() => controller?.retry()}>Retry</button>{/if}
-    {#if history.phase === 'error'}<EmptyState state="error" heading="Couldn't load bags" description="" />
+    {#if history.phase === 'error'}<EmptyState state="error" heading="Couldn't load drop rates" description="" />
     {:else if history.phase === 'busy' && history.retryAvailable}<EmptyState state="unavailable" heading="Loot history busy" description="" />
     {:else if !stats}<EmptyState state="loading" heading="Loading loot stats" description="" />{/if}
     {#if stats}

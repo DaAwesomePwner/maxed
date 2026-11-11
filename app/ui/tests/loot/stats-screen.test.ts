@@ -14,7 +14,7 @@ it.each([
   expect(rankShade(rank, ranks)).toBe(shade);
   expect(ranks).toEqual([42, 255, 0, 2, 42]);
 });
-it('uses full violet for a single non-white rank', () => {
+it('uses the full neutral shade for a single non-white rank', () => {
   expect(rankShade(42, [255, 42, 42])).toBe('color-mix(in srgb, var(--text-secondary) 100%, transparent)');
   expect(rankShade(42, [])).toBe('color-mix(in srgb, var(--text-secondary) 100%, transparent)');
 });

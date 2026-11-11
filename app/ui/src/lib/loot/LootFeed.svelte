@@ -222,7 +222,8 @@
     <div class="body" class:with-panel={selected !== null}>
       <div class="table-card">
         <div class="table-scroll">
-          {#if history.phase === 'error'}<EmptyState state="error" heading="Couldn't load bags" description="" />
+          <!-- A retryable failure is already explained once by the alert above; the card only repeats it when there is no Retry. -->
+          {#if history.phase === 'error'}{#if !history.retryAvailable}<EmptyState state="error" heading="Couldn't load bags" description="" />{/if}
           {:else if history.phase === 'busy' && history.retryAvailable}<EmptyState state="unavailable" heading="Loot history busy" description="" />
           {:else if !page}<EmptyState state="loading" heading="Loading bags" description="" />{/if}
           {#if page}
