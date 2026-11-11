@@ -197,7 +197,7 @@ it('unknown contents still feature one bag and exclude it from the other bags', 
   expect(loot.querySelector('.best-card .item-box')).toBeNull();
   expect(loot.querySelectorAll('[data-drop-id="unknown-0"]')).toHaveLength(1);
   expect(loot.querySelector('.bag-list-root')).toBeTruthy();
-  expect(loot.textContent).not.toContain('No Bags');
+  expect(loot.textContent).not.toContain('No bags');
 });
 it('PB and counts render; names, killer and level are only in tooltips', async () => {
   const props = fixture();

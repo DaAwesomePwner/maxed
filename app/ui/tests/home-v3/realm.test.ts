@@ -219,5 +219,5 @@ it('unknown bag contents render the bag-only feature alongside other bags', () =
   expect(loot.querySelector('.best-card .item-box')).toBeNull();
   expect(loot.querySelector('.bag-list-root')).toBeTruthy();
   expect(loot.querySelectorAll(`[data-drop-id="${props.window.drops[0].id}"]`)).toHaveLength(1);
-  expect(loot.textContent).not.toContain('No Bags');
+  expect(loot.textContent).not.toContain('No bags');
 });

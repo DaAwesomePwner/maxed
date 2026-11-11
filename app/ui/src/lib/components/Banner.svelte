@@ -55,26 +55,26 @@
 
 <style>
   .banner { position: relative; isolation: isolate; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); width: 100%; min-width: 0; box-sizing: border-box; padding: var(--space-1) var(--space-3); border: 1px solid var(--gold); border-radius: var(--radius-banner); background: var(--surface-panel); color: var(--text-primary); overflow: hidden; }
-  .celebrate::before { content: ''; position: absolute; pointer-events: none; z-index: -1; inset: 0 auto 0 0; width: 30%; background: linear-gradient(90deg, transparent, #ffffff55, transparent); animation: maxed-shimmer var(--motion-shimmer) var(--motion-ease) both; }
-  .paused::before { animation-play-state: paused; }
-  [data-kind="white_bag"] { border-color: var(--bag-white); box-shadow: var(--glow-white); }
-  [data-kind="death"] { border-color: var(--danger); background: var(--surface-panel); box-shadow: none; }
+  /* Celebration is the coloured border and kind label alone: no shimmer sweep or glow. */
+  [data-kind="white_bag"] { border-color: var(--bag-white); }
+  [data-kind="death"] { border-color: var(--danger); background: var(--surface-panel); }
   [data-kind="flawless_run"] { border-color: var(--success); }
   .copy { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
   .portal-icon { display: flex; flex: none; }
   .portal-icon :global(.frame[data-fallback="true"]) { display: none; }
-  .kind { color: var(--gold); font-size: var(--text-label); font-weight: var(--weight-semibold); }
+  .kind { color: var(--gold); font-size: var(--text-label); font-weight: var(--weight-medium); }
   [data-kind="white_bag"] .kind { color: var(--bag-white); }
   [data-kind="death"] .kind { color: var(--danger); }
   [data-kind="flawless_run"] .kind { color: var(--success); }
-  h2 { margin: 0; min-width: 0; font-size: var(--text-body); line-height: var(--leading-body); }
+  h2 { margin: 0; min-width: 0; font-size: var(--text-body); line-height: var(--leading-body); font-weight: var(--weight-medium); }
   .excerpt { flex-basis: 100%; margin: 0; min-width: 0; color: var(--text-secondary); font-size: var(--text-label); }
   p { margin: 0; color: var(--text-secondary); font-size: var(--text-label); line-height: var(--leading-label); }
   .happened { margin-top: var(--space-1); font-variant-numeric: tabular-nums; }
   .actions { display: flex; flex: none; max-width: 100%; margin-left: auto; flex-wrap: wrap; gap: var(--space-2); }
-  button, a { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; flex: none; min-height: var(--target-min); border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: var(--space-2); color: var(--text-primary); background: var(--surface-panel); font: inherit; cursor: pointer; text-decoration: none; }
-  button:hover, a:hover { background: var(--surface-hover); border-color: var(--text-muted); }
-  .toast { padding: var(--space-3); gap: var(--space-3); background: var(--surface-panel); box-shadow: none; }
+  button, a { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; flex: none; min-height: var(--target-min); border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: 0 var(--space-3); color: var(--text-primary); background: var(--surface-raised); font: inherit; cursor: pointer; text-decoration: none; }
+  button:hover, a:hover { background: var(--surface-hover); }
+  button:active, a:active { transform: scale(.98); }
+  .toast { padding: var(--space-4); gap: var(--space-3); background: var(--surface-panel); }
   .toast h2 { font-size: var(--text-body); line-height: var(--leading-body); }
   .toast .copy { display: block; }
   @media (max-width: 900px) { .copy { display: block; } }

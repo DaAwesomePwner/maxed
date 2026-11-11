@@ -74,7 +74,7 @@ it('fame tile falls back to the latest observed character outside the game', () 
   expect(tile.querySelector('.value')?.textContent).toBe('+500');
   expect(tile.textContent).toContain('9,000 → 9,500');
 });
-it('Nexus uses the shared 600ms best-bag glow exactly once and disables it for reduced motion', async () => {
+it('Nexus uses the shared 600ms best-bag tint flash exactly once and disables it for reduced motion', async () => {
   const animate = vi.fn(() => ({ cancel: vi.fn() }));
   vi.stubGlobal('matchMedia', () => ({ matches: false }));
   vi.stubGlobal('getComputedStyle', () => ({ color: '#a77bff' }));
@@ -89,7 +89,7 @@ it('Nexus uses the shared 600ms best-bag glow exactly once and disables it for r
   const next = { ...input.history, summary: { ...input.history.summary!, best_drop: { ...drop, id: 'new-best' } } };
   await page.rerender({ history: next });
   expect(animate).toHaveBeenCalledExactlyOnceWith([
-    { boxShadow: '0 0 22px 4px #a77bff' }, { boxShadow: '0 0 0 0 transparent' },
+    { backgroundColor: 'color-mix(in srgb, #a77bff 16%, var(--surface-raised))' }, {},
   ], { duration: 600, iterations: 1 });
   await page.rerender({ history: { ...next, summary: { ...next.summary, runs: 9999 } } });
   expect(animate).toHaveBeenCalledOnce();
@@ -97,7 +97,7 @@ it('Nexus uses the shared 600ms best-bag glow exactly once and disables it for r
   await page.rerender({ history: { ...next, summary: { ...next.summary, best_drop: { ...drop, id: 'another-best' } } } });
   expect(animate).toHaveBeenCalledOnce();
 });
-it('does not glow the best bag when saved history first arrives or the period changes', async () => {
+it('does not tint the best bag when saved history first arrives or the period changes', async () => {
   const animate = vi.fn(() => ({ cancel: vi.fn() }));
   vi.stubGlobal('matchMedia', () => ({ matches: false }));
   vi.stubGlobal('getComputedStyle', () => ({ color: '#a77bff' }));
@@ -106,7 +106,7 @@ it('does not glow the best bag when saved history first arrives or the period ch
     const input = props();
     const loaded = input.history;
     const drop = loaded.summary!.best_drop!;
-    // A UT headline item: only UT, ST and white bags glow at all.
+    // A UT headline item: only UT, ST and white bags flash at all.
     const visuals = { ...emptyHomeVisuals(), objects: [
       { object_type: drop.contents[0]?.item_type ?? drop.items[0], name: 'Featured UT', item_tier: 'UT', sprite: null, bag: null },
     ] };
@@ -141,8 +141,8 @@ it('keeps unknown scope, fame, art and fight values explicit and never invents a
   const data = homeSummary({ top_fight: null, best_drop: null, fame_delta: null, fame: [], dungeon_stats: null, recent_runs: [], recent_details: [] });
   const page = render(NexusHome, { ...input, snapshot: null, history: { ...ready(), summary: data }, loot: { items: [], next: null, total_bags: 0 } });
   expect(screen.queryByRole('link', { name: /Open fight/ })).toBeNull();
-  expect(screen.getByText('No Bags')).toBeTruthy();
-  expect(screen.getByText('No Loot')).toBeTruthy();
+  expect(screen.getByText('No bags')).toBeTruthy();
+  expect(screen.getByText('No loot')).toBeTruthy();
   expect(screen.queryByText('PB')).toBeNull();
   expect(page.container.innerHTML).not.toMatch(/NaN|undefined|Infinity/);
   const error = { ...ready(), phase: 'error' as const, summary: null, message: 'History details' };

@@ -41,15 +41,15 @@
               {#if href}<a href={href}><span class="name">{row.name ?? 'Player'}</span><span aria-hidden="true">›</span></a>
               {:else}<span class="name">{row.name ?? 'Player'}</span>{/if}
               {#if row.is_local}<span class="sr-only">You</span>{/if}</th>
-            <td><span class="amount"><span class="damage-fill" style:width={`${width(row.damage)}%`}></span>
+            <td><span class="amount"><span class="track"><span class="damage-fill" style:width={`${width(row.damage)}%`}></span></span>
               <b>{formatStat(known(row.damage))}</b></span></td>
             <td>{formatDps(known(row.dps))}</td><td>{formatShare(row.share)}</td>
           </tr>
         {/if}
-      {:else}<tr><td colspan="6">No Players</td></tr>{/each}
+      {:else}<tr><td colspan="6">No players</td></tr>{/each}
       {#if (known(otherDamage) ?? 0) > 0}
-        <tr class="other" data-unattributed><th scope="row" colspan="3">Other Damage</th>
-          <td><span class="amount"><span class="damage-fill" style:width={`${width(otherDamage!)}%`}></span>
+        <tr class="other" data-unattributed><th scope="row" colspan="3">Other damage</th>
+          <td><span class="amount"><span class="track"><span class="damage-fill" style:width={`${width(otherDamage!)}%`}></span></span>
             <b>{formatStat(otherDamage)}</b></span></td><td>—</td><td>—</td></tr>
       {/if}
     </tbody>
@@ -58,30 +58,35 @@
 </div>
 
 <style>
-  .dps-note { color: var(--text-muted); font-size: 11px; margin-bottom: 4px; }
-  .damage-table { min-width: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .dps-note { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); margin-bottom: var(--space-1); }
+  .damage-table { min-width: 0; font-size: var(--text-caption); line-height: var(--leading-label); font-variant-numeric: tabular-nums; }
   .scroll { max-height: 320px; overflow: auto; }
   .scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--surface-panel); }
-  .scroll:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+  .scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
   table { width: 100%; table-layout: fixed; border-collapse: collapse; }
-  th, td { height: 28px; padding: 2px 3px; text-align: right; white-space: nowrap; }
-  thead th { height: 22px; font-size: 10px; color: var(--text-muted); font-weight: 600; }
+  th, td { height: 32px; padding: 0 var(--space-1); text-align: right; white-space: nowrap; }
+  thead th { height: 24px; font-size: var(--text-meta); color: var(--text-muted); font-weight: var(--weight-medium); border-bottom: 1px solid var(--hairline-strong); }
   th:nth-child(3), tbody th { text-align: left; }
-  tbody tr + tr { border-top: 1px solid var(--border); }
-  .name { display: block; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
-  th a { display: flex; align-items: center; gap: 4px; min-height: 28px; color: inherit; text-decoration: none; }
+  tbody th { font-weight: var(--weight-normal); }
+  tbody tr + tr { border-top: 1px solid var(--hairline); }
+  .name { display: block; overflow: hidden; text-overflow: ellipsis; font-weight: var(--weight-medium); }
+  th a { display: flex; align-items: center; gap: var(--space-1); min-height: 32px; color: inherit; text-decoration: none; }
+  th a > [aria-hidden="true"] { color: var(--text-muted); }
   th a .name { flex: 1; min-width: 0; }
-  th a:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
-  .linked:hover, .linked:focus-within { background: color-mix(in srgb, var(--violet) 10%, transparent); }
-  .linked.self:hover, .linked.self:focus-within { background: color-mix(in srgb, var(--gold) 12%, transparent); }
-  .amount { position: relative; display: block; height: 18px; background: var(--surface-inset, #0c0b11); border-radius: 3px; }
-  .damage-fill { position: absolute; inset: 0 auto 0 0; background: var(--violet); opacity: .7; border-radius: inherit; }
-  .amount b { position: absolute; inset: 0 4px 0 0; line-height: 18px; font-size: 11px; color: white;
-    text-shadow: 1px 0 #000, -1px 0 #000, 0 1px #000, 0 -1px #000; font-weight: 600; }
-  .self { background: color-mix(in srgb, var(--gold) 7%, transparent); }
-  .self th { color: var(--gold); } .self .damage-fill { background: var(--gold); }
-  .other { color: var(--text-muted); } .other .damage-fill { background: var(--border-strong); }
-  .gap td { height: 20px; text-align: left; padding-left: 4.5rem; color: var(--text-muted); }
-  .more { display: block; min-height: 24px; color: var(--violet-text); padding: 4px 0 0 2.5rem; }
-  @media (max-width: 950px) { .damage-table { font-size: 11px; } }
+  th a:hover .name, th a:focus-visible .name { text-decoration: underline; text-underline-offset: 3px; }
+  th a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .linked:hover, .linked:focus-within { background: var(--surface-hover); }
+  /* Damage: a thin track, with the figure in its own right-aligned slot. */
+  .amount { display: flex; align-items: center; gap: var(--space-2); }
+  .track { position: relative; flex: 1; min-width: 0; height: 6px; border-radius: 2px; background: var(--bar-track); overflow: hidden; }
+  .damage-fill { position: absolute; inset: 0 auto 0 0; background: var(--bar-party); border-radius: inherit; }
+  /* Sized in ch so an eight-digit total (12,345,678) fits; larger figures grow the slot, never overlap DPS. */
+  .amount b { flex: none; min-width: 10ch; text-align: right; font-weight: var(--weight-normal); color: var(--text-primary); }
+  .self, .linked.self:hover, .linked.self:focus-within { background: var(--accent-soft); }
+  .self th { color: var(--gold); } .self .damage-fill { background: var(--bar-you); }
+  .other { color: var(--text-muted); } .other .damage-fill { background: var(--bar-party-muted); } .other .amount b { color: var(--text-muted); }
+  .gap td { height: 24px; text-align: left; padding-left: 4.5rem; color: var(--text-muted); }
+  .more { display: inline-flex; align-items: center; min-height: 24px; color: var(--text-secondary); padding: var(--space-1) 0 0 2.5rem; text-decoration: none; }
+  .more:hover, .more:focus-visible { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+  @media (max-width: 950px) { .damage-table { font-size: var(--text-meta); } }
 </style>

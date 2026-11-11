@@ -58,12 +58,12 @@
     {#each fights as fight (fight.id)}
       {@const visual = objectVisual(visuals.objects, (fight.target_type ?? fight.boss_type))}
       {@const done = fight.ended !== null || Boolean(fight.kill)}
-      <button type="button" role="tab" aria-label={visual?.name ?? names?.[fight.id] ?? 'Unknown Target'}
+      <button type="button" role="tab" aria-label={visual?.name ?? names?.[fight.id] ?? 'Unknown target'}
         data-row-id={saved ? `fight:${fight.id}` : undefined} class:live={!done} class:finished={done} aria-selected={selected === fight.id}
         tabindex={focusId === fight.id ? 0 : -1} onclick={() => onselect(fight.id)}>
         <SpriteImage sprite={visual?.sprite ?? null} fit={32}
           sheetUrl={visual?.sprite ? resolveSpriteUrl(visual.sprite) : null} alt={visual?.name ?? 'Boss'} />
-        <span class="label"><span title={visual?.name ?? names?.[fight.id] ?? 'Unknown Target'}>{visual?.name ?? names?.[fight.id] ?? 'Unknown Target'}</span>
+        <span class="label"><span title={visual?.name ?? names?.[fight.id] ?? 'Unknown target'}>{visual?.name ?? names?.[fight.id] ?? 'Unknown target'}</span>
           <small>{(saved ? bossOutcome(fight) === 'killed' : done) ? '✓ ' : ''}{formatElapsed(fight.started, fight.ended ?? fight.kill?.at ?? fight.last_hit ?? fight.started)}</small></span>
       </button>
     {/each}
@@ -77,20 +77,23 @@
 </div>
 
 <style>
-  .fight-tabs { display: flex; align-items: stretch; gap: 4px; min-width: 0; height: 46px; }
-  .fight-tablist { display: flex; flex: 1; min-width: 0; gap: 4px; }
-  button { box-sizing: border-box; display: flex; align-items: center; gap: 5px; height: 46px; border: 1px solid transparent;
-    border-radius: 5px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
-  .whole { flex: 0 0 82px; justify-content: center; }
+  .fight-tabs { display: flex; align-items: stretch; gap: var(--space-1); min-width: 0; height: 48px; }
+  .fight-tablist { display: flex; flex: 1; min-width: 0; gap: var(--space-1); }
+  button { box-sizing: border-box; display: flex; align-items: center; gap: var(--space-1); height: 48px; border: 1px solid transparent;
+    border-radius: var(--radius-control); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-caption); line-height: var(--leading-label); cursor: pointer;
+    transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease); }
+  button:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .whole { flex: 0 0 84px; justify-content: center; }
   .saved .whole { white-space: nowrap; }
   .more { flex: 0 0 100px; min-width: 100px; justify-content: center; align-self: center; height: 32px;
-    padding: 0 10px; border-color: var(--border-strong); background: var(--surface-raised);
-    white-space: nowrap; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    padding: 0 var(--space-3); border-color: var(--border-strong); background: var(--surface-raised); color: var(--text-primary);
+    white-space: nowrap; font-size: var(--text-meta); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
   .fight-scroll { display: flex; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-  .fight-scroll button { flex: 0 0 170px; width: 170px; padding: 4px; }
-  .other { flex: 0 0 auto; padding: 4px 8px; border-style: dashed; border-color: var(--border); }
+  .fight-scroll button { flex: 0 0 170px; width: 170px; padding: var(--space-1); }
+  .other { flex: 0 0 auto; padding: var(--space-1) var(--space-2); border-style: dashed; border-color: var(--hairline-strong); }
   .label { min-width: 0; text-align: left; } .label > span { display: block; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  small { display: block; font-size: 11px; font-variant-numeric: tabular-nums; }
-  .live small { color: var(--success, #75dfa1); } [aria-selected="true"] { background: var(--surface-raised); border-color: var(--border-strong); }
-  button:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+  small { display: block; font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .live small { color: var(--success); }
+  [aria-selected="true"] { background: var(--surface-raised); color: var(--text-primary); box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%); }
+  button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 </style>

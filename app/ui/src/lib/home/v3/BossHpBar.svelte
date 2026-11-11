@@ -19,26 +19,28 @@
     aria-valuemin={known ? 0 : undefined} aria-valuemax={known ? max! : undefined}
     aria-valuenow={known ? Math.min(displayedHp!, max!) : undefined}
     aria-valuetext={known ? (savedKill ? label : statusInside && killedAt ? `${text}; ${label}` : text) : undefined}>
-    <i style:width={`${fill}%`}></i><span class="hp-text">{label}</span>
+    <i style:transform={`scaleX(${fill / 100})`}></i><span class="hp-text">{label}</span>
   </div>
   {#if !statusInside && !savedKill}<span class="boss-status">{killedAt ? `Killed · ${clockTime(killedAt) ?? '—'}` : ended ? 'Ended' : '\u00a0'}</span>{/if}
 </div>
 
 <style>
-  .boss-hp { display: grid; grid-template-columns: minmax(0, 1fr) 18ch; gap: 6px;
+  .boss-hp { display: grid; grid-template-columns: minmax(0, 1fr) 18ch; gap: var(--space-2);
     height: 24px; min-height: 24px; width: 100%; font-variant-numeric: tabular-nums; }
   .boss-hp.status-inside { grid-template-columns: minmax(0, 1fr); }
-  .status-inside .track.killed { background: #2a2433; }
-  .status-inside .track.killed i { background: #5e5270; }
-  .boss-hp.saved-kill { height: 18px; min-height: 18px; }
-  .saved-kill .track.killed { height: 18px; border: 0; border-radius: 2px; background: #2a1c22; }
-  .saved-kill .hp-text { color: var(--text-muted); font-size: 11px; font-weight: 600; text-shadow: none; }
-  .track { position: relative; box-sizing: border-box; height: 24px; border: 2px solid #111; border-radius: 3px;
-    background: #5a1a1e; overflow: hidden; }
-  i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#d94a51, #b32c34); transition: width 400ms linear; }
-  .hp-text { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 700;
-    white-space: nowrap; text-shadow: 1px 0 #000, -1px 0 #000, 0 1px #000, 0 -1px #000; }
-  .boss-status { display: grid; align-items: center; text-align: right; font-size: 11px; white-space: nowrap; }
+  .status-inside .track.killed { background: var(--surface-raised); }
+  .status-inside .track.killed i { background: var(--bar-party-muted); }
+  .boss-hp.saved-kill { height: 20px; min-height: 20px; }
+  .saved-kill .track.killed { height: 20px; border: 0; background: var(--surface-inset); }
+  .saved-kill .hp-text { color: var(--text-muted); font-size: var(--text-meta); font-weight: var(--weight-medium); }
+  /* Boss HP keeps its red: a flat fill scaled from the left on a dark track. */
+  .track { position: relative; box-sizing: border-box; height: 24px; border: 1px solid var(--hairline); border-radius: var(--radius-tag);
+    background: var(--bar-track); overflow: hidden; }
+  i { position: absolute; inset: 0; transform-origin: left center; background: color-mix(in srgb, var(--danger) 55%, var(--bar-track));
+    transition: transform 400ms linear; }
+  .hp-text { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-primary); font-size: var(--text-meta); font-weight: var(--weight-medium);
+    white-space: nowrap; }
+  .boss-status { display: grid; align-items: center; text-align: right; font-size: var(--text-meta); color: var(--text-secondary); white-space: nowrap; }
   .unknown { visibility: hidden; }
   @media (prefers-reduced-motion: reduce) { i { transition: none; } }
 </style>
