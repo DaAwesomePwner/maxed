@@ -230,9 +230,9 @@
   {:else if history.message && history.message !== HISTORY_CATCH_UP && !/^(Refreshing|Loading)\b/.test(history.message)}<DebugNote text={history.message} />{/if}
   {#if retryShown}<button class="ctl" type="button" aria-disabled={!history.retryAvailable} onclick={() => { if (history.retryAvailable) controller?.retry(); }}>Retry</button>{/if}
   {#if !client}
-    <EmptyState state="unavailable" heading="No Players" description="" />
+    <EmptyState state="unavailable" heading="No players" description="" />
   {:else if selection?.kind === 'relationship'}
-    <EmptyState state="unavailable" heading="Player Unavailable" description="" />
+    <EmptyState state="unavailable" heading="Player unavailable" description="" />
   {:else if fight && selection}
     <div class="area-home player-screen" class:ambiguous={selection.kind === 'ambiguous'}>
     <div class="crumbs"><Breadcrumbs items={[{ label: 'Runs', href: '#/runs' },
@@ -242,7 +242,7 @@
       <DebugNote text="Player identity is ambiguous: a reused object ID refers to multiple saved player entries. Each entry's sources are shown separately." />
       <!-- Reused object IDs keep their saved entries separate. -->
       {#each fight.players.filter(row => row.object_id === objectId) as entry (entry.player_id)}
-        <SourceBreakdown player={entry} {visuals} rowPrefix={`source:${entry.player_id}`} label={`${entry.name ?? 'Unknown Player'} Sources`} />
+        <SourceBreakdown player={entry} {visuals} rowPrefix={`source:${entry.player_id}`} label={`${entry.name ?? 'Unknown player'} sources`} />
       {/each}
     {:else if player}
       <div class="head"><PlayerHeader {name} {classId} isLocal={profile?.is_local ?? player.is_local}
@@ -252,7 +252,7 @@
       {#if tabs.length}<div class="scope"><ScopeTabs {tabs} /></div>{/if}
       <div class="kpis"><KpiStrip {cells} /></div>
       <div class="main-column">
-        <PlayerTimelineChart {timeline} bands={[]} note={slicedTimeline ? 'Includes damage to other targets during this fight' : null} missingText={fight.scope_id != null && context === null ? 'Timeline unavailable' : 'Not recorded for this run'} unavailable={timeline === null ? 'legacy' : timeline.disabled ? 'limit' : undefined} />
+        <PlayerTimelineChart {timeline} bands={[]} local={profile?.is_local ?? player.is_local} note={slicedTimeline ? 'Includes damage to other targets during this fight' : null} missingText={fight.scope_id != null && context === null ? 'Timeline unavailable' : 'Not recorded for this run'} unavailable={timeline === null ? 'legacy' : timeline.disabled ? 'limit' : undefined} />
         <SourceBreakdown {player} label="Damage by item" {visuals} rowPrefix={`source:${player.player_id}`} showEstimates />
         <BossFightsTable rows={fights} currentFightId={fight.id} hrefFor={fightPlayerHref} />
       </div>
@@ -262,17 +262,17 @@
         <ActivityCard items={activity} />
       </aside>
     {:else}
-      <EmptyState heading="Player Not Found" description="" />
+      <EmptyState heading="Player not found" description="" />
     {/if}
     <!-- Lifetime reconstruction counters cannot describe this fight's missing damage. -->
     {#if selection.kind !== 'missing' && $debugMode}
-      <details class="area-debug" aria-label="Damage Evidence">
-        <summary>Damage Evidence</summary>
+      <details class="area-debug" aria-label="Damage evidence">
+        <summary>Damage evidence</summary>
         <p>{fight.complete_capture && fight.issues.length === 0 ? 'Complete observed capture' : 'Partial capture; observations are incomplete'}.</p>
         {#if fight.issues.length}<ul>{#each fight.issues as issue}<li>{coverageExplanation[issue]}</li>{/each}</ul>{/if}
         <p>Detailed reconstruction counts were not saved for this run.</p>
         <p>Lifetime diagnostic counters can remain after server reconciliation and do not describe this run's hits or missing damage. Known observed zero remains zero; missing attribution is unavailable.</p>
-        <details><summary>Reconstruction Defaults</summary>
+        <details><summary>Reconstruction defaults</summary>
           <p>These are documented defaults, not evidence that every assumption occurred in this fight. Saved source reasons above describe the retained evidence.</p>
           <ul>{#each reconstructionDefaults as explanation}<li>{explanation}</li>{/each}</ul>
         </details>
@@ -280,18 +280,18 @@
     {/if}
     </div>
   {:else if history.value !== null}
-    <EmptyState heading="Fight Not Found" description="">
+    <EmptyState heading="Fight not found" description="">
       {#snippet action()}<a href="#/runs">Runs</a>{/snippet}
     </EmptyState>
   {:else if history.phase === 'error'}
-    <EmptyState state="error" heading="Player Error" description="" />
+    <EmptyState state="error" heading="Player error" description="" />
   {:else}
-    <EmptyState state="loading" heading="Loading Player" description="" />
+    <EmptyState state="loading" heading="Loading player" description="" />
   {/if}
 </div>
 
 <style>
-  summary { cursor: pointer; min-height: 26px; }
+  summary { cursor: pointer; min-height: var(--target-min); align-content: center; }
   .player { overflow-anchor: none; overflow-wrap: anywhere; min-width: 0; }
   .player-screen { height: auto; grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: auto auto auto auto auto auto; grid-template-areas: 'crumbs crumbs' 'head head' 'scope scope' 'kpis kpis' 'main side' 'debug debug'; align-content: start; align-items: start; }
   .player-screen.ambiguous { display: flex; flex-direction: column; align-items: stretch; }
@@ -300,8 +300,8 @@
   .scope { grid-area: scope; min-width: 0; }
   .kpis { grid-area: kpis; min-width: 0; overflow-x: auto; }
   .kpis :global(.kpi-strip) { min-width: 800px; }
-  .main-column { grid-area: main; display: grid; gap: 10px; min-width: 0; }
-  .side-column { grid-area: side; display: grid; gap: 10px; min-width: 0; }
+  .main-column { grid-area: main; display: grid; gap: var(--space-3); min-width: 0; }
+  .side-column { grid-area: side; display: grid; gap: var(--space-3); min-width: 0; }
   @media (max-width: 900px) {
     .player-screen { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'crumbs' 'head' 'scope' 'kpis' 'main' 'side' 'debug'; }
   }

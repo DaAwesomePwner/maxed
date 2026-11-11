@@ -43,18 +43,21 @@
 </section>
 
 <style>
-  .bosses-card { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-card);
+  .bosses-card { min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card);
     background: var(--surface-panel); color: var(--text-primary); font-family: var(--font-home); }
-  h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; }
+  h2 { margin: 0 0 var(--space-1); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
   ol { list-style: none; margin: 0; padding: 0; }
-  li { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; }
-  li + li { border-top: 1px solid var(--border); }
+  li { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) 0; }
+  li + li { border-top: 1px solid var(--hairline); }
   li:last-child { padding-bottom: 0; }
   .details { min-width: 0; overflow-wrap: anywhere; }
-  .name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
-  .tag { padding: 1px 5px; border: 1px solid var(--border); border-radius: var(--radius-control); font-size: 11px; }
-  p { margin: 4px 0 0; font-size: 12px; color: var(--text-secondary); }
+  .name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .name strong { font-weight: var(--weight-medium); }
+  .tag { display: inline-flex; align-items: center; box-sizing: border-box; min-height: 18px; padding: 0 var(--space-1);
+    border: 1px solid var(--hairline-strong); border-radius: var(--radius-tag); color: var(--text-secondary);
+    font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); }
+  p { margin: var(--space-1) 0 0; color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); font-variant-numeric: tabular-nums; }
   .faster { color: var(--success); }
-  .upcoming { opacity: .65; }
-  .empty { margin: 0; }
+  .upcoming { opacity: .6; }
+  .empty { margin: var(--space-2) 0 0; }
 </style>

@@ -2,13 +2,14 @@
   import type { InstanceEventView } from '../bindings/InstanceEventView';
   import { eventParts, eventLabels } from './events-screen';
   import { clockTime, dayLabel } from './logs-format';
+  import Badge from '../components/Badge.svelte';
   let { view, className = () => null }: { view: InstanceEventView | null; className?: (id: number) => string | null } = $props();
   let parts = $derived(view ? eventParts(view, className) : null);
 </script>
 <section class="card" aria-label="Event details">
   <header><h2>{parts ? eventLabels[parts.kind] : 'Event'}</h2>{#if view}<small>{dayLabel(view.at, new Date())} · {clockTime(view.at)}</small>{/if}</header>
   {#if view && parts}
-    <strong class="name" title={parts.who ?? '—'}>{parts.who ?? '—'}</strong>{#if view.provisional}<span class="unconf">unconfirmed</span>{/if}
+    <div class="who"><strong class="name" title={parts.who ?? '—'}>{parts.who ?? '—'}</strong>{#if view.provisional}<Badge label="unconfirmed" tone="warning" />{/if}</div>
     <dl>
       {#if view.kind.type === 'player_death'}
         <dt>Level</dt><dd>{view.kind.level ?? '—'}</dd><dt>Class</dt><dd>{view.kind.class_id == null ? '—' : className(view.kind.class_id) ?? '—'}</dd>
@@ -23,8 +24,11 @@
   {:else}<p>Select an event to see its details.</p>{/if}
 </section>
 <style>
-  .card { padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); font-size: 12px; max-height: 480px; overflow: auto; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 12px; } h2 { margin: 0; font-size: 13px; } small, dt, p { color: var(--text-muted); }
-  .name { display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
-  dl { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 7px; margin: 12px 0 0; } dd { margin: 0; overflow-wrap: anywhere; }
+  .card { min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .card { max-height: 480px; overflow: auto; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); } h2 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  small, dt, p { color: var(--text-muted); } small { font-size: var(--text-meta); } p { margin: 0; }
+  .who { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+  .name { min-width: 0; font-weight: var(--weight-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  dl { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: var(--space-2); margin: var(--space-3) 0 0; } dd { margin: 0; overflow-wrap: anywhere; }
 </style>

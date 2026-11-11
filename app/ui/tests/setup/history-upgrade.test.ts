@@ -12,11 +12,11 @@ it.each(['pending', 'failed'] as const)('does not claim an upgrade is required w
     ? vi.fn(() => deferred<HistoryUpgradeStatus>().promise)
     : vi.fn().mockResolvedValue({ ...ready, phase: 'blocked', schema_version: null, failure: 'busy', required_bytes: null, free_bytes: null });
   render(Setup, { client: f.client });
-  await screen.findByText(state === 'pending' ? 'Checking history status…' : "Couldn't check saved history.");
+  await screen.findByText(state === 'pending' ? 'Checking history status' : 'Couldn’t check saved history');
   expect(screen.getByRole('button', { name: 'Retry history status and space' })).toBeTruthy();
   expect(screen.queryByText(/needs an upgrade|initial backup slot|Free space is unavailable/)).toBeNull();
   expect(screen.queryByRole('heading', { name: 'History upgrade required' })).toBeNull();
-  expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('true');
 });
 
 it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])('offers a backup-required upgrade for v%s without mutation on mount or retry', async schemaVersion => {
@@ -27,7 +27,7 @@ it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])('offers a backup-required upgrade for v
   await screen.findByRole('heading', { name: 'History upgrade required' });
   expect(screen.getByText(/initial backup slot/)).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Upgrade without backup' })).toBeNull();
-  expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('true');
   await fireEvent.click(screen.getByRole('button', { name: 'Retry history status and space' }));
   await fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
   expect(upgrade).not.toHaveBeenCalled();
@@ -46,7 +46,7 @@ it.each(['0', null])('refuses insufficient or unknown space (%s)', async freeByt
 it.each([0, 11, 12, 14, 15, 16])('bypasses the upgrade prompt for v%s', async schemaVersion => {
   const f = setupFixture(); f.transport.setHistoryUpgradeFixture({ schemaVersion, freeBytes: '1000000000' });
   render(Setup, { client: f.client });
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('false'));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('false'));
   expect(screen.queryByRole('heading', { name: 'History upgrade required' })).toBeNull();
 });
 
@@ -59,17 +59,17 @@ it('upgrades only after confirmation, prevents repeated clicks, and enables capt
   await fireEvent.click(button); await fireEvent.click(button);
   expect(f.client.backupAndUpgradeHistory).toHaveBeenCalledOnce();
   await screen.findByText('Backing up history before upgrading.');
-  expect(screen.getByRole('button', { name: 'Stop Capture' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Stop capture' }).getAttribute('aria-disabled')).toBe('true');
   view.unmount(); render(Setup, { client: f.client });
   await screen.findByText('Backing up history before upgrading.');
   expect(f.client.backupAndUpgradeHistory).toHaveBeenCalledOnce();
   f.transport.advanceHistoryUpgrade();
   await fireEvent.click(screen.getByRole('button', { name: 'Retry history status and space' }));
   await screen.findByText('Upgrading history after the verified backup.');
-  expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('true');
   f.transport.advanceHistoryUpgrade();
   await fireEvent.click(screen.getByRole('button', { name: 'Retry history status and space' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('false'));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('false'));
   expect(f.client.startCapture).not.toHaveBeenCalled();
   expect(native).not.toHaveBeenCalled();
   expect((await f.client.listStorageBackups()).map(backup => backup.role)).toEqual(['initial']);
@@ -85,7 +85,7 @@ it('keeps history blocked after backup failure and retries safely with retained 
   f.transport.advanceHistoryUpgrade('verification_failed');
   await fireEvent.click(screen.getByRole('button', { name: 'Retry history status and space' }));
   await screen.findByText('Previous attempt: Backup verification failed. Request a new backup.');
-  expect(screen.getByRole('button', { name: 'Check Access' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Check access' }).getAttribute('aria-disabled')).toBe('true');
   await fireEvent.click(button);
   expect(f.client.backupAndUpgradeHistory).toHaveBeenCalledTimes(2);
   await screen.findByText('Backing up history before upgrading.');
@@ -115,14 +115,14 @@ it('discards command replies from a retired client', async () => {
   await tick();
   expect(screen.getByRole('region', { name: 'History upgrade' }).innerHTML).toBe(before);
   expect(screen.getByRole('heading', { name: 'History upgrade required' })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Start Capture' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Start capture' }).getAttribute('aria-disabled')).toBe('true');
   expect(b.client.startCapture).not.toHaveBeenCalled();
 });
 it('makes no native upgrade reads or mutations in preview', async () => {
   const f = setupFixture();
   const native = vi.spyOn(nativeTransport, 'invoke');
   render(Setup, { client: f.client, preview: true });
-  await screen.findByText('Assets Ready');
+  await screen.findByText('Assets ready');
   expect(f.client.queryHistoryUpgradeStatus).not.toHaveBeenCalled();
   expect(f.client.queryStorageBackupLocation).not.toHaveBeenCalled();
   expect(f.client.backupAndUpgradeHistory).not.toHaveBeenCalled();

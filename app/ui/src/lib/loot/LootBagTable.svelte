@@ -70,27 +70,29 @@
   {/each}
 </table>
 <style>
-  table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--text-caption); line-height: var(--leading-caption); font-variant-numeric: tabular-nums; }
   table[data-columns="item"] { min-width: 760px; }
-  [data-columns="item"] th { white-space: nowrap; }
-  .time { width: 75px; } .bag { width: 115px; } .source { width: 23%; } .place { width: 17%; } .arrow { width: 24px; }
-  [data-columns="item"] .time { width: 110px; }
-  .enchants { width: 118px; } .taken-col { width: 52px; }
-  th { text-align: left; font-weight: 500; font-size: 11px; color: var(--text-muted); padding: 0 6px 6px; }
-  td { height: 30px; padding: 0 6px; border-top: 1px solid var(--border-soft, var(--border)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  tr[data-row-id] { cursor: pointer; } tr[data-row-id]:hover { background: var(--surface-hover); }
-  tr.selected { background: #f2c14e14; } tr.selected td:first-child { box-shadow: inset 2px 0 var(--gold); }
+  [data-columns="item"] th { vertical-align: bottom; }
+  .time { width: 76px; } .bag { width: 116px; } .source { width: 23%; } .place { width: 17%; } .arrow { width: 24px; }
+  [data-columns="item"] .time { width: 112px; } [data-columns="item"] .source { width: 20%; } [data-columns="item"] .place { width: 16%; }
+  .enchants { width: 120px; } .taken-col { width: 52px; }
+  th { text-align: left; font-weight: var(--weight-medium); font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); padding: 0 var(--space-2) var(--space-2); border-bottom: 1px solid var(--hairline-strong); }
+  td { height: var(--row-default); box-sizing: border-box; padding: 0 var(--space-2); border-top: 1px solid var(--hairline); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tr[data-row-id] { cursor: pointer; transition: background-color var(--motion-fast) var(--motion-ease); } tr[data-row-id]:hover { background: var(--surface-hover); }
+  tr.selected, tr.selected:hover { background: var(--surface-selected); } tr.selected td:first-child { box-shadow: var(--selected-edge); }
   tr:focus-visible, a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-  .group td { height: 26px; border: 0; color: var(--text-muted); font-size: 11px; }
-  .group b { color: var(--text-secondary); }
-  .cell { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+  .group td { height: var(--row-compact); border: 0; color: var(--text-muted); font-size: var(--text-meta); }
+  .group b { color: var(--text-secondary); font-weight: var(--weight-medium); }
+  .cell { display: flex; align-items: center; gap: var(--space-2); min-width: 0; overflow: hidden; }
   .cell > span { overflow: hidden; text-overflow: ellipsis; }
-  .source-cell .cell { flex-wrap: wrap; gap: 2px 6px; padding-block: 4px; }
+  .source-cell .cell { flex-wrap: wrap; gap: 0 var(--space-2); padding-block: var(--space-1); }
   .source-cell .cell > span { white-space: normal; overflow-wrap: anywhere; }
-  .contents { gap: 3px; } .tile { display: inline-flex; flex: none; border: 1px solid transparent; border-radius: 4px; }
-  .ut { color: var(--violet-text); } .st { color: var(--bag-orange); } .tile.ut, .tile.st { border-color: currentColor; }
-  .taken { opacity: .45; } .white { color: var(--bag-white); filter: drop-shadow(0 0 3px #ffffff30); }
-  small { color: var(--text-muted); } .tag { border: 1px solid var(--border); border-radius: 4px; padding: 0 3px; }
+  .contents { gap: var(--space-1); } .tile { display: inline-flex; flex: none; border: 1px solid transparent; border-radius: var(--radius-sprite); }
+  .ut { color: var(--tier-ut); } .st { color: var(--tier-st); } .tile.ut, .tile.st { border-color: currentColor; }
+  .taken { opacity: .45; } .white { color: var(--bag-white); }
+  /* Mirrors the shared Badge; kept as one element so the debug evidence title stays on the tag itself. */
+  .tag { display: inline-flex; align-items: center; box-sizing: border-box; min-height: 18px; padding: 0 var(--space-1); border: 1px solid var(--hairline-strong); border-radius: var(--radius-tag); color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); flex: none; }
+  small { color: var(--text-muted); font-size: var(--text-meta); } 
   a { color: var(--text-secondary); text-decoration: none; }
-  @media (max-width: 1100px) { .bag { width: 95px; } .source { width: 24%; } }
+  @media (max-width: 1100px) { .bag { width: 96px; } .source { width: 24%; } }
 </style>

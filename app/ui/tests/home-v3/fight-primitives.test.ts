@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -47,6 +48,17 @@ it('keeps column definitions and row slots stable through 2 to 4 digit churn', a
   expect([...page.container.querySelectorAll('col')].map(col => col.getAttribute('style'))).toEqual(columns);
   expect([...page.container.querySelectorAll('.damage-row')]).toEqual(slots);
   expect(page.container.textContent).toContain('9,999');
+});
+it('gives eight-digit damage totals their own slot beside the track', () => {
+  const page = render(DamageTable, { basis: 'player_active_window_v1', rows: [{ ...rows[0], damage: 12_345_678 }], total: 1,
+    otherDamage: 10_000_000, visuals, resolveSpriteUrl });
+  const figures = [...page.container.querySelectorAll('.amount')].map(amount => amount.querySelector(':scope > b')?.textContent);
+  expect(figures).toEqual(['12,345,678', '10,000,000']);
+  for (const amount of page.container.querySelectorAll('.amount')) expect(amount.querySelector('.track .damage-fill')).toBeTruthy();
+  // JSDOM cannot measure text; the slot is sized in ch from content rather than a fixed rem width.
+  const css = readFileSync('src/lib/home/v3/DamageTable.svelte', 'utf8');
+  expect(css).toMatch(/\.amount b \{ flex: none; min-width: 10ch;/);
+  expect(css).not.toMatch(/\.amount b \{[^}]*flex-basis/);
 });
 it('uses singular gap copy at rank six and plural copy as rank changes', async () => {
   const atRank = (rank: number) => rankWindow(rows.map(row => ({ ...row, is_local: row.rank === rank })));

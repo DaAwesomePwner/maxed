@@ -523,7 +523,7 @@
       presentation={connection.recapPresentation} />
   {/if}
 {/if}
-{#if client && visuals.phase === 'unavailable'}<button type="button" onclick={() => visualController?.retry()}>Retry Sprites</button>{/if}
+{#if client && visuals.phase === 'unavailable'}<button type="button" onclick={() => visualController?.retry()}>Retry sprites</button>{/if}
 <p class="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>
 {#if screen === 'dungeon'}
   {#if redesign}
@@ -576,7 +576,7 @@
   <div class="home-idle">
     {#if captureState !== 'WaitingForGame' || liveState?.phase === 'failed'}
       {#if liveState?.phase === 'failed'}
-        <EmptyState state="error" heading="Connection Interrupted" description="" />
+        <EmptyState state="error" heading="Connection interrupted" description="" />
         <DebugNote text="No return to Nexus or successful run is inferred." />
       {:else if (mode.stale || captureState === 'Recovering' || liveState?.phase === 'resyncing')
         && !(liveState?.phase === 'resyncing' && captureState !== 'Recovering'
@@ -584,13 +584,13 @@
         <EmptyState state="loading" heading="Reconnecting" description="" />
         <DebugNote text="Capture is recovering. Previous live-area values are no longer shown as live." />
       {:else if captureState && !['Stopped', 'Live', 'Recovering'].includes(captureState)}
-        <EmptyState state="unavailable" heading="Capture Offline" description="" />
+        <EmptyState state="unavailable" heading="Capture offline" description="" />
         <!-- Capture state alone does not establish a run outcome. -->
         <DebugNote text="A disconnect does not establish a run outcome." />
       {:else if captureState === 'Stopped' || !snapshot}
         <EmptyState heading="Ready" description="" />
       {:else if snapshot?.session?.ended != null}
-        <EmptyState heading="Session Ended" description="" />
+        <EmptyState heading="Session ended" description="" />
       {:else if captureState === 'Live' && snapshot?.area_kind === 'nexus'}
         <!-- NexusHome supplies the location and session heading. -->
       {:else if captureState === 'Live' && snapshot?.area_kind === 'unknown'}
@@ -615,5 +615,5 @@
     .home:has(> :global(.area-home)) { display: flex; flex-direction: column; height: 100%; }
     .home > :global(.area-home) { flex: 1; }
   }
-  button { font: inherit; min-height: var(--target-min); border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: var(--space-2) var(--space-4); color: var(--text-secondary); background: var(--surface-panel); }
+  button { font: inherit; font-size: var(--text-caption); line-height: var(--leading-caption); min-height: var(--control-dense); border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: var(--space-1) var(--space-3); color: var(--text-primary); background: var(--surface-raised); justify-self: start; }
 </style>

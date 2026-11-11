@@ -115,7 +115,7 @@
     <div class="v4-clock"><span class="sr-only">Run time</span>
       <strong>{run && snapshot ? formatElapsed(run.started, run.completed_at ?? run.ended ?? snapshot.at) : '—'}</strong>
       {#if benchmarks}<p>{benchmarks}</p>{/if}</div>
-    <span class="v4-live" class:stale role="status" aria-live="polite">{stale ? 'Recovering' : run?.ended ? 'Ended' : run ? 'Live' : '—'}</span>
+    <span class="v4-live" class:stale class:on={!stale && run !== null && !run.ended} role="status" aria-live="polite">{stale ? 'Recovering' : run?.ended ? 'Ended' : run ? 'Live' : '—'}</span>
   </header>
   <div class="v4-dungeon-grid">
     <div class="v4-main">
@@ -140,15 +140,15 @@
       {/if}
       <section class="v4-card v4-meter" aria-label="Party damage">
         <header class="v4-card-heading"><h3>Party damage</h3>
-          <div class="v4-meter-tabs" role="group" aria-label="Damage scope">
+          <div class="v4-meter-tabs seg" role="group" aria-label="Damage scope">
             <button type="button" aria-pressed={!wholeRun} disabled={!current} onclick={() => choose(false)}>This fight</button>
             <button type="button" aria-pressed={wholeRun} onclick={() => choose(true)}>Whole run</button>
           </div>
         </header>
-        <p class="v4-meter-total">{formatStat(totalDamage)} damage{#if fight} · {formatDps(fightDps(fight))} DPS{/if}</p>
+        <p class="v4-meter-total">{formatStat(totalDamage)} damage{#if fight}{` · ${formatDps(fightDps(fight))} DPS`}{/if}</p>
         <DamageTable basis={wholeRun ? 'whole_run' : fight?.dps_basis} {rows} total={allRows.length} {visuals} {resolveSpriteUrl}
           rowHref={row => wholeRun ? run ? runPlayerHref(run.id, row) : null : fight ? fightPlayerHref(fight, row, run?.id) : null} />
-        <footer class="v4-meter-footer"><p>{#if hidden > 0}+{hidden} more · {/if}{formatShare(otherShare)} of damage not attributed to a player</p>
+        <footer class="v4-meter-footer"><p>{#if hidden > 0}{`+${hidden} more · `}{/if}{formatShare(otherShare)} of damage not attributed to a player</p>
           {#if detailHref}<a href={detailHref}>{wholeRun ? 'Open run ›' : 'Open fight ›'}</a>{/if}</footer>
       </section>
     </div>

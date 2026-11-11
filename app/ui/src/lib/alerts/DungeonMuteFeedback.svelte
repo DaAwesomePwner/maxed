@@ -11,6 +11,5 @@
   </div>
 {/if}
 <style>
-  .feedback { position: absolute; bottom: var(--space-3); right: var(--space-3); z-index: 21; max-width: calc(100% - 2 * var(--space-3)); display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2); background: var(--surface-panel); border: 1px solid var(--border-strong); border-radius: var(--radius-control); }
-  button { min-height: var(--target-min); background: var(--surface-raised); color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: var(--radius-control); font: inherit; cursor: pointer; }
+  .feedback { position: absolute; bottom: var(--space-3); right: var(--space-3); z-index: 21; max-width: calc(100% - 2 * var(--space-3)); display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); background: var(--surface-raised); border: 1px solid var(--hairline-strong); border-radius: var(--radius-control); box-shadow: var(--elevation-popover); font-size: var(--text-label); }
 </style>

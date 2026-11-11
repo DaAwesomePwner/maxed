@@ -197,7 +197,7 @@ it('unknown contents still feature one bag and exclude it from the other bags', 
   expect(loot.querySelector('.best-card .item-box')).toBeNull();
   expect(loot.querySelectorAll('[data-drop-id="unknown-0"]')).toHaveLength(1);
   expect(loot.querySelector('.bag-list-root')).toBeTruthy();
-  expect(loot.textContent).not.toContain('No Bags');
+  expect(loot.textContent).not.toContain('No bags');
 });
 it('PB and counts render; names, killer and level are only in tooltips', async () => {
   const props = fixture();
@@ -298,5 +298,5 @@ it('updates the arrival glow colour when catalog tiers load', async () => {
     ...loading.objects, { object_type: 3000, item_tier: 'UT', name: 'Synthetic UT', sprite: null, bag: null },
   ] } }); await tick(); await tick();
   expect(page.container.querySelector('[data-drop-id="late-colour"]')).toBe(node);
-  expect(node.style.getPropertyValue('--loot-arrival-colour')).toBe('var(--violet-text)');
+  expect(node.style.getPropertyValue('--loot-arrival-colour')).toBe('var(--tier-ut)');
 });

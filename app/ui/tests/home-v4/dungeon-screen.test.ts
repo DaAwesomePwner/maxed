@@ -129,6 +129,13 @@ it('meter_appends_self_outside_top_six', () => {
   expect(within(table).getByRole('link', { name: /Synthetic 9/ }).getAttribute('href')).toContain('/players/');
 });
 
+it('meter_total_and_footer_keep_spaces_around_separators', () => {
+  const page = render(DungeonScreen, props());
+  const meter = page.getByRole('region', { name: 'Party damage' });
+  expect(meter.querySelector('.v4-meter-total')?.textContent).toMatch(/^100,000 damage · (—|[\d,]+) DPS$/);
+  expect(meter.querySelector('.v4-meter-footer p')?.textContent).toBe('+5 more · 10% of damage not attributed to a player');
+});
+
 it('meter_switches_to_whole_run_without_changing_the_hero_or_losing_distant_self', async () => {
   const input = props(); input.snapshot = snapshot(20, 24); input.onSelectFight = vi.fn();
   const page = render(DungeonScreen, input);
@@ -180,7 +187,7 @@ it('white_banner_covers_hero_while_active', async () => {
     bagType: 400, areaName: 'Synthetic Sanctum', sourceName: 'Synthetic Starwarden (estimated)', at: '15000000',
     streak: { kind: 'ended', runs: 23 } }, overflow: 0 } });
   expect(page.queryByRole('region', { name: 'Your DPS · Synthetic Starwarden' })).toBeNull();
-  expect(page.getByText('WHITE BAG')).toBeTruthy();
+  expect(page.getByText('White bag')).toBeTruthy();
   expect(region.closest('.v4-hero')).toBeTruthy();
   expect(page.getByRole('link', { name: 'Synthetic treasure' }).getAttribute('href')).toBe('#/loot/item/200');
   await page.rerender({ white: { current: null, overflow: 0 } });
@@ -251,7 +258,7 @@ it.each([[23, 0], [23, 23], [null, 0], [null, null]])(
     h.drop('second'); await settle();
     await vi.advanceTimersByTimeAsync(5500);
     const banner = h.page.container.querySelector('.white-banner-region') as HTMLElement;
-    expect(within(banner).getByText('WHITE BAG')).toBeTruthy();
+    expect(within(banner).getByText('White bag')).toBeTruthy();
     expect(banner.textContent).not.toMatch(/Ended a|white in .* runs before this/);
     expect(h.record).toHaveBeenCalledTimes(before === null ? 0 : 1);
     if (before === null) expect(h.page.queryByText(/Ended at/)).toBeNull();
@@ -261,7 +268,7 @@ it.each([[23, 0], [23, 23], [null, 0], [null, null]])(
 it.each([0, null])('home_zero_runs_never_show_or_record_a_streak_with_previous_white_%s', async previous => {
   const h = homeHarness(snapshot(), { ...dungeonStreak(previous), runs_ended: previous === null ? 0 : 46 }); await settle();
   h.drop('zero'); await settle();
-  expect(h.page.getByText('WHITE BAG')).toBeTruthy();
+  expect(h.page.getByText('White bag')).toBeTruthy();
   const banner = h.page.container.querySelector('.white-banner-region')!;
   expect(banner.textContent).not.toMatch(/Ended a|white in .* runs before this/);
   expect(h.page.queryByText(/Ended at/)).toBeNull();
@@ -294,7 +301,7 @@ it.each([0, 7])('home_first_white_in_next_run_uses_positive_streak_only_%s', asy
   await vi.advanceTimersByTimeAsync(500);
   expect(h.client.getHomeDungeonStreak).toHaveBeenCalledOnce();
   h.homeWindow.update(window => ({ ...window, drops: [newDrop(next, 'next-white')] })); await settle();
-  expect(h.page.getByText('WHITE BAG')).toBeTruthy();
+  expect(h.page.getByText('White bag')).toBeTruthy();
   expect(h.page.getByText(`Ended at ${runs || 23} runs`)).toBeTruthy();
   if (runs > 0) {
     expect(h.page.getByText('Ended a 7-run Synthetic Sanctum dry streak')).toBeTruthy();
@@ -322,7 +329,7 @@ it.each(['pending', 'failed', 'obsolete'] as const)('home_never_banners_run_A_st
   else if (result === 'obsolete') pending.resolve({ status: 'ready', value: dungeonStreak(99) });
   await settle();
   h.homeWindow.update(window => ({ ...window, drops: [newDrop(next, 'run-B-white')] })); await settle();
-  expect(h.page.getByText('WHITE BAG')).toBeTruthy();
+  expect(h.page.getByText('White bag')).toBeTruthy();
   expect(h.page.container.querySelector('.white-banner-region')!.textContent).not.toMatch(/Ended a|white in .* runs before this/);
   expect(h.record).not.toHaveBeenCalled();
 });
@@ -346,7 +353,7 @@ it('home_ended_streak_survives_leaving_home_and_returning_in_the_same_session', 
   const page = render(Home, { props: { snapshot: value, client: h.client, redesign: true, syntheticClock: true },
     context: new Map([[SHELL_CONNECTION, h.connection]]) });
   await settle();
-  expect(page.queryByText('WHITE BAG')).toBeNull();
+  expect(page.queryByText('White bag')).toBeNull();
   expect(page.getByText('Ended at 23 runs')).toBeTruthy();
 });
 
@@ -376,11 +383,11 @@ it('home_banner_resolves_new_catalog_names_without_changing_the_push_time_streak
 it('home_whites_present_at_mount_and_late_classifications_never_banner', async () => {
   const value = snapshot(); value.drops = [newDrop(value, 'old'), newDrop(value, 'unknown', null)];
   const h = homeHarness(value); await settle();
-  expect(h.page.queryByText('WHITE BAG')).toBeNull();
+  expect(h.page.queryByText('White bag')).toBeNull();
   h.homeWindow.update(window => ({ ...window, drops: window.drops.map(drop => ({ ...drop, bag_rank: 255 })) }));
-  await settle(); expect(h.page.queryByText('WHITE BAG')).toBeNull();
+  await settle(); expect(h.page.queryByText('White bag')).toBeNull();
   h.drop('new'); await settle();
-  expect(h.page.getByText('WHITE BAG')).toBeTruthy();
+  expect(h.page.getByText('White bag')).toBeTruthy();
   expect(h.page.getByText('Synthetic Starwarden (estimated) · 6:00 PM')).toBeTruthy();
 });
 
@@ -389,7 +396,7 @@ it('home_ended_streak_records_and_persists_after_banner_and_across_runs_until_se
   expect(h.page.getByText('Ended a 23-run Synthetic Sanctum dry streak')).toBeTruthy();
   expect(h.page.getByText('Ended at 23 runs')).toBeTruthy();
   await vi.advanceTimersByTimeAsync(6000);
-  expect(h.page.queryByText('WHITE BAG')).toBeNull();
+  expect(h.page.queryByText('White bag')).toBeNull();
   expect(h.page.getByText('Ended at 23 runs')).toBeTruthy();
   const next = { ...value, run: { ...value.run!, id: 'synthetic-next-run' } };
   h.homeWindow.update(window => ({ ...window, runId: next.run.id, drops: [], fights: [] }));
@@ -414,13 +421,13 @@ it('home_area_and_run_scope_changes_reseed_clear_display_and_dispose_old_queue',
   h.homeWindow.update(window => ({ ...window, runId: next.run.id, drops: [present], fights: [] }));
   await h.page.rerender({ snapshot: next }); await settle();
   expect(dispose).toHaveBeenCalledOnce();
-  expect(h.page.queryByText('WHITE BAG')).toBeNull();
+  expect(h.page.queryByText('White bag')).toBeNull();
   await vi.advanceTimersByTimeAsync(12_000);
-  expect(h.page.queryByText('WHITE BAG')).toBeNull();
+  expect(h.page.queryByText('White bag')).toBeNull();
   h.homeWindow.update(window => ({ ...window, drops: [...window.drops, newDrop(next, 'new-in-next')] }));
-  await settle(); expect(h.page.getByText('WHITE BAG')).toBeTruthy();
+  await settle(); expect(h.page.getByText('White bag')).toBeTruthy();
   await h.page.rerender({ snapshot: { ...next, area_kind: 'nexus', run: null } }); await settle();
-  expect(h.page.queryByText('WHITE BAG')).toBeNull();
+  expect(h.page.queryByText('White bag')).toBeNull();
 });
 
 it('home_realm_white_has_null_streak_and_visit_change_reseeds', async () => {

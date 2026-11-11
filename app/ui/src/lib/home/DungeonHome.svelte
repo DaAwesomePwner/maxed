@@ -92,7 +92,7 @@
   const arrivalColours = $derived(new Map(observations.drops.map(drop => {
     const item = bestItem(drop, visuals);
     const white = objectVisual(visuals.objects, drop.bag_type)?.bag?.is_white;
-    return [drop.id, item?.tier === 'UT' ? 'var(--violet-text)' : item?.tier === 'ST'
+    return [drop.id, item?.tier === 'UT' ? 'var(--tier-ut)' : item?.tier === 'ST'
       ? 'var(--bag-orange)' : white ? 'var(--bag-white, #fff)' : 'var(--text-secondary)'];
   })));
   $effect(() => {

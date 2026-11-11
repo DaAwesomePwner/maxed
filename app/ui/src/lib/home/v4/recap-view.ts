@@ -202,7 +202,7 @@ export function runRecapView(data: RunRecapData, timeZone?: string): RunRecapVie
   const rows = players.map(row => ({ rank: row.rank ?? null, name: row.name ?? null, classId: row.class_id ?? null,
     share: row.share ?? null, isLocal: row.is_local }));
   return { kind: 'run', runId: run.id, title: run.dungeon, outcome: run.outcome,
-    outcomeLabel: run.outcome === 'cleared' ? 'CLEARED' : run.outcome === 'died' ? 'DIED' : run.outcome === 'left' ? 'LEFT EARLY' : 'Outcome not established',
+    outcomeLabel: run.outcome === 'cleared' ? 'Cleared' : run.outcome === 'died' ? 'Died' : run.outcome === 'left' ? 'Left early' : 'Outcome not established',
     clearTime: run.outcome === 'cleared' ? elapsed(run.started, run.completed_at) : null, pb: pb != null, meta,
     chain: chainView(extras?.chain ?? null), best: bestDrop(story.drops), streakNote, streak: data.streak, streakEnded: dry?.runs ?? null,
     tiles, fights, fightsPartial: story.boss_fights_limited === true || bosses.some(row => row.partial), chips,

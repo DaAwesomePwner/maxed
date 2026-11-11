@@ -83,7 +83,7 @@ it('renders all five sections, observed identity, four slots, raw stats and elig
   expect(within(stats).getByRole('row', { name: /^HP / }).textContent).toContain('1 pot left');
   expect(within(stats).getByRole('row', { name: /^ATT / }).textContent).toContain('5 pots left');
   expect(within(stats).getByRole('columnheader', { name: 'Raw boost' })).toBeTruthy();
-  expect(p.main.getByText('Unavailable — deferred pending verification')).toBeTruthy();
+  expect(p.main.getByText('Not available yet; pending verification')).toBeTruthy();
   expect(p.main.queryByText('1.0×')).toBeNull();
 });
 it('renders authored group results with precise rounding, applied defense and accessible formula details', async () => {

@@ -4,6 +4,7 @@
   import type { RunView } from '../bindings/RunView';
   import { presetSummary } from './party-screen';
   import { routeHref } from '../navigation/routes';
+  import Badge from '../components/Badge.svelte';
   let { view, saved, presets, recentRun, onPick, busy = false }: {
     view: PartyView; saved: boolean; presets: RequirementPreset[]; recentRun: RunView | null;
     onPick: (id: string | null) => void; busy?: boolean;
@@ -25,7 +26,7 @@
     {#if saved && view.run_id}<option value={view.run_id}>{view.map ?? 'Saved run'}</option>{/if}
     {#if recentRun && (!saved || recentRun.id !== view.run_id)}<option value={recentRun.id}>Last run: {recentRun.dungeon}</option>{/if}
   </select>
-  {#if !saved && view.live}<span class="live">Live</span>{/if}
+  {#if !saved && view.live}<Badge label="Live" tone="success" />{/if}
   <span class="caption">{saved ? 'Players in this run' : 'Players in view'}</span>
   <div class="preset">
     {#if !saved}
@@ -45,6 +46,7 @@
 <style>
   .context, .preset { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
   .context { margin-bottom: var(--space-3); } .preset { margin-left: auto; }
-  .caption { color: var(--text-secondary); font-size: 12px; }
-  .live { color: var(--success); border: 1px solid var(--success); border-radius: var(--radius-control); padding: 1px 5px; font-size: 11px; }
+  select { min-height: var(--control-dense); max-width: 100%; }
+  .caption { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  .preset > span:not(.caption) { color: var(--text-secondary); font-size: var(--text-label); }
 </style>

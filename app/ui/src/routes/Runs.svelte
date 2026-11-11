@@ -27,6 +27,7 @@
   import { spriteUrl } from '../lib/bridge/visuals';
   import SpriteImage from '../lib/components/SpriteImage.svelte';
   import EmptyState from '../lib/components/EmptyState.svelte';
+  import Badge from '../lib/components/Badge.svelte';
   const historyCache = getContext<ShellConnection | undefined>(SHELL_CONNECTION)?.historyCache;
   let { client, streamId = null, scopeKey = '', required = null, store = null, savedState = emptyListState(), onStateChange,
     entryKey = '', onRowsReady, enabled = true }: {
@@ -128,7 +129,7 @@
       }
       pane.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true });
       pane.scrollTop = Math.max(0, Math.min(pane.scrollTop, pane.scrollHeight - pane.clientHeight));
-      missingRow = 'Row Removed';
+      missingRow = 'Row removed';
       onStateChange?.({ focusedRowId: null, scrollTop: pane.scrollTop });
     });
   });
@@ -241,21 +242,21 @@
               <span class="cell" title={run.dungeon}>{@render icon(portals.get(run.dungeon), '')}<strong class="name">{run.dungeon}</strong></span>
               <span class="result" title={clearAndDeath(run) ? 'Clear and death' : undefined} class:good={run.outcome === 'cleared'} class:bad={run.outcome === 'died'}>
                 {run.outcome === null ? (run.ended === null ? 'In progress' : '—') : run.outcome[0].toUpperCase() + run.outcome.slice(1)}
-                {#if clearAndDeath(run)}<small class="warning tag">Clear and death</small>{/if}
+                {#if clearAndDeath(run)}<small class="warning">Clear and death</small>{/if}
               </span>
-              <span class="number">{#if detail?.is_personal_best}<span class="pb">PB</span>{/if}{clearTime(detail?.clear_micros)}</span>
+              <span class="number">{#if detail?.is_personal_best}<span class="pb"><Badge label="PB" /></span>{/if}{clearTime(detail?.clear_micros)}</span>
               <span class="number comparison" title={comparison?.title} class:good={comparison?.tone === 'good'}>{comparison?.text ?? '—'}</span>
               <span class="cell" title={detail?.character_name ?? undefined}>{@render icon(detail?.class_id, '')}<span class="name">{detail?.character_name ?? '—'}</span></span>
               <span class="share">{#if detail?.local_share != null}<i aria-hidden="true"><b style:width={`${Math.max(0, Math.min(1, detail.local_share)) * 100}%`}></b></i>{/if}{formatShare(detail?.local_share ?? null)}</span>
               <span class="number" class:gold={detail?.fame_delta != null}>{signedFame(detail?.fame_delta ?? null)}</span>
               <span class="loot bags">{#if loot.length}{#each loot as bag}{@render icon(bag.bag_type, 'Observed bag')}{/each}{:else}—{/if}{#if detail && detail.observed_drop_count > loot.length}<small>+{detail.observed_drop_count - loot.length}</small>{/if}</span>
-              <span class="number started">{runDate(run.started).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{#if partial}<small class="tag" title={partial}>partial</small>{/if}</span>
+              <span class="number started">{runDate(run.started).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{#if partial}<span class="tag" title={partial}><Badge label="partial" /></span>{/if}</span>
             </a>
           {/each}
         {/each}
       </div>
     {/if}
-    <footer><span>Click a row to open the run</span><nav aria-label="Run Pages">
+    <footer><span>Open a run for its fights and loot</span><nav aria-label="Run Pages">
       <span>{page?.rows.length ? `${(pageOffset + previous.length) * 25 + 1}–${(pageOffset + previous.length) * 25 + page.rows.length}` : '0'} of {formatStat(total)}</span>
       <button class="ctl sq" type="button" aria-label="Previous" aria-disabled={paging || previous.length === 0} onclick={back}>‹</button>
       <button class="ctl sq" type="button" aria-label="Next" aria-disabled={paging || !page?.next} onclick={next}>›</button>
@@ -264,58 +265,61 @@
   </section>
 </div>
 <style>
-  .runs.area-home { overflow-anchor: none; overflow-wrap: anywhere; height: auto; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .runs.area-home { overflow-anchor: none; overflow-wrap: anywhere; height: auto; display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
   .ranges { margin-left: auto; }
-  .toolbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .ctl.search { width: 230px; min-width: 90px; flex: 0 1 230px; }
+  .toolbar { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+  .ctl.search { width: 232px; min-width: 88px; flex: 0 1 232px; }
   .outcomes { flex: none; }
-  .outcomes span { opacity: .6; margin-left: 3px; }
-  .characters { min-width: 0; max-width: 150px; text-overflow: ellipsis; }
-  .sort { display: flex; gap: 6px; align-items: center; margin-left: auto; color: var(--text-muted); }
-  .sort select { max-width: 130px; }
+  .characters { min-width: 0; max-width: 152px; text-overflow: ellipsis; }
+  .sort { display: flex; gap: var(--space-2); align-items: center; margin-left: auto; color: var(--text-muted); font-size: var(--text-caption); }
+  .sort select { max-width: 132px; }
   .retry { align-self: start; }
-  .runs .list-card { padding: 8px 6px 6px; }
-  .table { min-width: 0; }
-  .row { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.25fr) 70px 58px minmax(0, 1.35fr) 84px 54px 78px 116px; gap: 8px; align-items: center; min-height: 30px; padding: 0 6px; font-variant-numeric: tabular-nums; }
-  a.row { height: 30px; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid #ffffff06; }
+  .runs .list-card { padding: var(--space-2) var(--space-2) var(--space-3); }
+  .table { min-width: 0; font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .row { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.25fr) 72px 56px minmax(0, 1.35fr) 84px 56px 88px 116px; gap: var(--space-2); align-items: center; min-height: var(--row-compact); padding: 0 var(--space-2); font-variant-numeric: tabular-nums; }
+  a.row { height: var(--row-compact); color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--hairline); }
   a.row:hover, a.row:focus-visible { background: var(--surface-hover); }
   .row > span { min-width: 0; }
-  .labels { min-height: 23px; color: var(--text-muted); font-size: 10px; text-transform: uppercase; white-space: nowrap; }
-  .day { padding: 9px 6px 4px; color: var(--text-muted); font-size: 11px; }
-  .day b { color: var(--text-secondary); }
-  .cell { display: flex; align-items: center; gap: 6px; overflow: hidden; }
-  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
+  .labels { min-height: var(--space-6); color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); white-space: nowrap; border-bottom: 1px solid var(--hairline-strong); }
+  .day { padding: var(--space-3) var(--space-2) var(--space-1); color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  .day b { color: var(--text-secondary); font-weight: var(--weight-medium); }
+  .cell { display: flex; align-items: center; gap: var(--space-2); overflow: hidden; }
+  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-normal); }
   .number { text-align: right; white-space: nowrap; }
-  .good { color: var(--success); } .bad { color: var(--danger); } .warning.tag { color: var(--warning); font-size: 9px; }
+  .good { color: var(--success); } .bad { color: var(--danger); }
+  .warning { color: var(--warning); font-size: var(--text-meta); margin-left: var(--space-1); }
   .result { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pb { color: var(--gold); border: 1px solid #f2c14e45; background: #f2c14e14; padding: 0 3px; border-radius: 3px; font-size: 9px; margin-right: 4px; }
-  .share { display: flex; gap: 4px; align-items: center; font-size: 11px; white-space: nowrap; }
-  .share i { width: 30px; flex: 0 0 30px; height: 6px; background: var(--border-strong, #555568); border-radius: 2px; overflow: hidden; }
-  .share b { display: block; height: 100%; background: var(--violet); }
-  .bags { display: flex; align-items: center; gap: 1px; }
+  .number:has(> .pb) { display: flex; align-items: center; justify-content: flex-end; }
+  .pb { display: inline-flex; margin-right: var(--space-1); }
+  /* Your share of the run's damage: a thin neutral track, figure beside it. */
+  .share { display: flex; gap: var(--space-2); align-items: center; white-space: nowrap; color: var(--text-secondary); }
+  .share i { width: 32px; flex: 0 0 32px; height: 4px; background: var(--bar-track); border-radius: 2px; overflow: hidden; }
+  .share b { display: block; height: 100%; background: var(--text-muted); }
+  .bags { display: flex; align-items: center; gap: var(--space-1); overflow: hidden; white-space: nowrap; }
   .bags small, .started { color: var(--text-muted); }
-  .tag { color: var(--text-muted); font-size: 9px; border: 1px solid var(--border); border-radius: 3px; padding: 0 3px; margin-left: 3px; }
-  footer, footer nav { display: flex; align-items: center; gap: 6px; }
-  footer { margin-top: 8px; padding: 6px 6px 0; color: var(--text-muted); font-size: 11px; }
+  .bags small { font-size: var(--text-meta); }
+  .tag { display: inline-flex; vertical-align: middle; margin-left: var(--space-1); }
+  footer, footer nav { display: flex; align-items: center; gap: var(--space-2); }
+  footer { margin-top: var(--space-2); padding: var(--space-2) var(--space-2) 0; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
   footer nav { margin-left: auto; font-variant-numeric: tabular-nums; }
-  footer nav > span { margin-right: 4px; }
-  .empty { padding: 20px; text-align: center; color: var(--text-muted); }
-  .cap { color: var(--text-muted); font-size: 11px; margin: 6px; }
+  footer nav > span { margin-right: var(--space-1); }
+  .empty { padding: var(--space-5); text-align: center; color: var(--text-muted); }
+  .cap { color: var(--text-muted); font-size: var(--text-meta); margin: var(--space-2); }
   @media (max-width: 1200px) {
-    .row { grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.25fr) 70px 58px minmax(0, 1.35fr) 84px 52px 116px; gap: 5px; }
+    .row { grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.25fr) 72px 56px minmax(0, 1.35fr) 84px 52px 116px; gap: var(--space-1); }
     .loot { display: none; }
     .ctl.search { flex-basis: 160px; width: 160px; }
-    .characters { max-width: 115px; }
-    .toolbar { gap: 5px; }
+    .characters { max-width: 116px; }
+    .toolbar { gap: var(--space-1); }
   }
   @media (max-width: 1000px) {
-    .toolbar { gap: 4px; }
+    .toolbar { gap: var(--space-1); }
     .ctl.search { min-width: 80px; }
     .characters { max-width: 100px; }
-    .sort { gap: 4px; }
+    .sort { gap: var(--space-1); }
     .sort select { max-width: 104px; }
-    .outcomes :global(button) { padding-inline: 5px; gap: 3px; }
-    .row { grid-template-columns: minmax(0, 1.6fr) minmax(0, .9fr) 64px minmax(0, 1fr) 78px 48px 110px; gap: 4px; }
+    .outcomes :global(button) { padding-inline: var(--space-1); gap: var(--space-1); }
+    .row { grid-template-columns: minmax(0, 1.6fr) minmax(0, .9fr) 64px minmax(0, 1fr) 80px 48px 112px; gap: var(--space-1); }
     .comparison { display: none; }
   }
 </style>

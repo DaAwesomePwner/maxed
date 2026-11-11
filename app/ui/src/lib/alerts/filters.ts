@@ -11,8 +11,8 @@ export const alertKindDisplayOrder: readonly AlertKind[] = [
   'white_bag', 'personal_best', 'key_popped', 'whisper', 'guild_message', 'party_message', 'death', 'flawless_run',
 ];
 export const alertKindLabels: Record<AlertKind, string> = {
-  whisper: 'Whisper', guild_message: 'Guild Message', party_message: 'Party Message',
-  white_bag: 'White Bag', personal_best: 'Personal Best', key_popped: 'Key Popped', death: 'Death', flawless_run: 'Flawless Run',
+  whisper: 'Whisper', guild_message: 'Guild message', party_message: 'Party message',
+  white_bag: 'White bag', personal_best: 'Personal best', key_popped: 'Key popped', death: 'Death', flawless_run: 'Flawless run',
 };
 export const defaultAlertFilter = (): AlertFilter => ({ kind: null, range: null, query: '', cursor: null, limit: ALERT_PAGE_SIZE });
 

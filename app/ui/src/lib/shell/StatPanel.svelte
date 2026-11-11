@@ -56,19 +56,19 @@
 </section>
 
 <style>
-  .stat-panel { min-width: 0; display: grid; gap: 4px; }
-  .cap-reason { margin: 0; color: var(--text-muted); font-size: 11px; overflow-wrap: anywhere; }
-  .stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin: 0;
+  .stat-panel { min-width: 0; display: grid; gap: var(--space-1); }
+  .cap-reason { margin: 0; color: var(--text-muted); font-size: var(--text-meta); overflow-wrap: anywhere; }
+  .stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1); margin: 0;
     container-type: inline-size; container-name: rail-stats; }
-  .stat { min-width: 0; text-align: center; padding: 3px 2px 5px; border: 1px solid var(--border); border-radius: 5px; background: #00000045; }
-  dt { font-size: 9.5px; font-weight: 700; line-height: 1.3; letter-spacing: .1em; color: var(--text-muted); }
-  dd { margin: 0; overflow-wrap: anywhere; font: 700 var(--rail-stat-size, 14px)/calc(1em + 4px) var(--font-ui); /* whole-pixel line box tall enough for the glyphs at every stepped size */ font-variant-numeric: tabular-nums; letter-spacing: -.03em; color: #fff; }
-  [data-tone="max"] dd { color: #ffe04a; }
-  [data-tone="boosted"] dd { color: #5cff5c; }
-  .exalt { display: block; color: #d5b0ff; font-size: max(11px, .85em); overflow-wrap: anywhere; }
+  .stat { min-width: 0; text-align: center; padding: var(--space-1) 2px; border: 1px solid var(--hairline); border-radius: var(--radius-sprite); background: var(--surface-inset); }
+  dt { font-size: var(--text-meta); font-weight: var(--weight-medium); line-height: var(--leading-meta); color: var(--text-muted); }
+  dd { margin: 0; overflow-wrap: anywhere; font: var(--weight-medium) var(--rail-stat-size, 14px)/calc(1em + 4px) var(--font-ui); /* whole-pixel line box tall enough for the glyphs at every stepped size */ font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  [data-tone="max"] dd { color: var(--stat-maxed); }
+  [data-tone="boosted"] dd { color: var(--stat-boosted); }
+  .exalt { display: block; color: var(--text-secondary); font-size: var(--text-meta); overflow-wrap: anywhere; }
   .vital-exalt { text-align: right; font-variant-numeric: tabular-nums; }
   .stale { opacity: .7; }
-  ul { margin: 0; padding: 0; list-style: none; color: var(--text-muted); font-size: 11px; overflow-wrap: anywhere; }
+  ul { margin: 0; padding: 0; list-style: none; color: var(--text-muted); font-size: var(--text-meta); overflow-wrap: anywhere; }
   @media (max-width: 900px) {
     .stat-panel .stat { padding-inline: 1px; }
   }
@@ -81,8 +81,5 @@
   @container rail-stats (max-width: 184px) {
     dd { font-size: min(var(--rail-stat-size, 14px), 12px); }
   }
-  @container rail-stats (max-width: 172px) {
-    dd { font-size: min(var(--rail-stat-size, 14px), 11px); }
-  }
-  /* No step below 11px: longer values wrap instead of shrinking further. */
+  /* No step below 12px (the meta size): longer values wrap instead of shrinking further. */
 </style>

@@ -37,7 +37,7 @@
 }} />
 {#snippet chip(row: (typeof choices)[number])}
   <button class="ctl" class:local={row.local} type="button" aria-pressed={plotted.includes(row.id)} onclick={() => onToggle(row.id)} title={row.label}>
-    <i style:background={row.color}></i><span>{row.label}</span>
+    <svg class="key" viewBox="0 0 16 2" aria-hidden="true"><line x1="0" y1="1" x2="16" y2="1" stroke={row.color} stroke-width="2" stroke-dasharray={row.dash ?? undefined} /></svg><span>{row.label}</span>
   </button>
 {/snippet}
 <section class="area-card chart" aria-label="Damage over time">
@@ -52,12 +52,11 @@
     {#each choices.slice(4) as row (row.id)}{@render chip(row)}{/each}
   </div>{/if}
   <svg viewBox="0 0 800 170" preserveAspectRatio="none" role="img" aria-label="Fight DPS" aria-describedby={`${uid}-description`}>
-    <path d="M0 42H800M0 85H800M0 128H800" stroke="var(--border)" />
+    <path d="M0 42H800M0 85H800M0 128H800" stroke="var(--chart-grid)" vector-effect="non-scaling-stroke" />
     {#each rates as row (row.id)}
       {#each paths(row.points) as path}
-        {#if row.id === 'party'}<path d={`${path}V170Z`} fill={row.color} opacity=".11" />{/if}
-        <path d={path} fill="none" stroke={row.color} stroke-width={row.local ? 2.4 : row.id === 'party' ? 2 : 1.4}
-          opacity={row.local || row.id === 'party' ? 1 : .7} vector-effect="non-scaling-stroke" />
+        <path d={path} fill="none" stroke={row.color} stroke-width={row.local ? 2 : 1.5} stroke-dasharray={row.dash ?? undefined}
+          vector-effect="non-scaling-stroke" />
       {/each}
     {/each}
   </svg>
@@ -74,17 +73,21 @@
 </section>
 <style>
   .chart { grid-area: chart; align-self: start; }
-  .card-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .card-heading { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
   .chart .card-heading h3 { margin: 0; flex: none; white-space: nowrap; }
-  .legend { display: flex; gap: 4px; min-width: 0; margin-left: auto; justify-content: flex-end; }
-  .legend.expanded { flex-wrap: wrap; justify-content: flex-start; max-height: 96px; overflow: auto; margin-top: 8px; }
-  .legend button { border-radius: 13px; font-size: 11px; max-width: 140px; min-width: 0; flex: 0 1 auto; padding-inline: 6px; }
-  .legend .more { flex: none; }
+  .legend { display: flex; gap: var(--space-1); min-width: 0; margin-left: auto; justify-content: flex-end; }
+  .legend.expanded { flex-wrap: wrap; justify-content: flex-start; max-height: 96px; overflow: auto; margin-top: var(--space-2); }
+  /* Series toggles: ghost when off, a neutral surface step when plotted. Only your label is gold. */
+  .legend button { height: 28px; max-width: 140px; min-width: 0; flex: 0 1 auto; padding-inline: var(--space-2); gap: var(--space-1);
+    border-color: transparent; background: transparent; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  .legend button[aria-pressed='true'] { border-color: var(--hairline-strong); background: var(--surface-raised); color: var(--text-secondary); }
   .legend button.local { color: var(--gold); }
-  .legend button[aria-pressed='true'] { border-color: var(--gold); background: #f2c14e14; }
-  .legend i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .legend .more { flex: none; color: var(--text-secondary); }
+  /* The key draws the series' own stroke and dash pattern. */
+  .legend .key { width: 16px; height: 2px; flex: none; }
+  .legend button[aria-pressed='false'] .key { opacity: .5; }
   .legend span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  svg { display: block; width: 100%; height: 170px; margin-top: 8px; }
-  .axis { display: flex; justify-content: space-between; margin-top: 4px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  svg[role='img'] { display: block; width: 100%; height: 170px; margin-top: var(--space-2); }
+  .axis { display: flex; justify-content: space-between; margin-top: var(--space-1); color: var(--chart-label); font-size: var(--text-meta); line-height: var(--leading-meta); font-variant-numeric: tabular-nums; }
   p { color: var(--text-muted); }
 </style>

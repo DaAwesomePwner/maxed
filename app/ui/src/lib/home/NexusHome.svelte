@@ -51,7 +51,7 @@
     { key: 'deaths', label: 'Deaths', value: statText(summary?.deaths) ?? '—', sub: `in ${statText(summary?.runs) ?? '—'} ${plural(summary?.runs ?? 0, 'run')}` },
     { key: 'fame', label: 'Fame', value: fameDelta !== null ? `${fameDelta > 0 ? '+' : ''}${formatStat(fameDelta)}` : '—', tone: 'fame',
       sub: characterFame ? `${formatStat(characterFame.first_fame)} → ${formatStat(characterFame.last_fame)}` : '—' },
-    { key: 'dps', label: 'Top Active DPS', tooltip: `${dpsMetric('player_active_window_v1').tooltip} Best among complete, issue-free ended fights with at least 20 seconds from first to last hit.`, value: formatDps(local?.dps), sub: bossName },
+    { key: 'dps', label: 'Top active DPS', tooltip: `${dpsMetric('player_active_window_v1').tooltip} Best among complete, issue-free ended fights with at least 20 seconds from first to last hit.`, value: formatDps(local?.dps), sub: bossName },
   ]);
   let best = $derived.by(() => {
     const drop = summary?.best_drop;
@@ -77,14 +77,14 @@
 <div class="nexus-home" class:debug={$debugMode}>
   <header class="nexus-header">
     <div><h2 tabindex="-1" bind:this={heading}>{snapshot?.map ?? (snapshot?.area_kind === 'realm' || snapshot?.area_kind === 'other_hub' ? 'Realm' : snapshot?.capture.state === 'Live' && snapshot.area_kind === 'unknown' ? 'Live' : 'Nexus')}</h2><p>Session since {clockTime(snapshot?.session?.started) ?? '—'}</p></div>
-    {#if onScopeChange}<div class="scope-controls" role="group" aria-label="History Period"><button bind:this={sessionButton} aria-pressed={choice === 'session'} onclick={() => { if (choice !== 'session') onScopeChange?.('session'); }}>Session</button><button aria-pressed={choice === 'today'} onclick={() => { if (choice !== 'today') onScopeChange?.('today'); }}>Today</button></div>{/if}
+    {#if onScopeChange}<div class="scope-controls seg" role="group" aria-label="History period"><button bind:this={sessionButton} aria-pressed={choice === 'session'} onclick={() => { if (choice !== 'session') onScopeChange?.('session'); }}>Session</button><button aria-pressed={choice === 'today'} onclick={() => { if (choice !== 'today') onScopeChange?.('today'); }}>Today</button></div>{/if}
   </header>
   {#if error || history.phase === 'unavailable'}<div class="history-status" role="status">
-    {error ? "Couldn't load. Retry." : 'No History'}
-    {#if error}<button disabled={!history.retryAvailable} onclick={retryHistory}>Retry</button>{/if}
+    <span>{error ? "Couldn't load history" : 'No history'}</span>
+    {#if error}<button class="ctl" disabled={!history.retryAvailable} onclick={retryHistory}>Retry</button>{/if}
   </div>{/if}
   {#if $debugMode}<DebugNote>{syntheticClock && choice === 'today' ? 'Demo Day · ' : ''}{choice === 'today' ? dayCaption(scope) : ''}</DebugNote>{/if}
-  <div class="kpis" aria-label={`${period} Stats`}>
+  <div class="kpis" aria-label={`${period} stats`}>
     <KpiStrip {cells} />
     {#if top}<a class="fight-link" href={routeHref({ kind: 'fight', id: top.id, runId: top.run_id ?? undefined })} aria-label={`Open fight: ${bossName}`}>
       <span class="boss-sprite"><SpriteImage sprite={boss?.sprite ?? null} sheetUrl={boss?.sprite ? resolve(boss.sprite) : null} fit={32} alt={bossName} /></span>
@@ -96,8 +96,8 @@
     <h3 class="loot-title">Loot this {choice === 'session' ? 'session' : 'day'}</h3>
     <div class="loot-content" aria-busy={lootStatus?.phase === 'loading'}>
       {#if lootStatus && (lootStatus.phase === 'error' || (lootStatus.phase === 'busy' && lootStatus.retryAvailable))}<div class="loot-status" role="status">
-        {lootStatus.phase === 'error' ? "Couldn't load loot." : 'Loot busy'}
-        {#if lootStatus.retryAvailable}<button onclick={onRetryLoot}>Retry Loot</button>{/if}
+        <span>{lootStatus.phase === 'error' ? "Couldn't load loot" : 'Loot busy'}</span>
+        {#if lootStatus.retryAvailable}<button class="ctl" onclick={onRetryLoot}>Retry loot</button>{/if}
         <DebugNote text={lootStatus.message} />
       </div>{/if}
       <ScopeLoot page={loot} pageNumber={lootPage} {visuals} resolveSpriteUrl={resolve} enabled={history.phase === 'ready' && (!lootStatus || lootStatus.phase === 'ready')} next={onNextLoot} first={onFirstLoot} />
@@ -107,36 +107,36 @@
   <NexusCaveats {history} {snapshot} />
 </div>
 <style>
-  .nexus-home { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 10px; min-width: 0; align-content: start; }
-  .nexus-home .nexus-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
-  .nexus-home h2 { margin: 0; font-size: 22px; line-height: 1.1; }
-  .nexus-home p { margin: 3px 0 0; font-size: 12px; color: var(--text-secondary); }
-  .nexus-home .scope-controls { margin-left: auto; display: flex; padding: 3px; gap: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
-  .nexus-home button { font: inherit; color: var(--text-secondary); border: 1px solid transparent; border-radius: 6px; padding: 5px 14px; background: transparent; }
-  .nexus-home button[aria-pressed="true"] { color: var(--gold); background: var(--surface-raised); border-color: var(--border-strong); }
-  .nexus-home .history-status { grid-column: 1 / -1; font-size: 12px; }
+  .nexus-home { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: var(--space-3); min-width: 0; align-content: start; }
+  .nexus-home .nexus-header { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-3); }
+  .nexus-home h2 { margin: 0; font-size: var(--text-hero); line-height: var(--leading-hero); font-weight: var(--weight-medium); }
+  .nexus-home p { margin: 0; color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  .nexus-home .scope-controls { margin-left: auto; }
+  .nexus-home .history-status, .nexus-home .loot-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3);
+    color: var(--text-secondary); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .nexus-home .history-status { grid-column: 1 / -1; }
   .nexus-home .kpis { grid-column: 1 / -1; position: relative; min-width: 0; }
-  .nexus-home .fight-link { position: absolute; inset: 0 0 0 75%; border-radius: 0 8px 8px 0; }
-  .nexus-home .fight-link:hover { background: #ffffff05; }
-  .nexus-home .fight-link:focus-visible { outline: 2px solid var(--violet-text); outline-offset: -2px; }
-  .nexus-home .boss-sprite { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+  .nexus-home .fight-link { position: absolute; inset: 0 0 0 75%; border-radius: 0 var(--radius-card) var(--radius-card) 0; }
+  .nexus-home .fight-link:hover { background: rgb(255 255 255 / 3%); }
+  .nexus-home .fight-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .nexus-home .boss-sprite { position: absolute; right: var(--space-2); top: 50%; transform: translateY(-50%); }
   .nexus-home .kpis :global([data-kpi="dps"] dt) { position: relative; z-index: 1; width: fit-content; }
-  .nexus-home .kpis :global([data-kpi="dps"]) { padding-right: 46px; }
-  .nexus-home .kpis :global([data-kpi="dps"] .value) { font-size: 22px; }
-  .nexus-home .panel { min-width: 0; min-height: 262px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
-  .nexus-home h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); }
+  .nexus-home .kpis :global([data-kpi="dps"]) { padding-right: var(--space-12); }
+  /* Shared card style for every Nexus panel and table (DungeonBreakdown and RecentRuns match it). */
+  .nexus-home .panel { min-width: 0; min-height: 264px; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); }
+  .nexus-home h3 { margin: 0 0 var(--space-3); color: var(--text-primary); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
   .nexus-home .fame { display: flex; flex-direction: column; }
-  .nexus-home .loot { display: flex; flex-direction: column; gap: 4px; }
-  .nexus-home .loot-title { margin: 4px 0 0; }
-  .nexus-home :global(.history-link) { margin-left: auto; font-size: 12px; color: var(--violet-text); text-decoration: none; white-space: nowrap; }
-  .nexus-home :global(.history-link:hover) { text-decoration: underline; }
-  .nexus-home .tables { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 10px; min-width: 0; }
+  .nexus-home .loot { display: flex; flex-direction: column; gap: var(--space-1); }
+  .nexus-home .loot-title { margin: var(--space-3) 0 var(--space-1); }
+  .nexus-home :global(.history-link) { margin-left: auto; color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta);
+    text-decoration: none; text-underline-offset: 3px; white-space: nowrap; }
+  .nexus-home :global(.history-link:hover), .nexus-home :global(.history-link:focus-visible) { color: var(--text-primary); text-decoration: underline; }
+  .nexus-home .tables { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: var(--space-3); min-width: 0; }
   .nexus-home.debug .panel { height: auto; }
   .nexus-home > :global([data-debug-note]) { grid-column: 1 / -1; }
   @media (max-width: 900px) {
-    .nexus-home .panel { padding: 8px; }
-    .nexus-home, .nexus-home .tables { gap: 8px; }
-    .nexus-home .kpis :global([data-kpi="dps"] .value) { font-size: 18px; }
+    .nexus-home .panel { padding: var(--space-3); }
+    .nexus-home, .nexus-home .tables { gap: var(--space-2); }
   }
   @media (max-width: 650px) {
     .nexus-home, .nexus-home .tables { grid-template-columns: minmax(0, 1fr); }

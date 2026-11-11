@@ -14,9 +14,9 @@
 </script>
 
 <div class="recording">
-  <div class="choice"><label class="check"><input type="checkbox" bind:checked disabled={disabled || (demo && !saved)} aria-describedby={`${id}-warning ${id}-retention`} /> Save Recordings</label></div>
+  <div class="choice"><label class="check"><input type="checkbox" bind:checked disabled={disabled || (demo && !saved)} aria-describedby={`${id}-warning ${id}-retention`} /> Save recordings</label></div>
   <p id={`${id}-warning`} class="warning">May contain passwords and other players' data. Keep private.</p>
-  {#if demo}<p>Recordings are unavailable in Demo Mode.</p>{/if}
+  {#if demo}<p>Recordings are unavailable in demo mode.</p>{/if}
   <p class:error={!!$session.error} role={status?.state === 'failed' || $session.error ? 'alert' : 'status'}>
     Recording: {stateLabel}
     {#if status?.state === 'failed'} · {status.failure ? recordingFailureMessages[status.failure] : 'Toggle recording to retry.'}{/if}
@@ -32,19 +32,18 @@
     <h3>Recording quota</h3>
     <p>Limit: {formatBytes(status && status.state !== 'disabled' ? status.limit_bytes : limit)}</p>
     <p id={`${id}-retention`}>Oldest recordings auto-delete at the limit.</p>
-    {#if status && status.state !== 'failed' && !$session.error}<button class="ctl" type="button" disabled={$session.busy} onclick={() => session.refresh()}>Retry Recording</button>{/if}
+    {#if status && status.state !== 'failed' && !$session.error}<button class="ctl" type="button" disabled={$session.busy} onclick={() => session.refresh()}>Retry recording</button>{/if}
   </div>
-  {#if !status || status.state === 'failed' || $session.error}<button class="ctl" type="button" disabled={$session.busy} onclick={() => session.refresh()}>Retry Recording</button>{/if}
+  {#if !status || status.state === 'failed' || $session.error}<button class="ctl" type="button" disabled={$session.busy} onclick={() => session.refresh()}>Retry recording</button>{/if}
 </div>
 
 <style>
-  h3 { margin: 12px 0 4px; font-size: var(--text-label); color: var(--text-secondary); }
-  .recording { border-top: 1px solid var(--border); margin-top: var(--space-2); padding-top: var(--space-1); }
+  h3 { margin: var(--space-3) 0 var(--space-1); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); color: var(--text-secondary); }
+  .recording { border-top: 1px solid var(--hairline); margin-top: var(--space-2); padding-top: var(--space-1); }
   p { font-size: var(--text-label); margin: var(--space-1) 0; color: var(--text-secondary); line-height: var(--leading-label); font-variant-numeric: tabular-nums; }
-  .check { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-height: var(--target-min); font-size: var(--text-body); }
+  .check { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-height: var(--target-min); font-size: var(--text-label); }
   .choice { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
-  input { width: 1.25rem; height: 1.25rem; accent-color: var(--violet); }
-  button { min-height: var(--target-min); padding: var(--space-1) var(--space-2); font-size: var(--text-label); }
+  input { width: 1rem; height: 1rem; margin: 0; accent-color: var(--text-secondary); }
   .error { color: var(--danger); }
   .warning { color: var(--warning); }
 </style>

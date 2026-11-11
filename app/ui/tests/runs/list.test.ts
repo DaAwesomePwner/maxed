@@ -122,7 +122,7 @@ it('renders enriched rows, bounds loot previews and leaves unavailable values un
   expect(row.querySelectorAll('[role="img"][aria-label="Observed bag"]')).toHaveLength(3);
   expect(row.querySelectorAll('a, button')).toHaveLength(0);
   expect(within(row).getAllByText('partial')).toHaveLength(1);
-  expect(within(row).getByText('partial').title).toContain('Damage share');
+  expect(within(row).getByText('partial').closest<HTMLElement>('[title]')?.title).toContain('Damage share');
   expect(main().getByRole('button', { name: 'Dungeon records' }).getAttribute('aria-describedby')).toBeTruthy();
   expect(main().getByRole('link', { name: /Unknown details/ }).textContent).not.toMatch(/0%|0:00|PB/);
   expect(main().getByText(/100 saved runs/)).toBeTruthy();

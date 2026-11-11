@@ -39,6 +39,6 @@
 <style>
   svg { display: block; }
   polyline { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-  .you { stroke: var(--gold); }
-  .party { stroke: var(--party-avg); }
+  .you { stroke: var(--chart-you); }
+  .party { stroke: var(--chart-party); stroke-width: 1.5; }
 </style>

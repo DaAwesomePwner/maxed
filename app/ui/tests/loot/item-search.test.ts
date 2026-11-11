@@ -58,7 +58,7 @@ it('reports failures and retries with Enter', async () => {
 it('validates character bounds without querying', async () => {
   const page = mount();
   for (const value of ['', 'x'.repeat(65)]) { await fireEvent.input(page.input, { target: { value } }); await vi.advanceTimersByTimeAsync(250); }
-  expect(page.search).not.toHaveBeenCalled(); expect(screen.getByText('Enter 1–64 characters to search.')).toBeTruthy();
+  expect(page.search).not.toHaveBeenCalled(); expect(screen.getByText('Enter 1–64 characters to search')).toBeTruthy();
 });
 it('opens the keyboard-active option after 250ms', async () => {
   const page = await searchResults(), option = screen.getAllByRole('option')[0];

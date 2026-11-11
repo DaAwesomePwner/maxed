@@ -120,22 +120,24 @@
 </section>
 
 <style>
-  .visit-timeline { padding: 12px 16px; font-size: 11px; }
-  h3 { margin-bottom: 8px; }
+  .visit-timeline { padding: var(--space-3) var(--space-4); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  h3 { margin-bottom: var(--space-2); }
   .track, .point-row, .span-row { position: relative; min-width: 0; }
   .point-row { height: 24px; }
-  .span-row { background: linear-gradient(var(--border), var(--border)) center / 100% 1px no-repeat; }
+  .span-row::before { content: ''; position: absolute; inset: 50% 0 auto; height: 1px; background: var(--chart-grid); }
   .point { position: absolute; top: 0; width: 24px; }
   button, .bag-pip { display: flex; position: relative; justify-content: center; align-items: center; width: 24px; height: 24px;
     padding: 0; border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; }
-  .bag-dot { width: 9px; height: 9px; border: 1px solid var(--text-secondary); border-radius: 50%; background: var(--surface-raised); }
-  .announced-diamond { width: 7px; height: 7px; border: 1px solid var(--text-secondary); transform: rotate(45deg); background: transparent; }
-  .event-span { position: absolute; box-sizing: border-box; height: 22px; padding: 2px 4px; border: 1px solid var(--violet);
-    border-radius: var(--radius-control); background: color-mix(in srgb, var(--violet) 25%, var(--surface-panel));
-    color: var(--text-primary); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-decoration: none; }
-  .event-span.live { border-color: var(--success); background: color-mix(in srgb, var(--success) 18%, var(--surface-panel)); }
-  .now { position: absolute; top: 0; bottom: 0; right: 11px; border-left: 2px solid var(--success); pointer-events: none; }
-  .axis { display: flex; justify-content: space-between; color: var(--text-secondary); margin-top: 4px; }
-  .count { position: absolute; top: -2px; right: -3px; font-size: 9px; padding: 0 2px; border-radius: var(--radius-pill); background: var(--surface-raised); }
+  .bag-dot { width: 8px; height: 8px; border: 1px solid var(--text-secondary); border-radius: var(--radius-pill); background: var(--surface-raised); }
+  .announced-diamond { width: 8px; height: 8px; border: 1px solid var(--text-secondary); transform: rotate(45deg); background: transparent; }
+  .event-span { position: absolute; box-sizing: border-box; height: 20px; padding: 0 var(--space-1); border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-tag); background: var(--surface-raised); line-height: 18px;
+    color: var(--text-secondary); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-decoration: none; }
+  .event-span:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .event-span.live { border-color: var(--success); color: var(--text-primary); }
+  .now { position: absolute; top: 0; bottom: 0; right: 11px; border-left: 1px solid var(--text-secondary); pointer-events: none; }
+  .axis { display: flex; justify-content: space-between; margin-top: var(--space-1); color: var(--chart-label); font-variant-numeric: tabular-nums; }
+  .count { position: absolute; top: -2px; right: -4px; padding: 0 2px; border-radius: var(--radius-tag); background: var(--surface-raised);
+    font-size: var(--text-meta); line-height: 1; font-variant-numeric: tabular-nums; }
   a:focus-visible, button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; z-index: 1; }
 </style>

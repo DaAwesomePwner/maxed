@@ -130,13 +130,13 @@ it('rail_identity_equipment_and_capture_controls', async () => {
     expect(equipment.closest('[data-slot]')?.getAttribute('data-item-type')).toBe(String(200 + slot));
   }
   const stop = vi.spyOn(page.client, 'stopCapture');
-  await fireEvent.click(within(rail).getByRole('button', { name: 'Stop Capture' }));
+  await fireEvent.click(within(rail).getByRole('button', { name: 'Stop capture' }));
   await flushHomeRender();
   expect(stop).toHaveBeenCalledOnce();
   page.transport.publishCapture({ ...snapshot.capture, state: 'PermissionDenied', message: 'Synthetic permission failure' });
   await flushHomeRender();
   const start = vi.spyOn(page.client, 'startCapture');
-  await fireEvent.click(within(rail).getByRole('button', { name: 'Retry Capture' }));
+  await fireEvent.click(within(rail).getByRole('button', { name: 'Retry capture' }));
   expect(start).toHaveBeenCalledOnce();
   const stale = render(HeroCard, { view: railView({ ...snapshot, character: { ...snapshot.character!, identity_verified: false, died_at: '5000000' } }, [], true) });
   expect(stale.container.textContent).not.toMatch(/last seen/i);
@@ -148,7 +148,7 @@ it.each(['#/', '#/runs', '#/alerts', '#/settings'])('rail_present_on_all_routes 
   const page = mountV2(homeSnapshot(), undefined, { hash, features: { lootBrowsing: false, logs: false, stats: false, party: false, character: false, homeRedesign: false } });
   await flushHomeRender();
   expect(screen.getByRole('complementary', { name: 'Character' })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Stop Capture' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Stop capture' })).toBeTruthy();
   const nav = within(screen.getByRole('navigation', { name: 'Navigation' }));
   for (const name of ['Home', 'Runs', 'Alerts']) expect(nav.getByRole('link', { name })).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Settings' })).toBeTruthy();

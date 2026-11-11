@@ -50,15 +50,15 @@ it('bar_turns_amber_past_average', async () => {
 
 it('caption_says_not_a_drop_rate', () => {
   const page = render(DryStreakRow, { dungeon, stats, ended: null });
-  expect(page.getByText(`your average gap between ${dungeon} whites: 23 runs`)
-    .getAttribute('title')).toBe('observed, not a drop rate');
+  expect(page.getByText(`Your average gap between ${dungeon} whites: 23 runs`)
+    .getAttribute('title')).toBe('Observed, not a drop rate');
 });
 
 it('unknown_average_has_no_bar_and_zero_streak_remains_zero', () => {
   const page = render(DryStreakRow, { dungeon, ended: null,
     stats: { ...stats, runs_since_last_white: 0, avg_runs_per_white: null } });
   expect(page.getByText(`${dungeon} dry streak 0`)).toBeTruthy();
-  expect(page.getByText(`your average gap between ${dungeon} whites: — runs`)).toBeTruthy();
+  expect(page.getByText(`Your average gap between ${dungeon} whites: — runs`)).toBeTruthy();
   expect(page.queryByRole('meter')).toBeNull();
   expect(page.container.textContent).not.toMatch(/NaN|undefined/);
 });

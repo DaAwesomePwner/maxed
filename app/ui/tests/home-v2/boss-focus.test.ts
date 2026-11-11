@@ -86,7 +86,7 @@ it.each(['realm', 'dungeon'] as const)('%s displays unattributed damage without 
   boss.players[0] = { ...boss.players[0], rank: 7, share: 0.123 };
   snapshot.fights = [boss];
   const page = mode === 'realm' ? render(RealmHome, { snapshot }) : render(DungeonHome, { snapshot, stale: false });
-  expect(page.container.querySelector('[data-unattributed]')?.textContent).toContain('Other Damage');
+  expect(page.container.querySelector('[data-unattributed]')?.textContent).toContain('Other damage');
   expect(page.container.querySelector('[data-unattributed]')?.textContent).toContain('74,000');
   expect(page.container.querySelector('[data-unattributed]')?.hasAttribute('data-player-id')).toBe(false);
   expect(page.container.querySelector('[data-player-id], .damage-row')?.textContent).toContain('12.3%');
@@ -170,7 +170,7 @@ it('dungeon defaults to supplied run totals, follows an open boss through mob hi
   expect(detail().textContent).toContain('100,000');
   expect(detail().textContent).not.toContain('Fight Ended');
   expect(railView(snapshot, [], false, boss.id)).toMatchObject({ fight: null, target: 'Dungeon Total', dps: 345 });
-  await fireEvent.click(screen.getByRole('tab', { name: 'Unknown Target' }));
+  await fireEvent.click(screen.getByRole('tab', { name: 'Unknown target' }));
   expect(detail().getAttribute('data-whole-run')).toBe('false');
   expect(detail().textContent).toContain('Ended');
   expect(detail().textContent).toContain('1,234');

@@ -72,15 +72,15 @@
     grid-template-columns: 44px minmax(0, 1fr) 128px; gap: 10px; align-items: center; padding: 4px 10px 4px 6px;
     border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); }
   .kill-name { min-width: 0; display: grid; gap: 3px; line-height: 1.25; }
-  .kill-name b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
-  .kill-name > span { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums;
+  .kill-name b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--text-label); }
+  .kill-name > span { color: var(--text-muted); font-size: var(--text-meta); font-variant-numeric: tabular-nums;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .kill-stats { display: grid; gap: 2px; justify-items: end; font-size: 11px; line-height: 1.2; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .kill-stats { display: grid; gap: 2px; justify-items: end; font-size: var(--text-meta); line-height: 1.2; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .kill-stats b { color: var(--gold); }
   .share-track { width: 100%; height: 5px; overflow: hidden; border-radius: 3px; background: var(--surface-panel); }
   .share-fill { display: block; height: 100%; background: var(--gold); }
   button { flex: none; height: var(--kill-footer-height); border: 0; padding: 0; background: transparent; text-align: left;
-    color: var(--violet-text); font: inherit; cursor: pointer; }
+    color: var(--text-secondary); font: inherit; cursor: pointer; }
   .realm-kills.expanded .kill-space { flex: none; }
   p { margin: 0; color: var(--text-muted); }
   .medal { display: inline-block; width: 6px; height: 6px; margin-right: 5px; background: var(--gold);

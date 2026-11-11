@@ -63,7 +63,7 @@ function chain(): NonNullable<VisitRecapView['chain']> {
 it('visit_banner_and_time_here', async () => {
   const input = props(), page = render(VisitRecapScreen, input);
   expect(page.getByRole('region', { name: 'Recap' }).classList.contains('visit-recap-screen')).toBe(true);
-  expect(page.getByRole('heading', { name: 'Synthetic Saved Realm · REALM VISIT' })).toBeTruthy();
+  expect(page.getByRole('heading', { name: 'Synthetic Saved Realm · Realm visit' })).toBeTruthy();
   expect(page.getByText('Time here')).toBeTruthy(); expect(page.getByText('1:04')).toBeTruthy();
   expect(page.getByText('ended 00:01')).toBeTruthy();
   expect(page.queryByRole('img', { name: 'Synthetic Realm Portal' })).toBeNull();
@@ -251,8 +251,8 @@ it('visit_marks_partial_loot_and_records_on_the_saved_screen', async () => {
   savedData.visit.fights[0].target_name = 'Synthetic Guardian';
   const page = render(VisitRecapScreen, props(visitRecapView(savedData)));
   expect(within(page.getByRole('region', { name: 'Loot this visit' })).getByText('Partial loot history')).toBeTruthy();
-  expect(within(page.getByRole('row', { name: /Synthetic Guardian/ })).getByText('BEST DPS')).toBeTruthy();
-  expect(within(page.getByRole('row', { name: /Synthetic Announced/ })).queryByText('BEST DPS')).toBeNull();
+  expect(within(page.getByRole('row', { name: /Synthetic Guardian/ })).getByText('Best DPS')).toBeTruthy();
+  expect(within(page.getByRole('row', { name: /Synthetic Announced/ })).queryByText('Best DPS')).toBeNull();
   expect(page.getByText('Best DPS on Synthetic Guardian')).toBeTruthy();
   savedData.visit.drops_limited = false;
   await page.rerender({ view: visitRecapView(savedData) });
@@ -307,7 +307,7 @@ it('home_renders_visit_recap_when_saved', async () => {
   const { page, read, visuals, snapshot, dismiss } = await home();
   expect(page.container.querySelector('.visit-recap-screen')).not.toBeNull();
   expect(page.container.querySelector('.recap-placeholder')).toBeNull();
-  expect(page.getByRole('heading', { name: 'Synthetic Live Realm · REALM VISIT' })).toBeTruthy();
+  expect(page.getByRole('heading', { name: 'Synthetic Live Realm · Realm visit' })).toBeTruthy();
   expect(build).toHaveBeenCalledWith(expect.objectContaining({ kind: 'visit' }), undefined, 'Synthetic Live Realm');
   expect(visuals.mock.calls.flatMap(([types]) => types)).toEqual(expect.arrayContaining([1796, 4300, 4301, 4506, 4507, 4508]));
   const before = page.container.querySelector('.visit-recap-screen')!.textContent;
@@ -321,7 +321,7 @@ it('home_renders_visit_recap_when_saved', async () => {
 
 it('home_visit_uses_saved_title_when_live_title_unknown', async () => {
   const { page } = await home({ title: '—' });
-  expect(page.getByRole('heading', { name: 'Synthetic Saved Realm · REALM VISIT' })).toBeTruthy();
+  expect(page.getByRole('heading', { name: 'Synthetic Saved Realm · Realm visit' })).toBeTruthy();
 });
 
 it('home_visit_keeps_saving_and_partial_placeholder_until_store_catches_up', async () => {

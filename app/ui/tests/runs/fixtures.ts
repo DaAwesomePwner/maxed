@@ -35,7 +35,7 @@ export { deferred, saved };
  * Asserted status copy patterns (case-insensitive): loading /Loading.*runs/;
  * empty /No.*runs/; read error /Run Error/; contention /busy/;
  * ambiguous identity /ambiguous|reused object/; unavailable nested relationship
- * /Player Unavailable/; cursor cap
+ * /Player unavailable/; cursor cap
  * /100.*previous|previous.*100/. These constrain meaning without exact sentences.
  * No CSS selectors, component imports other than Shell, or private controller seams.
  */

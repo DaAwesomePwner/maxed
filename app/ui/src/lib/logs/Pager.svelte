@@ -6,11 +6,11 @@
   } = $props();
 </script>
 <div class="pager">
-  {#if loading}<span role="status">Loading older…</span>{/if}
+  {#if loading}<span role="status">Loading older {noun}</span>{/if}
   <button class="ctl ghost" disabled={atLatest || loading} onclick={onLatest}>Latest</button>
   <button class="ctl sq" aria-label={`Newer ${noun}`} disabled={atLatest || loading} onclick={onNewer}>‹</button>
   <button class="ctl sq" aria-label={`Older ${noun}`} disabled={!hasOlder || loading} onclick={onOlder}>›</button>
 </div>
 <style>
-  .pager { display: flex; align-items: center; justify-content: flex-end; gap: 6px; color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .pager { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); color: var(--text-muted); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
 </style>

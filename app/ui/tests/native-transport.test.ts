@@ -222,7 +222,7 @@ test('after live ownership loss Shell can retry saving and Party can read durabl
       receive({ payload: { ...fixture.capture, state: 'Failed', message: 'Synthetic capture stopped after loss' } });
     }
     await flush();
-    expect(screen.getByRole('button', { name: 'Retry Capture' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Retry capture' })).toBeTruthy();
     for (const receive of listeners.get('presentation-visible') ?? []) receive({ payload: false });
     await flush();
     expect(isPresentationVisible()).toBe(false);
@@ -248,7 +248,7 @@ test('after live ownership loss Shell can retry saving and Party can read durabl
     await vi.advanceTimersByTimeAsync(1000); await flush();
     expect(mocks.invoke.mock.calls.slice(beforePartyRead)).toContainEqual(['get_store_status', undefined]);
     expect(mocks.invoke).toHaveBeenCalledWith('get_party_run', { runId: 'synth-run' });
-    expect(screen.queryByText('Could not load party.')).toBeNull();
+    expect(screen.queryByText("Couldn't load party")).toBeNull();
     lost = false;
     await fireEvent.click(screen.getByRole('button', { name: 'Reconnect' })); await flush();
     const renewed = channels.slice(channels.indexOf(fallback) + 1)

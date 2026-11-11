@@ -26,8 +26,8 @@
   let clockLive = $derived(captureState === 'Live' && !preview && !view.stale);
   let elapsed = $derived(liveDuration(liveMs));
   let reconnect = $derived((capture === null && error !== '') || capture?.message === 'Live updates interrupted; reconnect or restart Maxed');
-  let actionLabel = $derived(reconnect ? 'Reconnect Capture' : active ? 'Stop Capture'
-    : failed && !restartRequired ? 'Retry Capture' : 'Start Capture');
+  let actionLabel = $derived(reconnect ? 'Reconnect capture' : active ? 'Stop capture'
+    : failed && !restartRequired ? 'Retry capture' : 'Start capture');
   let actionUnavailable = $derived(reconnect ? preview || busy : active ? stopUnavailable : startUnavailable);
   let stateText = $derived(view.stale && capture?.state === 'Live' ? 'Paused' : capture ? captureLabels[capture.state] : 'Connecting');
   let stream = $derived(view.snapshot?.stream_id ?? null);
@@ -86,10 +86,10 @@
       <p class="target" class:stale={view.stale}>{view.target}{#if view.fight?.kill && !view.fight.kill.provisional}{' · '}Defeated{:else if view.fight?.ended != null}{' · '}Ended{/if}</p>
       {#if !preview}<DebugNote text={guidance} />{/if}
       {#if capture && (capture.dropped_frames || capture.unknown_packets || capture.decode_failures)}
-        <dl aria-label="Capture Diagnostics" class="diagnostics">
-          <div><dt>Dropped Frames</dt><dd>{capture.dropped_frames}</dd></div>
-          <div><dt>Unknown Packets</dt><dd>{capture.unknown_packets}</dd></div>
-          <div><dt>Decode Failures</dt><dd>{capture.decode_failures}</dd></div>
+        <dl aria-label="Capture diagnostics" class="diagnostics">
+          <div><dt>Dropped frames</dt><dd>{capture.dropped_frames}</dd></div>
+          <div><dt>Unknown packets</dt><dd>{capture.unknown_packets}</dd></div>
+          <div><dt>Decode failures</dt><dd>{capture.decode_failures}</dd></div>
         </dl>
       {/if}
     </details>
@@ -98,29 +98,29 @@
 {#snippet unavailable()}<span aria-hidden="true">—</span><span class="sr-only">Unavailable</span>{/snippet}
 
 <style>
-  .compact-live { flex: 0 0 auto; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
-  .status-card { display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 2px 6px; align-items: center; }
-  .where { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+  .compact-live { flex: 0 0 auto; min-width: 0; padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); }
+  .status-card { display: grid; grid-template-columns: minmax(0, 1fr) var(--control-dense); gap: 0 var(--space-2); align-items: center; }
+  .where { display: flex; align-items: center; gap: var(--space-2); min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); }
   /* text-overflow does not apply to a flex container's bare text, so the name gets its own box. */
   .where-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .where i { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #6b6478; }
-  .where i.live { background: var(--success); box-shadow: 0 0 8px #75dfa188; }
-  .state { grid-column: 1; min-width: 0; display: block; font-size: 11px; font-weight: 400; color: var(--text-muted); }
-  .separator { display: inline-block; padding-inline: 3px; font-family: system-ui, sans-serif; font-weight: 700; }
+  .where i { width: 8px; height: 8px; flex: none; border-radius: var(--radius-pill); background: var(--text-disabled); }
+  .where i.live { background: var(--success); }
+  .state { grid-column: 1; min-width: 0; display: block; font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-normal); color: var(--text-muted); }
+  .separator { display: inline-block; padding-inline: var(--space-1); }
   .elapsed { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .toggle { grid-column: 2; grid-row: 1 / span 2; box-sizing: border-box; width: 30px; height: 30px; min-height: 30px; padding: 0; display: grid; place-items: center; border: 1px solid #ff9b9b55; border-radius: 6px; background: #ff9b9b14; color: var(--danger); }
-  .toggle.start { border-color: #75dfa155; background: #75dfa114; color: var(--success); }
+  .toggle { grid-column: 2; grid-row: 1 / span 2; box-sizing: border-box; width: var(--control-dense); height: var(--control-dense); min-height: 0; padding: 0; display: grid; place-items: center; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--danger); }
+  .toggle.start { color: var(--success); }
   .toggle[aria-disabled="true"] { opacity: .5; }
   svg { width: 12px; height: 12px; fill: currentColor; }
-  p, dl { margin: 0; font-size: 11px; }
+  p, dl { margin: 0; font-size: var(--text-meta); line-height: var(--leading-meta); }
   .error, .failed { color: var(--danger); }
   .guidance, .target { color: var(--text-secondary); }
-  .guidance { min-height: 0; margin-top: 4px; }
+  .guidance { min-height: 0; margin-top: var(--space-1); }
   .stale { color: var(--text-muted); }
-  details { margin-top: 4px; font-size: 11px; overflow-wrap: anywhere; }
-  summary { cursor: pointer; min-height: var(--target-min); align-content: center; }
+  details { margin-top: var(--space-1); font-size: var(--text-meta); overflow-wrap: anywhere; }
+  summary { cursor: pointer; min-height: var(--target-min); align-content: center; color: var(--text-secondary); }
   summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .fight-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   dd { margin: 0; font-variant-numeric: tabular-nums; }
-  .diagnostics div { display: flex; justify-content: space-between; gap: 4px; }
+  .diagnostics div { display: flex; justify-content: space-between; gap: var(--space-1); }
 </style>

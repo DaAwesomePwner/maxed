@@ -36,7 +36,7 @@ it('removed selected boss falls back to Whole run and does not return after grow
   page.queries.getRun.mockResolvedValue(ready(largeStory(1, true)));
   page.event({ run_updated: run() }, '13'); page.setStore(saved('13')); await advance();
   expect(main().getByRole('tab', { name: 'Whole run' }).getAttribute('aria-selected')).toBe('true');
-  expect(main().getByText('Row Removed')).toBeTruthy();
+  expect(main().getByText('Row removed')).toBeTruthy();
   expect(document.activeElement?.hasAttribute('data-story-header')).toBe(true);
   page.queries.getRun.mockResolvedValue(ready(value));
   page.event({ run_updated: run() }, '14'); page.setStore(saved('14')); await advance();

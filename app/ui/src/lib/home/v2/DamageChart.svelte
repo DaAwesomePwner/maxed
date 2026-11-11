@@ -100,10 +100,11 @@
   .damage-chart { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 var(--space-2); min-width: 0; font-size: var(--text-label); line-height: var(--leading-label); }
   svg { display: block; width: 100%; height: var(--space-8); grid-column: 1 / -1; overflow: visible; }
   path { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
-  .party { stroke: var(--violet-text); } .local { stroke: var(--gold); stroke-dasharray: 6 3; }
-  .player { stroke: var(--information); stroke-dasharray: 2 3; }
-  .party-key { color: var(--violet-text); } .local-key { color: var(--gold); }
-  p { margin: var(--space-1) 0; color: var(--text-secondary); }
+  .party { stroke: var(--chart-party); } .local { stroke: var(--chart-you); }
+  /* A selected other player is a neutral step, dashed to tell it from the party line. */
+  .player { stroke: #d0d0d4; stroke-dasharray: 2 3; }
+  .party-key { color: var(--chart-party); } .local-key { color: var(--chart-you); }
+  p { margin: var(--space-1) 0; color: var(--chart-label); font-size: var(--text-meta); line-height: var(--leading-meta); font-variant-numeric: tabular-nums; }
   details[open] { grid-column: 1 / -1; }
   summary { min-height: var(--target-min); align-content: center; cursor: pointer; }
   select { min-height: var(--target-min); max-width: 100%; margin-inline: var(--space-2); font: inherit; color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-control); }

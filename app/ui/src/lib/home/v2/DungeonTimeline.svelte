@@ -112,7 +112,7 @@
 <section class="timeline" aria-label="Timeline">
   <div class="heading">
     <h2>Timeline</h2>
-    {#if !saved}<a href={routeHref({ kind: 'run', id: run.id })}>Open Run</a>{/if}
+    {#if !saved}<a href={routeHref({ kind: 'run', id: run.id })}>Open run</a>{/if}
   </div>
   <div class="track" bind:this={track} role="group" aria-label={`Duration 0:00–${formatElapsed(run.started, end)}`}>
     <div class="row">
@@ -150,7 +150,7 @@
     <DebugNote text={`${partial ? 'Partial timeline. ' : ''}Blank gaps do not imply inactivity.`} />
     <span class="tick">{run.ended == null ? (saved ? 'Observed' : 'Now') : 'End'}: {formatElapsed(run.started, end)}</span>
   </div>
-  {#if !markers.length}<p>No Events</p>{/if}
+  {#if !markers.length}<p>No events</p>{/if}
   {#if provisional}<DebugNote text={`${provisional} provisional ${provisional === 1 ? 'marker' : 'markers'}.`} />{/if}
   {#each outside as marker (marker.id)}
     <a data-marker-id={marker.id} data-marker-members={JSON.stringify([marker.id])} href={routeHref({ kind: 'run', id: run.id })} onclick={onselect ? event => { event.preventDefault(); onselect(marker); } : undefined}>{markerSummary(marker, context).title}<DebugNote inline text="Outside available duration axis" /></a>
@@ -159,33 +159,37 @@
 
 <style>
   .saved-clear { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--success); pointer-events: none; }
-  .timeline { --span-height: 22px; padding: 6px 12px 10px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-panel); font-size: 11px; line-height: 16px; min-width: 0; }
-  h2 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
+  .timeline { --span-height: 22px; padding: var(--space-2) var(--space-3) var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); font-size: var(--text-meta); line-height: 16px; color: var(--text-secondary); min-width: 0; }
+  h2 { margin: 0; font-size: var(--text-meta); font-weight: var(--weight-medium); color: var(--text-muted); }
   .heading, .axis-notes { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; justify-content: space-between; }
-  .heading { min-height: 20px; margin-bottom: 4px; }
-  .axis-notes { margin-top: 4px; min-height: 16px; }
-  a { display: inline-flex; align-items: center; min-height: 20px; color: var(--violet-text); }
+  .heading { min-height: 20px; margin-bottom: var(--space-1); }
+  .axis-notes { margin-top: var(--space-1); min-height: 16px; color: var(--chart-label); }
+  a { display: inline-flex; align-items: center; min-height: 20px; color: var(--text-secondary); text-decoration: none; }
+  .heading a:hover, .heading a:focus-visible, .timeline > a:hover, .timeline > a:focus-visible { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
   .track { position: relative; min-width: 0; min-height: 58px; }
   .row { position: relative; height: 18px; }
-  .spans { background: linear-gradient(var(--border), var(--border)) center / 100% 1px no-repeat; }
+  /* A hairline baseline under the boss spans. */
+  .spans::before { content: ''; position: absolute; inset: 50% 0 auto; border-top: 1px solid var(--hairline); pointer-events: none; }
   .point, .span-slot { position: absolute; top: 0; display: flex; }
   .point { width: 24px; height: 100%; }
-  .marker { position: relative; box-sizing: border-box; justify-content: center; width: 24px; height: 18px; min-height: 18px; text-decoration: none; color: var(--text-secondary); border-radius: var(--radius-control); }
+  .marker { position: relative; box-sizing: border-box; justify-content: center; width: 24px; height: 18px; min-height: 18px; text-decoration: none; color: var(--text-secondary); border-radius: var(--radius-tag); }
   /* Keep the compact visual row while providing a 24px-tall pointer target. */
   .marker::before { content: ''; position: absolute; inset: -3px 0; }
   .marker:hover, .marker:focus-visible, .fight:hover, .fight:focus-visible { background: var(--surface-hover); z-index: 1; }
   .icon { display: inline-flex; align-items: center; justify-content: center; }
-  .count { position: absolute; top: 0; right: -6px; min-width: 1em; padding: 0 3px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill); background: var(--surface-raised); color: var(--text-primary); font-size: var(--text-meta); line-height: 1.1; font-weight: var(--weight-bold); text-align: center; font-variant-numeric: tabular-nums; }
+  .count { position: absolute; top: 0; right: -6px; min-width: 1em; padding: 0 2px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-tag); background: var(--surface-raised); color: var(--text-primary); font-size: var(--text-meta); line-height: 1.1; font-weight: var(--weight-medium); text-align: center; font-variant-numeric: tabular-nums; }
   .glyph { width: 14px; height: 14px; fill: none; stroke: var(--warning); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   .glyph.death, .death { stroke: var(--danger); color: var(--danger); }
   .dot { width: var(--space-2); height: var(--space-2); border-radius: var(--radius-pill); background: var(--text-secondary); }
   .bag-dot { display: block; width: var(--space-3); height: var(--space-3); border-radius: var(--radius-pill); background: var(--bag-color, var(--bag-unknown)); border: 1px solid var(--text-primary); box-shadow: 0 0 0 2px var(--surface-panel); }
-  .fight { box-sizing: border-box; gap: var(--space-1); height: calc(var(--span-height) - 2px); min-height: 0; margin-top: 1px; padding-inline: 2px var(--space-1); overflow: hidden; color: var(--violet-text); text-decoration: none; background: color-mix(in srgb, var(--violet) 35%, var(--surface-panel)); border: 1px solid var(--violet); border-radius: var(--radius-control); }
-  .fight.live { color: var(--success); background: color-mix(in srgb, var(--success) 18%, var(--surface-panel)); border-color: var(--success); }
+  /* Boss spans are neutral steps; only a live fight takes the live (success) colour. */
+  .fight { box-sizing: border-box; gap: var(--space-1); height: calc(var(--span-height) - 2px); min-height: 0; margin-top: 1px; padding-inline: 2px var(--space-1); overflow: hidden; color: var(--text-secondary); text-decoration: none; background: var(--surface-raised); border: 1px solid var(--hairline-strong); border-radius: var(--radius-tag); }
+  .fight:hover, .fight:focus-visible { color: var(--text-primary); }
+  .fight.live { color: var(--success); border-color: color-mix(in srgb, var(--success) 50%, transparent); }
   .fight-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .now { position: absolute; top: var(--space-1); bottom: var(--space-1); right: calc(24px / 2 - 1px); border-left: 2px solid var(--success); pointer-events: none; }
   .tip-entry { display: grid; }
-  .tip-entry + .tip-entry { margin-top: var(--space-1); padding-top: var(--space-1); border-top: 1px solid var(--border); }
+  .tip-entry + .tip-entry { margin-top: var(--space-1); padding-top: var(--space-1); border-top: 1px solid var(--hairline); }
   .tip-entry span { color: var(--text-secondary); }
   .timeline :global(.tooltip:has(.tip-entry + .tip-entry)) { max-height: 18rem; overflow-y: auto; }
   .tick { font-variant-numeric: tabular-nums; white-space: nowrap; }

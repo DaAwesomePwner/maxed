@@ -13,6 +13,7 @@
   import { damageRank, nonnegative } from './damage';
   import { limitRows, renderCount, RENDER_STEP, type RenderLimit } from './render-limit';
   import ShowMore from './ShowMore.svelte';
+  import Badge from '../components/Badge.svelte';
   let { fight, visuals = emptyHomeVisuals(), runId }: { fight: FightView; visuals?: HomeVisuals; runId?: string } = $props();
   let metric = $derived(dpsMetric(fight.dps_basis));
   let counts = $derived.by(() => {
@@ -31,10 +32,10 @@
   }
 </script>
 <section class="area-card players" aria-label="Players">
-  <div class="heading"><h3>Players</h3><span>Click a player for their damage sources · <DpsLabel basis={fight.dps_basis} /></span></div>
+  <div class="heading"><h3>Players</h3><span>Open a player for damage by item · <DpsLabel basis={fight.dps_basis} /></span></div>
   <div class="damage-table">
     <table aria-label="Fight Players">
-      <colgroup><col style="width: 28px" /><col style="width: 20%" /><col /><col style="width: 80px" /><col style="width: 60px" /><col style="width: 56px" /><col style="width: 64px" /><col style="width: 52px" /></colgroup>
+      <colgroup><col style="width: 28px" /><col style="width: 20%" /><col /><col style="width: 80px" /><col style="width: 56px" /><col style="width: 56px" /><col style="width: 64px" /><col style="width: 52px" /></colgroup>
       <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Damage</th><th scope="col">{metric.label}</th><th scope="col">Share</th><th scope="col">Hits</th><th scope="col">Best hit</th><th scope="col">Deaths</th></tr></thead>
       <tbody>
         {#each shown as player (player.player_id)}
@@ -47,15 +48,15 @@
               <SpriteImage sprite={visual?.sprite ?? null} sheetUrl={visual?.sprite ? spriteUrl(visuals.client_fingerprint, visual.sprite) : null} fit={24} alt={visual?.name ?? 'Class'} />
               {#if linked}<a class="name" aria-label={`${damageRank(player.rank)} ${player.name ?? 'Unknown player'}`} title={player.name ?? 'Unknown player'} href={routeHref({ kind: 'player', fightId: fight.id, objectId: player.object_id, runId })}>{player.name ?? 'Unknown player'}</a>
               {:else}<span class="name" title={player.name ?? 'Unknown player'}>{player.name ?? 'Unknown player'}</span>{/if}
-              {#if player.is_local}<span class="you">You</span>{/if}
+              {#if player.is_local}<span class="you"><Badge label="You" tone="gold" /></span>{/if}
             </div></th>
-            <td aria-label="Damage"><span class="amount"><span class="damage-fill" style:width={`${width(player.damage)}%`}></span><b>{formatStat(nonnegative(player.damage))}</b></span></td>
+            <td aria-label="Damage"><span class="amount"><span class="track"><span class="damage-fill" style:width={`${width(player.damage)}%`}></span></span><b>{formatStat(nonnegative(player.damage))}</b></span></td>
             <td aria-label={metric.label}>{formatDps(player.dps)}</td><td aria-label="Share">{formatShare(player.share)}</td>
             <td aria-label="Hits">{formatStat(nonnegative(player.hits))}</td><td aria-label="Biggest Hit">{formatStat(nonnegative(player.biggest_hit))}</td><td aria-label="Deaths" class:deaths={player.deaths > 0}>{formatStat(nonnegative(player.deaths))}</td>
           </tr>
           {#if !linked && $debugMode}<tr><td colspan="8"><DebugNote text="Player navigation is ambiguous because the object ID was reused or is unavailable." /></td></tr>{/if}
         {:else}<tr><td colspan="8">No players</td></tr>{/each}
-        <tr class="other"><td></td><th scope="row">Other damage</th><td><span class="amount"><span class="damage-fill" style:width={`${width(fight.unattributed_damage)}%`}></span><b>{formatStat(nonnegative(fight.unattributed_damage))}</b></span></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr class="other"><td></td><th scope="row">Other damage</th><td><span class="amount"><span class="track"><span class="damage-fill" style:width={`${width(fight.unattributed_damage)}%`}></span></span><b>{formatStat(nonnegative(fight.unattributed_damage))}</b></span></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
       </tbody>
     </table>
   </div>
@@ -64,27 +65,30 @@
 </section>
 <style>
   .players { grid-area: table; align-self: start; }
-  .heading { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  .heading > span { color: var(--text-muted); font-size: 11px; }
-  .damage-table { overflow-x: clip; min-width: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .heading { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+  .heading > span { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  .damage-table { overflow-x: clip; min-width: 0; font-size: var(--text-caption); line-height: var(--leading-caption); font-variant-numeric: tabular-nums; }
   table { width: 100%; table-layout: fixed; border-collapse: collapse; }
-  th, td { height: 30px; box-sizing: border-box; padding: 0 4px; text-align: right; white-space: nowrap; }
+  th, td { height: var(--row-compact); box-sizing: border-box; padding: 0 var(--space-1); text-align: right; white-space: nowrap; }
   thead { position: sticky; top: 0; z-index: 1; background: var(--surface-panel); }
-  thead th { font-size: 10px; color: var(--text-muted); font-weight: 500; }
+  thead th { height: var(--space-6); font-size: var(--text-meta); color: var(--text-muted); font-weight: var(--weight-medium); border-bottom: 1px solid var(--hairline-strong); }
   th:nth-child(2), tbody th { text-align: left; }
-  tbody tr { border-top: 1px solid var(--border); }
-  .identity { display: flex; gap: 5px; align-items: center; min-width: 0; }
-  .name { overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: inherit; text-decoration: none; }
-  a.name { line-height: 30px; }
-  .you { color: var(--gold); border: 1px solid #f2c14e55; border-radius: 4px; padding: 0 4px; font-size: 10px; }
-  .amount { position: relative; display: block; height: 18px; background: var(--surface-inset, #0c0b11); border-radius: 3px; }
-  .damage-fill { position: absolute; inset: 0 auto 0 0; background: var(--violet); opacity: .7; border-radius: inherit; }
-  .amount b { position: absolute; inset: 0 4px 0 0; line-height: 18px; font-size: 11px; color: white; text-shadow: 1px 0 #000, -1px 0 #000, 0 1px #000, 0 -1px #000; font-weight: 600; }
-  .self { background: color-mix(in srgb, var(--gold) 7%, transparent); }
-  .self th { color: var(--gold); } .self .damage-fill { background: var(--gold); }
-  .self td:first-child { box-shadow: inset 2px 0 var(--gold); }
-  .other { color: var(--text-muted); } .other .damage-fill { background: var(--border-strong); }
-  .linked { cursor: pointer; } .linked:hover { background: #ffffff07; } .linked:focus-within { outline: 1px solid var(--gold); outline-offset: -1px; }
+  tbody th { font-weight: var(--weight-normal); }
+  tbody tr + tr { border-top: 1px solid var(--hairline); }
+  .identity { display: flex; gap: var(--space-1); align-items: center; min-width: 0; }
+  .name { overflow: hidden; text-overflow: ellipsis; font-weight: var(--weight-medium); color: inherit; text-decoration: none; }
+  a.name { line-height: var(--row-compact); }
+  a.name:hover, a.name:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+  .you { display: inline-flex; flex: none; }
+  /* Damage: a thin track, with the figure in its own right-aligned slot (matches DamageTable). */
+  .amount { display: flex; align-items: center; gap: var(--space-2); }
+  .track { position: relative; flex: 1; min-width: 0; height: 6px; border-radius: 2px; background: var(--bar-track); overflow: hidden; }
+  .damage-fill { position: absolute; inset: 0 auto 0 0; background: var(--bar-party); border-radius: inherit; }
+  .amount b { flex: none; min-width: 10ch; text-align: right; font-weight: var(--weight-normal); color: var(--text-primary); }
+  .self, .linked.self:hover, .linked.self:focus-within { background: var(--accent-soft); }
+  .self th { color: var(--gold); } .self .damage-fill { background: var(--bar-you); }
+  .other { color: var(--text-muted); } .other .damage-fill { background: var(--bar-party-muted); } .other .amount b { color: var(--text-muted); }
+  .linked { cursor: pointer; } .linked:hover, .linked:focus-within { background: var(--surface-hover); }
   .deaths { color: var(--danger); }
-  @media (max-width: 1150px) { .damage-table { font-size: 11px; } th, td { padding-inline: 2px; } .identity { gap: 3px; } }
+  @media (max-width: 1150px) { .damage-table { font-size: var(--text-meta); } th, td { padding-inline: 2px; } .amount b { min-width: 8ch; } }
 </style>

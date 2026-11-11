@@ -42,14 +42,14 @@
       {#if s.ended === null}<p><a href="#/">Open in Home</a> for this session's fame chart.</p>{/if}
       <h3>Maps</h3>
       {#if detail.maps.length || detail.unrecorded_fame}<MapsTable rows={detail.maps} unrecorded={detail.unrecorded_fame} />
-      {:else}<p>No recorded maps in this session.</p>{/if}
+      {:else}<p>No recorded maps in this session</p>{/if}
       <h3>Runs</h3>
       {#if detail.runs.length}
         <ul class="runs">{#each detail.runs as run (run.id)}
           <li><a href={routeHref({ kind: 'run', id: run.id })}>{run.dungeon}</a> · {whenText(run.started)}{run.outcome ? ` · ${run.outcome}` : ''}</li>
         {/each}</ul>
-        {#if detail.runs_truncated}<p>Showing the first 500 runs.</p>{/if}
-      {:else}<p>No runs in this session.</p>{/if}
+        {#if detail.runs_truncated}<p>Showing the first 500 runs</p>{/if}
+      {:else}<p>No runs in this session</p>{/if}
     {/if}
   {/snippet}
 </StatsQuery>
