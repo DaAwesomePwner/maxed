@@ -41,5 +41,5 @@
   nav { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
   a { display: flex; align-items: center; min-height: var(--target-min); padding: var(--space-1) var(--space-3); border-radius: var(--radius-control); color: var(--text-secondary); text-decoration: none; }
   a:hover { background: var(--surface-hover); }
-  a[aria-current] { background: var(--surface-raised); color: var(--violet-text); }
+  a[aria-current] { background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--highlight-top); }
 </style>

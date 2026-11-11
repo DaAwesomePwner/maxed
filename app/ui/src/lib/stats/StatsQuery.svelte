@@ -52,7 +52,7 @@
   {#if history.phase === 'error' || (history.phase === 'busy' && history.retryAvailable)}
     <button type="button" onclick={() => controller?.retry()}>Retry</button>
   {/if}
-  {#if history.phase === 'error'}<EmptyState state="error" heading="Stats Error" description="" />
+  {#if history.phase === 'error'}<EmptyState state="error" heading="Stats error" description="" />
   {:else if history.phase === 'busy' && history.retryAvailable}<EmptyState state="unavailable" heading="Stats history busy" description="" />
   {:else if !history.value}<EmptyState state="loading" heading={`Loading ${subject}`} description="" />
   {:else}{@render children(history)}{/if}
@@ -60,5 +60,5 @@
 
 <style>
   .message { margin: 0; color: var(--text-secondary); }
-  button { justify-self: start; font: inherit; color: var(--text-primary); min-height: var(--target-min); border-radius: var(--radius-control); background: var(--surface-panel); border: 1px solid var(--border-strong); padding: var(--space-2) var(--space-3); cursor: pointer; }
+  button { justify-self: start; font: inherit; color: var(--text-primary); min-height: var(--target-min); border-radius: var(--radius-control); background: var(--surface-raised); border: 1px solid var(--border-strong); padding: var(--space-2) var(--space-3); cursor: pointer; }
 </style>

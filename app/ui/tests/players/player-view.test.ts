@@ -186,3 +186,19 @@ it('labels fight KPIs by their saved basis and run KPIs by the whole-run denomin
   }
   expect(runPlayerKpis(view())[1]).toMatchObject({ label: 'DPS', tooltip: expect.stringContaining('whole run') });
 });
+
+it('tones the Damage KPI gold only for the local player, profile first', () => {
+  const profile = (is_local: boolean) => ({ scope_id: 'run-1', player_id: 'player-1', object_id: 7, is_local,
+    maxed_stats: [], stats: [], equipment: [], first_seen: '0', last_seen: '2000000' });
+  const damage = (cells: { key: string; tone?: string | null }[]) => cells.find(cell => cell.key === 'damage')?.tone ?? null;
+  for (const [row, prof, expected] of [
+    [player({ is_local: true }), null, 'fame'],
+    [player({ is_local: false }), null, null],
+    [player({ is_local: false }), profile(true), 'fame'],
+    [player({ is_local: true }), profile(false), null],
+    [null, null, null],
+  ] as const) {
+    expect(damage(runPlayerKpis(view({ player: row, profile: prof })))).toBe(expected);
+    expect(damage(fightPlayerKpis(fight(), row, [], null, null, prof))).toBe(expected);
+  }
+});

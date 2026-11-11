@@ -37,11 +37,11 @@ it.each(['player_observed', 'scope_timeline_updated'] as const)(
     const page = mountRuns({ hash: '#/fights/fight-1/players/7',
       queries: { getFight: async () => ready(fight({ id: 'other-fight' })) } });
     await flush();
-    expect(main().getByText('Player Unavailable')).toBeTruthy();
+    expect(main().getByText('Player unavailable')).toBeTruthy();
     page.queries.getFight.mockResolvedValue(ready(fight()));
     page.event(notice(kind, 'run-1'), '13');
     page.setStore(saved('13')); await advance();
-    expect(main().getByText('Player Unavailable')).toBeTruthy();
+    expect(main().getByText('Player unavailable')).toBeTruthy();
     expect(main().queryByTitle('Invented Archer')).toBeNull();
     // A fight-scoped event still recovers the route.
     page.event({ fight_updated: fight() }, '14');

@@ -29,7 +29,7 @@ it.each(['fight', 'player'] as const)('nested %s accepts only matching context a
   page.queries.getFight.mockResolvedValue(ready(fight({ run_id: 'different-run' })));
   page.event({ run_updated: run() }, '13'); page.setStore(saved('13')); await advance();
   expect(parentLink(kind)).toBeNull();
-  expect(screen.getByRole('heading', { name: kind === 'fight' ? 'Fight Unavailable' : 'Player Unavailable' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: kind === 'fight' ? 'Fight unavailable' : 'Player unavailable' })).toBeTruthy();
   expect(page.queries.getFight).toHaveBeenCalledTimes(2);
   expect(page.queries.getPlayerBreakdown).toHaveBeenCalledTimes(kind === 'player' ? 1 : 0);
 });
