@@ -37,7 +37,7 @@
 }} />
 {#snippet chip(row: (typeof choices)[number])}
   <button class="ctl" class:local={row.local} type="button" aria-pressed={plotted.includes(row.id)} onclick={() => onToggle(row.id)} title={row.label}>
-    <i class:dashed={row.dash !== null} style:color={row.color}></i><span>{row.label}</span>
+    <svg class="key" viewBox="0 0 16 2" aria-hidden="true"><line x1="0" y1="1" x2="16" y2="1" stroke={row.color} stroke-width="2" stroke-dasharray={row.dash ?? undefined} /></svg><span>{row.label}</span>
   </button>
 {/snippet}
 <section class="area-card chart" aria-label="Damage over time">
@@ -83,11 +83,11 @@
   .legend button[aria-pressed='true'] { border-color: var(--hairline-strong); background: var(--surface-raised); color: var(--text-secondary); }
   .legend button.local { color: var(--gold); }
   .legend .more { flex: none; color: var(--text-secondary); }
-  .legend i { width: 12px; height: 0; flex: none; border-top: 2px solid currentColor; }
-  .legend i.dashed { border-top-style: dashed; }
-  .legend button[aria-pressed='false'] i { opacity: .5; }
+  /* The key draws the series' own stroke and dash pattern. */
+  .legend .key { width: 16px; height: 2px; flex: none; }
+  .legend button[aria-pressed='false'] .key { opacity: .5; }
   .legend span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  svg { display: block; width: 100%; height: 170px; margin-top: var(--space-2); }
+  svg[role='img'] { display: block; width: 100%; height: 170px; margin-top: var(--space-2); }
   .axis { display: flex; justify-content: space-between; margin-top: var(--space-1); color: var(--chart-label); font-size: var(--text-meta); line-height: var(--leading-meta); font-variant-numeric: tabular-nums; }
   p { color: var(--text-muted); }
 </style>

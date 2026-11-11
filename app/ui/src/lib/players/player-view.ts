@@ -127,7 +127,7 @@ export function runPlayerKpis(v: RunPlayerView): KpiCell[] {
   const from = timestampMs(v.profile?.first_seen), until = presenceEnd(v.profile?.last_seen, v.timeline, v.run.ended == null);
   const places = [...new Set(v.deaths.map(death => death.fight_id == null ? 'outside boss fights'
     : v.fights.find(f => f.fight_id === death.fight_id)?.target_name ?? '—'))];
-  return [...damageCells({ basis: 'whole_run', local: p?.is_local ?? v.profile?.is_local ?? false, damage: p?.damage ?? null, dps: p?.dps ?? null, topDps: v.party.top_dps ?? null,
+  return [...damageCells({ basis: 'whole_run', local: v.profile?.is_local ?? p?.is_local ?? false, damage: p?.damage ?? null, dps: p?.dps ?? null, topDps: v.party.top_dps ?? null,
     topName: v.party.top_name ?? null, average: v.party.average_dps ?? null, total: v.party.total_damage,
     rank: p?.rank ?? null, count: v.party.players_with_damage, share: p?.share ?? null, hits: p?.hits ?? null,
     best: best?.biggest_hit ?? null, source: best }),
@@ -140,7 +140,7 @@ export function fightPlayerKpis(f: FightView, p: PlayerDamage | null, deaths: Pl
   const damaging = f.players.filter(row => row.damage > 0), rates = damaging.map(row => nonnegative(row.dps));
   const average = rates.length && rates.every((rate): rate is number => rate !== null) ? rates.reduce((sum, rate) => sum + rate, 0) / rates.length : null;
   const top = average !== null ? [...damaging].sort((a, b) => b.dps! - a.dps!)[0] : null;
-  return [...damageCells({ basis: f.dps_basis, local: p?.is_local ?? profile?.is_local ?? false, damage: p?.damage ?? null, dps: p?.dps ?? null, topDps: top?.dps ?? null, topName: top?.name ?? null,
+  return [...damageCells({ basis: f.dps_basis, local: profile?.is_local ?? p?.is_local ?? false, damage: p?.damage ?? null, dps: p?.dps ?? null, topDps: top?.dps ?? null, topName: top?.name ?? null,
     average, total: f.total_damage, rank: p?.rank ?? null, count: damaging.length, share: p?.share ?? null, hits: p?.hits ?? null,
     best: p?.biggest_hit ?? null, source: p ? bestSource(p.sources) : null }),
     { key: 'deaths', label: 'Deaths', value: formatStat(deathCount), sub: deaths.length ? 'This fight' : '—', tone: deathCount ? 'bad' : null },

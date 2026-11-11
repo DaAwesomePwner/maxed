@@ -208,3 +208,17 @@ it.each(evidenceCases)('gates cap highlights and preserves boost tones with prov
   expect(screen.getByText('−5').classList.contains('player-danger')).toBe(true);
   if (evidence.count === '—/8') expect(container.querySelector('[data-tone="max"]')).toBeNull();
 });
+
+it('draws the player line gold only for you and neutral by default', () => {
+  const timeline = { compacted: false, disabled: false,
+    buckets: [{ from: '1000000', until: '3000000', party_total: 120, party_active: 2 }], points: [40] };
+  const neutral = render(PlayerTimelineChart, { timeline, bands: [] });
+  expect(neutral.container.querySelector('path[stroke="var(--series-1)"]')).toBeTruthy();
+  expect(neutral.container.querySelector('path[stroke="var(--chart-you)"]')).toBeNull();
+  expect(neutral.container.querySelector('.player-line-key')?.classList.contains('local')).toBe(false);
+  neutral.unmount();
+  const own = render(PlayerTimelineChart, { timeline, bands: [], local: true });
+  expect(own.container.querySelector('path[stroke="var(--chart-you)"]')).toBeTruthy();
+  expect(own.container.querySelector('path[stroke="var(--series-1)"]')).toBeNull();
+  expect(own.container.querySelector('.player-line-key')?.classList.contains('local')).toBe(true);
+});

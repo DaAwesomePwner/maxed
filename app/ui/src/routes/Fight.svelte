@@ -177,7 +177,7 @@
             </div>
           {:else}<p class="muted">—</p>{/each}
         </section>
-        <section class="area-card" aria-label="Your bosses this run"><h3>Your bosses this run</h3>
+        <section class="area-card" aria-label="Bosses this run"><h3>Bosses this run</h3>
           {#if strip?.length}<div class="strip-scroll"><table><thead><tr><th>Boss</th><th>Damage</th><th>Rank</th></tr></thead><tbody>
             {#each shownStrip as row (row.fight_id)}<tr class:current={row.fight_id === fight.id}><th scope="row"><a href={fightHref(row.fight_id)} aria-current={row.fight_id === fight.id ? 'page' : undefined} title={stripName(row)}>{stripName(row)}</a></th><td>{formatStat(row.damage)}</td><td>{damageRank(row.rank)}</td></tr>{/each}
           </tbody></table></div>
