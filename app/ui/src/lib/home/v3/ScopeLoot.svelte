@@ -15,7 +15,7 @@
   let items = $derived(page?.items.slice(0, 32) ?? []);
 </script>
 <div class="scope-loot">
-{#if page === null}<p>—</p>{:else if !items.length}<p>No Loot</p>{:else}
+{#if page === null}<p>—</p>{:else if !items.length}<p>No loot</p>{:else}
   {#each [true, false] as big}
     <div class="loot-row" class:large={big}>
       {#each items.filter(item => (item.tier === 'UT' || item.tier === 'ST') === big) as item (item.item_type)}
@@ -34,15 +34,16 @@
 <DebugNote text="Counts are retained appearances in bags, not stack sizes or pickups. Item tiers and enchant evidence may be unavailable." />
 </div>
 <style>
-  .scope-loot .loot-row { display: flex; flex-wrap: wrap; align-content: start; gap: 6px; padding-top: 5px; padding-right: 5px; }
-  .scope-loot .large { min-height: 48px; padding-bottom: 5px; }
-  .scope-loot .tile { position: relative; flex: none; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); }
+  .scope-loot .loot-row { display: flex; flex-wrap: wrap; align-content: start; gap: var(--space-2); padding-top: var(--space-1); padding-right: var(--space-1); }
+  .scope-loot .large { min-height: 48px; padding-bottom: var(--space-1); }
+  .scope-loot .tile { position: relative; flex: none; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--hairline); border-radius: var(--radius-sprite); background: var(--surface-raised); }
   .scope-loot .tile.big { width: 44px; height: 44px; }
-  .scope-loot [data-tier="UT"] { border-color: var(--violet-text); box-shadow: 0 0 8px #a77bff44; }
-  .scope-loot [data-tier="ST"] { border-color: var(--bag-orange); box-shadow: 0 0 8px #ffb34744; }
-  .scope-loot .count { position: absolute; top: -5px; right: 0; max-width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 8px; line-height: 12px; padding: 0 1px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface-raised); font-variant-numeric: tabular-nums; }
-  .scope-loot nav { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 5px; font-size: 11px; }
-  .scope-loot button { font: inherit; color: var(--violet-text); background: transparent; border: 1px solid var(--border); border-radius: 4px; min-height: 24px; }
-  .scope-loot button:disabled { color: var(--text-muted); }
+  .scope-loot [data-tier="UT"] { border-color: var(--tier-ut); }
+  .scope-loot [data-tier="ST"] { border-color: var(--tier-st); }
+  .scope-loot .count { position: absolute; top: -6px; right: -2px; max-width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-meta); line-height: 16px; padding: 0 2px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-tag); background: var(--surface-panel); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .scope-loot nav { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); font-size: var(--text-meta); color: var(--text-secondary); }
+  .scope-loot button { display: inline-flex; align-items: center; height: 32px; padding: 0 var(--space-3); font: inherit; color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-control); cursor: pointer; }
+  .scope-loot button:hover:not(:disabled) { background: var(--surface-hover); }
+  .scope-loot button:disabled { color: var(--text-disabled); cursor: default; }
   .scope-loot p { margin: 0; color: var(--text-secondary); }
 </style>

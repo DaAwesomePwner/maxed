@@ -43,7 +43,7 @@ it('features an unknown-content bag on every shared-card surface', async () => {
   const drop = retainedBag({ contents_known: false, contents: [], items: [] });
   expect(bestDrop([drop], visuals)).toEqual({ drop, item: null });
   const page = render(BestBagCard, { best: bestDrop([drop], visuals), visuals, resolveSpriteUrl, meta: '8:14 PM' });
-  expect(screen.queryByText('No Bags')).toBeNull();
+  expect(screen.queryByText('No bags')).toBeNull();
   expect(screen.getByRole('img', { name: `Bag ${drop.bag_type}` })).toBeTruthy();
   expect(page.container.textContent).toContain(`Bag ${drop.bag_type}`);
   expect(page.container.textContent).not.toContain('Contents unknown');
@@ -62,7 +62,7 @@ it('glows once in tier colour for a new best bag and respects reduced motion', a
   const second = { ...first, id: 'second' };
   await page.rerender({ best: bestDrop([second], visuals) });
   expect(animate).toHaveBeenCalledExactlyOnceWith([
-    { boxShadow: '0 0 22px 4px #ffb347' }, { boxShadow: '0 0 0 0 transparent' },
+    { backgroundColor: 'color-mix(in srgb, #ffb347 16%, transparent)' }, {},
   ], { duration: 600, iterations: 1 });
   await page.rerender({ best: bestDrop([second], visuals), meta: 'updated clock' });
   expect(animate).toHaveBeenCalledOnce();
@@ -116,7 +116,7 @@ it('features ST with tier styling, 16px pip, rarity, count and debug-only eviden
   expect(page.container.querySelector('[data-pip]')).toBeNull();
   expect(page.container.textContent).not.toMatch(/Common|enchants/);
   await page.rerender({ best: null, visuals, resolveSpriteUrl, meta: '—' });
-  expect(screen.getByText('No Bags')).toBeTruthy();
+  expect(screen.getByText('No bags')).toBeTruthy();
 });
 it('fills fixed rows, reserves overflow space, groups hidden bags and disconnects observer', async () => {
   let resize!: ResizeObserverCallback;
@@ -131,7 +131,7 @@ it('fills fixed rows, reserves overflow space, groups hidden bags and disconnect
   const drops = Array.from({ length: 8 }, (_, i) => ({ ...drop, id: `bag-${i}`, bag_type: i < 3 ? 1280 : 1286, bag_rank: i < 3 ? 10 : 0 }));
   const page = render(BagList, { drops, visuals, resolveSpriteUrl, clock: () => '8:14 PM' });
   const sized = (height: number) => resize([{ contentRect: { height } } as ResizeObserverEntry], {} as ResizeObserver);
-  sized(114); await tick();
+  sized(116); await tick();
   const tile = page.container.querySelector('.item')!;
   expect(tile.getAttribute('data-item-hover')).toBe('444');
   expect(tile.hasAttribute('title')).toBe(false);

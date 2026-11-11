@@ -52,5 +52,5 @@
   .frame { display: inline-block; position: relative; flex: none; overflow: hidden; vertical-align: middle; border-radius: var(--radius-sprite); background: var(--surface-raised); }
   img { position: absolute; top: 0; left: 0; max-width: none; transform-origin: top left; image-rendering: crisp-edges; image-rendering: pixelated; }
   .crop { position: absolute; display: block; overflow: hidden; }
-  .fallback { display: grid; place-items: center; width: 100%; height: 100%; color: var(--text-muted); font: var(--weight-semibold) var(--text-label)/var(--leading-label) var(--font-ui); }
+  .fallback { display: grid; place-items: center; width: 100%; height: 100%; color: var(--text-muted); font: var(--weight-medium) var(--text-label)/var(--leading-label) var(--font-ui); }
 </style>

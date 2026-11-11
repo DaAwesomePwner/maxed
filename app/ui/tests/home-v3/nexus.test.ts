@@ -89,7 +89,7 @@ it('Nexus uses the shared 600ms best-bag glow exactly once and disables it for r
   const next = { ...input.history, summary: { ...input.history.summary!, best_drop: { ...drop, id: 'new-best' } } };
   await page.rerender({ history: next });
   expect(animate).toHaveBeenCalledExactlyOnceWith([
-    { boxShadow: '0 0 22px 4px #a77bff' }, { boxShadow: '0 0 0 0 transparent' },
+    { backgroundColor: 'color-mix(in srgb, #a77bff 16%, transparent)' }, {},
   ], { duration: 600, iterations: 1 });
   await page.rerender({ history: { ...next, summary: { ...next.summary, runs: 9999 } } });
   expect(animate).toHaveBeenCalledOnce();
@@ -141,8 +141,8 @@ it('keeps unknown scope, fame, art and fight values explicit and never invents a
   const data = homeSummary({ top_fight: null, best_drop: null, fame_delta: null, fame: [], dungeon_stats: null, recent_runs: [], recent_details: [] });
   const page = render(NexusHome, { ...input, snapshot: null, history: { ...ready(), summary: data }, loot: { items: [], next: null, total_bags: 0 } });
   expect(screen.queryByRole('link', { name: /Open fight/ })).toBeNull();
-  expect(screen.getByText('No Bags')).toBeTruthy();
-  expect(screen.getByText('No Loot')).toBeTruthy();
+  expect(screen.getByText('No bags')).toBeTruthy();
+  expect(screen.getByText('No loot')).toBeTruthy();
   expect(screen.queryByText('PB')).toBeNull();
   expect(page.container.innerHTML).not.toMatch(/NaN|undefined|Infinity/);
   const error = { ...ready(), phase: 'error' as const, summary: null, message: 'History details' };

@@ -1,67 +1,69 @@
 /* The desktop parent supplies the available height after shell notices. The
    fight track grows beyond it only at the full table + chart plot minimum. */
-.area-home { display: grid; gap: 10px; min-width: 0; min-height: 0; height: 100%;
+.area-home { display: grid; gap: var(--space-3); min-width: 0; min-height: 0; height: 100%;
   grid-template-columns: minmax(0, 1fr) 284px; grid-template-rows: auto auto minmax(min-content, 1fr) auto;
   grid-template-areas: 'head head' 'kpis kpis' 'fight loot' 'timeline timeline';
-  font-size: 12px; color: var(--text-primary); }
-.area-home .area-header { grid-area: head; display: flex; align-items: center; gap: 12px; min-width: 0; }
-.area-home .area-header h2 { margin: 0; font-size: 22px; line-height: 1.1; }
-.area-home .area-header p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.area-home .run-icon { width: 40px; height: 40px; flex: none; display: grid; place-items: center; background: var(--surface-raised); border-radius: 8px; }
-.area-home .live-chip { margin-left: auto; flex: none; color: #75dfa1; background: #75dfa114; border: 1px solid #75dfa140;
-  border-radius: 99px; padding: 4px 10px; white-space: nowrap; }
+  font-size: var(--text-meta); color: var(--text-primary); }
+.area-home .area-header { grid-area: head; display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.area-home .area-header h2 { margin: 0; font-size: var(--text-hero); line-height: var(--leading-hero); font-weight: var(--weight-medium); }
+.area-home .area-header p { margin: var(--space-1) 0 0; color: var(--text-muted); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
+.area-home .run-icon { width: 40px; height: 40px; flex: none; display: grid; place-items: center; background: var(--surface-raised); border-radius: var(--radius-control); }
+/* Live is the shared badge: hairline tag, semantic text colour only. */
+.area-home .live-chip { margin-left: auto; flex: none; display: inline-flex; align-items: center; box-sizing: border-box; height: 18px;
+  padding: 0 var(--space-1); color: var(--success); border: 1px solid var(--hairline-strong); border-radius: var(--radius-tag);
+  font-size: var(--text-meta); font-weight: var(--weight-medium); white-space: nowrap; }
 .area-home .live-chip.stale { color: var(--warning); }
 .area-home .area-kpis { grid-area: kpis; min-width: 0; position: relative; font-variant-numeric: tabular-nums; }
-.area-home .area-card { min-width: 0; min-height: 0; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+.area-home .area-card { min-width: 0; min-height: 0; border: 1px solid var(--hairline); border-radius: var(--radius-card); padding: var(--space-3) var(--space-4);
   background: var(--surface-panel); }
-.area-home .area-card h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .07em; color: var(--text-muted); font-weight: 600; }
-.area-home .fight-panel { grid-area: fight; display: flex; flex-direction: column; gap: 8px; min-height: min-content; }
+.area-home .area-card h3 { margin: 0 0 var(--space-2); font-size: var(--text-caption); line-height: var(--leading-label); color: var(--text-secondary); font-weight: var(--weight-medium); }
+.area-home .fight-panel { grid-area: fight; display: flex; flex-direction: column; gap: var(--space-2); min-height: min-content; }
 .area-home .fight-panel > .fight-tabs { flex-shrink: 0; }
-.area-home .fight-detail { display: flex; flex-direction: column; gap: 7px; min-width: 0; min-height: min-content; flex: 1; }
+.area-home .fight-detail { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; min-height: min-content; flex: 1; }
 .area-home .fight-detail > .boss-hp { flex-shrink: 0; }
 .area-home .fight-detail > .damage-table { flex: none; }
-.area-home .fight-meta { display: flex; gap: 6px 14px; flex-wrap: wrap; flex-shrink: 0; margin: 0; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.area-home .fight-meta { display: flex; gap: var(--space-1) var(--space-4); flex-wrap: wrap; flex-shrink: 0; margin: 0; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .area-home .gold { color: var(--gold); }
-.area-home .area-loot { grid-area: loot; display: flex; flex-direction: column; gap: 7px; overflow: visible; }
+.area-home .area-loot { grid-area: loot; display: flex; flex-direction: column; gap: var(--space-2); overflow: visible; }
 .area-home .bag-space { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .area-home .bag-space > .bag-list-root { flex: 1; min-height: 0; }
 .area-home .area-timeline { grid-area: timeline; min-width: 0; }
-.area-home .area-debug { grid-column: 1 / -1; font-size: 12px; overflow-wrap: anywhere; }
+.area-home .area-debug { grid-column: 1 / -1; font-size: var(--text-meta); overflow-wrap: anywhere; }
 .area-home:has(.area-debug) { height: auto; }
 .area-home:has(.area-debug) .area-loot { min-height: 420px; }
 @media (max-width: 950px) {
   .area-home { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto auto;
     grid-template-areas: 'head' 'kpis' 'fight' 'loot' 'timeline'; }
-  .area-home .area-loot { height: 420px; } .area-home .fight-panel { min-height: 390px; }
+  .area-home .area-loot { height: 420px; } .area-home .fight-panel { min-height: 392px; }
 }
 
 /* Keep the fight track at least as tall as its ranked table. The page scrolls
    when fight + kills exceed the viewport; an auto track can under-size it. */
 .realm-home { grid-template-rows: auto auto minmax(min-content, auto) minmax(140px, 1fr);
   grid-template-areas: 'head head' 'kpis kpis' 'fight loot' 'kills loot'; }
-.realm-home .realm-fight { gap: 7px; }
-.realm-home .fight-heading { display: flex; gap: 8px; align-items: baseline; }
+.realm-home .realm-fight { gap: var(--space-2); }
+.realm-home .fight-heading { display: flex; gap: var(--space-2); align-items: baseline; }
 .realm-home .fight-heading h3 { margin: 0; }
-.realm-home .ended-tag { font-size: 11px; font-weight: 600; color: var(--text-muted); background: var(--surface-raised);
-  border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; }
-.realm-home .fight-target { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.realm-home .ended-tag { display: inline-flex; align-items: center; box-sizing: border-box; height: 18px; padding: 0 var(--space-1);
+  font-size: var(--text-meta); font-weight: var(--weight-medium); color: var(--text-secondary);
+  border: 1px solid var(--hairline-strong); border-radius: var(--radius-tag); }
+.realm-home .fight-target { display: flex; gap: var(--space-3); align-items: center; min-width: 0; }
 .realm-home .boss-name { display: grid; min-width: 0; }
-.realm-home .boss-name b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.realm-home .kind { color: var(--text-muted); text-transform: uppercase; font-size: 10px; letter-spacing: .07em; }
+.realm-home .boss-name b { font-size: var(--text-body); line-height: var(--leading-body); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.realm-home .kind { color: var(--text-muted); font-size: var(--text-meta); }
 .realm-home .fight-time { margin-left: auto; flex: 0 0 10ch; width: 10ch; text-align: right;
-  white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--text-muted); }
+  white-space: nowrap; font-variant-numeric: tabular-nums; font-size: var(--text-meta); color: var(--text-muted); }
 .realm-home .realm-kill-card { grid-area: kills; display: flex; flex-direction: column; min-height: 0; }
-.realm-home .kill-count { margin-left: 4px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.realm-home .kill-count { margin-left: var(--space-1); color: var(--text-primary); font-variant-numeric: tabular-nums; }
 /* Score has two six-digit quantities. Keep the bound component's API unchanged. */
 .realm-home .kpi-strip { grid-template-columns: 1.6fr 1fr 1fr 1fr !important; }
-.realm-home [data-kpi='score'] .value { font-size: 22px; }
-.realm-home [data-kpi='score'] small { font-size: 12px; }
-.realm-home [data-kpi='score'] .progress i { background: linear-gradient(90deg, var(--violet), var(--gold)); }
+.realm-home [data-kpi='score'] .value { font-size: var(--text-title); line-height: var(--leading-hero); }
+.realm-home [data-kpi='score'] small { font-size: var(--text-meta); }
 @media (max-width: 950px) {
   .realm-home { grid-template-areas: 'head' 'kpis' 'fight' 'kills' 'loot'; grid-template-rows: auto auto auto 220px 420px; }
   .realm-home .realm-fight { min-height: 0; }
-  .realm-home [data-kpi='score'] .value { font-size: 18px; }
-  .realm-home .kpi-strip > div { padding-inline: 8px; }
+  .realm-home [data-kpi='score'] .value { font-size: var(--text-body); line-height: var(--leading-title); }
+  .realm-home .kpi-strip > div { padding-inline: var(--space-2); }
 }
 
 .realm-home:has(.realm-kills.expanded) { height: auto; }
