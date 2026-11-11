@@ -108,12 +108,12 @@ function activeCell(t: PlayerTimeline | null, presentMs: number | null): KpiCell
   return { key: 'active', label: 'Active', value: `${ratio !== null && t?.compacted ? 'approx. ' : ''}${ratioText(ratio)}`,
     sub: `${active !== null && t?.compacted && ratio === null ? 'approx. ' : ''}${durationText(active)} of ${durationText(presentMs)} dealing dmg` };
 }
-function damageCells(input: { basis: DpsScope; damage: number | null; dps: number | null; topDps: number | null; topName: string | null;
+function damageCells(input: { basis: DpsScope; local: boolean; damage: number | null; dps: number | null; topDps: number | null; topName: string | null;
   average: number | null; total: number; rank: number | null; count: number; share: number | null;
   hits: number | null; best: number | null; source: SourceDamage | null }): KpiCell[] {
   const avgRatio = vsAverage(input.dps, input.average), delta = avgRatio === null ? null : avgRatio - 1;
   return [
-    { key: 'damage', label: 'Damage', value: formatStat(nonnegative(input.damage)), sub: `of ${formatStat(nonnegative(input.total))} party`, tone: 'fame' },
+    { key: 'damage', label: 'Damage', value: formatStat(nonnegative(input.damage)), sub: `of ${formatStat(nonnegative(input.total))} party`, tone: input.local ? 'fame' : null },
     { key: 'dps', ...dpsMetric(input.basis), value: formatDps(input.dps), sub: delta === null ? '—' : `${delta >= 0 ? '+' : '−'}${ratioText(Math.abs(delta))} vs avg`, subTone: delta === null || delta === 0 ? null : delta > 0 ? 'good' : 'bad' },
     { key: 'vs_top', label: 'vs Top', value: ratioText(vsTop(input.dps, input.topDps)), sub: `${input.topName ?? '—'} ${formatDps(input.topDps)}` },
     { key: 'rank', label: 'Rank', value: damageRank(input.rank) === '—' ? '—' : `#${damageRank(input.rank)}`, of: String(input.count), sub: `${formatShare(input.share)} share` },
@@ -127,7 +127,7 @@ export function runPlayerKpis(v: RunPlayerView): KpiCell[] {
   const from = timestampMs(v.profile?.first_seen), until = presenceEnd(v.profile?.last_seen, v.timeline, v.run.ended == null);
   const places = [...new Set(v.deaths.map(death => death.fight_id == null ? 'outside boss fights'
     : v.fights.find(f => f.fight_id === death.fight_id)?.target_name ?? '—'))];
-  return [...damageCells({ basis: 'whole_run', damage: p?.damage ?? null, dps: p?.dps ?? null, topDps: v.party.top_dps ?? null,
+  return [...damageCells({ basis: 'whole_run', local: p?.is_local ?? v.profile?.is_local ?? false, damage: p?.damage ?? null, dps: p?.dps ?? null, topDps: v.party.top_dps ?? null,
     topName: v.party.top_name ?? null, average: v.party.average_dps ?? null, total: v.party.total_damage,
     rank: p?.rank ?? null, count: v.party.players_with_damage, share: p?.share ?? null, hits: p?.hits ?? null,
     best: best?.biggest_hit ?? null, source: best }),
@@ -140,7 +140,7 @@ export function fightPlayerKpis(f: FightView, p: PlayerDamage | null, deaths: Pl
   const damaging = f.players.filter(row => row.damage > 0), rates = damaging.map(row => nonnegative(row.dps));
   const average = rates.length && rates.every((rate): rate is number => rate !== null) ? rates.reduce((sum, rate) => sum + rate, 0) / rates.length : null;
   const top = average !== null ? [...damaging].sort((a, b) => b.dps! - a.dps!)[0] : null;
-  return [...damageCells({ basis: f.dps_basis, damage: p?.damage ?? null, dps: p?.dps ?? null, topDps: top?.dps ?? null, topName: top?.name ?? null,
+  return [...damageCells({ basis: f.dps_basis, local: p?.is_local ?? profile?.is_local ?? false, damage: p?.damage ?? null, dps: p?.dps ?? null, topDps: top?.dps ?? null, topName: top?.name ?? null,
     average, total: f.total_damage, rank: p?.rank ?? null, count: damaging.length, share: p?.share ?? null, hits: p?.hits ?? null,
     best: p?.biggest_hit ?? null, source: p ? bestSource(p.sources) : null }),
     { key: 'deaths', label: 'Deaths', value: formatStat(deathCount), sub: deaths.length ? 'This fight' : '—', tone: deathCount ? 'bad' : null },

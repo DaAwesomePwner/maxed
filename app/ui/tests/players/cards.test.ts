@@ -152,8 +152,8 @@ it('plots bucket DPS with shaded bosses, approximate label and a keyboard crossh
     buckets: [{ from: '1000000', until: '3000000', party_total: 120, party_active: 2 }], points: [40] },
     bands: [{ from: 1000, until: 3000, label: 'Invented Boss' }] });
   expect(screen.getByText('approx.')).toBeTruthy();
-  expect(container.querySelector('path[stroke="var(--gold)"]')).toBeTruthy();
-  expect(container.querySelector('path[stroke="var(--violet)"]')?.hasAttribute('stroke-dasharray')).toBe(true);
+  expect(container.querySelector('path[stroke="var(--series-1)"]')).toBeTruthy();
+  expect(container.querySelector('path[stroke="var(--chart-party)"]')?.hasAttribute('stroke-dasharray')).toBe(true);
   expect(container.querySelector('rect')?.getAttribute('width')).toBe('800');
   await fireEvent.input(screen.getByRole('slider', { name: 'Inspect timeline' }), { target: { value: '0' } });
   const tooltip = screen.getByRole('tooltip');

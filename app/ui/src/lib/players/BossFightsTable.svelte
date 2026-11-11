@@ -30,7 +30,7 @@
 </section>
 
 <style>
-  .heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .heading span, small { color: var(--text-muted); font-size: 11px; }
+  .heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+  .heading span, small { color: var(--text-muted); font-size: var(--text-meta); }
   small { display: block; }
 </style>

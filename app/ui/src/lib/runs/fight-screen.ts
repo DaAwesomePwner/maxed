@@ -49,9 +49,12 @@ export function bucketRate(amount: number, from: string, until: string): number 
   return seconds > 0 ? amount / seconds : NaN;
 }
 /** NaN marks unavailable bucket values so the renderer leaves a gap, never a zero. */
-export function seriesForChart(fight: FightView, plotted: string[]): Array<{ id: string; label: string; color: string; local: boolean; points: number[] }> {
-  const rows = [{ id: 'party', label: 'Party', color: 'var(--violet)', local: false, points: fight.buckets.map(bucket => bucket.total) }];
-  const colors = ['#8de4e5', '#75dfa1', '#f2a6cf', '#ffc076', '#83bbff', '#c99a70'];
+/** You are gold, Party is the dashed party line, others take neutral steps (dotted after the fourth).
+ * Bag and rarity colors never stand in for players. */
+export function seriesForChart(fight: FightView, plotted: string[]): Array<{ id: string; label: string; color: string; dash: string | null; local: boolean; points: number[] }> {
+  const rows: Array<{ id: string; label: string; color: string; dash: string | null; local: boolean; points: number[] }> = [
+    { id: 'party', label: 'Party', color: 'var(--chart-party)', dash: '6 4', local: false, points: fight.buckets.map(bucket => bucket.total) }];
+  const colors = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)'];
   const locals = fight.players.filter(player => player.is_local);
   const rank = (player: PlayerDamage) => player.rank !== null && player.rank > 0 ? player.rank : Infinity;
   const players = [...fight.players].sort((a, b) => rank(a) - rank(b));
@@ -62,7 +65,8 @@ export function seriesForChart(fight: FightView, plotted: string[]): Array<{ id:
     const points = matches.length === 1 && matches[0].points.length === fight.buckets.length ? matches[0].points
       : player.is_local && locals.length === 1 ? fight.buckets.map(bucket => bucket.local ?? NaN) : null;
     if (points) rows.push({ id: player.player_id, label: player.name ?? (player.is_local ? 'You' : 'Unknown player'),
-      color: player.is_local ? 'var(--gold)' : colors[colorIndex++ % colors.length], local: player.is_local, points });
+      color: player.is_local ? 'var(--chart-you)' : colors[colorIndex % colors.length],
+      dash: player.is_local || colorIndex++ < colors.length ? null : '2 3', local: player.is_local, points });
   }
   const order = (row: (typeof rows)[number]) => row.local ? 0 : row.id === 'party' ? 1 : 2;
   return rows.filter(row => plotted.includes(row.id)).sort((a, b) => order(a) - order(b));

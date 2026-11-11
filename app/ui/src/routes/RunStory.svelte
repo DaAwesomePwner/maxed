@@ -13,6 +13,7 @@
   import { historyStatus } from '../lib/status/registry';
   import HistoryStatus from '../lib/runs/HistoryStatus.svelte';
   import EmptyState from '../lib/components/EmptyState.svelte';
+  import Badge from '../lib/components/Badge.svelte';
   import DebugNote from '../lib/debug/DebugNote.svelte';
   import { debugMode } from '../lib/debug/debug';
   import { createDungeonPortal, createHomeVisuals, emptyHomeVisuals, type HomeVisuals } from '../lib/home/visuals';
@@ -146,10 +147,10 @@
       }
     }
     if (selected !== 'whole' && !(selected === 'others' && others.length) && !bosses.some(row => row.id === selected)) {
-      missingRow = 'Row Removed'; untrack(() => choose('whole'));
+      missingRow = 'Row removed'; untrack(() => choose('whole'));
     }
     if (selectedDropId && !story.drops.some(drop => drop.id === selectedDropId)) {
-      selectedDropId = null; missingRow = 'Row Removed'; untrack(() => onStateChange?.({ focusedRowId: null }));
+      selectedDropId = null; missingRow = 'Row removed'; untrack(() => onStateChange?.({ focusedRowId: null }));
     }
   });
   $effect.pre(() => {
@@ -163,7 +164,7 @@
       const replacement = rowId ? [...region.querySelectorAll<HTMLElement>('[data-row-id]')].find(row => row.dataset.rowId === rowId) : null;
       if (replacement) { replacement.focus({ preventScroll: true }); return; }
       region.querySelector<HTMLElement>('[data-story-header]')?.focus({ preventScroll: true });
-      missingRow = 'Row Removed'; onStateChange?.({ focusedRowId: null });
+      missingRow = 'Row removed'; onStateChange?.({ focusedRowId: null });
     });
   });
   $effect(() => {
@@ -192,10 +193,10 @@
   <p class="sr-only" role="status" aria-live="polite">{missingRow}</p>
   {#if history.message && history.message !== HISTORY_CATCH_UP && !/^(Refreshing|Loading)\b/.test(history.message)}<DebugNote text={history.message} />{/if}
   {#if retryShown}<button class="ctl" type="button" aria-disabled={!history.retryAvailable} onclick={() => { if (history.retryAvailable) controller?.retry(); }}>Retry</button>{/if}
-  {#if !client}<EmptyState state="unavailable" heading="No Runs" description="" />
-  {:else if loaded && !story}<EmptyState heading="Run Not Found" description="" />
-  {:else if !story && history.phase !== 'error'}<EmptyState state="loading" heading="Loading Run" description="" />
-  {:else if !story}<EmptyState state="error" heading="Run Error" description="" />{/if}
+  {#if !client}<EmptyState state="unavailable" heading="No runs" description="" />
+  {:else if loaded && !story}<EmptyState heading="Run not found" description="" />
+  {:else if !story && history.phase !== 'error'}<EmptyState state="loading" heading="Loading run" description="" />
+  {:else if !story}<EmptyState state="error" heading="Run error" description="" />{/if}
   {#if story}
     <div class="area-home run-screen">
       <div class="run-crumbs"><Breadcrumbs items={runCrumbs(story)} />
@@ -206,8 +207,8 @@
         <div class="run-heading"><h2>{story.run.dungeon}</h2><p>{runHeaderLine(story, objectVisual(visuals.objects, story.character?.class_id)?.name ?? null)}</p></div>
         <span class="outcome" data-outcome={story.run.ended === null ? 'open' : story.run.outcome}>{story.run.ended === null ? 'In progress' : story.run.outcome === 'cleared' ? 'Cleared' : story.run.outcome === 'died' ? 'Died' : story.run.outcome === 'left' ? 'Left' : '—'}</span>
         {#if clearAndDeath(story.run)}<span class="warning">Clear and death</span>{/if}
-        {#if !story.run.complete_capture || story.run.issues.length || totals?.partial}<span class="quiet-tag">partial</span>{/if}
-        {#if estimatedClear(story)}<span class="quiet-tag">estimated clear</span>{/if}
+        {#if !story.run.complete_capture || story.run.issues.length || totals?.partial}<Badge label="partial" />{/if}
+        {#if estimatedClear(story)}<Badge label="estimated clear" />{/if}
         <div class="run-controls">
           {#if features.logs}<nav aria-label="Run logs"><a class="ctl ghost" href={`#/logs/run/${encodeURIComponent(runId)}`}>Chat log</a><a class="ctl ghost" href={`#/logs/events/run/${encodeURIComponent(runId)}`}>Events</a></nav>{/if}
           <a class="ctl sq" href={story.older_run_id ? routeHref({ kind: 'run', id: story.older_run_id }) : undefined} aria-disabled={!story.older_run_id} aria-label="Older run">‹</a>
@@ -232,7 +233,7 @@
             {#if fight}
               <BossHpBar saved hp={fight.target_hp ?? null} max={fight.max_hp} ended={fight.ended !== null}
                 killedAt={bossOutcome(fight) === 'killed' ? fight.kill && !fight.kill.provisional ? fight.kill.at : fight.ended : null} />
-              <p class="fight-meta"><span>{formatStat(fight.total_damage)} damage · {formatDps(fightDps(fight))} DPS · {fight.players.length} players</span><span class="gold">You: best hit {formatStat(self?.biggest_hit ?? null)} · {formatStat(self?.hits ?? null)} hits</span>{#if !fight.complete_capture || fight.issues.length}<span class="quiet-tag">partial</span>{/if}<a class="open-fight" href={fightHref(fight.id)}>Open fight ›</a></p>
+              <p class="fight-meta"><span>{formatStat(fight.total_damage)} damage · {formatDps(fightDps(fight))} DPS · {fight.players.length} players</span><span class="gold">You: best hit {formatStat(self?.biggest_hit ?? null)} · {formatStat(self?.hits ?? null)} hits</span>{#if !fight.complete_capture || fight.issues.length}<Badge label="partial" />{/if}<a class="open-fight" href={fightHref(fight.id)}>Open fight ›</a></p>
             {:else}<p class="fight-meta"><span>{formatStat(totals?.total_damage ?? null)} damage</span><span>{totals ? `${totals.fights} fights · ${totals.kills} kills` : '—'}</span><span class="gold">You: {formatShare(local?.share ?? null)} · rank {formatStat(local?.rank ?? null)}</span></p>{/if}
             {#if fight || totals}<DamageTable basis={fight ? fight.dps_basis : 'whole_run'} scroll rows={shownRows} total={fight?.players.length ?? totals?.players.length ?? 0} otherDamage={fight?.unattributed_damage ?? totals?.unattributed_damage} {visuals} {resolveSpriteUrl}
               rowHref={row => fight ? fightPlayerHref(fight, row, runId) : runPlayerHref(runId, row)} />

@@ -9,7 +9,7 @@ it('weights rate by observed time and labels the bounded page scope', () => {
   const cells = sessionPageKpis([row(3_600_000_000, 100), row(7_200_000_000, 500, true)]);
   expect(cells.find(c => c.key === 'rate')?.value).toBe('≥ 200');
   expect(cells.find(c => c.key === 'fame')?.value).toBe('≥ 600');
-  expect(cells.every(c => c.sub === 'On this page')).toBe(true);
+  expect(cells.every(c => c.sub === 'this page')).toBe(true);
 });
 it('preserves the five-minute threshold and real zero', () => {
   expect(sessionPageKpis([row(299_999_999, 10)]).find(c => c.key === 'rate')?.value).toBe('—');
@@ -23,7 +23,7 @@ it('weights bag rates by total page time rather than averaging row rates', () =>
   ]);
   expect(cells.find(c => c.key === 'bags-rate')?.value).toBe('6');
   expect(cells.find(c => c.key === 'notable-rate')?.value).toBe('1.3');
-  expect(cells.every(c => c.sub === 'On this page')).toBe(true);
+  expect(cells.every(c => c.sub === 'this page')).toBe(true);
 });
 it('applies the five-minute minimum to page bag rates, including empty and zero totals', () => {
   for (const key of ['bags-rate', 'notable-rate']) {

@@ -5,28 +5,30 @@
 .run-screen .run-heading { min-width: 0; }
 .run-screen .run-controls { margin-left: auto; }
 .run-screen .run-heading h2, .run-screen .run-heading p { overflow-wrap: anywhere; }
-.run-screen .run-controls, .run-screen .run-controls nav { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
-.run-screen .outcome, .run-screen .quiet-tag { white-space: nowrap; font-size: 11px; color: var(--text-muted); }
-.run-screen .outcome { border: 1px solid currentColor; border-radius: 99px; padding: 3px 9px; }
-.run-screen [data-outcome='cleared'] { color: var(--success); background: #75dfa114; }
+.run-screen .run-controls, .run-screen .run-controls nav { display: flex; gap: var(--space-1); align-items: center; flex-shrink: 0; }
+/* Status words are plain semantic text; caveats use the shared badge. */
+.run-screen .outcome { white-space: nowrap; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); color: var(--text-secondary); }
+.run-screen [data-outcome='cleared'] { color: var(--success); }
 .run-screen [data-outcome='died'] { color: var(--danger); }
-.run-screen [data-outcome='open'] { color: var(--gold); }
-.run-screen .warning { color: var(--warning); }
+.run-screen .warning { color: var(--warning); font-size: var(--text-caption); }
 .run-screen .area-header { flex-wrap: wrap; }
-.run-screen .area-card h3 { text-transform: uppercase; }
 .run-screen .area-loot { overflow: hidden; max-height: 640px; }
-.run-screen .open-fight { color: var(--violet-text); text-decoration: none; margin-left: auto; }
-.run-screen .other-targets { overflow-y: auto; max-height: 480px; }
-.run-screen .other-row { display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr); gap: 8px;
-  min-height: 30px; align-items: center; border-bottom: 1px solid var(--border); color: var(--text-secondary); text-decoration: none; font-variant-numeric: tabular-nums; }
+.run-screen .open-fight { color: var(--text-secondary); text-decoration: none; margin-left: auto; }
+.run-screen .open-fight:hover, .run-screen .open-fight:focus-visible { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+.run-screen .other-targets { overflow-y: auto; max-height: 480px; font-size: var(--text-caption); line-height: var(--leading-caption); }
+.run-screen .other-row { display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr); gap: var(--space-2);
+  min-height: var(--row-compact); align-items: center; border-bottom: 1px solid var(--hairline); color: var(--text-secondary); text-decoration: none; font-variant-numeric: tabular-nums; }
+.run-screen .other-row:first-child { min-height: var(--space-6); color: var(--text-muted); font-size: var(--text-meta); font-weight: var(--weight-medium); border-bottom-color: var(--hairline-strong); }
 .run-screen .other-row > span { min-width: 0; overflow-wrap: anywhere; }
-.run-screen .other-row a { color: inherit; text-decoration: none; }
+.run-screen .other-row a { color: var(--text-primary); text-decoration: none; }
+.run-screen .other-row a:hover, .run-screen .other-row a:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 .run-screen .other-row > span:not(:first-child) { text-align: right; }
-.run-screen .other-row small { display: block; color: var(--text-muted); }
+.run-screen .other-row small { display: block; color: var(--text-muted); font-size: var(--text-meta); }
 .run-screen .run-death { grid-column: 1 / -1; }
-.run-screen .fight-tabs .more { height: 26px; min-height: 26px; }
+.run-screen .run-death h3 { margin: 0 0 var(--space-2); font-size: var(--text-caption); font-weight: var(--weight-medium); color: var(--text-secondary); }
+.run-screen .fight-tabs .more { height: var(--control-dense); min-height: var(--control-dense); }
 @media (max-width: 950px) {
   .area-home.run-screen { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto auto auto;
     grid-template-areas: 'crumbs' 'head' 'kpis' 'fight' 'loot' 'timeline'; }
-  .run-screen .area-loot { height: 420px; } .run-screen .fight-panel { min-height: 390px; }
+  .run-screen .area-loot { height: 420px; } .run-screen .fight-panel { min-height: 392px; }
 }

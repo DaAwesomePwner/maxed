@@ -18,10 +18,10 @@
 </nav>
 
 <style>
-  .crumbs { display: flex; gap: 6px; align-items: center; color: var(--text-muted); font-size: 12px; height: 16px; margin: 0; padding: 0; list-style: none; }
-  li { display: flex; gap: 6px; align-items: center; min-width: 0; }
+  .crumbs { display: flex; gap: var(--space-2); align-items: center; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); height: 16px; margin: 0; padding: 0; list-style: none; }
+  li { display: flex; gap: var(--space-2); align-items: center; min-width: 0; }
   a, span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .crumbs a { color: var(--text-secondary); text-decoration: none; }
-  .crumbs a:hover { color: var(--violet-text); }
-  .crumbs i { font-style: normal; opacity: .55; }
+  .crumbs a:hover, .crumbs a:focus-visible { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+  .crumbs i { font-style: normal; color: var(--text-disabled); }
 </style>

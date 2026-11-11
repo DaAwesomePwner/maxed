@@ -61,7 +61,7 @@ it('shows observed bag totals and loot rates in rows and the page KPI strip', as
   const strip = screen.getByRole('group', { name: 'Sessions on this page' });
   expect(strip.querySelector('[data-kpi="bags-rate"] .value')?.textContent).toBe('18');
   expect(strip.querySelector('[data-kpi="notable-rate"] .value')?.textContent).toBe('2.3');
-  expect(within(strip).getAllByText('On this page')).toHaveLength(6);
+  expect(within(strip).getAllByText('this page')).toHaveLength(6);
   expect(screen.getByText(/Notable: orange\/ST, red and white bags/)).toBeTruthy();
 });
 it('shows no bag rates under five minutes in the session row or page strip', async () => {

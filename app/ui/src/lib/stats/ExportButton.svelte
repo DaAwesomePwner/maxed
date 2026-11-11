@@ -24,5 +24,5 @@
 <style>
   .export { display: inline-flex; align-items: center; gap: var(--space-2); }
   button:not([aria-disabled="true"]) { cursor: pointer; } button[aria-disabled="true"] { color: var(--text-muted); }
-  [role="alert"] { color: var(--danger-text, var(--text-primary)); }
+  [role="alert"] { color: var(--danger); }
 </style>
