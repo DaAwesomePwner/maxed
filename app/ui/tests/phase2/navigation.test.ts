@@ -16,7 +16,7 @@ it('phase2_navigation_windows_and_bounds', async () => {
   await fireEvent.click(main().getAllByRole('tab')[1]); await flush(); await follow('#/runs/run-6/fights/fight-1', region('Fight damage'));
   // The fixture's fight relationship must agree with the selected parent.
   // Override before the player read, without fabricating a run label on Fight.
-  expect(main().getByRole('heading', { name: 'Fight Unavailable' })).toBeTruthy();
+  expect(main().getByRole('heading', { name: 'Fight unavailable' })).toBeTruthy();
   await click('Back', history()); await click('Back', history());
   expect(document.activeElement?.getAttribute('data-row-id')).toBe('run-6');
   expect(page.browser.adapter.state).not.toHaveProperty('runsWindow');

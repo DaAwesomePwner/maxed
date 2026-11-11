@@ -158,13 +158,13 @@ it('shows neighboring boss links, the current fight, and unknown strip metrics',
   expect(main().getByRole('link', { name: 'Previous boss: Synthetic boss 1' }).classList.contains('ghost')).toBe(true);
   expect(main().getByRole('link', { name: 'Previous boss: Synthetic boss 1' }).getAttribute('href')).toBe('#/runs/run-1/fights/before');
   expect(main().getByRole('link', { name: 'Next boss: Synthetic boss 3' }).getAttribute('href')).toBe('#/runs/run-1/fights/after');
-  expect(region('You this run').getByRole('link', { name: 'Synthetic boss 2' }).getAttribute('aria-current')).toBe('page');
-  expect(region('You this run').getByRole('row', { name: /Synthetic boss 3/ }).textContent).toContain('——');
+  expect(region('Bosses this run').getByRole('link', { name: 'Synthetic boss 2' }).getAttribute('aria-current')).toBe('page');
+  expect(region('Bosses this run').getByRole('row', { name: /Synthetic boss 3/ }).textContent).toContain('——');
   expect(page.queries.getRun).not.toHaveBeenCalled();
   await follow('#/runs/run-1/fights/after', within(main().getByRole('navigation', { name: 'Adjacent boss fights' })));
   const next = main().getByText('Next boss ›');
   expect(next.getAttribute('aria-disabled')).toBe('true'); expect(next.hasAttribute('href')).toBe(false);
-  await follow('#/runs/run-1/fights/before', region('You this run'));
+  await follow('#/runs/run-1/fights/before', region('Bosses this run'));
   expect(main().getByText('‹ Previous boss').getAttribute('aria-disabled')).toBe('true');
 });
 it.each(['busy', 'error'] as const)('strip %s keeps the fight visible with unavailable run context', async mode => {
@@ -172,7 +172,7 @@ it.each(['busy', 'error'] as const)('strip %s keeps the fight visible with unava
     getRunFightStrip: async () => { if (mode === 'error') throw new Error('Synthetic read error'); return { status: 'busy' }; },
   } }); await flush();
   expect(main().getByRole('table', { name: 'Fight Players' })).toBeTruthy();
-  expect(region('You this run').getByText('—')).toBeTruthy();
+  expect(region('Bosses this run').getByText('—')).toBeTruthy();
   expect(main().queryByText(/fight \d+ of/)).toBeNull();
 });
 it.each([
@@ -204,7 +204,7 @@ it('loads the strip only after valid fight context resolves', async () => {
   expect(page.queries.getRunFightStrip).not.toHaveBeenCalled();
   pending.resolve(ready(fight())); await flush();
   expect(page.queries.getRunFightStrip).toHaveBeenCalledTimes(1);
-  expect(region('You this run').getByRole('link', { name: 'Synthetic boss 2' })).toBeTruthy();
+  expect(region('Bosses this run').getByRole('link', { name: 'Synthetic boss 2' })).toBeTruthy();
 });
 it.each(['fight', 'strip'] as const)('retires the pending %s stage when leaving the route', async stage => {
   const context = deferred<HistoryReply<FightView | null>>();
@@ -217,7 +217,7 @@ it.each(['fight', 'strip'] as const)('retires the pending %s stage when leaving 
   context.resolve(ready(fight())); strip.resolve(ready(bossStrip)); await flush();
   expect(page.queries.getRunFightStrip).toHaveBeenCalledTimes(stage === 'strip' ? 1 : 0);
   expect(page.browser.adapter.hash).toBe('#/logs');
-  expect(main().queryByRole('region', { name: 'You this run' })).toBeNull();
+  expect(main().queryByRole('region', { name: 'Bosses this run' })).toBeNull();
 });
 it.each(['busy', 'superseded', 'missing', 'mismatch'] as const)('skips the strip for %s fight context', async mode => {
   const page = mountPhase2({ hash: '#/runs/run-1/fights/fight-1', queries: {
@@ -235,7 +235,7 @@ it.each([null, '7000000'])('provisional kill evidence alone does not confirm a k
   })) } }); await flush();
   expect(main().queryByText('Killed', { selector: '.chip' })).toBeNull();
   expect(main().getByText(ended === null ? 'In progress' : 'Ended', { selector: '.chip' })).toBeTruthy();
-  expect(main().getByText('partial', { selector: '.tag' })).toBeTruthy();
+  expect(main().getByText('partial', { selector: '.tag .badge' })).toBeTruthy();
 });
 
 it('uses numeric-hour formatting for the fight facts', async () => {
