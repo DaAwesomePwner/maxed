@@ -78,20 +78,22 @@
 </section>
 
 <style>
-  .recap-placeholder { display: grid; gap: 24px; padding: 24px; }
-  h2 { margin: 4px 0 8px; font: 700 26px var(--font-home-display); overflow-wrap: anywhere; }
+  .recap-placeholder { display: grid; gap: var(--space-6); padding: var(--space-6); }
+  h2 { margin: var(--space-1) 0 var(--space-2); font-size: var(--text-hero); line-height: var(--leading-hero); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
   p, dl, dd { margin: 0; }
-  .eyebrow, dt, footer p, .recap-loot p { color: var(--text-secondary); font-size: 12px; }
-  .recap-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-  dd { margin-top: 6px; font-size: 20px; font-variant-numeric: tabular-nums; }
-  h3 { margin: 0 0 8px; }
-  ul { margin: 0; padding-left: 20px; }
-  li + li { margin-top: 8px; }
-  li span { margin-left: 12px; color: var(--text-secondary); font-size: 12px; }
-  .bag, .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-  .bag { margin-bottom: 8px; overflow-wrap: anywhere; }
-  .actions { margin-bottom: 12px; }
-  a { color: var(--gold); }
-  button { font: inherit; min-height: var(--target-min); border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: 8px 16px; color: var(--text-primary); background: var(--surface-raised); }
+  .eyebrow, dt, footer p, .recap-loot p { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  .recap-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5); }
+  dd { margin-top: var(--space-1); font-size: var(--text-title); line-height: var(--leading-title); font-variant-numeric: tabular-nums; }
+  h3 { margin: 0 0 var(--space-2); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  ul { margin: 0; padding-left: var(--space-5); }
+  li + li { margin-top: var(--space-2); }
+  li span { margin-left: var(--space-3); color: var(--text-muted); font-size: var(--text-meta); }
+  .bag, .actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+  .bag { margin-bottom: var(--space-2); overflow-wrap: anywhere; }
+  .actions { margin-bottom: var(--space-3); }
+  a { color: var(--text-primary); text-decoration: none; text-underline-offset: 3px; }
+  a:hover, a:focus-visible { text-decoration: underline; }
+  button { font: inherit; font-size: var(--text-label); line-height: var(--leading-label); min-height: var(--target-min); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control); padding: var(--space-2) var(--space-4); color: var(--text-primary); background: var(--surface-raised); }
   @container (max-width: 540px) { .recap-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

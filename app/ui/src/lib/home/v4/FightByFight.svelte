@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { SpriteRef } from '../../bindings/SpriteRef';
   import { objectVisual } from '../../bridge/visual-index';
+  import Badge from '../../components/Badge.svelte';
   import SpriteImage from '../../components/SpriteImage.svelte';
   import { formatDps } from '../../styles/format';
   import type { HomeVisuals } from '../visuals';
@@ -33,7 +34,7 @@
               <SpriteImage sprite={visual?.sprite ?? null} sheetUrl={visual?.sprite ? resolveSpriteUrl(visual.sprite) : null} fit={32} alt="" />
               <div>{visual?.name ?? row.name ?? '—'}<span class="recap-row-detail">{row.kill}</span></div>
             </div></th>
-            <td>{formatDps(row.dps)}{#if row.best}<span class="recap-tag">BEST DPS</span>{/if}</td>
+            <td>{formatDps(row.dps)}{#if row.best}<span class="recap-badge"><Badge label="Best DPS" tone="success" /></span>{/if}</td>
             <PartyComparison value={row.vsParty} /><td>{fightRank(row.rank, row.players)}</td>
             <td>{#if row.buckets}<PartySparkline buckets={row.buckets} />{:else}<span class="recap-note">Party average line not recorded for this fight</span>{/if}</td>
           </tr>

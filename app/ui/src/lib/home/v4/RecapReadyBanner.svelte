@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte';
   import type { SpriteRef } from '../../bindings/SpriteRef';
   import { objectVisual } from '../../bridge/visual-index';
+  import Badge from '../../components/Badge.svelte';
   import SpriteImage from '../../components/SpriteImage.svelte';
   import { formatElapsed } from '../../styles/format';
   import { bestItem } from '../v3/loot-rank';
@@ -16,9 +17,9 @@
     presentation: ReturnType<typeof createRecapPresentation>;
   } = $props();
   let region: HTMLElement;
-  const labels = { cleared: 'CLEARED', died: 'DIED', left: 'LEFT EARLY', unknown: 'OUTCOME UNKNOWN' };
+  const labels = { cleared: 'Cleared', died: 'Died', left: 'Left early', unknown: 'Outcome unknown' };
   const title = $derived(view?.title ?? recap.summary.title);
-  const outcome = $derived(recap.summary.kind === 'visit' ? 'REALM VISIT' : labels[recap.summary.outcome ?? 'unknown']);
+  const outcome = $derived(recap.summary.kind === 'visit' ? 'Realm visit' : labels[recap.summary.outcome ?? 'unknown']);
   const clearTime = $derived(view?.kind === 'run' ? view.clearTime
     : recap.summary.outcome === 'cleared' && recap.summary.completedAt
       ? formatElapsed(recap.summary.startedAt, recap.summary.completedAt, true) : null);
@@ -40,9 +41,9 @@
   <SpriteImage sprite={portal?.sprite ?? null} sheetUrl={portal?.sprite ? resolveSpriteUrl(portal.sprite) : null} fit={32} alt="" />
   <div class="recap-ready-copy">
     <p class="v4-meta">Recap ready</p>
-    <h2>{title} <span class="recap-outcome">· {outcome}</span></h2>
+    <h2>{title} <span class="recap-outcome" data-outcome={recap.summary.kind === 'visit' ? 'visit' : recap.summary.outcome ?? 'unknown'}>· {outcome}</span></h2>
     {#if clearTime !== null}
-      <p>{clearTime}{#if view?.kind === 'run' && view.pb}<span class="recap-tag">PB</span>{/if}</p>
+      <p class="recap-ready-time">{clearTime}{#if view?.kind === 'run' && view.pb}<Badge label="PB" tone="success" />{/if}</p>
     {:else if view?.kind === 'visit'}<p>{view.timeHere}</p>{/if}
   </div>
   {#if drop}<div class="recap-ready-loot">
@@ -56,15 +57,21 @@
 </section>
 
 <style>
-  .recap-ready { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; }
+  .recap-ready { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
   .recap-ready-copy { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
-  h2 { margin: 2px 0; font: 600 15px/1.4 var(--font-home-display); }
+  h2 { margin: 2px 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
   p { margin: 0; font-variant-numeric: tabular-nums; }
-  .recap-outcome { font-size: 11px; color: var(--text-secondary); }
-  .recap-ready-loot { display: flex; align-items: center; gap: 6px; max-width: 100%; font-size: 12px; }
+  .recap-ready-time { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .recap-outcome { color: var(--text-secondary); font-size: var(--text-caption); font-weight: var(--weight-normal); }
+  .recap-outcome[data-outcome="cleared"] { color: var(--success); }
+  .recap-outcome[data-outcome="died"] { color: var(--danger); }
+  .recap-ready-loot { display: flex; align-items: center; gap: var(--space-2); max-width: 100%; font-size: var(--text-meta); line-height: var(--leading-meta); }
   .recap-ready-loot span { min-width: 0; overflow-wrap: anywhere; }
-  .recap-ready-actions { display: flex; gap: 8px; }
-  button { min-height: var(--target-min); padding: 6px 12px; border: 1px solid var(--border-strong);
-    border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary); font: inherit; }
+  .recap-ready-actions { display: flex; gap: var(--space-2); }
+  button { box-sizing: border-box; min-height: var(--control-dense); padding: var(--space-1) var(--space-3); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary); font: inherit;
+    font-size: var(--text-caption); line-height: var(--leading-caption); }
+  button[aria-label="Dismiss recap banner"] { min-width: var(--control-dense); border-color: transparent; background: transparent; color: var(--text-secondary); }
+  button[aria-label="Dismiss recap banner"]:hover { background: var(--surface-hover); color: var(--text-primary); }
   button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 </style>

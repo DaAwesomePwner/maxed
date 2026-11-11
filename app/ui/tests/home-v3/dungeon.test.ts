@@ -298,5 +298,5 @@ it('updates the arrival glow colour when catalog tiers load', async () => {
     ...loading.objects, { object_type: 3000, item_tier: 'UT', name: 'Synthetic UT', sprite: null, bag: null },
   ] } }); await tick(); await tick();
   expect(page.container.querySelector('[data-drop-id="late-colour"]')).toBe(node);
-  expect(node.style.getPropertyValue('--loot-arrival-colour')).toBe('var(--violet-text)');
+  expect(node.style.getPropertyValue('--loot-arrival-colour')).toBe('var(--tier-ut)');
 });

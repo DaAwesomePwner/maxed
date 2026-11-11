@@ -102,7 +102,7 @@
     </div>
     <div class="v4-clock"><p>Time here</p><strong aria-label="Time here">{view.visitElapsed !== null ? formatElapsed('0', view.visitElapsed, true) : '—'}</strong>
       {#if view.hasAwayTime}<p>excludes time away</p>{/if}</div>
-    <span class="v4-live" class:stale role="status" aria-live="polite">{stale ? 'Recovering' : view.realm ? 'Live' : '—'}</span>
+    <span class="v4-live" class:stale class:on={!stale && Boolean(view.realm)} role="status" aria-live="polite">{stale ? 'Recovering' : view.realm ? 'Live' : '—'}</span>
     <div class="realm-progress">
       <div><span>Realm closing progress</span><span>Realm score {formatStat(view.score?.current ?? null)} / {formatStat(view.score?.max ?? null)} · {view.percent === null ? '—' : `${formatStat(view.percent)}%`}</span></div>
       <div class="progress-track" role="progressbar" aria-label="Realm closing progress" title="Realm score, not a closure prediction"
@@ -160,11 +160,13 @@
 
 <style>
   .realm-progress { flex-basis: 100%; min-width: 0; }
-  .realm-progress > div:first-child { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 11px; color: var(--text-secondary); }
-  .progress-track { height: 6px; margin-top: 6px; overflow: hidden; border-radius: var(--radius-pill); background: var(--surface-raised); }
-  .progress-track i { display: block; height: 100%; background: var(--violet); }
-  .v4-hero-content { display: flex; flex-direction: column; gap: 8px; }
+  .realm-progress > div:first-child { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-1) var(--space-3);
+    color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); font-variant-numeric: tabular-nums; }
+  .progress-track { height: 6px; margin-top: var(--space-1); overflow: hidden; border-radius: 2px; background: var(--bar-track); }
+  .progress-track i { display: block; height: 100%; background: var(--text-disabled); }
+  .v4-hero-content { display: flex; flex-direction: column; gap: var(--space-2); }
   .ended { opacity: .6; }
-  .ended-tag { align-self: start; font-size: 11px; padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius-pill); }
-  .quest-target { display: flex; align-items: center; gap: 12px; min-height: 112px; overflow-wrap: anywhere; }
+  .ended-tag { align-self: start; box-sizing: border-box; min-height: 18px; padding: 0 var(--space-1); border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-tag); color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); }
+  .quest-target { display: flex; align-items: center; gap: var(--space-3); min-height: 112px; overflow-wrap: anywhere; }
 </style>

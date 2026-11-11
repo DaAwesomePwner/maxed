@@ -23,17 +23,18 @@
         <span class="tick" style:left={`${average / scale * 100}%`} title={`Average gap: ${formatStat(average)} runs`}></span>
       </div>
     {/if}
-    <p class="caption" title="observed, not a drop rate">your average gap between {dungeon} whites: {formatStat(average)} runs</p>
+    <p class="caption" title="Observed, not a drop rate">Your average gap between {dungeon} whites: {formatStat(average)} runs</p>
   {/if}
 </div>
 
 <style>
-  .dry-streak-row { min-width: 0; color: var(--text-primary); font: 13px/1.4 var(--font-home); overflow-wrap: anywhere; }
+  .dry-streak-row { min-width: 0; color: var(--text-primary); font-family: var(--font-home); font-size: var(--text-caption);
+    line-height: var(--leading-caption); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
   p { margin: 0; }
-  .bar { position: relative; height: 6px; margin: 10px 0; border-radius: var(--radius-pill); background: var(--surface-raised); }
-  .fill { display: block; height: 100%; border-radius: inherit; background: var(--violet); }
+  .bar { position: relative; height: 6px; margin: var(--space-2) 0; border-radius: 2px; background: var(--bar-track); }
+  .fill { display: block; height: 100%; border-radius: inherit; background: var(--text-disabled); }
   .past-average .fill { background: var(--warning); }
-  .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text-secondary); transform: translateX(-1px); }
-  .caption { color: var(--text-secondary); font-size: 11px; }
-  .ended { display: inline-block; padding: 3px 8px; border: 1px solid var(--success); border-radius: var(--radius-pill); color: var(--success); }
+  .tick { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--text-secondary); transform: translateX(-1px); }
+  .caption { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  .ended { color: var(--success); }
 </style>

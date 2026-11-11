@@ -25,7 +25,7 @@ describe('host live-session regressions', () => {
     const props = { snapshot: homeSnapshot(), history: { phase: 'ready' as const, summary, message: '', retryAvailable: true }, choice: 'session' as const, retry: () => {} };
     const page = render(NexusHome, props);
     await flushHomeRender();
-    expect(screen.getByText('Top Active DPS')).toBeTruthy();
+    expect(screen.getByText('Top active DPS')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Top fight source/ })).toBeNull();
     expect(screen.queryByText('Top fight has partial observations.')).toBeNull();
     expect(screen.queryByText('Partial or estimated fight observations.')).toBeNull();
@@ -96,7 +96,7 @@ describe('host live-session regressions', () => {
     mountHome(snapshot);
     await flushHomeRender();
     const main = screen.getByRole('main');
-    expect(main.textContent).not.toMatch(/Waiting for RotMG|Capture Offline|No Session|Reconnecting|Ready/);
+    expect(main.textContent).not.toMatch(/Waiting for RotMG|Capture offline|No Session|Reconnecting|Ready/);
     expect(within(main).getByRole('heading', { name: 'Nexus' })).toBeTruthy();
     expect(within(main).getByRole('group', { name: 'History Period' })).toBeTruthy();
   });

@@ -2,6 +2,7 @@
   import type { SpriteRef } from '../../bindings/SpriteRef';
   import { objectVisual } from '../../bridge/visual-index';
   import { itemHover } from '../../components/item-hover';
+  import Badge from '../../components/Badge.svelte';
   import SpriteImage from '../../components/SpriteImage.svelte';
   import { routeHref } from '../../navigation/routes';
   import { bestItem } from '../v3/loot-rank';
@@ -21,10 +22,10 @@
 <header class="v4-card recap-banner" data-outcome={view.kind === 'run' ? view.outcome ?? 'unknown' : undefined}>
   <SpriteImage sprite={portal?.sprite ?? null} sheetUrl={portal?.sprite ? resolveSpriteUrl(portal.sprite) : null} fit={48} alt="" />
   <div class="recap-banner-copy">
-    <h2>{view.title} · <span class="recap-outcome">{view.kind === 'visit' ? 'REALM VISIT' : view.outcomeLabel}</span></h2>
+    <h2>{view.title} · <span class="recap-outcome">{view.kind === 'visit' ? 'Realm visit' : view.outcomeLabel}</span></h2>
     {#if view.kind === 'visit'}
       <p class="v4-meta">Time here</p><div class="recap-clear-time">{view.timeHere}</div>
-    {:else if view.clearTime !== null}<div class="recap-clear-time">{view.clearTime}{#if view.pb}<span class="recap-tag">PB</span>{/if}</div>{/if}
+    {:else if view.clearTime !== null}<div class="recap-clear-time">{view.clearTime}{#if view.pb}<Badge label="PB" tone="success" />{/if}</div>{/if}
     <p class="v4-meta">{view.meta.join(' · ')}</p>
     {#if view.chain}<p class="v4-meta">{view.chain.label}</p>{/if}
   </div>
