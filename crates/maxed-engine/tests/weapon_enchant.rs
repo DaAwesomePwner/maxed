@@ -297,33 +297,44 @@ fn unusable_scaled_bounds_keep_the_unscaled_roll_as_a_counted_assumption() {
 }
 
 #[test]
-fn weapon_enchant_fallback_leaves_later_rolls_untrusted() {
-    // A fallback shot may or may not have consumed a draw on the client, so a
-    // later shot with known evidence must not be reported as exact.
-    let run = |first: &str| {
-        let mut e = Engine::new(config(), Arc::new(weapon_catalog())).unwrap();
-        setup(&mut e);
-        for (bullet, code) in [(1, first), (2, "")] {
+fn weapon_enchant_fallback_leaves_later_rolls_untrusted_until_reseed() {
+    // A fallback shot may or may not have consumed a draw on the client, so hits
+    // resolved afterwards must not be reported as exact until the next map seed.
+    fn fire(e: &mut Engine, bullets: &[(i16, &str)]) {
+        for &(bullet, code) in bullets {
             apply(
-                &mut e,
+                e,
                 2500,
                 tick(vec![status(
                     1,
                     vec![stat(8, 211), string(80, &format!("{code},,,"))],
                 )]),
             );
-            apply(&mut e, 3000, shoot_with(bullet, 211));
-            apply(&mut e, 4000, hit(bullet));
+            apply(e, 3000, shoot_with(bullet, 211));
+            apply(e, 4000, hit(bullet));
         }
+    }
+    let counts = |e: &Engine| {
         let counts = e.reconstruction_coverage();
         (
             counts["assumedWeaponEnchantDefault"],
             counts["untrustedRng"],
         )
     };
-    assert_eq!(run(""), (0, 0));
+    let mut known = Engine::new(config(), Arc::new(weapon_catalog())).unwrap();
+    setup(&mut known);
+    fire(&mut known, &[(1, ""), (2, "")]);
+    assert_eq!(counts(&known), (0, 0));
+
+    let mut e = Engine::new(config(), Arc::new(weapon_catalog())).unwrap();
+    setup(&mut e);
+    fire(&mut e, &[(1, E16), (2, "")]);
     // Both hits resolve after the fallback shot, so both carry the untrusted roll.
-    assert_eq!(run(E16), (1, 2));
+    assert_eq!(counts(&e), (1, 2));
+    // Entering a map reseeds the RNG and restores trust for known evidence.
+    setup(&mut e);
+    fire(&mut e, &[(3, ""), (4, "")]);
+    assert_eq!(counts(&e), (1, 2));
 }
 
 #[test]
