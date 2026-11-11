@@ -41,7 +41,7 @@
   import CharacterRail from './CharacterRail.svelte';
   import RouteFrame from '../../routes/RouteFrame.svelte';
   import { createRecordingSession } from '../settings/recording';
-  import { railView } from './rail';
+  import { characterRailView } from './rail';
   import { createHomeObservation } from '../home/mode';
   import { emptyHomeLiveWindow } from '../home/v2/live';
   import { createRecapTracker } from '../home/v4/recap';
@@ -195,7 +195,7 @@
   });
   let railSnapshot = $state.raw<LiveSnapshot | null>(null);
   let railPaused = $state(false);
-  let view = $derived(railView(railSnapshot, visuals, railPaused));
+  let view = $derived(characterRailView(railSnapshot, visuals, railPaused));
   $effect(() => {
     const next = snapshot, status = capture, state = liveState;
     void accountRailRevision;

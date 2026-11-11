@@ -94,3 +94,39 @@ it('counter-only capture publications do not refresh recording status', async ()
   f.capture('Stopped'); await flush();
   expect(f.client.queryRecording).toHaveBeenCalledTimes(calls + 2);
 });
+
+const reply = (state: RecordingStatus['state']): RecordingStatus =>
+  ({ state, failure: null, retained_bytes: 0, limit_bytes: 1_000_000_000, dropped_frames: 0 });
+
+it('coalesces refreshes requested during an in-flight read into one trailing read', async () => {
+  const f = setupFixture();
+  const resolvers: Array<(status: RecordingStatus) => void> = [];
+  const query = vi.spyOn(f.client, 'queryRecording').mockImplementation(() => new Promise<RecordingStatus>(resolve => { resolvers.push(resolve); }));
+  const session = createRecordingSession(f.client);
+  let latest: RecordingStatus | null = null;
+  const unsubscribe = session.subscribe(value => { latest = value.status; });
+  try {
+    const first = session.refresh();
+    expect(query).toHaveBeenCalledTimes(1);
+    // Three requests arrive while the first read (which will answer 'disabled') is in flight.
+    void session.refresh(); void session.refresh(); void session.refresh();
+    expect(query).toHaveBeenCalledTimes(1);
+    resolvers[0](reply('disabled')); await first; await flush();
+    expect(query).toHaveBeenCalledTimes(2); // exactly one trailing read, not three
+    resolvers[1](reply('writing')); await flush();
+    expect(latest).toMatchObject({ state: 'writing' }); // the newer answer is not lost
+    expect(query).toHaveBeenCalledTimes(2); // and nothing loops on
+  } finally { unsubscribe(); session.dispose(); }
+});
+
+it('does not run the trailing recording read after dispose', async () => {
+  const f = setupFixture();
+  let resolve: (status: RecordingStatus) => void = () => {};
+  const query = vi.spyOn(f.client, 'queryRecording').mockImplementation(() => new Promise<RecordingStatus>(r => { resolve = r; }));
+  const session = createRecordingSession(f.client);
+  const first = session.refresh();
+  void session.refresh();
+  session.dispose();
+  resolve(reply('disabled')); await first; await flush();
+  expect(query).toHaveBeenCalledTimes(1);
+});
