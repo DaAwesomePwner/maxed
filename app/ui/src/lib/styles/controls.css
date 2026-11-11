@@ -15,16 +15,16 @@ button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px
 button:disabled, button[aria-disabled="true"] { opacity: .45; cursor: default; }
 button[aria-disabled="true"]:focus-visible { opacity: 1; }
 
-/* Inputs and selects: zero specificity so component styles win. Checkboxes, radios and sliders keep native styling. */
-:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"]), select, textarea) {
-  box-sizing: border-box; padding: 0 var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-control);
+/* Inputs and selects: zero specificity so component styles win. Checkboxes, radios, sliders and list boxes keep
+   native styling. No height: padding + line-height + border give 32px, so components that set their own padding
+   keep their own height. The focus ring comes from the shared rule in tokens.css. */
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"]), select:not([multiple], [size]), textarea) {
+  box-sizing: border-box; padding: 5px var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-control);
   background: var(--surface-raised); color: var(--text-primary); font: inherit; font-size: var(--text-caption); line-height: var(--leading-caption);
 }
-:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"]), select) { height: var(--control-dense); }
 :where(textarea) { padding: var(--space-2) var(--space-3); }
 :where(input, select, textarea)::placeholder { color: var(--text-muted); }
 :where(input, select, textarea):disabled { opacity: .45; cursor: default; }
-:where(input, select, textarea):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 /* Dense controls (toolbars, filters, inputs). Secondary by default; ghost and primary variants. */
 .ctl { box-sizing: border-box; height: var(--control-dense); min-height: 0; display: inline-flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3);

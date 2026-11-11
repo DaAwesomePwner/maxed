@@ -36,7 +36,14 @@ describe('motion and component keyboard regressions', () => {
       expect(bare).toBeTruthy();
       expect(bare!.style.getPropertyValue('min-height')).toBe('');
       expect(bare!.style.getPropertyValue('height')).toBe('');
-      expect(rules.filter((rule) => rule.selectorText.startsWith(':where(input')).map((rule) => rule.style.getPropertyValue('height'))).toContain('var(--control-dense)');
+      // The input/select base reaches 32px through padding, so inputs with their own padding keep their own height.
+      const inputs = rules.filter((rule) => rule.selectorText.startsWith(':where(input'));
+      expect(inputs.length).toBeGreaterThan(0);
+      for (const rule of inputs) {
+        expect(rule.style.getPropertyValue('height')).toBe('');
+        expect(rule.style.getPropertyValue('min-height')).toBe('');
+      }
+      expect(inputs[0].style.getPropertyValue('border')).toBe('1px solid var(--border-strong)');
     } finally { controls.remove(); style.remove(); }
   });
 
