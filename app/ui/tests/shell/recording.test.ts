@@ -94,3 +94,82 @@ it('counter-only capture publications do not refresh recording status', async ()
   f.capture('Stopped'); await flush();
   expect(f.client.queryRecording).toHaveBeenCalledTimes(calls + 2);
 });
+
+const reply = (state: RecordingStatus['state']): RecordingStatus =>
+  ({ state, failure: null, retained_bytes: 0, limit_bytes: 1_000_000_000, dropped_frames: 0 });
+
+it('coalesces refreshes requested during an in-flight read into one trailing read', async () => {
+  const f = setupFixture();
+  const resolvers: Array<(status: RecordingStatus) => void> = [];
+  const query = vi.spyOn(f.client, 'queryRecording').mockImplementation(() => new Promise<RecordingStatus>(resolve => { resolvers.push(resolve); }));
+  const session = createRecordingSession(f.client);
+  let latest: RecordingStatus | null = null;
+  const unsubscribe = session.subscribe(value => { latest = value.status; });
+  try {
+    const first = session.refresh();
+    expect(query).toHaveBeenCalledTimes(1);
+    // Three requests arrive while the first read (which will answer 'disabled') is in flight.
+    void session.refresh(); void session.refresh(); void session.refresh();
+    expect(query).toHaveBeenCalledTimes(1);
+    resolvers[0](reply('disabled')); await first; await flush();
+    expect(query).toHaveBeenCalledTimes(2); // exactly one trailing read, not three
+    resolvers[1](reply('writing')); await flush();
+    expect(latest).toMatchObject({ state: 'writing' }); // the newer answer is not lost
+    expect(query).toHaveBeenCalledTimes(2); // and nothing loops on
+  } finally { unsubscribe(); session.dispose(); }
+});
+
+// One controllable queryRecording: each call parks until the test settles it.
+function parked(f: ReturnType<typeof setupFixture>) {
+  const calls: Array<{ resolve: (status: RecordingStatus) => void; reject: (error: Error) => void }> = [];
+  const query = vi.spyOn(f.client, 'queryRecording').mockImplementation(() => new Promise<RecordingStatus>((resolve, reject) => { calls.push({ resolve, reject }); }));
+  return { calls, query };
+}
+
+it('runs the trailing recording read unless the session was disposed', async () => {
+  const f = setupFixture(), { calls, query } = parked(f);
+  const kept = createRecordingSession(f.client), disposed = createRecordingSession(f.client);
+  try {
+    const keptFirst = kept.refresh(), disposedFirst = disposed.refresh();
+    expect(query).toHaveBeenCalledTimes(2);
+    void kept.refresh(); void disposed.refresh(); // both requested mid-read
+    disposed.dispose();
+    calls[0].resolve(reply('disabled')); calls[1].resolve(reply('disabled'));
+    await keptFirst; await disposedFirst; await flush();
+    expect(query).toHaveBeenCalledTimes(3); // only the live session read again
+  } finally { kept.dispose(); disposed.dispose(); }
+});
+
+it('defers the trailing recording read while hidden and resumes once when visible', async () => {
+  const f = setupFixture(), { calls, query } = parked(f);
+  const session = createRecordingSession(f.client);
+  try {
+    const first = session.refresh();
+    void session.refresh(); // visible and busy: pending
+    setNativePresentationVisible(false);
+    calls[0].resolve(reply('disabled')); await first; await flush();
+    expect(query).toHaveBeenCalledTimes(1); // finally must not read while hidden
+    await advance(60_000);
+    expect(query).toHaveBeenCalledTimes(1);
+    setNativePresentationVisible(true); await flush();
+    expect(query).toHaveBeenCalledTimes(2); // resumed exactly once
+    calls[1].resolve(reply('disabled')); await flush(); await advance(60_000);
+    expect(query).toHaveBeenCalledTimes(2);
+  } finally { session.dispose(); }
+});
+
+it('retries once after a failed read with a pending refresh, without looping', async () => {
+  const f = setupFixture(), { calls, query } = parked(f);
+  const session = createRecordingSession(f.client);
+  let latest: { error: string } | null = null;
+  const unsubscribe = session.subscribe(value => { latest = value; });
+  try {
+    const first = session.refresh();
+    void session.refresh(); void session.refresh();
+    calls[0].reject(new Error('query failed')); await first; await flush();
+    expect(query).toHaveBeenCalledTimes(2); // exactly one retry
+    calls[1].reject(new Error('query failed')); await flush(); await advance(60_000);
+    expect(query).toHaveBeenCalledTimes(2); // the retry's failure does not loop
+    expect(latest).toMatchObject({ error: expect.stringContaining('recording') });
+  } finally { unsubscribe(); session.dispose(); }
+});

@@ -7,9 +7,9 @@
   import StatPanel from './StatPanel.svelte';
   import { characterMaxed } from './vitals';
   import type { SpriteRef } from '../bindings/SpriteRef';
-  import type { RailView } from './rail';
+  import type { CharacterRailView } from './rail';
   let { view, sheetUrl = null, resolveSpriteUrl }: {
-    view: RailView; sheetUrl?: string | null; resolveSpriteUrl?: (sprite: SpriteRef) => string | null;
+    view: CharacterRailView; sheetUrl?: string | null; resolveSpriteUrl?: (sprite: SpriteRef) => string | null;
   } = $props();
   const known = (n: number | null | undefined): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
   let maxed = $derived(characterMaxed(view.character));

@@ -143,15 +143,19 @@ export function verifiedRunSelf(snapshot: LiveSnapshot | null): RunPlayerTotal |
   return totals.local ?? candidates[0];
 }
 
-export function railView(snapshot: LiveSnapshot | null, visuals: ObjectVisual[] = [], stale = false, previousId: string | null = null, window: HomeLiveWindow | null = null) {
+/**
+ * Character projection: identity, class and equipment only. It never selects a fight.
+ * Its `stale` therefore no longer counts a fight: with no character, map or run the
+ * hero card is not dimmed even when paused over a fight. Selecting the fight here
+ * would repeat the focus work per snapshot; the hero card shows nothing from a fight.
+ * The raw `paused` flag is kept so the focus projection can apply its own fight-aware rule.
+ */
+export function characterRailView(snapshot: LiveSnapshot | null, visuals: ObjectVisual[] = [], stale = false) {
   const character = snapshot?.character ?? null;
   const classVisual = objectVisual(visuals, character?.class_id);
-  const fight = snapshotFight(snapshot, previousId, window);
-  const wholeRun = snapshot?.area_kind === 'dungeon' && snapshot.run !== null && fight === null;
-  const local = wholeRun ? verifiedRunSelf(snapshot) : verifiedSelf(character, fight);
-  const targetType = fight?.target_type ?? fight?.boss_type;
   return {
-    stale: stale && Boolean(character || fight || snapshot?.map || snapshot?.run),
+    stale: stale && Boolean(character || snapshot?.map || snapshot?.run),
+    paused: stale,
     character, snapshot, visuals,
     name: character?.name ?? (character ? 'Character' : 'No Character'),
     className: classVisual?.name ?? 'Class',
@@ -165,6 +169,21 @@ export function railView(snapshot: LiveSnapshot | null, visuals: ObjectVisual[] 
     }),
     provisional: character !== null && !character.identity_verified,
     died: character?.died_at !== null && character?.died_at !== undefined,
+  };
+}
+export type CharacterRailView = ReturnType<typeof characterRailView>;
+
+/** Focus projection: the one place the shared boss/quest/local-hit fight is selected for the rail. */
+export function focusRailView(base: CharacterRailView, previousId: string | null = null, window: HomeLiveWindow | null = null) {
+  const { snapshot, visuals, character } = base;
+  const fight = snapshotFight(snapshot, previousId, window);
+  const wholeRun = snapshot?.area_kind === 'dungeon' && snapshot.run !== null && fight === null;
+  const local = wholeRun ? verifiedRunSelf(snapshot) : verifiedSelf(character, fight);
+  const targetType = fight?.target_type ?? fight?.boss_type;
+  return {
+    // Same rule the whole rail used before the split, with the window-aware fight.
+    stale: base.paused && Boolean(character || fight || snapshot?.map || snapshot?.run),
+    snapshot,
     map: snapshot?.map ?? 'Location',
     fight, wholeRun,
     target: fight ? objectVisual(visuals, targetType)?.name ?? 'Target' : wholeRun ? 'Dungeon Total' : 'No Boss',
@@ -172,5 +191,12 @@ export function railView(snapshot: LiveSnapshot | null, visuals: ObjectVisual[] 
     rank: local?.rank ?? null,
     elapsed: snapshot?.run ? formatElapsed(snapshot.run.started, snapshot.run.ended ?? snapshot.at) : null,
   };
+}
+export type FocusRailView = ReturnType<typeof focusRailView>;
+
+/** Both projections merged, for callers and tests that want the whole rail. */
+export function railView(snapshot: LiveSnapshot | null, visuals: ObjectVisual[] = [], stale = false, previousId: string | null = null, window: HomeLiveWindow | null = null) {
+  const character = characterRailView(snapshot, visuals, stale);
+  return { ...character, ...focusRailView(character, previousId, window) };
 }
 export type RailView = ReturnType<typeof railView>;
