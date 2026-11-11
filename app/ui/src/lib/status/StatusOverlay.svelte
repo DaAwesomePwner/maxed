@@ -14,7 +14,7 @@
     color: var(--text-secondary); background: var(--surface-raised);
     border-radius: var(--radius-control); overflow-wrap: anywhere;
   }
-  .active { padding: var(--space-1) var(--space-2); border: 1px solid var(--border); }
+  .active { padding: var(--space-1) var(--space-3); border: 1px solid var(--hairline-strong); box-shadow: var(--elevation-popover); }
   @media (prefers-reduced-motion: reduce) {
     .status-overlay { animation: none; transition: none; }
   }

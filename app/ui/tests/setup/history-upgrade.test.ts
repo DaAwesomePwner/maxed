@@ -12,7 +12,7 @@ it.each(['pending', 'failed'] as const)('does not claim an upgrade is required w
     ? vi.fn(() => deferred<HistoryUpgradeStatus>().promise)
     : vi.fn().mockResolvedValue({ ...ready, phase: 'blocked', schema_version: null, failure: 'busy', required_bytes: null, free_bytes: null });
   render(Setup, { client: f.client });
-  await screen.findByText(state === 'pending' ? 'Checking history status…' : "Couldn't check saved history.");
+  await screen.findByText(state === 'pending' ? 'Checking history status' : 'Couldn’t check saved history');
   expect(screen.getByRole('button', { name: 'Retry history status and space' })).toBeTruthy();
   expect(screen.queryByText(/needs an upgrade|initial backup slot|Free space is unavailable/)).toBeNull();
   expect(screen.queryByRole('heading', { name: 'History upgrade required' })).toBeNull();
@@ -85,7 +85,7 @@ it('keeps history blocked after backup failure and retries safely with retained 
   f.transport.advanceHistoryUpgrade('verification_failed');
   await fireEvent.click(screen.getByRole('button', { name: 'Retry history status and space' }));
   await screen.findByText('Previous attempt: Backup verification failed. Request a new backup.');
-  expect(screen.getByRole('button', { name: 'Check Access' }).getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Check access' }).getAttribute('aria-disabled')).toBe('true');
   await fireEvent.click(button);
   expect(f.client.backupAndUpgradeHistory).toHaveBeenCalledTimes(2);
   await screen.findByText('Backing up history before upgrading.');
@@ -122,7 +122,7 @@ it('makes no native upgrade reads or mutations in preview', async () => {
   const f = setupFixture();
   const native = vi.spyOn(nativeTransport, 'invoke');
   render(Setup, { client: f.client, preview: true });
-  await screen.findByText('Assets Ready');
+  await screen.findByText('Assets ready');
   expect(f.client.queryHistoryUpgradeStatus).not.toHaveBeenCalled();
   expect(f.client.queryStorageBackupLocation).not.toHaveBeenCalled();
   expect(f.client.backupAndUpgradeHistory).not.toHaveBeenCalled();

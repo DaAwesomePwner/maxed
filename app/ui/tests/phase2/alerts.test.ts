@@ -192,7 +192,7 @@ it('available Windows Notifications save the toggle and test through guarded nat
   } }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   const windows = main().getByRole('checkbox', { name: /Windows Notifications/i });
   expect(disabled(windows)).toBe(false);
-  const test = main().getByRole('button', { name: /^Test Notification$/ });
+  const test = main().getByRole('button', { name: /^Test notification$/ });
   expect(disabled(test)).toBe(true);
   await fireEvent.click(windows); await flush();
   await click('Save');
@@ -246,7 +246,7 @@ it('Key popped exposes loudness, catalog dungeon selection and a guarded Test', 
     client.queryAlertDelivery = vi.fn(async () => ({ permission: 'unavailable' as const, sound_available: true,
       message: null, flawless_unavailable: 'Flawless evidence is unavailable.' }));
   } }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
-  const level = main().getByRole('combobox', { name: 'Key Popped' });
+  const level = main().getByRole('combobox', { name: 'Key popped' });
   const filter = main().getByRole('combobox', { name: /key popped dungeons/i });
   expect((filter as HTMLSelectElement).value).toBe('all');
   await fireEvent.change(level, { target: { value: 'banner' } });
@@ -274,7 +274,7 @@ it('saving a dungeon filter removes visible and queued key-pop banners without r
   const page = mountPhase2({ hash: '#/settings', configure: client => {
     client.listCatalogDungeonOptions = vi.fn(async () => ['Lost Halls', 'The Void'].map(name => dungeonDef({ name, aliases: [] })));
   } }); await flush(); await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
-  await fireEvent.change(main().getByRole('combobox', { name: 'Key Popped' }), { target: { value: 'banner' } });
+  await fireEvent.change(main().getByRole('combobox', { name: 'Key popped' }), { target: { value: 'banner' } });
   await click('Save');
   const key = { kind: 'key_popped' as const, details: { type: 'key_popped' as const, dungeon: 'Lost Halls' }, run_id: null };
   page.event({ alert_fired: alert({ ...key, id: 'visible-key' }) }, '13');

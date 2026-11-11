@@ -9,7 +9,7 @@ import { setupFixture, deferred } from './fixture';
 
 describe('initiating controls retain focus while pending and after status updates', () => {
   it.each([
-    ['Check Access', 'startCapture'], ['Apply Adapter', 'setAdapter'],
+    ['Check access', 'startCapture'], ['Apply adapter', 'setAdapter'],
     ['Start capture', 'startCapture'], ['Stop capture', 'stopCapture'],
   ] as const)('%s remains focusable and rejects repeat keyboard activation', async (name, command) => {
     const f = setupFixture();
@@ -29,19 +29,19 @@ describe('initiating controls retain focus while pending and after status update
     expect(invoke).toHaveBeenCalledOnce();
     if (command !== 'setAdapter') f.capture(command === 'stopCapture' ? 'Stopped' : 'WaitingForGame');
     pending.resolve();
-    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Capture Adapter' }) as HTMLSelectElement).disabled).toBe(false));
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Capture adapter' }) as HTMLSelectElement).disabled).toBe(false));
     expect(document.activeElement).toBe(button);
   });
 
-  it.each(['Apply', 'Demo Mode'] as const)('%s keeps focus and guards pending activation', async (name) => {
+  it.each(['Apply', 'Demo mode'] as const)('%s keeps focus and guards pending activation', async (name) => {
     const f = setupFixture(); const pending = deferred<void>();
-    const command = name === 'Demo Mode' ? 'setDemo' : 'updateSettings';
+    const command = name === 'Demo mode' ? 'setDemo' : 'updateSettings';
     const invoke = vi.fn(() => pending.promise); f.client[command] = invoke;
     render(Settings, { client: f.client });
-    const channel = await screen.findByRole('combobox', { name: 'Update Channel' });
+    const channel = await screen.findByRole('combobox', { name: 'Update channel' });
     const user = userEvent.setup();
     if (name === 'Apply') await user.selectOptions(channel, 'beta');
-    const button = screen.getByRole(name === 'Demo Mode' ? 'switch' : 'button', { name }) as HTMLButtonElement;
+    const button = screen.getByRole(name === 'Demo mode' ? 'switch' : 'button', { name }) as HTMLButtonElement;
     await waitFor(() => expect(button.getAttribute('aria-disabled')).toBe('false'));
     button.focus(); await user.keyboard('{Enter}');
     await waitFor(() => expect(invoke).toHaveBeenCalledOnce());
@@ -75,7 +75,7 @@ describe('initiating controls retain focus while pending and after status update
   it('expanded Settings Recovery keeps retry focus through a delayed settings read', async () => {
     const f = setupFixture();
     render(Settings, { client: f.client });
-    await screen.findByRole('combobox', { name: 'Update Channel' });
+    await screen.findByRole('combobox', { name: 'Update channel' });
     const user = userEvent.setup();
     const summary = screen.getByText('Recovery', { selector: 'summary' });
     expect(summary.closest('details')?.open).toBe(false);
@@ -84,12 +84,12 @@ describe('initiating controls retain focus while pending and after status update
     const saved = await f.client.querySettings();
     const pending = deferred<typeof saved>();
     f.client.querySettings = vi.fn(() => pending.promise);
-    const button = screen.getByRole('button', { name: 'Retry Settings' });
+    const button = screen.getByRole('button', { name: 'Retry settings' });
     button.focus(); await user.keyboard('{Enter}');
     await waitFor(() => expect(f.client.querySettings).toHaveBeenCalledOnce());
     expect(document.activeElement).toBe(button);
     pending.resolve({ ...saved, hardware_acceleration: true });
-    await waitFor(() => expect((screen.getByRole('checkbox', { name: 'Hardware Acceleration' }) as HTMLInputElement).checked).toBe(true));
+    await waitFor(() => expect((screen.getByRole('checkbox', { name: 'Hardware acceleration' }) as HTMLInputElement).checked).toBe(true));
     expect(summary.closest('details')?.open).toBe(true);
     expect(document.activeElement).toBe(button);
   });

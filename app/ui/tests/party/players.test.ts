@@ -57,7 +57,7 @@ it.each(['success', 'failure'] as const)('keeps Players clear disabled while set
   await flush();
   expect(button.disabled).toBe(outcome === 'failure');
   if (outcome === 'failure') {
-    const hint = screen.getByText('Could not check Demo Mode. Reload to try again.');
+    const hint = screen.getByText('Couldn’t check demo mode. Reload to try again.');
     expect(hint.hidden).toBe(false); expect(button.getAttribute('aria-describedby')).toBe(hint.id);
     expect(document.body.textContent).not.toContain('PRIVATE');
   }
@@ -73,7 +73,7 @@ it.each(['success', 'failure'] as const)('ignores an obsolete setup %s after the
   else pending.reject(new Error('PRIVATE'));
   await flush();
   expect((screen.getByRole('button', { name: 'Clear party history…' }) as HTMLButtonElement).disabled).toBe(false);
-  expect(screen.queryByText('Could not check Demo Mode. Reload to try again.')).toBeNull();
+  expect(screen.queryByText('Couldn’t check demo mode. Reload to try again.')).toBeNull();
 });
 
 it('does not restore a dropped row after clearing history and marking the player again', async () => {
@@ -381,7 +381,7 @@ it('syncs clear state on Escape and native close, restores focus and shows late 
   await fireEvent(screen.getByRole('dialog'), new Event('close'));
   expect(screen.queryByRole('dialog')).toBeNull(); expect(document.activeElement).toBe(trigger);
   pending.reject(new Error('synthetic failure')); await flush();
-  expect(screen.getByRole('alert').textContent).toBe('Could not clear party history. Retry to clear it.');
+  expect(screen.getByRole('alert').textContent).toBe('Couldn’t clear party history. Retry to clear it.');
   await fireEvent.click(trigger); expect(screen.getByRole('dialog')).toBeTruthy();
 });
 

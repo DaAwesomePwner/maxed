@@ -17,7 +17,7 @@
 
 {#if !preview && $session.history?.phase !== 'ready'}
   <section aria-label="History upgrade" class="history-upgrade">
-    <h2>{required ? 'History upgrade required' : $session.history || $session.errors.history ? "Couldn't check saved history." : 'Checking history status…'}</h2>
+    <h2>{required ? 'History upgrade required' : $session.history || $session.errors.history ? 'Couldn’t check saved history' : 'Checking history status'}</h2>
     {#if !required}
       <button class="ctl" disabled={$session.historyChecking} onclick={() => session.retryHistory()}>Retry history status and space</button>
     {:else if $session.historyDeferred}
@@ -47,9 +47,10 @@
   </section>
 {/if}
 <style>
-  .history-upgrade { border: 1px solid var(--border-strong); border-radius: var(--radius-card); padding: var(--space-4); min-width: 0; overflow-wrap: anywhere; }
-  h2 { font-size: 16px; margin: 0 0 var(--space-3); }
+  .history-upgrade { padding: var(--space-5); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); min-width: 0; overflow-wrap: anywhere; }
+  h2 { margin: 0 0 var(--space-3); font-size: var(--text-title); line-height: var(--leading-title); font-weight: var(--weight-medium); }
   p, dt { color: var(--text-secondary); } p { margin: var(--space-2) 0; }
-  dl { display: flex; flex-wrap: wrap; gap: var(--space-4); } dd { margin: 0; font-variant-numeric: tabular-nums; }
+  dt { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  dl { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); margin: var(--space-3) 0; } dd { margin: 0; font-variant-numeric: tabular-nums; }
   .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
 </style>

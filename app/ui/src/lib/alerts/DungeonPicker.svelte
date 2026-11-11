@@ -130,7 +130,7 @@
     return edit(mode === 'selected' ? { key_pop_dungeons: names } : { key_pop_excluded_dungeons: names });
   }
 </script>
-<label for="key-pop-dungeons">Key Popped dungeons</label>
+<label for="key-pop-dungeons">Key popped dungeons</label>
 <select id="key-pop-dungeons" value={mode} {disabled} onchange={event => { switchMode(event.currentTarget.value as Mode); event.currentTarget.value = mode; }}>
   <option value="all">All dungeons</option><option value="except">All except…</option><option value="selected">Only…</option>
 </select>
@@ -160,12 +160,16 @@
   </fieldset>
 {/if}
 <style>
-  fieldset { min-width: 0; padding: 12px; border-radius: 6px; border: 1px solid var(--border); margin: var(--space-2) 0; }
+  label[for] { display: block; margin-block: var(--space-2) var(--space-1); color: var(--text-secondary); font-size: var(--text-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); }
+  fieldset { min-width: 0; padding: var(--space-3); border-radius: var(--radius-control); border: 1px solid var(--hairline); margin: var(--space-2) 0; }
+  legend { padding: 0 var(--space-1); color: var(--text-secondary); font-size: var(--text-caption); }
   .results { max-height: 14rem; overflow: auto; margin-top: var(--space-2); }
-  .choice, .chips button { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); min-height: var(--target-min); }
+  .choice, .chips button { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1) var(--space-2); min-height: var(--target-min); font-size: var(--text-label); }
+  .choice small { margin-right: var(--space-2); color: var(--text-muted); font-size: var(--text-meta); }
   .chips, .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0; }
-  .note { color: var(--text-secondary); font-size: 12px; }
-  button, select, input[type="search"] { min-height: var(--target-min); max-width: 100%; box-sizing: border-box; color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-control); font: inherit; padding: var(--space-1) var(--space-2); }
+  .note { color: var(--text-secondary); font-size: var(--text-caption); }
+  button { max-width: 100%; }
+  .chips button { padding: 0 var(--space-2); }
   input[type="search"] { display: block; width: 100%; }
-  input { accent-color: var(--violet); }
+  input { accent-color: var(--text-secondary); } input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; }
 </style>

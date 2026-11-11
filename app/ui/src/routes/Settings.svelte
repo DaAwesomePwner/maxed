@@ -24,6 +24,7 @@
   import { createSetupSession } from '../lib/setup/session';
   import { historyRunning } from '../lib/settings/storage-state';
   import { titleCase } from '../lib/styles/format';
+  import { errorLine } from '../lib/setup/presentation';
   let { client, tab, preview = false, features = productionFeatures, enabled = true, streamId = null, store = null }: {
     client: Client; tab?: SettingsTab; preview?: boolean; features?: Features; enabled?: boolean; streamId?: string | null; store?: StoreStatus | null;
   } = $props();
@@ -34,8 +35,8 @@
     && $snapshot.stream_id === streamId && streamId.startsWith('live-') && /^\d+$/.test($snapshot.at) && store?.state !== 'failed');
   let session = $derived(createSetupSession(client, preview, connection));
   let partyClearHint = $derived(preview ? 'Clearing is not available in preview.'
-    : $session.errors.setup ? 'Could not check Demo Mode. Reload to try again.'
-    : $session.setup?.demo ? 'Turn off Demo Mode to clear your party history.' : '');
+    : $session.errors.setup ? 'Couldn’t check demo mode. Reload to try again.'
+    : $session.setup?.demo ? 'Turn off demo mode to clear your party history.' : '');
   $effect(() => { const current = session; current.start(); return () => current.dispose(); });
   const id = $props.id();
   let draft = $state<AppSettings | null>(null);
@@ -54,7 +55,7 @@
     if (!$session.settings || $session.errors.settings) return 'Unavailable';
     if ($session.settings.adapter_id === null) return 'Auto';
     const selected = $session.adapters?.find((item) => item.id === $session.settings?.adapter_id);
-    return selected ? selected.description || 'Unnamed Adapter' : 'Unknown Adapter';
+    return selected ? selected.description || 'Unnamed adapter' : 'Unknown adapter';
   });
   let recordingSession = $derived(connection?.recording ?? createRecordingSession(client, preview));
   function refreshRecording() { return recordingSession.refresh(); }
@@ -67,7 +68,7 @@
   });
   let readUnavailable = $derived(preview || $session.extracting || !!$session.errors.settings || $session.settings?.version !== 1);
   let unavailable = $derived(readUnavailable || $session.busy);
-  let errorText = $derived([...Object.values($session.errors), policyError].filter(Boolean).join(' '));
+  let errors = $derived([...Object.entries($session.errors), ['policy', policyError] as [string, string]].filter(([, message]) => message));
   function changed() { revision++; edited = true; saved = ''; }
   function revert() {
     revision++; edited = false; saved = '';
@@ -94,7 +95,7 @@
     if (!$session.errors.settings && submitted === revision) {
       edited = false; saved = 'Saved';
     } else if (!$session.errors.settings) {
-      saved = 'Unsaved Changes';
+      saved = 'Unsaved changes';
     }
     await Promise.all([refreshPolicy(), refreshRecording()]);
   }
@@ -118,11 +119,14 @@
 <div class="settings-page">
   <a class="setup-link ctl" href="#/setup">Setup</a>
   {#if preview}<p class="notice">Preview</p>{/if}
-  <p class="error-summary" role="alert" aria-atomic="true">{errorText}</p>
-  {#if upgrading}<p class="notice">Demo Mode is unavailable while the history upgrade is running.</p>{/if}
+  <div class="error-summary" role="alert" aria-atomic="true">{#if errors.length}<ul>
+    {#each errors as [key, message] (key)}<li><span>{errorLine(message)}</span>
+      {#if key === 'settings'}<button class="ctl" type="button" onclick={retrySettings}>Retry settings</button>{/if}</li>{/each}
+  </ul>{/if}</div>
+  {#if upgrading}<p class="notice">Demo mode is unavailable while the history upgrade is running.</p>{/if}
   {#if !draft}<p>Disconnected</p>{/if}
-  {#if draft && draft.version !== 1}<p class="notice">Update Required</p>{/if}
-  {#if $session.errors.settings || !draft}<button class="ctl" type="button" onclick={retrySettings}>Retry Settings</button>{/if}
+  {#if draft && draft.version !== 1}<p class="notice">Update required</p>{/if}
+  {#if !draft && !$session.errors.settings}<button class="ctl retry" type="button" onclick={retrySettings}>Retry settings</button>{/if}
   <SettingsTabs requestedTab={tab} notificationsEnabled={features.logs}>
     {#snippet general()}
       <div class="settings-grid">
@@ -131,7 +135,7 @@
             <div oninput={changed} onchange={changed}>
               <div class="adapter-row">
                 <AdapterControl adapters={$session.adapters} {preview} bind:value={adapter} disabled={readUnavailable} />
-                {#if !preview}<button class="ctl" type="button" disabled={$session.busy} onclick={() => session.refreshAdapters()}>Retry Adapters</button>{/if}
+                {#if !preview}<button class="ctl" type="button" disabled={$session.busy} onclick={() => session.refreshAdapters()}>Retry adapters</button>{/if}
                 <p>Current adapter: {savedAdapter}</p>
               </div>
             </div>
@@ -139,7 +143,7 @@
         </SettingsSection>
         <SettingsSection heading="Appearance">
           {#if draft}
-            <label class="check"><input type="checkbox" bind:checked={draft.hardware_acceleration} onchange={changed} disabled={readUnavailable} aria-describedby={`${id}-acceleration-note`} /> Hardware Acceleration</label>
+            <label class="check"><input type="checkbox" bind:checked={draft.hardware_acceleration} onchange={changed} disabled={readUnavailable} aria-describedby={`${id}-acceleration-note`} /> Hardware acceleration</label>
             <p>Current setting: {$session.settings?.hardware_acceleration ? 'On' : 'Off'}</p>
           {/if}
           <p id={`${id}-acceleration-note`}><span>Restart required</span>. In Maxed's tests (2026-10-04, one Intel Core Ultra 7 laptop, WebView2 154),
@@ -148,14 +152,14 @@
         <SettingsSection heading="Updates">
           {#if draft}
             <div class="channel-row">
-              <label for={`${id}-channel`}>Update Channel</label>
+              <label for={`${id}-channel`}>Update channel</label>
               <select class="ctl" id={`${id}-channel`} bind:value={draft.update_channel} onchange={changed} disabled={readUnavailable}><option value="stable">Stable</option><option value="beta">Beta</option></select>
             </div>
           {/if}
           <UpdateControl {client} {preview} channel={$session.settings?.update_channel} capture={$session.capture} />
         </SettingsSection>
         <SettingsSection heading="Demo">
-          <div class="demo-row"><button class="ctl" type="button" role="switch" aria-checked={$session.setup?.demo ?? false} aria-disabled={demoUnavailable} onclick={toggleDemo}>Demo Mode</button><span>Mode: {$session.setup ? $session.setup.demo ? 'Demo' : 'Live' : 'Unavailable'}</span></div>
+          <div class="demo-row"><button class="ctl" type="button" role="switch" aria-checked={$session.setup?.demo ?? false} aria-disabled={demoUnavailable} onclick={toggleDemo}>Demo mode</button><span>Mode: {$session.setup ? $session.setup.demo ? 'Demo' : 'Live' : 'Unavailable'}</span></div>
         </SettingsSection>
         <SettingsSection heading="Debug">
           <label class="check"><input type="checkbox" checked={$debugMode} onchange={(event) => setDebugMode(event.currentTarget.checked)} /> Debug mode</label>
@@ -193,10 +197,10 @@
       </div>
     {/snippet}
     {#snippet assets()}
-      <SettingsSection heading="Game Assets">
+      <SettingsSection heading="Game assets">
         <p>Assets: <strong>{$session.setup?.assets ? titleCase($session.setup.assets) : 'Unavailable'}</strong></p>
         <details>
-          <summary>Assets Path</summary>
+          <summary>Assets path</summary>
           <AssetsControl {session} {preview} />
         </details>
       </SettingsSection>
@@ -204,7 +208,7 @@
   </SettingsTabs>
   <form class="save-bar" onsubmit={(event) => { event.preventDefault(); void apply(); }}>
     <div class="actions">
-      <span role="status" aria-live="polite">{saved || (edited ? 'Unsaved Changes' : draft && !$session.errors.settings ? 'Saved' : 'Disconnected')}</span>
+      <span role="status" aria-live="polite">{saved || (edited ? 'Unsaved changes' : draft && !$session.errors.settings ? 'Saved' : 'Disconnected')}</span>
       <button class="ctl" type="submit" aria-disabled={unavailable || !edited}>Apply</button>
       <button class="ctl" type="button" disabled={$session.busy || !edited} onclick={revert}>Revert</button>
       <a href={features.logs ? "#/logs/alerts" : "#/alerts"} aria-label={features.logs ? "Alert history" : "Alerts"}>{features.logs ? "Alert history" : "Alerts"}</a>
@@ -212,8 +216,8 @@
     <details>
       <summary>Recovery</summary>
       <div class="actions">
-        {#if draft && !$session.errors.settings}<button class="ctl" type="button" onclick={retrySettings}>Retry Settings</button>{/if}
-        <button class="ctl" type="button" onclick={() => session.refreshSetup({ retry: true })}>Retry Checks</button>
+        {#if draft && !$session.errors.settings}<button class="ctl" type="button" onclick={retrySettings}>Retry settings</button>{/if}
+        <button class="ctl" type="button" onclick={() => session.refreshSetup({ retry: true })}>Retry checks</button>
       </div>
     </details>
   </form>
@@ -223,27 +227,32 @@
 </div>
 <style>
   .settings-page :global(.preferences) { padding: 0; border: 0; background: transparent; }
-  .hint { color: var(--text-secondary); font-size: 12px; }
-  .settings-page { display: grid; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; font-size: var(--text-label); line-height: var(--leading-label); container-type: inline-size; }
-  .settings-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+  .hint { color: var(--text-muted); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .settings-page { display: grid; gap: var(--space-3); min-width: 0; overflow-wrap: anywhere; font-size: var(--text-label); line-height: var(--leading-label); container-type: inline-size; }
+  .settings-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
   p { color: var(--text-secondary); margin: var(--space-1) 0; line-height: var(--leading-label); }
   .notice { color: var(--warning); }
-  .error-summary { color: var(--danger); margin: 0; }
   .error-summary:empty { display: none; }
+  .error-summary ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+  .error-summary li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-height: var(--control-dense); color: var(--danger); }
   .actions, .demo-row, .channel-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
-  .actions > span { margin-right: auto; }
+  .channel-row label { color: var(--text-secondary); }
+  .actions > span { margin-right: auto; color: var(--text-secondary); }
   .adapter-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-2); align-items: end; }
   .adapter-row :global(label), .adapter-row :global(p) { grid-column: 1 / -1; }
-  button, select, .actions a { min-height: var(--target-min); font-size: var(--text-label); }
-  button { padding: var(--space-1) var(--space-2); }
-  .setup-link { justify-self: start; }
-  a { color: var(--violet-text); }
-  .actions a { display: inline-flex; align-items: center; }
-  .check { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-height: var(--target-min); font-size: var(--text-body); }
-  input[type="checkbox"] { width: 1.25rem; height: 1.25rem; accent-color: var(--violet); }
-  select { min-width: 0; padding: var(--space-1) var(--space-2); color: var(--text-primary); background: var(--surface-canvas); border: 1px solid var(--border-strong); border-radius: var(--radius-control); font: inherit; }
-  summary { min-height: var(--target-min); align-content: center; color: var(--violet-text); cursor: pointer; }
+  .adapter-row button { justify-self: start; }
+  .setup-link, .retry { justify-self: start; }
+  a { color: var(--text-primary); text-decoration: none; text-underline-offset: 3px; }
+  a:hover, a:focus-visible { text-decoration: underline; }
+  .actions a { display: inline-flex; align-items: center; min-height: var(--control-dense); padding: 0 var(--space-2); color: var(--text-secondary); }
+  .actions a:hover { color: var(--text-primary); }
+  .check { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-height: var(--target-min); font-size: var(--text-label); }
+  input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; accent-color: var(--text-secondary); }
+  select { min-width: 0; }
+  strong { font-weight: var(--weight-medium); color: var(--text-primary); }
+  summary { min-height: var(--target-min); align-content: center; color: var(--text-secondary); cursor: pointer; }
+  summary:hover { color: var(--text-primary); }
   summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-  .save-bar { position: static; min-width: 0; padding: var(--space-2) var(--space-3); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-card); }
+  .save-bar { position: static; min-width: 0; padding: var(--space-3) var(--space-4); background: var(--surface-panel); border: 1px solid var(--hairline); border-radius: var(--radius-card); }
   @container (max-width: 38rem) { .settings-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>

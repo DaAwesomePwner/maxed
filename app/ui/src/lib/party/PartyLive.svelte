@@ -115,7 +115,7 @@
     subscribe();
     function readPresets() {
       void owner.querySettings().then(settings => { if (!disposed) presets = settings.party.presets; })
-        .catch(() => { if (!disposed) error = 'Could not load presets.'; });
+        .catch(() => { if (!disposed) error = 'Couldn’t load presets'; });
     }
     function readRecentRun() {
       // Include an open run and the latest ended run, without retaining the whole run history.
@@ -144,7 +144,7 @@
     if (picking) return;
     picking = true;
     try { await client.setPartyPresetPick(id); refresh(); }
-    catch { error = 'Could not pick preset.'; }
+    catch { error = 'Couldn’t pick preset'; }
     finally { picking = false; }
   }
   async function selectMember(member: PartyMember, keyboard = false) {
@@ -192,8 +192,8 @@
     <PartySummary {view} {saved} {visuals} />
     <div class="layout" class:with-panel={selected !== null}>
       <section class="roster" aria-label="Roster">
-        <header><h2>Roster</h2><div class="filters" aria-label="Roster filters">
-          {#each filters as [value, label]}<button class="ctl" aria-pressed={filter === value} onclick={() => { filter = value; }}>{label} {filterMembers(view.members, value).length}</button>{/each}
+        <header><h2>Roster</h2><div class="filters seg" aria-label="Roster filters">
+          {#each filters as [value, label]}<button aria-pressed={filter === value} onclick={() => { filter = value; }}>{label} <span>{filterMembers(view.members, value).length}</span></button>{/each}
         </div>
         {#if !saved && view.preset && view.assets_available}<button class="ctl" onclick={copyFailing}>Copy failing names</button>{/if}
         <span role="status">{copied}</span></header>
@@ -209,11 +209,11 @@
   {/if}
 </section>
 <style>
-  .layout { display: grid; gap: var(--space-3); align-items: start; } .with-panel { grid-template-columns: minmax(0, 1fr) 290px; }
-  .roster { min-width: 0; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-panel); }
-  header, .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; } header { gap: var(--space-2); margin-bottom: var(--space-2); }
-  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); margin: 0 auto 0 0; }
-  .filters button { border-radius: 12px; } button[aria-pressed=true] { border-color: var(--gold); color: var(--text-primary); }
-  .hint, .notice { font-size: 12px; color: var(--text-secondary); } .hint { margin-bottom: 0; } [role=alert] { color: var(--danger); }
+  .layout { display: grid; gap: var(--space-4); align-items: start; } .with-panel { grid-template-columns: minmax(0, 1fr) 290px; }
+  .roster { min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+  h2 { margin: 0 auto 0 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); color: var(--text-primary); }
+  .hint, .notice { font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); } .hint { margin: var(--space-3) 0 0; } .notice { margin: 0 0 var(--space-2); color: var(--text-secondary); }
+  [role=alert] { color: var(--danger); }
   @media (max-width: 1050px) { .with-panel { grid-template-columns: minmax(0, 1fr); } }
 </style>

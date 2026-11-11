@@ -15,6 +15,5 @@
     || (!!$preferences && !keyPopAllows($preferences, dungeon, dungeonMetadata(dungeon, $dungeonCatalog)))} onclick={() => { void mute.mute(dungeon); }}>Mute {dungeon}</button>
 {/if}
 <style>
-  button { min-height: var(--target-min); border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: var(--space-2); color: var(--text-primary); background: var(--surface-panel); font: inherit; cursor: pointer; }
-  button:disabled { color: var(--text-disabled); cursor: default; }
+  span { color: var(--text-secondary); font-size: var(--text-label); }
 </style>

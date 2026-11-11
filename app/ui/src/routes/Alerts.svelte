@@ -165,23 +165,23 @@
   <section class="history" aria-label="Alert Log">
     <h2>History</h2>
     <form onsubmit={apply} aria-label="Alert Filters">
-      <label>Search<input type="search" bind:value={query} placeholder="Search Alerts" /></label>
-      <div class="filter-actions"><label>Kind<select bind:value={kind}><option value="">All Kinds</option>{#each alertKindDisplayOrder as value}<option value={value}>{alertKindLabels[value]}</option>{/each}</select></label><button type="submit">Apply</button></div>
+      <label>Search<input type="search" bind:value={query} placeholder="Search alerts" /></label>
+      <div class="filter-actions"><label>Kind<select bind:value={kind}><option value="">All kinds</option>{#each alertKindDisplayOrder as value}<option value={value}>{alertKindLabels[value]}</option>{/each}</select></label><button type="submit">Apply</button></div>
       <details open={!!validation || !!filter.range}><summary>Dates</summary><div class="dates"><label>From<input type="date" bind:value={from} /></label><label>Through<input type="date" bind:value={through} /></label><button type="button" onclick={reset}>Reset</button></div></details>
       {#if validation}<p role="alert">{validation}</p>{/if}
     </form>
     {#if !client || !enabled}<EmptyState state="unavailable" heading="Disconnected" description="" />
     {:else}
-      {#if history.phase === 'error'}<p class="message">Couldn't load alerts. Retry.</p>
-      {:else if history.phase === 'stale' && store?.state === 'failed'}<p class="message">Couldn't save. Retry.</p>
+      {#if history.phase === 'error'}<p class="message">Couldn’t load alerts</p>
+      {:else if history.phase === 'stale' && store?.state === 'failed'}<p class="message">Couldn’t save</p>
       {:else if history.phase === 'superseded'}<p class="message">Waiting</p>
       {:else if history.phase === 'busy' && history.retryAvailable}<p class="message">Busy</p>
-      {:else if !history.page && history.phase === 'loading'}<EmptyState state="loading" heading="Loading Alerts" description="" />{/if}
+      {:else if !history.page && history.phase === 'loading'}<EmptyState state="loading" heading="Loading alerts" description="" />{/if}
       {#if history.phase !== 'ready' && !historyStatus(history, 'alerts')}<DebugNote text={history.message} />{/if}
-      {#if history.page && rows.length === 0}<EmptyState heading="No Alerts" description="" />
+      {#if history.page && rows.length === 0}<EmptyState heading="No alerts" description="" />
       {:else if rows.length}<AlertLog rows={visible} {visuals} />{/if}
-      <div class="rows-footer"><span>{rows.length ? `${window * DENSE_ALERT_ROWS + 1}-${Math.min(rows.length, (window + 1) * DENSE_ALERT_ROWS)} of ${rows.length}` : '0 Rows'}</span><nav aria-label="Alert Rows"><button type="button" disabled={window === 0 || !rows.length} onclick={() => moveWindow(-1)}>Previous Rows</button><button type="button" disabled={window >= lastWindow || !rows.length} onclick={() => moveWindow(1)}>Next Rows</button></nav></div>
-      <details><summary>Pages</summary><button type="button" disabled={history.phase !== 'ready'} onclick={() => controller?.retry()}>Refresh</button><nav aria-label="Alert Pages"><button type="button" disabled={paging || filter.cursor === null} onclick={firstPage}>First Page</button><button type="button" disabled={paging || window !== 0 || !previous.length} onclick={previousPage}>Previous Page</button><button type="button" disabled={paging || window !== lastWindow || !history.page?.next} onclick={nextPage}>Next Page</button></nav></details>
+      <div class="rows-footer"><span>{rows.length ? `${window * DENSE_ALERT_ROWS + 1}-${Math.min(rows.length, (window + 1) * DENSE_ALERT_ROWS)} of ${rows.length}` : '0 rows'}</span><nav aria-label="Alert Rows"><button type="button" disabled={window === 0 || !rows.length} onclick={() => moveWindow(-1)}>Previous rows</button><button type="button" disabled={window >= lastWindow || !rows.length} onclick={() => moveWindow(1)}>Next rows</button></nav></div>
+      <details><summary>Pages</summary><button type="button" disabled={history.phase !== 'ready'} onclick={() => controller?.retry()}>Refresh</button><nav aria-label="Alert Pages"><button type="button" disabled={paging || filter.cursor === null} onclick={firstPage}>First page</button><button type="button" disabled={paging || window !== 0 || !previous.length} onclick={previousPage}>Previous page</button><button type="button" disabled={paging || window !== lastWindow || !history.page?.next} onclick={nextPage}>Next page</button></nav></details>
       {#if history.phase !== 'ready' && history.retryAvailable && !historyStatus(history, 'alerts')}<button class="retry" type="button" onclick={() => controller?.retry()}>Retry</button>{/if}
     {/if}
   </section>
@@ -193,22 +193,21 @@
 </div>
 
 <style>
-  .alerts { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: var(--space-3); align-items: start; min-width: 0; overflow-anchor: none; }
+  .alerts { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; min-width: 0; overflow-anchor: none; }
   .history-only { grid-template-columns: minmax(0, 1fr); }
-  .history { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-panel); min-width: 0; overflow-wrap: anywhere; }
-  h2 { font-size: var(--text-body); margin: 0 0 var(--space-2); }
-  form { display: grid; gap: var(--space-1); }
-  label { display: grid; gap: var(--space-1); min-width: 0; color: var(--text-secondary); font-size: var(--text-label); }
-  input, select, button { min-height: var(--target-min); min-width: 0; max-width: 100%; color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-control); font: inherit; padding: var(--space-1) var(--space-2); }
-  button { font-size: var(--text-label); }
+  .history { padding: var(--space-5); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); min-width: 0; overflow-wrap: anywhere; }
+  h2 { margin: 0 0 var(--space-3); font-size: var(--text-title); line-height: var(--leading-title); font-weight: var(--weight-medium); }
+  form { display: grid; gap: var(--space-2); }
+  label { display: grid; gap: var(--space-1); min-width: 0; color: var(--text-secondary); font-size: var(--text-caption); }
+  input, select, button { min-width: 0; max-width: 100%; }
   button:not(:disabled), summary { cursor: pointer; }
-  button:disabled { color: var(--text-disabled); }
   .filter-actions, .dates, nav { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: end; }
   .filter-actions label { flex: 1; }
-  .rows-footer { display: grid; gap: var(--space-2); margin-top: var(--space-2); font-size: var(--text-label); font-variant-numeric: tabular-nums; }
+  .rows-footer { display: grid; gap: var(--space-2); margin-top: var(--space-2); color: var(--text-muted); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
   .rows-footer nav { justify-content: space-between; }
   .message { font-size: var(--text-label); color: var(--text-secondary); margin: var(--space-1) 0; }
-  summary { min-height: var(--target-min); align-content: center; font-size: var(--text-label); color: var(--violet-text); }
-  .retry { margin-top: var(--space-1); }
+  summary { min-height: var(--target-min); align-content: center; font-size: var(--text-label); color: var(--text-secondary); }
+  summary:hover { color: var(--text-primary); }
+  .retry { margin-top: var(--space-1); justify-self: start; }
   @media (max-width: 900px) { .alerts { grid-template-columns: minmax(0, 1fr); } }
 </style>

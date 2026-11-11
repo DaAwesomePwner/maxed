@@ -104,13 +104,13 @@ it('exposes a failed initial preferences read beside the panel and retries visib
   await fireEvent.click(screen.getByRole('tab', { name: 'Notifications' }));
   expect(page.client.querySettings).toHaveBeenCalledTimes(3);
   expect(screen.getByRole('status', { name: 'Background activity' }).textContent).toBe('');
-  expect(screen.getByText("Couldn't load alert preferences. Retry.").closest('.preferences')).toBeTruthy();
-  const retry = screen.getByRole('button', { name: 'Retry Preferences' });
+  expect(screen.getByText('Couldn’t load alert preferences').closest('.preferences')).toBeTruthy();
+  const retry = screen.getByRole('button', { name: 'Retry preferences' });
   expect(retry.closest('details')).toBeNull();
   await fireEvent.click(retry); await flush();
   expect(page.client.querySettings).toHaveBeenCalledTimes(4);
-  expect((screen.getByRole('combobox', { name: 'Personal Best' }) as HTMLSelectElement).disabled).toBe(false);
-  expect(screen.queryByText("Couldn't load alert preferences. Retry.")).toBeNull();
+  expect((screen.getByRole('combobox', { name: 'Personal best' }) as HTMLSelectElement).disabled).toBe(false);
+  expect(screen.queryByText('Couldn’t load alert preferences')).toBeNull();
   expect(screen.getByRole('status', { name: 'Background activity' }).textContent).toBe('');
 });
 it('shows a long initial Runs load in the shell and releases it when data arrives', async () => {

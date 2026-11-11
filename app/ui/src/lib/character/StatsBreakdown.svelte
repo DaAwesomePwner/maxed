@@ -43,10 +43,14 @@
 </section>
 <style>
   section { min-width: 0; }
+  h2 { margin: 0 0 var(--space-3); font-size: var(--text-title); line-height: var(--leading-title); font-weight: var(--weight-medium); }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
-  th, td { padding: 8px 4px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
-  thead th { font-size: 12px; color: var(--text-secondary); }
-  small { display: block; color: var(--text-secondary); font-size: 11px; }
-  summary { cursor: pointer; min-height: var(--target-min, 32px); align-content: center; }
-  p { color: var(--text-secondary); }
+  th, td { padding: var(--space-2) var(--space-1); text-align: left; vertical-align: top; border-bottom: 1px solid var(--hairline); overflow-wrap: anywhere; font-size: var(--text-label); line-height: var(--leading-label); }
+  tbody th { font-weight: var(--weight-medium); }
+  thead th { font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); color: var(--text-muted); border-bottom-color: var(--hairline-strong); }
+  small { display: block; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  summary { cursor: pointer; min-height: var(--target-min); align-content: center; font-size: var(--text-label); color: var(--text-secondary); }
+  summary:hover { color: var(--text-primary); }
+  ul { color: var(--text-secondary); font-size: var(--text-label); }
+  p { margin-block: 0 var(--space-3); color: var(--text-secondary); font-size: var(--text-label); line-height: var(--leading-label); }
 </style>

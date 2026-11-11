@@ -12,7 +12,7 @@ it('shows alert values in production and reveals evidence only in Debug', async 
   render(AlertLog, { rows: [alert({ kind: 'white_bag', explanation: 'Estimated bag source.',
     details: { type: 'white_bag', drop_id: 'bag-1', bag_type: 200, ordinal: 3, window: null,
       source_enemy: null, source_estimated: true, contents_known: false } })] });
-  expect(screen.getByText('Weekly Count: 3')).toBeTruthy();
+  expect(screen.getByText('Weekly count: 3')).toBeTruthy();
   expect(screen.queryByText('Estimated bag source.')).toBeNull();
   expect(document.querySelector('[data-debug-note]')).toBeNull();
   setDebugMode(true);
@@ -31,7 +31,7 @@ it('key pops are intentionally unlinked even in Debug', () => {
     explanation: 'Lost Halls key popped', details: { type: 'key_popped', dungeon: 'Lost Halls' } })] });
   expect(container.querySelector('a')).toBeNull();
   expect(container.textContent).not.toContain('relationship unavailable');
-  expect(screen.getByRole('article', { name: 'Key Popped' })).toBeTruthy();
+  expect(screen.getByRole('article', { name: 'Key popped' })).toBeTruthy();
 });
 
 it('shows run-time PB wording and links the saved run', () => {

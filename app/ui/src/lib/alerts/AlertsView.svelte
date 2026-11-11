@@ -212,17 +212,25 @@
   </section><aside><AlertPanel alert={selected} {visuals} /></aside></div>
 </div>
 <style>
-  .feed { overflow-anchor: none; overflow-wrap: anywhere; display: grid; gap: 10px; min-width: 0; }
-  .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; } .toolbar input { flex: 1; min-width: 160px; max-width: 260px; }
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; min-width: 0; }
-  .list { position: relative; min-width: 0; padding: 8px 6px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
-  aside { display: grid; gap: 10px; min-width: 0; padding: 0; margin: 0; border: 0; background: none; }
-  p { margin: 8px; color: var(--text-secondary); font-size: 12px; }
-  .empty { padding: 20px 14px; margin: 6px; border: 1px dashed var(--border); border-radius: 6px; text-align: center; font-size: 12px; } .empty h2 { font-size: 13px; }
-  footer { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; border-top: 1px solid var(--border); margin-top: 8px; padding: 8px 4px 0; color: var(--text-muted); font-size: 11px; }
+  .feed { overflow-anchor: none; overflow-wrap: anywhere; display: grid; gap: var(--space-3); min-width: 0; }
+  .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; } .toolbar input { flex: 1; min-width: 160px; max-width: 260px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-4); align-items: start; min-width: 0; }
+  .list { position: relative; min-width: 0; padding: var(--space-2) var(--space-2) var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); }
+  aside { display: grid; gap: var(--space-3); min-width: 0; padding: 0; margin: 0; border: 0; background: none; }
+  p { margin: var(--space-2); color: var(--text-secondary); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .empty { padding: var(--space-5) var(--space-4); margin: var(--space-2); text-align: center; font-size: var(--text-caption); }
+  .empty h2 { margin: 0 0 var(--space-2); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  footer { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); border-top: 1px solid var(--hairline); margin-top: var(--space-2); padding: var(--space-2) var(--space-1) 0; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
   @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
   .settings { margin-left: auto; }
-  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--surface-panel); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; min-width: 0; }
-  .kpis button { display: block; text-align: left; min-width: 0; padding: 9px 14px 10px; border-radius: 0; height: auto; } .kpis button + button { border-left: 1px solid var(--border); } .chosen { box-shadow: inset 0 -2px var(--gold); } .label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); } strong { display: block; font-size: 24px; line-height: 1.15; color: var(--text-primary); font-variant-numeric: tabular-nums; } .gold { color: var(--gold); } .sub { display: block; font-size: 11px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  @media (max-width: 900px) { .kpis button { padding-inline: 8px; } }
+  /* Stat strip: sentence-case label, 28px figure, muted caption; the chosen kind is a neutral surface step. */
+  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--surface-panel); border: 1px solid var(--hairline); border-radius: var(--radius-card); margin-bottom: var(--space-3); min-width: 0; overflow: hidden; }
+  .kpis button { display: block; height: auto; min-width: 0; padding: var(--space-3) var(--space-4); border: 0; border-radius: 0; text-align: left; }
+  .kpis button + button { border-left: 1px solid var(--hairline); }
+  .kpis button.chosen, .kpis button.chosen:hover { background: var(--surface-selected); box-shadow: var(--highlight-top); }
+  .label { display: block; font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-normal); color: var(--text-muted); }
+  strong { display: block; margin-top: var(--space-1); font-size: var(--text-hero); line-height: var(--leading-hero); font-weight: var(--weight-medium); color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .gold { color: var(--gold); }
+  .sub { display: block; font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 900px) { .kpis button { padding-inline: var(--space-2); } }
 </style>

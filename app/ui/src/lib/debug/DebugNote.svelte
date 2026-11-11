@@ -11,7 +11,8 @@
 {/if}
 
 <style>
-  .debug-note { color: var(--warning); font-family: var(--font-mono, monospace); font-size: var(--text-label); line-height: var(--leading-label); overflow-wrap: anywhere; }
-  p.debug-note { margin: 0; padding: var(--space-1) var(--space-2); border: 1px dashed var(--warning); border-radius: var(--radius-control); }
+  /* Debug caveats: warning-coloured text on an inset well; the colour carries the meaning, no dashed frame. */
+  .debug-note { color: var(--warning); font-family: var(--font-ui); font-size: var(--text-caption); line-height: var(--leading-caption); font-weight: var(--weight-normal); overflow-wrap: anywhere; }
+  p.debug-note { margin: 0; padding: var(--space-1) var(--space-2); background: var(--surface-inset); border: 1px solid var(--hairline); border-radius: var(--radius-control); }
   span.debug-note::before { content: ' \00b7  '; }
 </style>
