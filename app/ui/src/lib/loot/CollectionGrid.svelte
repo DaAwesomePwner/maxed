@@ -57,26 +57,27 @@
   </div>
 </div>
 <style>
-  .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; min-width: 0; }
-  h3 { margin: 0; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; }
-  .note, label { color: var(--text-secondary); font-size: 12px; }
-  label { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
-  .body { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 16px; min-width: 0; }
-  nav { max-height: 430px; overflow: auto; border-right: 1px solid var(--border-soft); padding-right: 10px; }
-  summary { padding-block: 8px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
-  nav button { display: flex; width: 100%; height: 30px; gap: 8px; justify-content: start; }
+  .card-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); min-width: 0; }
+  h3 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); color: var(--text-primary); }
+  .note, label { color: var(--text-secondary); font-size: var(--text-meta); }
+  label { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); flex: none; }
+  .body { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--space-4); min-width: 0; }
+  nav { max-height: 432px; overflow: auto; border-right: 1px solid var(--hairline); padding-right: var(--space-3); }
+  summary { padding-block: var(--space-2); font-size: var(--text-caption); color: var(--text-secondary); cursor: pointer; }
+  nav button { display: flex; width: 100%; height: var(--control-dense); gap: var(--space-2); justify-content: start; }
   nav button span, .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  nav button[aria-pressed="true"] { background: var(--surface-raised); box-shadow: inset 2px 0 var(--violet); }
-  .items { min-width: 0; max-height: 430px; overflow: auto; }
-  ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px; list-style: none; margin: 0; padding: 0; }
+  nav button[aria-pressed="true"], nav button[aria-pressed="true"]:hover:not(:disabled) { background: var(--surface-selected); color: var(--text-primary); box-shadow: var(--selected-edge); }
+  .items { min-width: 0; max-height: 432px; overflow: auto; }
+  ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-4); list-style: none; margin: 0; padding: 0; }
   li { min-width: 0; }
-  a { box-sizing: border-box; height: 36px; display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--border-soft); color: var(--text-primary); text-decoration: none; font-size: 12px; }
+  a { box-sizing: border-box; height: var(--row-default); display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-1); border-top: 1px solid var(--hairline); color: var(--text-primary); text-decoration: none; font-size: var(--text-caption);
+    transition: background-color var(--motion-fast) var(--motion-ease); }
   a:hover { background: var(--surface-hover); }
   a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-  .tile { display: inline-flex; flex: none; border: 1px solid currentColor; border-radius: 4px; }
-  .name { flex: 1; font-weight: 600; }
-  .star { color: var(--gold); } .ut { color: var(--violet-text); } .st { color: var(--bag-orange); }
+  .tile { display: inline-flex; flex: none; border: 1px solid currentColor; border-radius: var(--radius-sprite); }
+  .name { flex: 1; font-weight: var(--weight-medium); }
+  .star { color: var(--gold); } .ut { color: var(--tier-ut); } .st { color: var(--tier-st); }
   .count, .last { flex: none; font-variant-numeric: tabular-nums; }
-  .last { color: var(--text-secondary); font-size: 11px; min-width: 48px; text-align: right; }
-  @media (max-width: 1000px) { .body { grid-template-columns: 170px minmax(0, 1fr); gap: 10px; } .note { display: none; } }
+  .last { color: var(--text-secondary); font-size: var(--text-meta); min-width: 48px; text-align: right; }
+  @media (max-width: 1000px) { .body { grid-template-columns: 172px minmax(0, 1fr); gap: var(--space-3); } .note { display: none; } }
 </style>

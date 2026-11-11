@@ -43,7 +43,7 @@
 </div>
 <style>
   .range { position: relative; }
-  .popover { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; width: 240px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 8px 24px #0008; font-size: 12px; }
-  .actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 6px; }
+  .popover { position: absolute; right: 0; top: calc(100% + var(--space-2)); z-index: 10; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-2); width: 240px; padding: var(--space-3); border: 1px solid var(--hairline-strong); border-radius: var(--radius-control); background: var(--surface-raised); box-shadow: var(--elevation-popover); font-size: var(--text-caption); }
+  .actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: var(--space-2); }
   p { grid-column: 1 / -1; margin: 0; color: var(--danger); }
 </style>

@@ -149,7 +149,7 @@ it('shows linked grid cells with catalog tiers and observed counts', async () =>
 });
 it('shows a retryable collection error instead of empty results', async () => {
   const page = mount({ error: true }); await flush();
-  expect(screen.getByText("Couldn't load collection.")).toBeTruthy();
+  expect(screen.getByText("Couldn't load collection")).toBeTruthy();
   expect(screen.queryByText('Chase an item to track it')).toBeNull();
   expect(screen.queryByRole('heading', { name: 'Choose a dungeon' })).toBeNull();
   await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
@@ -167,7 +167,7 @@ it('waits for settings and lets a settings failure be retried without reading an
 });
 it('shows a retryable dungeon catalog failure', async () => {
   const page = mount({ catalogError: true }); await flush();
-  expect(screen.getByText('Dungeon choices unavailable.')).toBeTruthy();
+  expect(screen.getByText('Dungeon choices unavailable')).toBeTruthy();
   expect(screen.queryByRole('heading', { name: 'Choose a dungeon' })).toBeNull();
   await fireEvent.click(screen.getByRole('button', { name: 'Retry dungeon choices' })); await flush();
   expect(page.catalog).toHaveBeenCalledTimes(2);
@@ -178,7 +178,7 @@ it('rejects invalid searches and ignores replies after the query changes', async
   const input = screen.getByRole('combobox', { name: 'Add an item to chase' });
   for (const value of [' ', 'a'.repeat(65)]) {
     await fireEvent.input(input, { target: { value } }); await fireEvent.keyDown(input, { key: 'Enter' }); await flush();
-    expect(screen.getByText('Enter 1–64 characters to search.')).toBeTruthy();
+    expect(screen.getByText('Enter 1–64 characters to search')).toBeTruthy();
   }
   expect(page.search).not.toHaveBeenCalled();
   const pending = deferred<Awaited<ReturnType<typeof page.client.searchItems>>>();
@@ -237,7 +237,7 @@ it('hides retained empty states after a failed refresh', async () => {
   expect(screen.getByText('Search above, pick a dungeon and click the star.')).toBeTruthy();
   page.read.mockRejectedValueOnce(new Error('synthetic refresh failure'));
   await fireEvent.click(screen.getByRole('button', { name: 'Invented Burrow' })); await flush();
-  expect(screen.getByText("Couldn't load collection.")).toBeTruthy();
+  expect(screen.getByText("Couldn't load collection")).toBeTruthy();
   expect(screen.queryByText('Chase an item to track it')).toBeNull();
   expect(screen.queryByRole('heading', { name: 'Choose a dungeon' })).toBeNull();
 });
@@ -378,7 +378,7 @@ it('shows the schema-error recovery message beside the retryable error bar', asy
   const message = 'History schema is newer than this Maxed build; update Maxed, then Retry.';
   page.read.mockRejectedValueOnce(new Error(message)); await flush();
   expect(screen.getByText(message).tagName).toBe('P');
-  expect(screen.getByRole('alert').textContent).toContain("Couldn't load collection.");
+  expect(screen.getByRole('alert').textContent).toContain("Couldn't load collection");
   await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
   expect(screen.queryByText(message)).toBeNull();
   expect(screen.getByRole('table', { name: 'Chase list' })).toBeTruthy();
@@ -388,7 +388,7 @@ it('keeps the settings chase count but hides unavailable observation KPIs after 
   expect(screen.getByText('2 seen at least once')).toBeTruthy();
   page.read.mockRejectedValueOnce(new Error('synthetic refresh failure'));
   await fireEvent.click(screen.getByRole('button', { name: 'Invented Burrow' })); await flush();
-  expect(screen.getByText("Couldn't load collection.")).toBeTruthy();
+  expect(screen.getByText("Couldn't load collection")).toBeTruthy();
   const kpis = page.container.querySelector('.kpis')!;
   expect(kpis.querySelector('[data-kpi="chasing"] .value')?.textContent).toBe('3');
   expect(kpis.querySelector('[data-kpi="chasing"] .sub')?.textContent?.trim()).toBe('');
@@ -499,7 +499,7 @@ it.each(['scopeKey', 'streamId'] as const)('clears old visit evidence when %s ch
   expect(visits).toHaveBeenCalledTimes(2);
   expect(screen.getByRole('navigation', { name: 'Collection dungeon' })).toBe(nav);
   replacement.reject(new Error('synthetic replacement history failure')); await flush();
-  expect.soft(screen.queryByText('Visit history unavailable.')).not.toBeNull();
+  expect.soft(screen.queryByText('Visit history unavailable')).not.toBeNull();
   expect.soft(screen.queryByRole('button', { name: 'Retry visit history' })).not.toBeNull();
   expect.soft(within(nav).queryByText(/^Not visited/)).toBeNull();
   expect.soft(within(nav).queryByText('All dungeons (3)')).not.toBeNull();
@@ -512,7 +512,7 @@ it.each(['scopeKey', 'streamId'] as const)('clears old visit evidence when %s ch
   ] } });
   await fireEvent.click(screen.getByRole('button', { name: 'Retry visit history' })); await flush();
   expect(visits).toHaveBeenCalledTimes(3);
-  expect(screen.queryByText('Visit history unavailable.')).toBeNull();
+  expect(screen.queryByText('Visit history unavailable')).toBeNull();
   expect([...nav.querySelectorAll(':scope > button')].map(button => button.getAttribute('title')))
     .toEqual(['Invented Courtyard']);
   expect(within(nav).getByText('Not visited (2)')).toBeTruthy();
@@ -521,7 +521,7 @@ it('keeps unavailable visit history distinct from not visited and offers retry',
   const page = mount();
   const visits = vi.spyOn(page.client, 'getLootStats').mockRejectedValueOnce(new Error('synthetic unavailable history'));
   await flush();
-  expect(screen.getByText('Visit history unavailable.')).toBeTruthy();
+  expect(screen.getByText('Visit history unavailable')).toBeTruthy();
   expect(screen.queryByText(/^Not visited/)).toBeNull();
   await fireEvent.click(screen.getByRole('button', { name: 'Retry visit history' })); await flush();
   expect(visits).toHaveBeenCalledTimes(2);

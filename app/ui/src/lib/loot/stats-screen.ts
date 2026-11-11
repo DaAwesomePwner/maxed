@@ -8,13 +8,13 @@ export const statsSortKeys = ['dungeon', 'runs_ended', 'clears', 'bags', 'whites
 export type StatsSort = typeof statsSortKeys[number];
 export const bagTotal = (bags: BagTierCount[]) => bags.reduce((sum, tier) => sum + tier.count, 0);
 
-/** An ordinal tier shade, not an inferred bag colour. A lone rank uses full violet. */
+/** An ordinal tier shade, not an inferred bag colour. A lone rank uses the full neutral shade. */
 export function rankShade(rank: number | null, ranks: number[]): string {
   if (rank === 255) return 'var(--bag-white)';
   if (rank === null) return 'var(--text-muted)';
   const ordered = [...new Set([...ranks, rank])].filter(value => value !== 255).sort((a, b) => a - b);
   const percent = ordered.length === 1 ? 100 : 35 + 65 * ordered.indexOf(rank) / (ordered.length - 1);
-  return `color-mix(in srgb, var(--violet) ${percent}%, transparent)`;
+  return `color-mix(in srgb, var(--text-secondary) ${percent}%, transparent)`;
 }
 
 export function bestDungeon(rows: DungeonLootStats[]): DungeonLootStats | undefined {

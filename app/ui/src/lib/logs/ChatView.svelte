@@ -52,7 +52,7 @@
   });
   let filter = $state({ ...(savedChat?.filter ?? defaults()), limit: 100 });
   let validation = $state(''), hideError = $state('');
-  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading saved chat.', retryAvailable: false });
+  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading saved chat', retryAvailable: false });
   let readRequired: string | null = null;
   let controller = $state.raw<HistoryController>();
   let region: HTMLDivElement;
@@ -86,7 +86,7 @@
       const latest = (await client.querySettings()).chat;
       const next = { ...latest, filter_spam: !latest.filter_spam };
       await client.updateChatSettings(next); settings = next;
-    } catch { hideError = 'Could not update spam filter. Retry.'; }
+    } catch { hideError = "Couldn't update spam filter. Retry."; }
     finally { spamSaving = false; }
   }
   let overview = $state.raw<ChatOverview | null>(null);
@@ -148,13 +148,13 @@
     try {
       const next = { ...settings, store: { ...settings.store, [storageChannel]: true } };
       await client.updateChatSettings(next); settings = next; controller?.retry();
-    } catch { hideError = 'Could not update chat settings. Retry.'; }
+    } catch { hideError = "Couldn't update chat settings. Retry."; }
   }
   $effect(() => {
     const owner = reader;
     if (!owner) {
       controller = undefined;
-      history = { phase: 'loading', value: null, message: 'Loading saved chat.', retryAvailable: false };
+      history = { phase: 'loading', value: null, message: 'Loading saved chat', retryAvailable: false };
       return;
     }
     const instance = createRunHistory(owner, next => {
@@ -191,13 +191,13 @@
   async function hideSender(sender: string) {
     hideError = '';
     if (!validHiddenTerm(sender, 32)) {
-      hideError = 'Could not hide sender. Use 1–32 UTF-8 bytes with no control characters.'; return;
+      hideError = "Couldn't hide sender. Use 1–32 UTF-8 bytes with no control characters."; return;
     }
     try {
       if (!client) return;
       updateSettings(await hideChatSender(client, sender));
       controller?.retry();
-    } catch { hideError = 'Could not hide sender. Retry.'; }
+    } catch { hideError = "Couldn't hide sender. Retry."; }
   }
   function updateSettings(next: ChatSettings) { settings = next; }
 </script>
@@ -238,14 +238,16 @@
   </div>
 </div>
 <style>
-  .spam-controls { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-muted); }
-  .spam-controls label { display: flex; align-items: center; gap: 6px; }
-  .feed { --ch-public: #c6bed5; --ch-guild: #75dfa1; --ch-party: #8de4e5; --ch-whisper: #f2a6cf; --ch-npc: #aaa2bc; overflow-anchor: none; overflow-wrap: anywhere; display: grid; gap: 10px; min-width: 0; }
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; min-width: 0; }
-  .list { position: relative; min-width: 0; padding: 8px 6px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
-  aside { display: grid; gap: 10px; min-width: 0; padding: 0; margin: 0; border: 0; background: none; }
-  p { margin: 8px; color: var(--text-secondary); font-size: 12px; }
-  .empty { padding: 20px 14px; margin: 6px; border: 1px dashed var(--border); border-radius: 6px; text-align: center; font-size: 12px; } .empty p { margin: 6px 0 12px; } .empty .ctl + .ctl { margin-left: 6px; }
-  footer { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; border-top: 1px solid var(--border); margin-top: 8px; padding: 8px 4px 0; color: var(--text-muted); font-size: 11px; }
+  .spam-controls { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-caption); color: var(--text-secondary); }
+  .spam-controls label { display: flex; align-items: center; gap: var(--space-2); }
+  .spam-controls input { width: 16px; height: 16px; margin: 0; accent-color: var(--text-primary); }
+  .spam-controls span { color: var(--text-muted); font-size: var(--text-meta); }
+  .feed { overflow-anchor: none; overflow-wrap: anywhere; display: grid; gap: var(--space-3); min-width: 0; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-3); align-items: start; min-width: 0; }
+  .list { position: relative; min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); }
+  aside { display: grid; gap: var(--space-3); align-content: start; min-width: 0; padding: 0; margin: 0; border: 0; background: none; }
+  p { margin: var(--space-2); color: var(--text-secondary); font-size: var(--text-caption); }
+  .empty { padding: var(--space-5) var(--space-4); margin: var(--space-2); border: 1px dashed var(--hairline-strong); border-radius: var(--radius-control); text-align: center; font-size: var(--text-caption); } .empty strong { font-weight: var(--weight-medium); } .empty p { margin: var(--space-1) 0 var(--space-3); } .empty .ctl + .ctl { margin-left: var(--space-2); }
+  footer { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); border-top: 1px solid var(--hairline); margin-top: var(--space-2); padding-top: var(--space-3); color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
   @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } aside { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

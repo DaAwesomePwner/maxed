@@ -41,7 +41,7 @@
     let current = true;
     catalogError = '';
     void owner.listCatalogDungeons().then(value => { if (current) dungeons = value; }, () => {
-      if (current) catalogError = 'Dungeon choices unavailable.';
+      if (current) catalogError = 'Dungeon choices unavailable';
     });
     return () => { current = false; };
   });
@@ -56,7 +56,8 @@
   {#if catalogError}<span>{catalogError} <button class="ctl" type="button" onclick={() => catalogRevision++}>Retry dungeon choices</button></span>{/if}
 </div>
 <style>
-  .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
-  select, button { max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
-  [aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
+  .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+  select, button { max-width: 232px; overflow: hidden; text-overflow: ellipsis; }
+  .ctl[aria-pressed="true"] { border-color: var(--text-secondary); background: var(--surface-hover); color: var(--text-primary); }
+  span { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: var(--text-caption); }
 </style>
