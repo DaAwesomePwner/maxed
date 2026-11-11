@@ -36,12 +36,16 @@ it('reads the selected channel with NPC lines hidden by default', async () => {
 
 const cursor = { at: '1000', id: 'live-1:chat:1' };
 const defaultFilter = (): ChatFilter => ({ channel: null, sender: null, query: '', run_id: null, show_npc: false, show_hidden: false, cursor: null, limit: 100 });
-function mount(options: { savedState?: ListState; channel?: 'all' | 'guild' | 'party'; runId?: string; seedSender?: string; hiddenKeywords?: string[]; listChat?: LogsFixtureQueries['listChat'] } = {}) {
+function mount(options: { savedState?: ListState; channel?: 'all' | 'guild' | 'party'; runId?: string; seedSender?: string; hiddenKeywords?: string[]; settingsFailures?: number; listChat?: LogsFixtureQueries['listChat'] } = {}) {
   const listChat = vi.fn(options.listChat ?? (filter => ({ rows: [row(1, filter.cursor ? 'older' : 'latest')], next: filter.cursor ? null : cursor })));
   const client = createClient(createFixtureTransport(fixture, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { listChat }));
   if (options.hiddenKeywords) {
     const settings = client.querySettings;
     client.querySettings = async () => { const value = await settings(); return { ...value, chat: { ...value.chat, hidden_keywords: options.hiddenKeywords! } }; };
+  }
+  if (options.settingsFailures) {
+    const settings = client.querySettings; let failures = options.settingsFailures;
+    client.querySettings = vi.fn(async () => { if (failures-- > 0) throw new Error('synthetic settings failure'); return settings(); });
   }
   const pane = document.createElement('main'); document.body.append(pane);
   const onStateChange = vi.fn(), onRowsReady = vi.fn();
@@ -365,6 +369,42 @@ describe('stable selection and reversible spam presentation', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Older lines' })); await flush();
     expect(view.container.querySelector('blockquote')?.textContent).toContain('latest');
     expect(view.onStateChange.mock.lastCall![0].logsPosition.chat.selectedId).toBe('live-1:chat:1');
+  });
+  describe('chat settings read failure', () => {
+    const ad = () => ({ rows: [row(1, 'synthgold-shop.com delivery', { channel: 'public' })], next: null });
+    it('says the settings are unavailable instead of presenting defaults as the stored choice', async () => {
+      const view = mount({ settingsFailures: 1, listChat: ad }); await flush();
+      const error = screen.getByText("Couldn't load chat settings");
+      expect(error.closest('[role="alert"]')?.querySelector('button')?.textContent).toBe('Retry');
+      const toggle = screen.getByRole('checkbox', { name: 'Filter spam' }) as HTMLInputElement;
+      expect(toggle.checked).toBe(false); expect(toggle.indeterminate).toBe(true); expect(toggle.disabled).toBe(true);
+      expect(screen.getByText('synthgold-shop.com delivery')).toBeTruthy();
+      expect(screen.queryByText('1 hidden')).toBeNull();
+      expect(view.client.querySettings).toHaveBeenCalledTimes(1);
+    });
+    it('restores the real settings when Retry succeeds', async () => {
+      const view = mount({ settingsFailures: 1, listChat: ad }); await flush();
+      await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
+      expect(view.client.querySettings).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText("Couldn't load chat settings")).toBeNull();
+      const toggle = screen.getByRole('checkbox', { name: 'Filter spam' }) as HTMLInputElement;
+      expect(toggle.checked).toBe(true); expect(toggle.indeterminate).toBe(false); expect(toggle.disabled).toBe(false);
+      expect(screen.queryByText('synthgold-shop.com delivery')).toBeNull();
+      expect(screen.getByText('1 hidden')).toBeTruthy();
+    });
+    it('keeps the error when Retry fails again', async () => {
+      const view = mount({ settingsFailures: 2, listChat: ad }); await flush();
+      await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
+      expect(view.client.querySettings).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Couldn't load chat settings")).toBeTruthy();
+      expect((screen.getByRole('checkbox', { name: 'Filter spam' }) as HTMLInputElement).disabled).toBe(true);
+    });
+    it('behaves as before when the first read succeeds', async () => {
+      mount({ listChat: ad }); await flush();
+      expect(screen.queryByText("Couldn't load chat settings")).toBeNull();
+      expect((screen.getByRole('checkbox', { name: 'Filter spam' }) as HTMLInputElement).checked).toBe(true);
+      expect(screen.queryByText('synthgold-shop.com delivery')).toBeNull();
+    });
   });
   it('keeps the toggle and filtered rows consistent when saving fails', async () => {
     const view = mount({ listChat: () => ({ rows: [row(1, 'synthgold-shop.com delivery', { channel: 'public' })], next: null }) });
