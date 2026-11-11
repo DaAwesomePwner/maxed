@@ -326,10 +326,9 @@ fn bucket(
     let at = c.at.0 / 1_000_000 * 1_000_000;
     let local_known = v.players.iter().any(|p| p.is_local);
     let local = c.player.as_ref().is_some_and(|p| p.is_local);
-    if let Some(b) = v
-        .buckets
-        .iter_mut()
-        .find(|b| b.from.0 <= at && at < b.until.0)
+    if let Some(b) =
+        crate::engine::series::find_bucket(&v.buckets, Timestamp(at), |b| (b.from, b.until))
+            .map(|index| &mut v.buckets[index])
     {
         b.total += c.source.damage;
         if local_known && b.local.is_none() {
@@ -341,15 +340,19 @@ fn bucket(
         b.others_damage = b.others_damage.zip(others_damage).map(|(a, b)| a + b);
         b.others_presence = b.others_presence.zip(others_presence).map(|(a, b)| a + b);
     } else {
-        v.buckets.push(DamageBucket {
-            from: Timestamp(at),
-            until: Timestamp(at.saturating_add(1_000_000)),
-            total: c.source.damage,
-            local: local_known.then_some(if local { c.source.damage } else { 0. }),
-            others_damage,
-            others_presence,
-        });
-        v.buckets.sort_by_key(|b| b.from);
+        // Same position a stable sort after pushing would give: after any equal `from`.
+        let insert = v.buckets.partition_point(|b| b.from.0 <= at);
+        v.buckets.insert(
+            insert,
+            DamageBucket {
+                from: Timestamp(at),
+                until: Timestamp(at.saturating_add(1_000_000)),
+                total: c.source.damage,
+                local: local_known.then_some(if local { c.source.damage } else { 0. }),
+                others_damage,
+                others_presence,
+            },
+        );
     }
     if v.buckets.len() > 1800 {
         v.buckets = v
@@ -1127,5 +1130,112 @@ mod tests {
         f.pending.clear();
         assert!(f.series_budget.disabled);
         assert!(f.project().player_series.is_none());
+    }
+
+    #[test]
+    fn bucket_picks_same_bucket_for_every_position() {
+        const S: u64 = 1_000_000;
+        let base = maxed_types::demo::demo_snapshot().fights.remove(0);
+        let source = base.players[0].sources[0].clone();
+        let make = |from: u64, until: u64| DamageBucket {
+            from: Timestamp(from * S),
+            until: Timestamp(until * S),
+            total: 1.,
+            local: None,
+            others_damage: None,
+            others_presence: None,
+        };
+        let ranges = [(10, 11), (11, 13), (20, 21)];
+        let probes = [
+            ("newest bucket", 20 * S + 500_000, Some(2)),
+            ("newest bucket at from", 20 * S, Some(2)),
+            ("newest bucket at until", 21 * S, None),
+            ("older bucket", 11 * S + 500_000, Some(1)),
+            ("older bucket at from", 11 * S, Some(1)),
+            ("older bucket at until", 13 * S, None),
+            ("first bucket", 10 * S + 1, Some(0)),
+            ("before first", 5 * S, None),
+            ("gap between", 15 * S, None),
+            ("after last", 30 * S, None),
+        ];
+        for (label, at, index) in probes {
+            let mut v = base.clone();
+            v.players.clear();
+            v.buckets = ranges.iter().map(|(a, b)| make(*a, *b)).collect();
+            let c = Contribution {
+                player: None,
+                source: SourceDamage {
+                    damage: 5.,
+                    ..source.clone()
+                },
+                at: Timestamp(at),
+                active_at: Timestamp(at),
+            };
+            bucket(&mut v, &c, None, None);
+            let mut expected: Vec<_> = ranges.iter().map(|(a, b)| make(*a, *b)).collect();
+            match index {
+                Some(i) => expected[i].total += 5.,
+                None => {
+                    let rounded = at / S;
+                    let mut added = make(rounded, rounded + 1);
+                    added.total = 5.;
+                    expected.push(added);
+                    expected.sort_by_key(|b| b.from);
+                }
+            }
+            assert_eq!(v.buckets, expected, "{label}");
+        }
+    }
+
+    #[test]
+    fn out_of_order_hits_keep_view_buckets_and_series_cells_aligned() {
+        const S: u64 = 1_000_000;
+        let mut v = maxed_types::demo::demo_snapshot().fights.remove(0);
+        let source = v.players[0].sources[0].clone();
+        let mut template = v.players[0].clone();
+        template.is_local = false;
+        v.players.clear();
+        v.buckets.clear();
+        let mut series = crate::engine::series::Series::default();
+        let mut hit = |v: &mut FightView, id: usize, at: u64, damage: f64| {
+            let mut p = template.clone();
+            p.player_id = format!("synthetic-{id}");
+            p.object_id = id as i32;
+            let c = Contribution {
+                player: Some(p),
+                source: SourceDamage {
+                    damage,
+                    ..source.clone()
+                },
+                at: Timestamp(at),
+                active_at: Timestamp(at),
+            };
+            add(v, &mut series, &c);
+        };
+        hit(&mut v, 1, 20 * S, 1.);
+        hit(&mut v, 1, 21 * S, 2.);
+        hit(&mut v, 2, 21 * S, 3.);
+        // Before every bucket, into a gap, into an existing bucket, after the last.
+        hit(&mut v, 2, 10 * S, 5.);
+        hit(&mut v, 1, 15 * S, 7.);
+        hit(&mut v, 2, 21 * S + 7, 6.);
+        hit(&mut v, 1, 30 * S, 8.);
+        let froms: Vec<_> = v.buckets.iter().map(|b| b.from.0 / S).collect();
+        assert_eq!(froms, vec![10, 15, 20, 21, 30]);
+        assert_eq!(
+            v.buckets.iter().map(|b| b.total).collect::<Vec<_>>(),
+            vec![5., 7., 1., 11., 8.]
+        );
+        assert_eq!(series.buckets.len(), v.buckets.len());
+        let rows = series.project().unwrap();
+        assert_eq!(rows[0].points, vec![0., 7., 1., 2., 8.]);
+        assert_eq!(rows[1].points, vec![5., 0., 0., 9., 0.]);
+        for (i, b) in v.buckets.iter().enumerate() {
+            assert_eq!(rows.iter().map(|r| r.points[i]).sum::<f64>(), b.total);
+            assert_eq!(
+                (series.buckets[i].0, series.buckets[i].1),
+                (b.from, b.until)
+            );
+        }
     }
 }
