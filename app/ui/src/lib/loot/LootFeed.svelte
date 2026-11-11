@@ -36,7 +36,7 @@
   const initialSeed = untrack(() => restored.lootPosition?.feed.seedApplied ? undefined : seed);
   let filter = $state(initialSeed ? { ...defaults(), range: untrack(() => range), place: initialSeed.place !== undefined ? { kind: 'dungeon' as const, name: initialSeed.place } : null, item_type: initialSeed.item ?? null } : restored.lootPosition?.feed.filter ?? defaults());
   let previous = $state<Array<DropCursor | null>>(initialSeed ? [] : restored.lootPosition?.feed.previous ?? []);
-  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading saved bags.', retryAvailable: false });
+  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading saved bags', retryAvailable: false });
   let controller = $state.raw<HistoryController>();
   let visuals = $state.raw<HomeVisuals>(emptyHomeVisuals());
   let visualController = $state.raw<ReturnType<typeof createHomeVisuals>>();
@@ -118,7 +118,7 @@
     const owner = activeClient;
     if (!owner) {
       controller = undefined;
-      history = { phase: 'loading', value: null, message: 'Loading saved bags.', retryAvailable: false };
+      history = { phase: 'loading', value: null, message: 'Loading saved bags', retryAvailable: false };
       return;
     }
     const instance = createRunHistory(owner, next => {
@@ -218,11 +218,11 @@
     <EmptyState state="unavailable" heading="Loot unavailable" description="" />
   {:else}
     {#if history.message && history.message !== HISTORY_CATCH_UP && !/^(Refreshing|Loading)\b/.test(history.message)}<p>{history.message}</p>{/if}
-    {#if (history.retryAvailable && (history.phase === 'error' || history.phase === 'busy')) || summaryRetryAvailable}<div class="error" role="alert">{summaryRetryAvailable && history.phase === 'ready' ? "Couldn't load bag totals." : "Couldn't load bags."} <button class="ctl" type="button" onclick={retry}>Retry</button></div>{/if}
+    {#if (history.retryAvailable && (history.phase === 'error' || history.phase === 'busy')) || summaryRetryAvailable}<div class="error" role="alert">{summaryRetryAvailable && history.phase === 'ready' ? "Couldn't load bag totals" : "Couldn't load bags"} <button class="ctl" type="button" onclick={retry}>Retry</button></div>{/if}
     <div class="body" class:with-panel={selected !== null}>
       <div class="table-card">
         <div class="table-scroll">
-          {#if history.phase === 'error'}<EmptyState state="error" heading="Loot Error" description="" />
+          {#if history.phase === 'error'}<EmptyState state="error" heading="Couldn't load bags" description="" />
           {:else if history.phase === 'busy' && history.retryAvailable}<EmptyState state="unavailable" heading="Loot history busy" description="" />
           {:else if !page}<EmptyState state="loading" heading="Loading bags" description="" />{/if}
           {#if page}
@@ -249,14 +249,14 @@
   {/if}
 </div>
 <style>
-  .feed { overflow-anchor: none; display: grid; gap: 10px; min-width: 0; font-size: 12px; }
-  .body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: start; min-width: 0; }
+  .feed { overflow-anchor: none; display: grid; gap: var(--space-3); min-width: 0; font-size: var(--text-caption); }
+  .body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); align-items: start; min-width: 0; }
   .body.with-panel { grid-template-columns: minmax(0, 1fr) 300px; }
-  .table-card { display: flex; flex-direction: column; min-width: 0; padding: 10px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
+  .table-card { display: flex; flex-direction: column; min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); }
   .table-scroll { min-width: 0; }
   p { margin: 0; color: var(--text-secondary); }
-  footer, nav { display: flex; align-items: center; gap: 6px; } footer { flex: none; padding-top: 8px; flex-wrap: wrap; justify-content: space-between; color: var(--text-muted); }
-  .error { display: flex; align-items: center; gap: 8px; color: var(--danger); }
+  footer, nav { display: flex; align-items: center; gap: var(--space-2); } footer { flex: none; margin-top: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--hairline); flex-wrap: wrap; justify-content: space-between; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  .error { display: flex; align-items: center; gap: var(--space-2); color: var(--danger); }
   @media (max-width: 1100px) { .body.with-panel { grid-template-columns: minmax(0, 1fr); } .body :global(aside) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .feed :global(.kpi-strip .sub) { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
   @media (max-width: 1000px) { .feed :global(.kpi-strip) { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }

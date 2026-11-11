@@ -53,7 +53,7 @@
   let settingsError = $state(''), settingsRevision = $state(0);
   let dungeons = $state<string[]>([]), catalogError = $state(''), catalogReady = $state(false), catalogRevision = $state(0);
   let choices = $derived(collectionDungeons(dungeons, visits, dungeon));
-  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading collection.', retryAvailable: false });
+  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading collection', retryAvailable: false });
   let controller = $state.raw<HistoryController>();
   let visuals = $state.raw<HomeVisuals>(emptyHomeVisuals());
   let visualController = $state.raw<ReturnType<typeof createHomeVisuals>>();
@@ -75,7 +75,7 @@
     const owner = activeClient;
     if (!owner) {
       controller = undefined;
-      history = { phase: 'loading', value: null, message: 'Loading collection.', retryAvailable: false };
+      history = { phase: 'loading', value: null, message: 'Loading collection', retryAvailable: false };
       return;
     }
     const instance = createRunHistory(owner, next => { history = next; }, { cache: historyCache });
@@ -124,7 +124,7 @@
     if (!owner) return;
     let current = true;
     void owner.listCatalogDungeons().then(value => { if (current) { dungeons = value; catalogReady = true; } }, () => {
-      if (current) catalogError = 'Dungeon choices unavailable.';
+      if (current) catalogError = 'Dungeon choices unavailable';
     });
     return () => { current = false; };
   });
@@ -191,7 +191,7 @@
     {#if settings}
       {#if history.message && history.message !== HISTORY_CATCH_UP && !/^(Refreshing|Loading)\b/.test(history.message)}<p>{history.message}</p>{/if}
       {#if history.phase === 'error' || (history.phase === 'busy' && history.retryAvailable)}
-        <div class="error" role="alert">{history.phase === 'error' ? "Couldn't load collection." : 'Loot history busy'}<button class="ctl" onclick={() => controller?.retry()}>Retry</button></div>
+        <div class="error" role="alert">{history.phase === 'error' ? "Couldn't load collection" : 'Loot history busy'}<button class="ctl" onclick={() => controller?.retry()}>Retry</button></div>
       {:else if !collection}<EmptyState state="loading" heading="Loading collection" description="" />{/if}
     {/if}
     <section class="card chase-card" aria-label="Chase items">
@@ -209,9 +209,9 @@
     </section>
     <section class="card" aria-label="Dungeon collection">
       {#if catalogError}<div class="error" role="alert">{catalogError}<button class="ctl" onclick={() => catalogRevision++}>Retry dungeon choices</button></div>
-      {:else if !catalogReady}<p>Loading dungeon choices…</p>
+      {:else if !catalogReady}<p>Loading dungeon choices</p>
       {:else}
-        {#if !visitsReady}<p>{visitsHistory.phase === 'error' || (visitsHistory.phase === 'busy' && visitsHistory.retryAvailable) ? 'Visit history unavailable.' : 'Loading visit history…'}{#if visitsHistory.retryAvailable}<button class="ctl" onclick={() => visitsController?.retry()}>Retry visit history</button>{/if}</p>{/if}
+        {#if !visitsReady}<p>{visitsHistory.phase === 'error' || (visitsHistory.phase === 'busy' && visitsHistory.retryAvailable) ? 'Visit history unavailable' : 'Loading visit history'}{#if visitsHistory.retryAvailable}<button class="ctl" onclick={() => visitsController?.retry()}>Retry visit history</button>{/if}</p>{/if}
         <CollectionGrid {dungeon} {dungeons} visited={choices.visited} {visitsReady} cells={collection?.grid ?? []} {visuals} {portals} {sort} onSort={changeSort} chase={settings?.loot.chase ?? []} ready={readable && settings !== null && collection?.grid_dungeon === dungeon} onChange={chooseDungeon} />{/if}
     </section>
   {/if}
@@ -219,18 +219,17 @@
 </div>
 
 <style>
-  .collection { overflow-anchor: none; display: grid; gap: 10px; min-width: 0; }
-  .card { min-width: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); padding: 10px 12px; }
-  .chase-card { padding: 8px 6px 6px; }
-  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 2px 6px 8px; }
-  h3 { margin: 0; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; }
-  p { margin: 0; color: var(--text-secondary); font-size: 12px; }
-  .error { display: flex; gap: 10px; align-items: center; color: var(--warning); font-size: 12px; }
+  .collection { overflow-anchor: none; display: grid; gap: var(--space-3); min-width: 0; }
+  .card { min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); padding-bottom: var(--space-3); }
+  h3 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); color: var(--text-primary); }
+  p { margin: 0; color: var(--text-secondary); font-size: var(--text-caption); } .footer { color: var(--text-muted); font-size: var(--text-meta); }
+  .error { display: flex; gap: var(--space-3); align-items: center; color: var(--warning); font-size: var(--text-caption); }
   .dungeon-select { width: 120px; min-width: 0; }
   .card-head :global(.search ul) { left: auto; right: 0; }
-  .kpis :global([data-kpi="last"] .value) { font-size: 20px; line-height: 28px; overflow: hidden; text-overflow: ellipsis; }
+  .kpis :global([data-kpi="last"] .value) { font-size: var(--text-title); line-height: var(--leading-title); overflow: hidden; text-overflow: ellipsis; }
   .kpis :global([data-kpi="dry"] .value) { color: var(--estimated); }
   .kpis :global(dt) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .kpis[data-last-tier="UT"] :global([data-kpi="last"] .value) { color: var(--violet-text); }
-  .kpis[data-last-tier="ST"] :global([data-kpi="last"] .value) { color: var(--bag-orange); }
+  .kpis[data-last-tier="UT"] :global([data-kpi="last"] .value) { color: var(--tier-ut); }
+  .kpis[data-last-tier="ST"] :global([data-kpi="last"] .value) { color: var(--tier-st); }
 </style>

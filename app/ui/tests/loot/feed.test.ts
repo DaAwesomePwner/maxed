@@ -123,7 +123,7 @@ it('offers Retry after busy and shows an error instead of an empty feed after a 
   expect(screen.queryByText('No bags yet')).toBeNull();
   busy.unmount();
   const failure = mount({ error: true }); await flush();
-  expect(screen.getByRole('heading', { name: 'Loot Error' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: "Couldn't load bags" })).toBeTruthy();
   expect(screen.queryByText('No bags yet')).toBeNull();
   vi.mocked(failure.client.listDrops).mockResolvedValue({ status: 'ready', value: { rows: [], next: null } });
   await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
@@ -216,7 +216,7 @@ it('rejects invalid search and dates without issuing history or catalog searches
   for (const value of ['   ', 'a'.repeat(65)]) {
     await fireEvent.input(search, { target: { value } });
     await fireEvent.keyDown(search, { key: 'Enter' }); await flush();
-    expect(screen.getByText('Enter 1–64 characters to search.')).toBeTruthy();
+    expect(screen.getByText('Enter 1–64 characters to search')).toBeTruthy();
   }
   expect(page.searchItems).not.toHaveBeenCalled();
   await fireEvent.click(screen.getByRole('button', { name: 'Custom…' }));

@@ -286,7 +286,7 @@ matching instance-event kinds invalidate Key pops and Events. Stream changes
 reject stale query results.
 
 On the first page at the top, new messages refresh automatically. While reading
-older rows or scrolled down, a violet new-data pill returns to the latest rows
+older rows or scrolled down, a quiet new-data chip returns to the latest rows
 without moving the current reading position until clicked. Pills require matching
 accepted envelopes; unrelated checkpoints stay deferred silently. Counts exclude
 NPC lines when disabled, and numbers are omitted when hide lists, search or other

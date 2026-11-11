@@ -13,13 +13,14 @@
   <div class="right">{@render children?.()}</div>
 </header>
 <style>
-  header { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
-  h2 { margin: 0; font-size: 22px; }
-  p { margin: 3px 0 0; color: var(--text-muted); font-size: 12px; }
-  nav { display: flex; gap: 2px; align-self: center; margin-left: 14px; }
-  a { height: 28px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 6px; color: var(--text-secondary); font-size: 13px; text-decoration: none; }
-  a:hover { background: #ffffff0a; color: var(--text-primary); }
-  a[aria-current] { background: var(--surface-raised); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--violet); }
-  a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+  header { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); }
+  h2 { margin: 0; font-size: var(--text-hero); line-height: var(--leading-hero); font-weight: var(--weight-medium); }
+  p { margin: 0; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  nav { display: flex; gap: var(--space-1); align-self: center; margin-left: var(--space-4); }
+  a { height: var(--control-dense); display: inline-flex; align-items: center; padding: 0 var(--space-3); border-radius: var(--radius-control); color: var(--text-secondary); font-size: var(--text-label); text-decoration: none;
+    transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease); }
+  a:hover { background: var(--surface-hover); color: var(--text-primary); }
+  a[aria-current] { background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--highlight-top); }
+  a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .right { margin-left: auto; }
 </style>

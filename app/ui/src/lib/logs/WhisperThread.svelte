@@ -52,19 +52,20 @@
     {/each}
     {#if !items.length && !loading}<p>No whispers match this conversation.</p>{/if}
   </div>
-  <footer><span>Oldest at the top.</span>{#if capped}<span>Showing the latest 500 lines {#if routablePartner(name)}<a class="ctl ghost" href={allChat}>Older lines in Chat ›</a>{:else}<button class="ctl ghost" disabled title="This name cannot be opened in Chat">Older lines in Chat ›</button>{/if}</span>{:else if hasOlder}<button class="ctl ghost" disabled={loading} onclick={onEarlier}>{loading ? 'Loading earlier…' : 'Load earlier'}</button>{/if}</footer>
+  <footer><span>Oldest at the top</span>{#if capped}<span>Showing the latest 500 lines {#if routablePartner(name)}<a class="ctl ghost" href={allChat}>Older lines in Chat ›</a>{:else}<button class="ctl ghost" disabled title="This name cannot be opened in Chat">Older lines in Chat ›</button>{/if}</span>{:else if hasOlder}<button class="ctl ghost" disabled={loading} onclick={onEarlier}>{loading ? 'Loading earlier lines' : 'Load earlier'}</button>{/if}</footer>
 </section>
 <style>
-  .conversation { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 8px 6px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
-  header { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 0 6px 8px; font-size: 11px; }
-  .identity { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1; } .identity b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; } .identity span { white-space: nowrap; color: var(--text-muted); }
-  header a { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .danger { color: var(--danger, #f28b9d); }
+  .conversation { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); }
+  header { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding-bottom: var(--space-3); border-bottom: 1px solid var(--hairline-strong); font-size: var(--text-meta); }
+  .identity { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; flex: 1; } .identity b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-label); font-weight: var(--weight-medium); } .identity span { white-space: nowrap; color: var(--text-muted); }
+  header a { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .danger { color: var(--danger); }
   .thread { flex: 1; overflow-y: auto; overflow-anchor: none; min-height: 0; }
-  .line { display: grid; grid-template-columns: 58px 74px minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 4px 8px; border-top: 1px solid var(--border-soft, var(--border)); font-size: 12px; }
-  .sender { font-size: 11px; color: var(--ch-whisper); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .out .sender { color: var(--gold); }
-  .message { overflow-wrap: anywhere; line-height: 1.4; } time { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-  .hidden { opacity: .55; font-style: italic; } .day { font-size: 11px; color: var(--text-secondary); padding: 10px 8px 4px; }
+  .line { display: grid; grid-template-columns: 56px 76px minmax(0, 1fr); gap: var(--space-3); align-items: baseline; padding: var(--space-1) var(--space-2); border-top: 1px solid var(--hairline); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .sender { font-size: var(--text-meta); color: var(--ch-whisper); font-weight: var(--weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .out .sender { color: var(--gold); }
+  .message { overflow-wrap: anywhere; } time { font-size: var(--text-meta); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .hidden { opacity: .55; font-style: italic; } .day { font-size: var(--text-meta); font-weight: var(--weight-medium); color: var(--text-muted); padding: var(--space-3) var(--space-2) var(--space-1); }
+  .day + .line { border-top: 0; }
   .thread:focus-visible, .line:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-  footer { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 8px; font-size: 11px; color: var(--text-muted); } p { padding: 8px; font-size: 12px; }
-  @media (max-width: 1000px) { .line { grid-template-columns: 52px 62px minmax(0, 1fr); gap: 6px; } }
+  footer { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--hairline); font-size: var(--text-meta); color: var(--text-muted); } p { margin: 0; padding: var(--space-2); font-size: var(--text-caption); color: var(--text-secondary); }
+  @media (max-width: 1000px) { .line { grid-template-columns: 52px 64px minmax(0, 1fr); gap: var(--space-2); } }
 </style>

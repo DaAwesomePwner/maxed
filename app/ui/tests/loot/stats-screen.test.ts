@@ -6,17 +6,17 @@ const row = (dungeon: string, runs = 10): DungeonLootStats => ({ dungeon, runs_e
 it.each([
   [255, 'var(--bag-white)'],
   [null, 'var(--text-muted)'],
-  [0, 'color-mix(in srgb, var(--violet) 35%, transparent)'],
-  [2, 'color-mix(in srgb, var(--violet) 67.5%, transparent)'],
-  [42, 'color-mix(in srgb, var(--violet) 100%, transparent)'],
+  [0, 'color-mix(in srgb, var(--text-secondary) 35%, transparent)'],
+  [2, 'color-mix(in srgb, var(--text-secondary) 67.5%, transparent)'],
+  [42, 'color-mix(in srgb, var(--text-secondary) 100%, transparent)'],
 ] as const)('shades rank %s by ordinal position without inferring a bag colour', (rank, shade) => {
   const ranks = [42, 255, 0, 2, 42];
   expect(rankShade(rank, ranks)).toBe(shade);
   expect(ranks).toEqual([42, 255, 0, 2, 42]);
 });
 it('uses full violet for a single non-white rank', () => {
-  expect(rankShade(42, [255, 42, 42])).toBe('color-mix(in srgb, var(--violet) 100%, transparent)');
-  expect(rankShade(42, [])).toBe('color-mix(in srgb, var(--violet) 100%, transparent)');
+  expect(rankShade(42, [255, 42, 42])).toBe('color-mix(in srgb, var(--text-secondary) 100%, transparent)');
+  expect(rankShade(42, [])).toBe('color-mix(in srgb, var(--text-secondary) 100%, transparent)');
 });
 it('uses ended-run denominators, including zero whites and uncapped rates', () => {
   expect(whiteRate(0, 10)).toBe('0.0%'); expect(whiteRate(1, 0)).toBe('—'); expect(whiteRate(3, 41)).toBe('7.3%'); expect(whiteRate(2, 1)).toBe('200.0%');

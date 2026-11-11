@@ -44,7 +44,7 @@
     return saved && saved.filter.run_id === runId && saved.filter.kinds.length === 1 && saved.filter.kinds[0] === 'portal_opened' ? saved : null;
   });
   let filter = $state({ ...defaults(), ...savedEvents?.filter, range: restored.logsPosition?.range ?? null, query: (savedEvents?.filter.query ?? '').trim() });
-  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading saved events.', retryAvailable: false });
+  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading saved events', retryAvailable: false });
   let readRequired: string | null = null;
   let controller = $state.raw<HistoryController>();
   let region: HTMLDivElement;
@@ -114,7 +114,7 @@
     const owner = reader;
     if (!owner) {
       controller = undefined;
-      history = { phase: 'loading', value: null, message: 'Loading saved events.', retryAvailable: false };
+      history = { phase: 'loading', value: null, message: 'Loading saved events', retryAvailable: false };
       return;
     }
     const instance = createRunHistory(owner, next => {
@@ -181,15 +181,16 @@
   </section><aside><DungeonRanking rows={rankingRows} muted={rankedMuted} filtered={ruleFiltered} selected={filter.dungeon} range={filter.range} onSelect={toggleDungeon} /></aside></div>
 </div>
 <style>
-  .feed { overflow-anchor: none; overflow-wrap: anywhere; display: grid; gap: 10px; min-width: 0; }
-  .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; } .toolbar input { flex: 1; min-width: 160px; max-width: 260px; }
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; min-width: 0; }
-  .list { position: relative; min-width: 0; padding: 8px 6px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
-  aside { display: grid; gap: 10px; min-width: 0; padding: 0; margin: 0; border: 0; background: none; }
-  p { margin: 8px; color: var(--text-secondary); font-size: 12px; }
-  .empty { padding: 20px 14px; margin: 6px; border: 1px dashed var(--border); border-radius: 6px; text-align: center; font-size: 12px; } .empty h2 { font-size: 13px; }
-  footer { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; border-top: 1px solid var(--border); margin-top: 8px; padding: 8px 4px 0; color: var(--text-muted); font-size: 11px; }
+  .feed { overflow-anchor: none; overflow-wrap: anywhere; display: grid; gap: var(--space-3); min-width: 0; }
+  .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; } .toolbar input { flex: 1; min-width: 160px; max-width: 260px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-3); align-items: start; min-width: 0; }
+  .list { position: relative; min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); }
+  aside { display: grid; gap: var(--space-3); align-content: start; min-width: 0; padding: 0; margin: 0; border: 0; background: none; }
+  p { margin: var(--space-2); color: var(--text-secondary); font-size: var(--text-caption); }
+  .empty { padding: var(--space-5) var(--space-4); margin: var(--space-2); border: 1px dashed var(--hairline-strong); border-radius: var(--radius-control); text-align: center; font-size: var(--text-caption); } .empty h2 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  footer { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); border-top: 1px solid var(--hairline); margin-top: var(--space-2); padding-top: var(--space-3); color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
   @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
-  .key-kpis { margin-bottom: 12px; min-width: 0; } .key-kpis :global(.value) { overflow: hidden; text-overflow: ellipsis; } .key-kpis :global([data-kpi="most"] .value) { font-size: 20px; line-height: 1.38; }
-  .hint { margin-left: auto; font-size: 11px; color: var(--text-muted); } .chip { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .key-kpis { margin-bottom: var(--space-3); min-width: 0; } .key-kpis :global(.value) { overflow: hidden; text-overflow: ellipsis; } .key-kpis :global([data-kpi="most"] .value) { font-size: var(--text-title); line-height: var(--leading-title); }
+  .hint { margin-left: auto; font-size: var(--text-meta); color: var(--text-muted); } .chip { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toolbar .ctl[aria-pressed="true"] { border-color: var(--text-secondary); background: var(--surface-hover); color: var(--text-primary); }
 </style>

@@ -139,14 +139,14 @@ it('renders busy retry and errors without reporting a zero state', async () => {
   const busy = mount({ busy: true }); await flush(); await vi.advanceTimersByTimeAsync(1000); await flush();
   expect(screen.getByRole('heading', { name: 'Loot history busy' })).toBeTruthy();
   const retry = within(screen.getByRole('alert')).getByRole('button', { name: 'Retry' });
-  expect(screen.getByRole('alert').textContent).toContain("Couldn't load bags.");
+  expect(screen.getByRole('alert').textContent).toContain("Couldn't load bags");
   expect(retry.hasAttribute('disabled')).toBe(false);
   expect(retry.hasAttribute('aria-disabled')).toBe(false);
   expect(screen.queryByText('Not seen yet')).toBeNull();
   busy.unmount();
   const page = mount({ error: true }); await flush();
-  expect(screen.getByRole('heading', { name: 'Loot Error' })).toBeTruthy();
-  expect(within(screen.getByRole('alert')).getByText("Couldn't load bags.")).toBeTruthy();
+  expect(screen.getByRole('heading', { name: "Couldn't load item history" })).toBeTruthy();
+  expect(within(screen.getByRole('alert')).getByText("Couldn't load bags")).toBeTruthy();
   expect(screen.queryByText('Not seen yet')).toBeNull();
   vi.mocked(page.client.getItemHistory).mockResolvedValue({ status: 'ready', value: fixture() });
   await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
@@ -230,7 +230,7 @@ it.each(['error', 'busy'] as const)('hides a retained zero summary when a refres
   else read.mockResolvedValue({ status: 'busy' });
   await page.rerender({ required: '2', store: { state: 'ready', durable: '2', stream_id: 'synthetic-stream', queued: 0, message: '' } }); await flush();
   await vi.advanceTimersByTimeAsync(2000); await flush();
-  expect(screen.getByRole('heading', { name: phase === 'error' ? 'Loot Error' : 'Loot history busy' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: phase === 'error' ? "Couldn't load item history" : 'Loot history busy' })).toBeTruthy();
   expect(screen.queryByText(/^Seen 0/)).toBeNull();
   expect(screen.queryByText('Not seen yet')).toBeNull();
   expect(screen.queryByText("Maxed hasn't seen this item in any bag yet.")).toBeNull();

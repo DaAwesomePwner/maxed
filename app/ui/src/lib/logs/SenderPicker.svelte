@@ -35,6 +35,7 @@
 </div>
 <style>
   .picker { position: relative; min-width: 0; } .picker > button { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
-  .menu { position: absolute; top: 32px; left: 0; width: 260px; max-width: 70vw; padding: 8px; z-index: 5; background: var(--surface-panel); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px #0008; }
-  input { width: 100%; } .option { display: flex; width: 100%; justify-content: space-between; } .option span { overflow: hidden; text-overflow: ellipsis; } small, p { color: var(--text-muted); } p { font-size: 11px; margin: 8px 0 0; }
+  .menu { position: absolute; top: calc(var(--control-dense) + var(--space-1)); left: 0; width: 260px; max-width: 70vw; padding: var(--space-2); z-index: 5; display: grid; gap: var(--space-1); background: var(--surface-raised); border: 1px solid var(--hairline-strong); border-radius: var(--radius-control); box-shadow: var(--elevation-popover); }
+  input { width: 100%; } .option { display: flex; width: 100%; justify-content: space-between; } .option span { overflow: hidden; text-overflow: ellipsis; } .option[aria-selected="true"] { background: var(--surface-hover); color: var(--text-primary); }
+  small, p { color: var(--text-muted); } small { font-size: var(--text-meta); } p { font-size: var(--text-meta); line-height: var(--leading-meta); margin: var(--space-1) 0 0; }
 </style>

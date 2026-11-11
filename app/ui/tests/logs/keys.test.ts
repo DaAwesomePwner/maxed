@@ -235,7 +235,7 @@ it('marks only ranked rule-filtered dungeons and summarizes them without catalog
   expect(rank.querySelector('.muted')).toBeNull();
   expect(within(rank).getByText('Filtered by rules')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Muted vault 4' }).querySelector('.muted')).toBeTruthy();
-  expect(screen.getByText('1 shown dungeon filtered by rules.')).toBeTruthy();
+  expect(screen.getByText('1 shown dungeon filtered by rules')).toBeTruthy();
   expect(screen.queryByText(/Unranked/)).toBeNull();
   expect(screen.getByText(/Marked “Filtered by rules”: excluded by notification rules/)).toBeTruthy();
   expect(screen.getByText('72 muted or filtered for alerts')).toBeTruthy();
