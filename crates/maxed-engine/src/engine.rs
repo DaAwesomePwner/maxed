@@ -1046,8 +1046,11 @@ fn validate_catalog(c: &Catalog) -> Result<(), EngineError> {
     let bad = || EngineError::InvalidCatalog;
     if c.enchants.len() > 65536
         || c.enchants.iter().any(|e| {
-            e.stat_damage_multiplier
-                .is_some_and(|m| !m.is_finite() || m < 0.0 || m > f64::from(f32::MAX))
+            let invalid = |m: f64| !m.is_finite() || m < 0.0 || m > f64::from(f32::MAX);
+            e.stat_damage_multiplier.is_some_and(invalid)
+                || e.weapon_damage.as_ref().is_some_and(|d| {
+                    d.min_multiplier.is_some_and(invalid) || d.max_multiplier.is_some_and(invalid)
+                })
         })
         || c.enchants
             .iter()

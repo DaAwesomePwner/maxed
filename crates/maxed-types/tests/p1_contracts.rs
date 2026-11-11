@@ -130,6 +130,29 @@ fn legacy_enchant_metadata_is_loadable_without_claiming_a_neutral_multiplier() {
 }
 
 #[test]
+fn legacy_weapon_damage_metadata_stays_absent_and_unsupported_has_no_multipliers() {
+    let mut e: EnchantDef =
+        serde_json::from_value(json!({"id":123,"name":"Synthetic","description":""})).unwrap();
+    assert_eq!(e.weapon_damage, None);
+    assert!(round_trip(&e).get("weapon_damage").is_none());
+    let unsupported: EnchantWeaponDamageDef = serde_json::from_value(
+        json!({"support":"unsupported","reasons":["unsupported_subattack"]}),
+    )
+    .unwrap();
+    assert_eq!(unsupported.min_multiplier, None);
+    assert_eq!(unsupported.max_multiplier, None);
+    e.weapon_damage = Some(EnchantWeaponDamageDef {
+        support: CatalogSupport::Supported,
+        min_multiplier: Some(0.75),
+        max_multiplier: Some(0.75),
+        reasons: vec![],
+    });
+    assert_eq!(round_trip(&e)["weapon_damage"]["min_multiplier"], 0.75);
+    e.weapon_damage.as_mut().unwrap().max_multiplier = Some(f64::NAN);
+    assert!(serde_json::to_string(&e).is_err());
+}
+
+#[test]
 fn unknown_enchant_and_large_sequence_survive_json() {
     let value = EnchantView {
         state: EnchantState::Missing,
@@ -419,6 +442,7 @@ fn catalog_round_trip_includes_every_definition_and_unknown_asset_fields() {
         name: "Synthetic enchant".into(),
         description: "Contract fixture".into(),
         stat_damage_multiplier: Some(1.25),
+        weapon_damage: None,
     });
     catalog.sprites.push(SpriteRef {
         key: "synthetic".into(),

@@ -30,6 +30,7 @@ mod live;
 pub mod party;
 mod players;
 mod runs;
+mod weapon_enchant;
 mod world;
 pub use live::{compact_live_fight, LIVE_CHART_BUCKETS};
 pub use players::{RosterPresence, PROFILE_LIMIT};

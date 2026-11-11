@@ -22,6 +22,7 @@ reasons! {
     AssumedCrucibleDefault => "assumedCrucibleDefault",
     AssumedBloodRitualDefault => "assumedBloodRitualDefault",
     AssumedAbilityEnchantDefault => "assumedAbilityEnchantDefault",
+    AssumedWeaponEnchantDefault => "assumedWeaponEnchantDefault",
     AssumedScalingStatDefault => "assumedScalingStatDefault",
     AssumedTargetStatDefault => "assumedTargetStatDefault",
     MissingProjectile => "missingProjectile",

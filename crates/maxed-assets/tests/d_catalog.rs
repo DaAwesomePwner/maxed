@@ -177,7 +177,7 @@ fn cache_version_bumped_invalidates_old_generation() {
     assert!(phases.contains(&AssetProgress::Reading));
     let manifest: serde_json::Value =
         serde_json::from_slice(&fs::read(cached.root.join("manifest.json")).unwrap()).unwrap();
-    assert_eq!(manifest["version"], 13);
+    assert_eq!(manifest["version"], 14);
     assert_eq!(
         fs::read_to_string(root.join("current")).unwrap(),
         cached.catalog.client_fingerprint
@@ -213,7 +213,7 @@ fn cache_rebuilds_manifest_from_before_consumable_tier_rules() {
     assert!(phases.contains(&AssetProgress::Reading));
     let manifest: serde_json::Value =
         serde_json::from_slice(&fs::read(rebuilt.root.join("manifest.json")).unwrap()).unwrap();
-    assert_eq!(manifest["version"], 13);
+    assert_eq!(manifest["version"], 14);
     phases.clear();
     load_or_extract(&paths, &flag, &mut |p| phases.push(p)).unwrap();
     assert!(!phases.contains(&AssetProgress::Reading));

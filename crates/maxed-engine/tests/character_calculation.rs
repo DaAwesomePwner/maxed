@@ -720,6 +720,7 @@ fn regen_fixture() -> (CharacterView, Catalog) {
         name: "Synthetic enchant".into(),
         description: "Ignored display text".into(),
         stat_damage_multiplier: None,
+        weapon_damage: None,
         regeneration: Some(EnchantRegenDef {
             support: CatalogSupport::Supported,
             hp: vec![regen_effect(Some(2.0), Some(0.01))],

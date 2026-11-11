@@ -1,0 +1,210 @@
+//! D-weapon-enchant: weapon shots scale projectile bounds by the equipped weapon's
+//! enchant damage multipliers before the roll. Synthetic names and IDs only.
+use crate::common::*;
+use maxed_engine::Engine;
+use maxed_protocol::Packet;
+use maxed_types::*;
+use std::sync::Arc;
+
+// Six-bit enchant codes for weapon slot 0 (header 0,2,4 + little-endian i16 IDs).
+const E11: &str = "AAIECwA=";
+const E11_12: &str = "AAIECwAMAA==";
+const E11_END: &str = "AAIECwD9_w==";
+const E11_16: &str = "AAIECwAQAA==";
+const E13: &str = "AAIEDQA=";
+const E14: &str = "AAIEDgA=";
+const E15: &str = "AAIEDwA=";
+const E16: &str = "AAIEEAA=";
+
+fn supported(m: f64) -> Option<EnchantWeaponDamageDef> {
+    Some(EnchantWeaponDamageDef {
+        support: CatalogSupport::Supported,
+        min_multiplier: Some(m),
+        max_multiplier: Some(m),
+        reasons: vec![],
+    })
+}
+
+fn enchant(id: i32, weapon_damage: Option<EnchantWeaponDamageDef>) -> EnchantDef {
+    EnchantDef {
+        id,
+        name: "Synthetic".into(),
+        description: String::new(),
+        stat_damage_multiplier: Some(1.0),
+        regeneration: None,
+        weapon_damage,
+    }
+}
+
+fn weapon(object_type: u16, min_damage: i32, max_damage: i32) -> ItemDef {
+    let mut item = catalog().items.remove(0);
+    item.object_type = object_type;
+    item.projectiles[0].min_damage = min_damage;
+    item.projectiles[0].max_damage = max_damage;
+    item
+}
+
+fn weapon_catalog() -> Catalog {
+    let mut c = catalog();
+    c.items.extend([
+        weapon(210, 135, 135),
+        weapon(211, 135, 175),
+        weapon(212, 108, 140),
+    ]);
+    c.enchants = vec![
+        enchant(11, supported(0.8)),
+        enchant(12, supported(1.5)),
+        enchant(13, None),
+        enchant(
+            14,
+            Some(EnchantWeaponDamageDef {
+                support: CatalogSupport::Unsupported,
+                min_multiplier: None,
+                max_multiplier: None,
+                reasons: vec!["unsupported_subattack".into()],
+            }),
+        ),
+        enchant(15, supported(f64::from(1.05f32))),
+    ];
+    c
+}
+
+fn shoot_with(bullet: i16, weapon: u16) -> Packet {
+    let Packet::PlayerShoot(mut p) = shoot(bullet) else {
+        unreachable!()
+    };
+    p.weaponId = weapon;
+    Packet::PlayerShoot(p)
+}
+
+/// Equips `weapon` with weapon-slot enchant evidence `code` (None: no stat 80),
+/// fires `bullets` shots and returns (fight total, weapon-enchant assumptions, estimated).
+fn run(weapon: u16, code: Option<&str>, bullets: i16) -> (f64, u64, bool) {
+    let mut e = Engine::new(config(), Arc::new(weapon_catalog())).unwrap();
+    apply(&mut e, 0, map("The Void"));
+    apply(&mut e, 1000, create(1, 1));
+    let mut p = player();
+    p.status
+        .stats
+        .retain(|s| s.statTypeNum != 80 && s.statTypeNum != 8);
+    p.status.stats.push(stat(8, i32::from(weapon)));
+    if let Some(code) = code {
+        p.status.stats.push(string(80, &format!("{code},,,")));
+    }
+    apply(&mut e, 2000, update(vec![p, target()], vec![]));
+    for bullet in 1..=bullets {
+        apply(&mut e, 3000, shoot_with(bullet, weapon));
+        apply(&mut e, 4000, hit(bullet));
+    }
+    let counts = e.reconstruction_coverage();
+    assert_eq!(counts["attemptedHits"], bullets as u64);
+    assert_eq!(counts["reconstructedHits"], bullets as u64);
+    assert_eq!(counts["omittedHits"], 0);
+    let snapshot = e.snapshot();
+    let fight = &snapshot.fights[0];
+    (
+        fight.total_damage,
+        counts["assumedWeaponEnchantDefault"],
+        fight.players[0].sources[0].estimated,
+    )
+}
+
+#[test]
+fn known_enchant_products_scale_weapon_damage_and_stay_exact() {
+    // Synthetic sword: fixed 100 damage, neutral attack, exaltation and defense.
+    assert_eq!(run(200, Some(""), 1), (100., 0, false));
+    assert_eq!(run(200, Some(E11), 1), (80., 0, false));
+    // Slot-order f32 product: 0.8 * 1.5.
+    assert_eq!(run(200, Some(E11_12), 1), (120., 0, false));
+    // -3 terminates the applied list.
+    assert_eq!(run(200, Some(E11_END), 1), (80., 0, false));
+}
+
+#[test]
+fn scaled_bounds_truncate_the_f32_product() {
+    // 135 * 1.05f32 = 141.75: truncation gives 141, rounding would give 142.
+    assert_eq!(run(210, Some(E15), 1), (141., 0, false));
+    assert_eq!(run(210, Some(""), 1), (135., 0, false));
+}
+
+#[test]
+fn bounds_are_scaled_before_the_roll_with_the_same_draw() {
+    // 135-175 scaled by 0.8 is 108-140. The same RNG draws must reproduce an
+    // unenchanted 108-140 weapon, not 0.8 times an unenchanted 135-175 roll.
+    let mut before_roll = vec![];
+    let mut after_roll = vec![];
+    let mut scaled = vec![];
+    for bullets in 1..=8 {
+        let total = |w, code| run(w, Some(code), bullets).0;
+        let previous = |w, code| {
+            if bullets == 1 {
+                0.
+            } else {
+                run(w, Some(code), bullets - 1).0
+            }
+        };
+        scaled.push(total(211, E11) - previous(211, E11));
+        before_roll.push(total(212, "") - previous(212, ""));
+        let plain = total(211, "") - previous(211, "");
+        after_roll.push(f64::from((plain as f32 * 0.8f32) as i32));
+    }
+    assert_eq!(scaled, before_roll);
+    assert_ne!(scaled, after_roll);
+    assert!(scaled.iter().all(|d| (108. ..140.).contains(d)));
+}
+
+#[test]
+fn missing_or_unusable_weapon_enchant_evidence_is_a_counted_neutral_assumption() {
+    for (code, label) in [
+        (None, "missing stat 80"),
+        (Some("!!"), "invalid code"),
+        (Some(E13), "legacy catalog metadata"),
+        (Some(E14), "unsupported enchant"),
+        (Some(E16), "unknown enchant ID"),
+        (Some(E11_16), "one unknown among known"),
+    ] {
+        assert_eq!(run(200, code, 2), (200., 2, true), "{label}");
+    }
+}
+
+#[test]
+fn evidence_for_another_equipped_item_is_not_used() {
+    let mut e = Engine::new(config(), Arc::new(weapon_catalog())).unwrap();
+    setup(&mut e);
+    // Slot 0 now holds a different item with recorded enchant evidence.
+    apply(
+        &mut e,
+        2500,
+        tick(vec![status(
+            1,
+            vec![stat(8, 210), string(80, &format!("{E11},,,"))],
+        )]),
+    );
+    apply(&mut e, 3000, shoot_with(1, 200));
+    apply(&mut e, 4000, hit(1));
+    assert_eq!(e.snapshot().fights[0].total_damage, 100.);
+    assert_eq!(
+        e.reconstruction_coverage()["assumedWeaponEnchantDefault"],
+        1
+    );
+    assert!(e.snapshot().fights[0].players[0].sources[0].estimated);
+}
+
+#[test]
+fn ability_shots_ignore_weapon_enchant_evidence() {
+    let mut e = Engine::new(config(), Arc::new(weapon_catalog())).unwrap();
+    setup(&mut e);
+    apply(
+        &mut e,
+        2500,
+        tick(vec![status(1, vec![string(80, &format!("{E14},,,"))])]),
+    );
+    apply(&mut e, 3000, shoot_with(1, 201));
+    apply(&mut e, 4000, hit(1));
+    // Ability: 50 base + (60 - 50) * 2 scaling, armor piercing.
+    assert_eq!(e.snapshot().fights[0].total_damage, 70.);
+    assert_eq!(
+        e.reconstruction_coverage()["assumedWeaponEnchantDefault"],
+        0
+    );
+}

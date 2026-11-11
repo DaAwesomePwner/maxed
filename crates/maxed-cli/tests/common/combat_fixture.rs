@@ -4,6 +4,9 @@ use serde_json::json;
 // Minimal synthetic combat metadata for the two committed reconnect fixtures.
 // Neutral enchant/crucible definitions exercise decoding without shipping a client catalog.
 pub fn catalog(target_type: u16, target_name: &str, realm: bool) -> Catalog {
+    // Known neutral weapon damage-range metadata (D-weapon-enchant), not client values.
+    let neutral_weapon =
+        json!({"support":"supported","min_multiplier":1.0,"max_multiplier":1.0,"reasons":[]});
     serde_json::from_value(json!({
         "format_version":1,"client_fingerprint":"synthetic-fixture-subset",
         "items":[
@@ -15,8 +18,9 @@ pub fn catalog(target_type: u16, target_name: &str, realm: bool) -> Catalog {
             {"object_type":target_type,"name":target_name,"is_player":false,"is_boss":!realm,"is_miniboss":false,"event_boss":realm,"realm_event_key":realm.then_some("The_Plague_Doctor"),"sprite_key":null}
         ],
         "classes":[],"enchants":[
-            {"id":423,"name":"Synthetic enchant","description":"","stat_damage_multiplier":1.0},
-            {"id":1203,"name":"Synthetic enchant","description":"","stat_damage_multiplier":1.0}
+            {"id":337,"name":"Synthetic enchant","description":"","stat_damage_multiplier":1.0,"weapon_damage":neutral_weapon},
+            {"id":423,"name":"Synthetic enchant","description":"","stat_damage_multiplier":1.0,"weapon_damage":neutral_weapon},
+            {"id":1203,"name":"Synthetic enchant","description":"","stat_damage_multiplier":1.0,"weapon_damage":neutral_weapon}
         ],"bags":[],"sprites":[],"tiles":[],"crucible_bonuses":[{"id":"5614074501562368","damage_multiplier":1.0}],
         "dungeons":[{"name":if realm { "Realm of the Mad God" } else { "Lair of Shaitan" },"aliases":[],"kind":if realm { "realm" } else { "dungeon" },"completion_index":null}]
     })).unwrap()
