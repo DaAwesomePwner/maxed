@@ -115,6 +115,27 @@ pub struct EnchantDef {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub regeneration: Option<EnchantRegenDef>,
+    /// Weapon projectile damage-range mutators. Absent in older catalogs means
+    /// the metadata was not extracted, not a neutral 1.0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub weapon_damage: Option<EnchantWeaponDamageDef>,
+}
+
+/// `Supported` carries the XML-order f32 products of `MultiplyMinDamage` and
+/// `MultiplyMaxDamage` (1.0 when the enchant has none). `Unsupported` carries no
+/// multipliers: its mutators may change weapon damage in a way Maxed cannot model.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+pub struct EnchantWeaponDamageDef {
+    pub support: CatalogSupport,
+    #[serde(default, with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub min_multiplier: Option<f64>,
+    #[serde(default, with = "crate::finite::optional_f64")]
+    #[ts(as = "Option<f64>")]
+    pub max_multiplier: Option<f64>,
+    // Controlled reason codes, never source XML or display descriptions.
+    pub reasons: Vec<String>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 pub struct DungeonDef {

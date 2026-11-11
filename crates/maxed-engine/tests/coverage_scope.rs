@@ -356,3 +356,33 @@ fn trailing_bytes_count_as_field_failures_without_double_counting_totals() {
     );
     assert!(s.fights[0].issues.contains(&CoverageIssue::DecodeFailure));
 }
+
+#[test]
+fn crucible_configuration_failures_do_not_taint_open_records() {
+    let mut e = ready();
+    apply(&mut e, 4000, damage(1, 1, 100));
+    failure(&mut e, 5000, 183);
+    for kind in [
+        Diagnostic::TrailingBytes,
+        Diagnostic::Packet {
+            id: 183,
+            problem: PacketDiagnostic::TrailingBytes,
+            alignment_verified: true,
+        },
+    ] {
+        e.diagnostic(ConnId(1), Direction::ServerToClient, Timestamp(6000), kind);
+    }
+    let s = e.snapshot();
+    assert!(s.fights[0].complete_capture);
+    assert!(s.fights[0].issues.is_empty());
+    assert!(s.issues.is_empty());
+    let run = s.run.unwrap();
+    assert!(run.complete_capture);
+    assert!(run.issues.is_empty());
+    assert!(!run
+        .evidence
+        .iter()
+        .any(|v| v.evidence == Evidence::CaptureGap));
+    assert_eq!(s.capture.decode_failures, 2);
+    assert_eq!(s.capture.packet_diagnostics[0].field_failures, 2);
+}

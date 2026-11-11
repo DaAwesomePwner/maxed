@@ -1632,7 +1632,10 @@ fn record_packet_ids_match_consumed_reducer_variants() {
                         .next()
                         .unwrap()
                 })
-                .filter(|name| *name != "Unknown")
+                // CrucibleResponse is configuration only: missing definitions
+                // already count as per-hit assumptions, so decode failures must
+                // not taint otherwise complete gameplay records.
+                .filter(|name| !matches!(*name, "Unknown" | "CrucibleResponse"))
         })
         .map(|variant| {
             *ids.get(variant)

@@ -72,6 +72,7 @@ pub(crate) struct Local {
 pub struct Engine {
     pub(crate) config: EngineConfig,
     pub(crate) catalog: Arc<Catalog>,
+    pub(crate) crucible_definitions: crate::crucible::Definitions,
     pub(crate) object_index: BTreeMap<u16, usize>,
     pub(crate) object_name_index: BTreeMap<String, Option<u16>>,
     pub(crate) character_dirty: bool,
@@ -202,6 +203,7 @@ impl Engine {
         Ok(Self {
             config,
             catalog,
+            crucible_definitions: Default::default(),
             object_index,
             object_name_index,
             item_index,
@@ -795,6 +797,7 @@ impl Engine {
             events.push(EngineEvent::CaptureStateChanged(self.capture.clone()));
         }
         match packet.packet {
+            Packet::CrucibleResponse(p) => self.crucible_definitions.learn(&p.crucibleJsons),
             Packet::MapInfo(p) => self.enter_map(p, &mut events),
             Packet::CreateSuccess(p) => {
                 let replacing = self.local.is_some();
@@ -1043,8 +1046,11 @@ fn validate_catalog(c: &Catalog) -> Result<(), EngineError> {
     let bad = || EngineError::InvalidCatalog;
     if c.enchants.len() > 65536
         || c.enchants.iter().any(|e| {
-            e.stat_damage_multiplier
-                .is_some_and(|m| !m.is_finite() || m < 0.0 || m > f64::from(f32::MAX))
+            let invalid = |m: f64| !m.is_finite() || m < 0.0 || m > f64::from(f32::MAX);
+            e.stat_damage_multiplier.is_some_and(invalid)
+                || e.weapon_damage.as_ref().is_some_and(|d| {
+                    d.min_multiplier.is_some_and(invalid) || d.max_multiplier.is_some_and(invalid)
+                })
         })
         || c.enchants
             .iter()

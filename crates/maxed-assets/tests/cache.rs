@@ -674,7 +674,7 @@ fn character_cache_rejects_v11_and_failed_rebuild_preserves_prior_publication() 
     let manifest_path = cached.root.join("manifest.json");
     let mut manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
-    assert_eq!(manifest["version"], 13);
+    assert_eq!(manifest["version"], 14);
     manifest["version"] = 11.into();
     std::fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     assert!(matches!(

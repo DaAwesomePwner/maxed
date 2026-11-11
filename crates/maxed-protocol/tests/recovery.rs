@@ -297,3 +297,38 @@ fn direction_registry_distinguishes_untyped_known_ids_from_unknown_ids() {
     assert_eq!(packet_direction(120), Some(S));
     assert_eq!(packet_direction(62), Some(C));
 }
+#[test]
+fn malformed_crucible_response_is_a_per_packet_diagnostic() {
+    let mut d = Decoder::default();
+    open(&mut d, 1, S, true);
+    let mut s = cipher(S);
+    // Negative id count: a definition error confined to this framed packet.
+    let e = data(&mut d, 1, S, frame(&mut s, 183, vec![255, 255, 0, 0]));
+    assert_eq!(packets(&e), 0);
+    assert!(diag(&e, Diagnostic::BadFields));
+    assert!(e.iter().any(|e| matches!(
+        e,
+        DecodeEvent::Diagnostic {
+            kind: Diagnostic::Packet {
+                id: 183,
+                problem: maxed_protocol::PacketDiagnostic::BadFields,
+                ..
+            },
+            ..
+        }
+    )));
+    assert!(!diag(&e, Diagnostic::Recovering));
+    let e = data(
+        &mut d,
+        1,
+        S,
+        frame(&mut s, 183, vec![0, 0, 0, 1, 0, 2, b'{', b'}', 9]),
+    );
+    assert_eq!(packets(&e), 1);
+    assert!(diag(&e, Diagnostic::TrailingBytes));
+    assert_eq!(
+        packets(&data(&mut d, 1, S, frame(&mut s, 183, vec![0; 4]))),
+        1
+    );
+    assert_eq!(packets(&data(&mut d, 1, S, frame(&mut s, 10, tick(0)))), 1);
+}

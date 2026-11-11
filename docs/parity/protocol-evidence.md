@@ -7,6 +7,7 @@ Packet definitions and typed decoders in `crates/maxed-protocol/src` are authori
 | DEATH (46) | Trimmed `killedBy` is the killer display text; a case-insensitive catalog name match supplies a type only when unique | `totalFame` is still ignored; recap fame is the observed character fame and HP is only the local HP explicitly observed before death |
 | QUESTOBJID (82) | Signed big-endian object ID, compressed count and list; count bounded to 0–64; -1 clears the target | Quest switches alone do not prove a kill; generation resolution is local |
 | REALM_SCORE_UPDATE (169) | One signed big-endian absolute score | MAPINFO supplies the maximum; sentinels stay unavailable; score does not prove a realm has closed |
+| CRUCIBLE_RESPONSE (183) | Signed-short-counted big-endian `i32` category IDs and length-prefixed JSON strings; counts bounded to 0–64 | JSON is undecoded game configuration; bonus `type` meanings and the multiplier rule are unverified (see below) |
 | MAPINFO | Area, realm name, seed, open time, capacity and optional difficulty/modifiers | Parent realm names may appear in dungeons; a name alone is not an instance identity; unknown grades/modifiers stay unknown |
 | Player UPDATE objects and drops | Observed instance population | A derived count, not a verified server population counter; NEWTICK alone cannot admit a player |
 | PlayerDeath / PortalOpened notices | Exact recognized template data | Chat (TEXT) is stored for Logs; notice templates still do not retain their raw text or export opener/victim identities. Missing identity prevents a reliable join |
@@ -80,3 +81,51 @@ Absent initial levels remain unknown.
 unchanged equipment cannot establish exalt placement. Client build 7.1.0.2.0 matches the owner-supplied version;
 Npcap 1.88 is owner-supplied. The report separates coverage limits, raw packet 114/stat 113 observations,
 multi-account risks and the pending Task 11 Windows/coefficient checklist. It adds no stat 113 semantics.
+
+## CRUCIBLE_RESPONSE (183): layout and content (2026-11-10)
+
+For [issue #39](https://github.com/DaAwesomePwner/maxed/issues/39). One private
+owner recording (one account and character; about 10.3 hours covering two play
+periods 8.6 hours apart; 75 connections, 46 with CREATE_SUCCESS) was replayed
+in place with a throwaway aggregate-only probe. No capture bytes or JSON were
+retained.
+
+- **Layout verified:** `i16 n; i32[n] crucibleIds; i16 m; string[m] crucibleJsons`
+  (string = `u16` length + UTF-8), matching RealmShark. All 22 packets (frame
+  length 4,530 each) decoded with no remaining bytes and no packet diagnostics.
+  `maxed-cli replay` counters were identical before and after, except 22 fewer
+  unknown packets. Malformed bodies remain per-packet `BadFields`/`TrailingBytes`
+  diagnostics; framing and cipher state are unaffected.
+- **Request/response:** every 183 answered a client `CRUCIBLE_REQUEST` (182,
+  14-byte body) within a few packets. Requests came about every 300 s across
+  connections, not on connect: 16 of 46 local connections carried 183 (22 in
+  total) and 30 had none. 183 never preceded the first non-empty stat 128 in its
+  connection (15 after; 1 connection had no non-empty stat 128). It preceded the
+  first PLAYERSHOOT in 3 connections and followed it in 13.
+- **Content:** all 22 were byte-identical across both play periods. `crucibleIds`
+  were `[0, 1, 2]`, category indices paired with the strings, not entry IDs.
+  Each string is `{"array":[entry...]}`; entries have string `id`, `title`,
+  `desc` and optional `item`, plus one of `crucible` (string 0: the current
+  season Crucible, 1 entry), `modifierEvent` (string 1: a weekly event, 1 entry)
+  or `bloodRitual` (string 2: a 10-level ladder). `crucible` and `bloodRitual`
+  have Unix-second `start`/`end`, `bonuses[]` of `{type, amount, percent, fame?}`,
+  and null `leavelimitation`/`seasonalonly`. `crucible` also has `restrictions[]`
+  (`{type, stat?, healMethods?, value, percent?}`) and an empty `trials[]`.
+- **Ids:** the local player's non-empty stat 128 equalled the `crucible` entry
+  `id` string exactly. Stat 155 was never non-empty.
+- **Bonuses:** the Crucible entry had types 1, 2 and 3 (no type 5). Ritual
+  levels had types 4, 5 and 3. Type 5 `amount` ranged 0.78–1.24 on a 1.0 scale,
+  inversely paired with type 4 (0.8–1.2).
+- **Privacy:** no key carries progress or unlock state. No string contained the
+  local name or account ID. The scrubber keeps a JSON string only when it parses
+  as `{"array":[...]}` with every key in the observed allowlist, no repeated
+  key in any object and no `\u` escape; anything else is filled as
+  unclassified. A recheck with the repeated-key rule kept all 66 strings in
+  the 22 packets. Identity and credential
+  collision checks still apply; player-text coincidences are listed.
+
+Unverified: that the content is the same for other accounts or regions; what
+bonus types 1–4 mean; whether type 5 is the damage multiplier (RealmShark's
+rule, untested against observed damage); whether a Crucible with no type 5
+bonus deals unmodified damage; and Blood Ritual stat 155 values. The engine
+does not yet consume 183.

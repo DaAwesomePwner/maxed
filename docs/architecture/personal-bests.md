@@ -11,6 +11,16 @@ typed target UPDATE has a known zero baseline. Neither case increments
 missing-input diagnostics. Unknown active bonus IDs, missing bonus channels,
 target states seen only through deltas, missing attacker stats, missing
 scaling/enchant metadata, ambiguous hits and coverage gaps remain ineligible.
+Weapon shots whose weapon-slot enchant evidence is missing, invalid, unknown,
+legacy or unsupported use unscaled bounds and count `assumedWeaponEnchantDefault`
+([D-weapon-enchant](../parity/deliberate-differences.md#reconstruction-defaults));
+explicitly empty weapon enchants are a known 1.0. That fallback also invalidates RNG
+trust until the next map seed (below), so later local hits in that map are
+estimated even when their own evidence is known.
+Active Crucible/Blood Ritual IDs resolved from packet 183 or the saved definition
+table are known, including entries with no type-5 bonus (known 1.0). Hits before
+definitions are first seen for an ID remain ineligible; later learning does not
+rewrite them.
 Eligibility also requires settled local pairs and the current DPS basis.
 
 The engine publishes a confirmed kill as an ended `FightUpdated` before
@@ -63,8 +73,9 @@ Synthetic view-exit/re-entry tests cover all three omitted stats.
 
 Known stats alone cannot establish reconstruction accuracy. Map entry seeds the
 RNG and establishes trust. A stream gap, PLAYERSHOOT (id 30) decode failure,
-or PlayerShoot whose identity/item/projectile/seed prevents advancement
-invalidates trust until the next map seed, even when no fight is open. Other
+PlayerShoot whose identity/item/projectile/seed prevents advancement, or a weapon
+shot that used the weapon-enchant fallback (the client may or may not have consumed
+a draw) invalidates trust until the next map seed, even when no fight is open. Other
 packet decode failures retain their coverage marking without invalidating RNG.
 Subsequent local reconstructions are estimated and mark `MissingStats`
 (`untrustedRng` assumption counter).

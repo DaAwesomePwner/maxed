@@ -280,6 +280,16 @@ define_packets! {
     169 => RealmScoreUpdate, "REALM_SCORE_UPDATE", ServerToClient, |r| {
         score:i32=r.i32()?,
     };
+    // RS incoming/CrucibleResponsePacket.java: signed short counts, big-endian ids,
+    // then length-prefixed JSON strings; verified on an owner recording (2026-11-10).
+    // JSON semantics belong to the engine; privacy keeps only allowlisted config.
+    183 => CrucibleResponse, "CRUCIBLE_RESPONSE", ServerToClient, |r| {
+        crucibleIds:Vec<i32>={let n=crucible_count(r.i16()?)?;r.list(n,4,Reader::i32)?},
+        crucibleJsons:Vec<String>={
+            let n=crucible_count(r.i16()?)?;
+            r.list(n,2,|r| r.public_if(crate::privacy::crucible_config, true))?
+        },
+    };
 }
 
 pub fn known_name(id: u8) -> &'static str {
@@ -837,6 +847,15 @@ impl NotificationData {
             _ => {}
         }
         Ok(n)
+    }
+}
+/// CRUCIBLE_RESPONSE lists are small category tables (three observed).
+pub(crate) const CRUCIBLE_LIST_LIMIT: i16 = 64;
+fn crucible_count(n: i16) -> Result<i32, ProtocolError> {
+    if (0..=CRUCIBLE_LIST_LIMIT).contains(&n) {
+        Ok(i32::from(n))
+    } else {
+        Err(ProtocolError::Definition)
     }
 }
 fn modifiers(s: String) -> [Option<String>; 5] {

@@ -253,6 +253,7 @@ fn nested_nonfinite_values_fail_serialization() {
                 name: "Synthetic".into(),
                 description: String::new(),
                 stat_damage_multiplier: None,
+                weapon_damage: None,
                 regeneration: Some(EnchantRegenDef {
                     support: CatalogSupport::Supported,
                     hp: vec![effect],

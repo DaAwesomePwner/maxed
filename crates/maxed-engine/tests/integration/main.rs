@@ -92,3 +92,12 @@ mod account_scope;
 
 #[path = "../account_scope_transitions.rs"]
 mod account_scope_transitions;
+
+#[path = "../crucible.rs"]
+mod crucible;
+
+#[path = "../crucible_validation.rs"]
+mod crucible_validation;
+
+#[path = "../weapon_enchant.rs"]
+mod weapon_enchant;

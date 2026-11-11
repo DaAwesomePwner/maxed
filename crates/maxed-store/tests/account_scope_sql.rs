@@ -198,7 +198,7 @@ fn account_scope_notice_migration_backfills_existing_runless_history() {
         db.execute_batch(&format!("DROP TRIGGER {trigger}"))
             .unwrap();
     }
-    db.execute_batch("DROP TABLE unresolved_observations; DELETE FROM schema_migrations WHERE version=19; PRAGMA user_version=18;
+    db.execute_batch("DROP TABLE crucible_definitions; DROP TABLE unresolved_observations; DELETE FROM schema_migrations WHERE version>=19; PRAGMA user_version=18;
         INSERT INTO fights(id,session_id,started,complete_capture,json) VALUES('legacy','s',100,1,'{}');
         INSERT INTO drops(id,session_id,at,bag_type,json) VALUES('legacy','s',100,1,'{}');").unwrap();
     maxed_store::migrate(&mut db).unwrap();

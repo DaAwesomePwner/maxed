@@ -187,6 +187,9 @@ These appear in one or both tools but break Maxed's rules (passive capture, no u
 
 | Date | Decision |
 | --- | --- |
+| 2026-11-10 | Weapon-damage enchants (`MultiplyMinDamage`/`MultiplyMaxDamage`) scale a weapon shot's projectile damage range before the roll. This goes beyond RealmShark, which parses them but does not apply them to hits; it was fixed with #39 because resolving Crucible IDs exposed it. Missing, unknown or unsupported enchant evidence, including an older catalog, uses 1.0 and counts `assumedWeaponEnchantDefault`, so the hit stays estimated. Truncation of the scaled bounds and combining several damage enchants are not yet checked against observed damage |
+| 2026-11-10 | #39: Crucible and Blood Ritual damage multipliers come from the `CRUCIBLE_RESPONSE` packet (183), not the asset catalog. Definitions are saved locally (migration 020) and reused across connections and restarts; a hit is known when the active ID is in the saved table. No HTTP or account-service lookup is used |
+| 2026-11-10 | #39: A known Crucible entry with no type-5 bonus counts as a known 1.0× multiplier (RealmShark's rule). An ID never seen in a definition keeps the counted neutral default and stays ineligible for personal bests. On one recording the active Crucible entry's own multiplier measured 1.0 (±0.25%); other bonus-type meanings and Blood Ritual (stat 155) matching are not yet checked against observed damage; fights stored before the fix stay as recorded |
 | 2026-11-08 | Gate P resolved from sanitized owner evidence (#37/#38): exalt inside boost; HP/MP fields carry bonus amounts. Nonzero exalt permits cap/maxed decisions with observed operands and catalog caps. Exalt damage remains deferred |
 | 2026-11-07 | #4: Home follows the current account, with no selector. Legacy attribution uses local recomputation; unmatched history stays stored and is excluded from totals, records and bests with a notice. Windows account-switch acceptance remains pending |
 | 2026-11-06 | Observed-only Daily Quests (Tinkerer) and Pets are in scope, built from passive capture with no token. Each needs its own spec before it is built; neither is scheduled yet |
@@ -255,7 +258,7 @@ answer is given.
 - **Migrations are numbered in the plans.** Loot took 008, Logs 009, Stats 010,
   excluded-bag cleanup 011, event-name search 012, player observations 013
   Party 014, Home loot-statistics indexes 015, maintenance receipts 016, accounts 017,
-  account read index 018 and attribution notice 019. The next spec claims 020 so parallel workers never collide.
+  account read index 018, attribution notice 019 and Crucible definitions 020. The next spec claims 021 so parallel workers never collide.
   Never rewrite an installed migration.
 - **Home stays the Session/Today view; Stats owns lifetime views.** Don't duplicate Home's KPI strip or
   By-dungeon section; link from Home to the matching Stats view instead. The Home redesign phase 1,
