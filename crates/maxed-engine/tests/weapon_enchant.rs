@@ -335,6 +335,10 @@ fn weapon_enchant_fallback_leaves_later_rolls_untrusted_until_reseed() {
     setup(&mut e);
     fire(&mut e, &[(3, ""), (4, "")]);
     assert_eq!(counts(&e), (1, 2));
+    // All four hits were reconstructed, so the unchanged count is not vacuous.
+    let coverage = e.reconstruction_coverage();
+    assert_eq!(coverage["attemptedHits"], 4);
+    assert_eq!(coverage["reconstructedHits"], 4);
 }
 
 #[test]
