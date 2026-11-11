@@ -65,7 +65,7 @@ it('limits a 64-fight sidebar, pins the current fight, and resets on navigation'
   mountRuns({ hash: '#/runs/run-1/fights/fight-63', queries: {
     getFight: async id => ready(fight({ id })), getRunFightStrip: async () => ready(strip),
   } }); await flush();
-  const sidebar = () => within(main().getByRole('region', { name: 'You this run' }));
+  const sidebar = () => within(main().getByRole('region', { name: 'Bosses this run' }));
   expect(sidebar().getAllByRole('row')).toHaveLength(1 + 8 + 1);
   expect(sidebar().getByRole('link', { name: 'Invented boss 63' }).getAttribute('aria-current')).toBe('page');
   await fireEvent.click(sidebar().getByRole('button', { name: 'Show more' })); await flush();

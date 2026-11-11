@@ -39,7 +39,7 @@
   let cursor = $derived(cursors[cursors.length - 1]);
   let settings = $state.raw<AppSettings | null>(null);
   let settingsError = $state(''), settingsRevision = $state(0);
-  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading item history.', retryAvailable: false });
+  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading item history', retryAvailable: false });
   let controller = $state.raw<HistoryController>();
   let visuals = $state.raw<HomeVisuals>(emptyHomeVisuals());
   let visualController = $state.raw<ReturnType<typeof createHomeVisuals>>();
@@ -57,7 +57,7 @@
     const owner = activeClient;
     if (!owner) {
       controller = undefined;
-      history = { phase: 'loading', value: null, message: 'Loading item history.', retryAvailable: false };
+      history = { phase: 'loading', value: null, message: 'Loading item history', retryAvailable: false };
       return;
     }
     const instance = createRunHistory(owner, next => {
@@ -164,8 +164,9 @@
     <EmptyState state="unavailable" heading="Loot unavailable" description="" />
   {:else}
     {#if history.message && history.message !== HISTORY_CATCH_UP && !/^(Refreshing|Loading)\b/.test(history.message)}<p>{history.message}</p>{/if}
-    {#if history.retryAvailable && (history.phase === 'error' || history.phase === 'busy')}<div class="error" role="alert"><span>Couldn't load bags.</span><button class="ctl" type="button" onclick={() => controller?.retry()}>Retry</button></div>{/if}
-    {#if history.phase === 'error'}<EmptyState state="error" heading="Loot Error" description="" />
+    {#if history.retryAvailable && (history.phase === 'error' || history.phase === 'busy')}<div class="error" role="alert"><span>Couldn't load item history</span><button class="ctl" type="button" onclick={() => controller?.retry()}>Retry</button></div>{/if}
+    <!-- A retryable failure is already explained once by the alert above; the card only repeats it when there is no Retry. -->
+    {#if history.phase === 'error'}{#if !history.retryAvailable}<EmptyState state="error" heading="Couldn't load item history" description="" />{/if}
     {:else if history.phase === 'busy' && history.retryAvailable}<EmptyState state="unavailable" heading="Loot history busy" description="" />
     {:else if !page}<EmptyState state="loading" heading="Loading item history" description="" />{/if}
     {#if item && page}
@@ -191,25 +192,25 @@
 </div>
 
 <style>
-  .item-history { overflow-anchor: none; display: grid; gap: 10px; min-width: 0; }
-  header { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .item-history { overflow-anchor: none; display: grid; gap: var(--space-3); min-width: 0; }
+  header { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
   .identity { flex: 1; min-width: 0; }
-  h2 { margin: 0; font-size: 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .subline { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .header-tile { flex: none; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-  .ut { color: var(--violet-text); } .st { color: var(--bag-orange); }
-  .header-tile.ut, .header-tile.st { border-color: currentColor; box-shadow: 0 0 8px #b69aff33; }
-  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 10px; }
-  .bags-card { min-width: 0; padding: 10px 6px 6px; background: var(--surface-panel); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
-  .card-head { display: flex; justify-content: space-between; padding: 2px 6px 10px; color: var(--text-secondary); font-size: 12px; }
-  h3 { margin: 0; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .07em; }
+  h2 { margin: 0; font-size: var(--text-hero); line-height: var(--leading-hero); font-weight: var(--weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .subline { font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .header-tile { flex: none; border: 1px solid var(--hairline); border-radius: var(--radius-control); overflow: hidden; }
+  .ut { color: var(--tier-ut); } .st { color: var(--tier-st); }
+  .header-tile.ut, .header-tile.st { border-color: currentColor; }
+  .actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-3); }
+  .bags-card { min-width: 0; padding: var(--space-4); background: var(--surface-panel); border: 1px solid var(--hairline); border-radius: var(--radius-card); display: flex; flex-direction: column; }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: var(--space-3); color: var(--text-muted); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
+  h3 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); color: var(--text-primary); }
   .table-scroll { overflow-x: auto; }
-  footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 10px; color: var(--text-muted); font-size: 11px; }
-  nav, .error { display: flex; gap: 6px; align-items: center; } .error { color: var(--warning); }
-  p { margin: 0; color: var(--text-secondary); } .honesty { font-size: 11.5px; }
+  footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: auto; padding-top: var(--space-3); color: var(--text-muted); font-size: var(--text-meta); }
+  nav, .error { display: flex; gap: var(--space-2); align-items: center; } .error { color: var(--warning); }
+  p { margin: 0; color: var(--text-secondary); } .honesty { font-size: var(--text-meta); color: var(--text-muted); }
   .kpis { min-width: 0; } .kpis :global(.value) { overflow: hidden; text-overflow: ellipsis; }
-  .kpis :global([data-kpi="most"] .value) { font-size: 20px; line-height: 27.6px; }
+  .kpis :global([data-kpi="most"] .value) { font-size: var(--text-title); line-height: var(--leading-title); }
   @media (max-width: 1200px) { .layout { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 700px) { header { flex-wrap: wrap; } .actions { width: 100%; } }
 </style>

@@ -4,6 +4,7 @@
   import { eventParts, eventLabels, eventGlyphs } from './events-screen';
   import { clockTime, dayLabel } from './logs-format';
   import EventPortal from './EventPortal.svelte';
+  import Badge from '../components/Badge.svelte';
   import './glyphs.css';
   import type { EnteredRun } from '../bindings/EnteredRun';
   import { routeHref } from '../navigation/routes';
@@ -39,7 +40,7 @@
           {@const portal = row.kind.type === 'portal_opened' ? row.kind : null}
           {@const run = enteredRuns.find(run => run.event_id === row.id)}
           <td title={portal?.dungeon ?? '—'}><div class="description"><span class="k portal-name"><EventPortal {client} dungeon={portal?.dungeon ?? null} /><strong>{portal?.dungeon ?? '—'}</strong></span>{#if row.provisional}<span class="sr-only">Unconfirmed: seen without a confirming observation.</span>{:else}<span class="confirmed">confirmed</span>{/if}</div></td>
-          <td title={portal?.opener ?? '—'} class:local={portal?.opener_is_local === true}><div class="description"><strong class="summary">{portal?.opener ?? '—'}</strong>{#if portal?.opener_is_local === true}<span class="you">you</span>{/if}</div></td>
+          <td title={portal?.opener ?? '—'} class:local={portal?.opener_is_local === true}><div class="description"><strong class="summary">{portal?.opener ?? '—'}</strong>{#if portal?.opener_is_local === true}<Badge label="you" tone="gold" />{/if}</div></td>
           <td title={row.map ?? '—'}>{row.map ?? '—'}</td>
           <td>{#if run}<a href={routeHref({ kind: 'run', id: run.run_id })} title={`A ${run.dungeon} run started ${Math.round(Number(BigInt(run.started_at) - BigInt(row.at)) / 1_000_000).toLocaleString('en-US')} s after this portal opened`}>{run.dungeon} · {run.outcome ? titleCase(run.outcome) : '—'} ›</a>{/if}</td>
         {:else}
@@ -52,14 +53,20 @@
   </tbody>
 </table>
 <style>
-  table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
-  .time { width: 72px; } .kind { width: 104px; } .where { width: 22%; }
-  th { text-align: left; color: var(--text-muted); font-size: 11px; font-weight: 500; padding: 0 6px 6px; }
-  td { height: 30px; border-top: 1px solid var(--border); padding: 2px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  td:first-child, td:last-child, .detail { color: var(--text-muted); }
-  .description { display: flex; align-items: center; min-width: 0; } .summary { overflow: hidden; text-overflow: ellipsis; } .confirmed { flex: none; margin-left: 6px; font-size: 10px; color: var(--success); }
-  tr[data-row-id] { cursor: pointer; } tr[data-row-id]:hover { background: #ffffff05; } tr.selected { background: #f2c14e14; box-shadow: inset 2px 0 var(--gold); }
+  table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--text-caption); line-height: var(--leading-caption); font-variant-numeric: tabular-nums; }
+  th { text-align: left; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); padding: 0 var(--space-2) var(--space-2); border-bottom: 1px solid var(--hairline-strong); }
+  tbody tr:first-child td { border-top: 0; }
+  tr[data-row-id] { cursor: pointer; transition: background-color var(--motion-fast) var(--motion-ease); } tr[data-row-id]:hover { background: var(--surface-hover); }
+  tr.selected, tr.selected:hover { background: var(--surface-selected); box-shadow: var(--selected-edge); }
   tr:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-  .group td { color: var(--text-muted); font-size: 11px; background: #ffffff03; }
-  .opener { width: 20%; } .run { width: 22%; } .local, .you { color: var(--gold); } .you { flex: none; margin-left: 5px; font-size: 10px; border: 1px solid #f2c14e40; border-radius: 3px; padding: 0 3px; } a { color: var(--violet-text); text-decoration: none; } .k strong { overflow: hidden; text-overflow: ellipsis; } .portal-name { min-width: 0; overflow: hidden; }
+  .time { width: 72px; } .kind { width: 120px; } .where { width: 22%; } .opener { width: 20%; } .run { width: 22%; }
+  td { height: var(--row-default); box-sizing: border-box; border-top: 1px solid var(--hairline); padding: 0 var(--space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td:first-child, td:last-child, .detail { color: var(--text-muted); }
+  strong { font-weight: var(--weight-medium); }
+  .description { display: flex; align-items: center; gap: var(--space-2); min-width: 0; } .summary { overflow: hidden; text-overflow: ellipsis; }
+  .confirmed { flex: none; font-size: var(--text-meta); color: var(--success); }
+  .group td { color: var(--text-muted); font-size: var(--text-meta); font-weight: var(--weight-medium); }
+  .local { color: var(--gold); }
+  td a { color: var(--text-secondary); text-decoration: none; } td a:hover, td a:focus-visible { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+  .k strong { overflow: hidden; text-overflow: ellipsis; } .portal-name { min-width: 0; overflow: hidden; }
 </style>

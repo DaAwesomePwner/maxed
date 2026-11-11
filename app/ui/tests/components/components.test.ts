@@ -23,7 +23,7 @@ describe('Card, EmptyState and ListRow', () => {
     const retry = vi.fn();
     render(ContentHarness, { retry });
     expect(screen.getByRole('region', { name: 'Capture unavailable' }).getAttribute('aria-busy')).toBe('false');
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry Capture' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry capture' }));
     expect(retry).toHaveBeenCalledOnce();
   });
   it('can leave loading for unavailable without an endless busy state', async () => {
@@ -41,7 +41,7 @@ describe('Card, EmptyState and ListRow', () => {
     expect(link.querySelectorAll('button, a, [tabindex]')).toHaveLength(0);
     const user = userEvent.setup();
     await user.tab();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Retry Capture' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Retry capture' }));
     await user.tab();
     expect(document.activeElement).toBe(link);
     // Observe after the component's handlers, then suppress jsdom's unsupported navigation.

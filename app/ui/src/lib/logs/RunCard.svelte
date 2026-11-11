@@ -18,7 +18,12 @@
   <nav aria-label="Run links"><a class="ctl ghost" href={routeHref({ kind: 'logs', view: 'events', channel: 'all', runId })}>Events in this run</a><a class="ctl ghost" href={routeHref({ kind: 'logs', view: 'chat', channel: 'all', runId })}>Chat in this run</a></nav>
 </section>
 <style>
-  .card { padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); font-size: 12px; max-height: 480px; overflow: auto; }
-  header { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 12px; } h2 { margin: 0; font-size: 13px; } a { color: var(--violet-text); text-decoration: none; } p, dt { color: var(--text-muted); }
-  strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } dl { display: grid; grid-template-columns: 1fr auto; gap: 7px; } dd { margin: 0; font-variant-numeric: tabular-nums; } nav { display: flex; flex-wrap: wrap; gap: 4px; }
+  .card { min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .card { max-height: 480px; overflow: auto; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); } h2 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  header a { color: var(--text-secondary); text-decoration: none; } header a:hover, header a:focus-visible { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+  p, dt { color: var(--text-muted); } p { margin: var(--space-1) 0 var(--space-3); }
+  strong { display: block; font-weight: var(--weight-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  dl { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2); margin: 0 0 var(--space-3); } dd { margin: 0; font-variant-numeric: tabular-nums; }
+  nav { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 </style>

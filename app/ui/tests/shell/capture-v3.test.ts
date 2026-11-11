@@ -16,7 +16,7 @@ it('has one toggle, counts observed Live time, pauses recovery, and keeps diagno
   const props = { view, capture: snapshot.capture, busy: false, error: '', onStart, onStop, onRetry };
   const page = render(LiveStatusCard, props); await tick();
   expect(screen.getAllByRole('button')).toHaveLength(1);
-  await fireEvent.click(screen.getByRole('button', { name: 'Stop Capture' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Stop capture' }));
   expect(onStop).toHaveBeenCalledOnce();
   for (let i = 0; i < 4; i++) {
     await page.rerender({ ...props, capture: { ...snapshot.capture }, view: railView({ ...snapshot, at: String(6000000 + i * 250000) }) });
@@ -33,7 +33,7 @@ it('has one toggle, counts observed Live time, pauses recovery, and keeps diagno
   expect(screen.getByText('Details')).toBeTruthy();
   expect(screen.getByText(snapshot.capture.message)).toBeTruthy();
   await page.rerender({ ...props, capture: { ...snapshot.capture, state: 'Stopped' } });
-  await fireEvent.click(screen.getByRole('button', { name: 'Start Capture' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Start capture' }));
   expect(onStart).toHaveBeenCalledOnce();
   expect(screen.queryByLabelText('Capture live elapsed')).toBeNull();
 });
@@ -73,10 +73,10 @@ it('retains busy, preview, recoverable failure, subscription retry and permanent
   await page.rerender({ ...props, preview: true });
   await fireEvent.click(screen.getByRole('button')); expect(onStop).not.toHaveBeenCalled();
   await page.rerender({ ...props, capture: { ...snapshot.capture, state: 'PermissionDenied' } });
-  await fireEvent.click(screen.getByRole('button', { name: 'Retry Capture' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry capture' }));
   expect(onStart).toHaveBeenCalledOnce();
   await page.rerender({ ...props, capture: null, error: 'Capture status unavailable.' });
-  await fireEvent.click(screen.getByRole('button', { name: 'Reconnect Capture' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Reconnect capture' }));
   expect(onRetry).toHaveBeenCalledOnce();
   await page.rerender({ ...props, capture: { ...snapshot.capture, state: 'Failed', message: 'Capture worker failed; restart Maxed' } });
   expect(screen.getByText('Restart Maxed')).toBeTruthy();

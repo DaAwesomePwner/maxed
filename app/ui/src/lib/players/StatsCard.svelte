@@ -17,7 +17,7 @@
   }));
 </script>
 <section class="player-card" aria-label="Stats">
-  <h3>Stats {#if profile}<span class="player-card-sub">{effectiveMaxed(profile) ?? '—'}/8 · boosts shown</span>{/if}</h3>
+  <h3>Stats {#if profile}<span class="player-card-sub">{effectiveMaxed(profile) ?? '—'}/8 maxed · values include boosts</span>{/if}</h3>
   {#if profile === null}<p class="player-muted">{missingText}</p>
   {:else}
     <dl class="player-stats">

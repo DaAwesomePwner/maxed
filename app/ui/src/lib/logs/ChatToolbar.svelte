@@ -33,11 +33,19 @@
   {#if latestAt}<small>Latest line {clockTime(latestAt)}</small>{/if}
 </div>
 <style>
-  .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; font-size: 12px; }
-  .search { position: relative; flex: 1 1 180px; max-width: 280px; } input { width: 100%; padding-right: 24px; } .search span { position: absolute; right: 9px; top: 6px; color: var(--text-muted); }
-  small { margin-left: auto; color: var(--text-muted); } [aria-pressed="true"] { color: var(--gold); border-color: var(--gold); }
-  .seg a { display: inline-flex; align-items: center; padding: 0 9px; border-radius: 4px; color: var(--text-secondary); text-decoration: none; }
-  .seg a.on { background: var(--surface-hover); color: var(--text-primary); box-shadow: inset 0 0 0 1px #c4a7ff55; }
-  .seg a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
-  .dot { width: 6px; height: 6px; border-radius: 2px; margin-right: 5px; } .check { width: 11px; height: 11px; border: 1px solid var(--text-muted); border-radius: 3px; } [aria-pressed="true"] .check { background: var(--gold); border-color: var(--gold); }
+  .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; font-size: var(--text-caption); }
+  .search { position: relative; flex: 1 1 180px; max-width: 280px; } input { width: 100%; padding-right: var(--space-6); }
+  .search span { position: absolute; right: var(--space-3); top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: var(--text-meta); }
+  small { margin-left: auto; color: var(--text-muted); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
+  .ctl[aria-pressed="true"] { border-color: var(--text-secondary); color: var(--text-primary); }
+  .seg a { display: inline-flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-3); border-radius: calc(var(--radius-control) - 2px); color: var(--text-secondary); font-size: var(--text-caption); text-decoration: none;
+    transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease); }
+  .seg a:hover:not(.on) { background: var(--surface-hover); color: var(--text-primary); }
+  .seg a.on { background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--highlight-top); }
+  .seg a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .dot { width: 6px; height: 6px; border-radius: 2px; }
+  /* Mirrors a native 16px checkbox: neutral when on, never gold. */
+  .check { position: relative; box-sizing: border-box; width: 16px; height: 16px; flex: none; border: 1px solid var(--border-strong); border-radius: var(--radius-tag); background: var(--surface-inset); }
+  [aria-pressed="true"] .check { border-color: var(--text-primary); background: var(--text-primary); }
+  [aria-pressed="true"] .check::after { content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px; border: solid var(--surface-canvas); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 </style>

@@ -36,9 +36,9 @@ export function recapImageModel(view: RunRecapView | VisitRecapView, options: Re
   const add = (block: RecapImageBlock, height: number) => { blocks.push(block); y += height; };
   const targetName = (type: number | null) => type === null ? null : context.objectName?.(type);
   const targetSprite = (type: number | null) => type === null ? null : context.spriteUrl(type);
-  add({ kind: 'banner', title: view.title, outcome: view.kind === 'run' ? view.outcomeLabel : 'REALM VISIT',
+  add({ kind: 'banner', title: view.title, outcome: view.kind === 'run' ? view.outcomeLabel : 'Realm visit',
     tone: view.kind === 'run' ? view.outcome ?? 'unknown' : 'visit',
-    clearTime: view.kind === 'run' ? view.died ? `DIED AT ${view.died.elapsed}` : view.clearTime : view.timeHere,
+    clearTime: view.kind === 'run' ? view.died ? `Died at ${view.died.elapsed}` : view.clearTime : view.timeHere,
     pb: view.kind === 'run' && view.pb, y }, 148);
   const tile = (key: string) => view.tiles.find(tile => tile.key === key);
   const stat = (key: string, label: string, field: 'value' | 'detail' = 'value') => {
@@ -83,7 +83,7 @@ export function recapImageModel(view: RunRecapView | VisitRecapView, options: Re
     add({ kind: 'loot', items, more, partial: view.kind === 'visit' && view.dropsPartial, y },
       48 + Math.max(1, Math.ceil(items.length / 2)) * 48 + (more ? 32 : 0));
   }
-  add({ kind: 'footer', text: `${context.character ?? '—'} · ${context.className ?? '—'} · ${context.date} · MAXED`, y }, 64);
+  add({ kind: 'footer', text: `${context.character ?? '—'} · ${context.className ?? '—'} · ${context.date} · Maxed`, y }, 64);
   return { width: 640, height: y, scale: 2, blocks };
 }
 
@@ -106,10 +106,13 @@ export async function loadSprite(url: string): Promise<HTMLImageElement> {
   return image;
 }
 
-const displayFont = '"Segoe UI Variable Display", "Segoe UI", sans-serif';
-const textFont = '"Segoe UI Variable Text", "Segoe UI", sans-serif';
-const colors = { background: '#10141d', panel: '#191f2b', text: '#eef0f5', muted: '#a9b1c2',
-  gold: '#ebc66d', party: '#a995e5', green: '#8bd6b2', red: '#f0a0a9', border: '#303848' };
+// The shareable PNG uses the app's contract palette (tokens.css): graphite surfaces, gold for you, neutral party.
+export const recapImageFont = '"Segoe UI", system-ui, sans-serif';
+const displayFont = recapImageFont;
+const textFont = displayFont;
+export const recapImageColors = { background: '#0f0f10', panel: '#19191b', text: '#ededed', secondary: '#b4b4ba', muted: '#96969c',
+  gold: '#f2c14e', bar: '#36363a', green: '#4cc38a', red: '#f2777a', warning: '#e8a25a', border: '#2a2a2d' } as const;
+const colors = recapImageColors;
 
 /** Call only from the copy action. The detached canvas never captures the DOM. */
 export async function renderRecapImage(model: RecapImageModel,
@@ -128,7 +131,7 @@ export async function renderRecapImage(model: RecapImageModel,
   })));
   const rect = (x: number, y: number, w: number, h: number, color: string) => { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); };
   const text = (value: string, x: number, y: number, width: number, size = 16, color: string = colors.text, title = false) => {
-    ctx.font = `${title ? 600 : 400} ${size}px ${title ? displayFont : textFont}`; ctx.fillStyle = color;
+    ctx.font = `${title ? 500 : 400} ${size}px ${title ? displayFont : textFont}`; ctx.fillStyle = color;
     let fitted = value;
     if (ctx.measureText(fitted).width > width) {
       const points = Array.from(value);
@@ -157,49 +160,52 @@ export async function renderRecapImage(model: RecapImageModel,
     const y = block.y;
     switch (block.kind) {
       case 'banner': {
-        const accent = block.tone === 'died' ? colors.red : block.tone === 'cleared' ? colors.green : colors.gold;
+        const accent = block.tone === 'died' ? colors.red : block.tone === 'cleared' ? colors.green : colors.secondary;
         rect(0, y, model.width, 148, colors.panel); rect(0, y, model.width, 4, accent);
         text(block.outcome, 24, y + 30, 592, 13, accent, true);
         text(block.title, 24, y + 65, 592, 28, colors.text, true);
-        if (block.clearTime !== null) text(block.clearTime, 24, y + 111, 440, 28, colors.gold, true);
-        if (block.pb) { rect(548, y + 95, 68, 30, colors.gold); text('PB', 568, y + 111, 40, 16, colors.background, true); }
+        if (block.clearTime !== null) text(block.clearTime, 24, y + 111, 440, 28, block.tone === 'died' ? colors.red : colors.text, true);
+        if (block.pb) {
+          rect(568, y + 98, 48, 26, colors.green); rect(569, y + 99, 46, 24, colors.panel);
+          text('PB', 582, y + 111, 32, 15, colors.green, true);
+        }
         break;
       }
       case 'stats':
         block.items.forEach((item, i) => {
           const x = 24 + i * 148;
           const labelWidth = text(item.label, x, y + 27, item.partial ? 72 : 136, 13, colors.muted);
-          if (item.partial) text('Partial', x + labelWidth + 8, y + 27, 56, 11, colors.gold);
-          text(item.value, 24 + i * 148, y + 57, 136, item.value.length > 12 ? 14 : 21, colors.text, true);
+          if (item.partial) text('Partial', x + labelWidth + 8, y + 27, 56, 12, colors.warning);
+          text(item.value, 24 + i * 148, y + 57, 136, item.value.length > 12 ? 14 : 20, item.label === 'Your DPS' ? colors.gold : colors.text, true);
         });
         break;
       case 'fights':
         rect(24, y, 592, 1, colors.border);
-        text('Fight by fight', 24, y + 25, 348, 17, colors.text, true);
-        if (block.partial) text('Partial', 184, y + 25, 80, 12, colors.gold);
+        text('Fight by fight', 24, y + 25, 348, 16, colors.text, true);
+        if (block.partial) text('Partial', 184, y + 25, 80, 12, colors.warning);
         text('Your DPS', 424, y + 25, 86, 12, colors.muted); text('vs party', 536, y + 25, 80, 12, colors.muted);
         if (!block.rows.length) text('—', 24, y + 70, 592, 16, colors.muted);
         block.rows.forEach((row, i) => {
           const top = y + 48 + i * 64;
           spriteText(row, 24, top + 16, 380);
-          text(row.dps, 424, top + 16, 90, 17, colors.gold); text(row.vsParty, 536, top + 16, 80, 16, colors.party);
+          text(row.dps, 424, top + 16, 90, 16, colors.gold); text(row.vsParty, 536, top + 16, 80, 16, colors.secondary);
           text(row.time, 24, top + 42, 592, 13, colors.muted);
         });
         if (block.more) text(`+${block.more} more fights`, 24, y + 48 + block.rows.length * 64 + 16, 592, 13, colors.muted);
         break;
       case 'party':
-        rect(24, y, 592, 1, colors.border); text('Party · top 5', 24, y + 25, 592, 17, colors.text, true);
+        rect(24, y, 592, 1, colors.border); text('Party · top 5', 24, y + 25, 592, 16, colors.text, true);
         if (!block.rows.length) text('—', 24, y + 68, 592, 16, colors.muted);
         block.rows.forEach((row, i) => {
           const top = y + 48 + i * 40, share = row.shareValue;
           rect(24, top, 592, 30, colors.panel);
-          if (share !== null && Number.isFinite(share)) rect(24, top, 592 * Math.min(1, Math.max(0, share)), 30, '#35304c');
-          text(row.label, 36, top + 15, 462, 15); text(row.share, 536, top + 15, 72, 15, colors.party);
+          if (share !== null && Number.isFinite(share)) rect(24, top, 592 * Math.min(1, Math.max(0, share)), 30, colors.bar);
+          text(row.label, 36, top + 15, 462, 14); text(row.share, 536, top + 15, 72, 14, colors.secondary);
         });
         break;
       case 'loot':
-        rect(24, y, 592, 1, colors.border); text('Loot', 24, y + 25, 592, 17, colors.text, true);
-        if (block.partial) text('Partial', 84, y + 25, 80, 12, colors.gold);
+        rect(24, y, 592, 1, colors.border); text('Loot', 24, y + 25, 592, 16, colors.text, true);
+        if (block.partial) text('Partial', 84, y + 25, 80, 12, colors.warning);
         if (!block.items.length) text('—', 24, y + 72, 592, 16, colors.muted);
         block.items.forEach((item, i) => spriteText(item, 24 + (i % 2) * 300, y + 72 + Math.floor(i / 2) * 48, 284));
         if (block.more) text(`+${block.more} more ${block.more === 1 ? 'bag' : 'bags'}`, 24, y + 48 + Math.max(1, Math.ceil(block.items.length / 2)) * 48 + 16, 592, 13, colors.muted);

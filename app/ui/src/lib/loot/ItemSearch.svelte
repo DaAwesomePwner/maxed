@@ -39,8 +39,8 @@
     clearTimeout(timer);
     clearResults();
     const text = query.trim();
-    if (!text || [...text].length > 64) { searchMessage = 'Enter 1–64 characters to search.'; return; }
-    if (!client) { searchMessage = 'Item search unavailable.'; return; }
+    if (!text || [...text].length > 64) { searchMessage = 'Enter 1–64 characters to search'; return; }
+    if (!client) { searchMessage = 'Item search unavailable'; return; }
     if (!enabled) { searchMessage = 'Item search unavailable. Press Enter to retry.'; return; }
     const request = searchRevision;
     searching = true;
@@ -85,16 +85,17 @@
       {/each}
     </ul>
   {/if}
-  {#if searching || searchMessage}<p role="status">{searching ? 'Searching items…' : searchMessage}</p>{/if}
+  {#if searching || searchMessage}<p role="status">{searching ? 'Searching items' : searchMessage}</p>{/if}
 </div>
 <style>
-  .search { position: relative; width: 230px; max-width: 100%; min-width: 0; }
+  .search { position: relative; width: 232px; max-width: 100%; min-width: 0; }
   input { width: 100%; box-sizing: border-box; }
-  ul { position: absolute; top: 28px; left: 0; width: min(400px, 75vw); z-index: 5; margin: 0; padding: 4px; list-style: none; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-panel); }
-  li { display: flex; gap: 6px; align-items: center; padding: 4px; cursor: pointer; }
+  ul { position: absolute; top: calc(var(--control-dense) + var(--space-1)); left: 0; width: min(400px, 75vw); z-index: 5; margin: 0; padding: var(--space-1); list-style: none; border: 1px solid var(--hairline-strong); border-radius: var(--radius-control); background: var(--surface-raised); box-shadow: var(--elevation-popover); font-size: var(--text-caption); }
+  li { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-1); border-radius: var(--radius-tag); cursor: pointer; }
   li > span:not(.tile) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   li:hover, [aria-selected="true"] { background: var(--surface-hover); }
-  .tile { flex: none; display: inline-flex; border: 1px solid currentColor; border-radius: 4px; }
-  .ut { color: var(--violet-text); } .st { color: var(--bag-orange); }
-  p { margin: 4px 0; font-size: 12px; color: var(--text-secondary); }
+  small { font-size: var(--text-meta); }
+  .tile { flex: none; display: inline-flex; border: 1px solid currentColor; border-radius: var(--radius-sprite); }
+  .ut { color: var(--tier-ut); } .st { color: var(--tier-st); }
+  p { margin: var(--space-1) 0; font-size: var(--text-meta); color: var(--text-secondary); }
 </style>

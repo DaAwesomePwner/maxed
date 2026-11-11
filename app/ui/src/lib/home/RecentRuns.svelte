@@ -48,41 +48,48 @@
           {#if !run.complete_capture}<DebugNote text="Partial observations" />{/if}
           <DebugNote text={[...new Set([...run.issues, ...(detail?.issues ?? [])])].map(issue => coverageLabels[issue]).concat(run.evidence.map(item => evidenceLabel(item.evidence))).join('; ')} />
           <DebugNote>{run.completed_at !== null ? 'Clear' : 'Elapsed'} · Elapsed: {observedTime(run.started, run.ended)}</DebugNote>
-          {#if run.died_at !== null}<a data-row-id={run.id} href={routeHref({ kind: 'run', id: run.id, point: 'death' })}>View Death</a>{/if}
+          {#if run.died_at !== null}<a data-row-id={run.id} href={routeHref({ kind: 'run', id: run.id, point: 'death' })}>View death</a>{/if}
           {#if detail?.share_partial}<DebugNote text="Partial share" />{/if}
           {#if !bag && preview.length}<DebugNote text="Rank unavailable; unranked preview" />{/if}
-          {#each preview as drop}<DebugNote text={drop.capture_scope === 'extended' ? 'Extended Scope' : 'RealmShark Scope'} />{#if drop.source_estimated}<DebugNote>Source estimated: {reasonLabel(drop.source_reason)}</DebugNote>{/if}{#each drop.issues as issue}<DebugNote text={coverageLabels[issue]} />{/each}{/each}
+          {#each preview as drop}<DebugNote text={drop.capture_scope === 'extended' ? 'Extended scope' : 'RealmShark scope'} />{#if drop.source_estimated}<DebugNote>Source estimated: {reasonLabel(drop.source_reason)}</DebugNote>{/if}{#each drop.issues as issue}<DebugNote text={coverageLabels[issue]} />{/each}{/each}
           {#if detail?.loot_preview_limited}<DebugNote text="Limited preview" />{/if}
         </div>{/if}
       {/each}
     </div>
-  {:else}<p>No Runs</p>{/if}
+  {:else}<p>No runs</p>{/if}
   <DebugNote text="Up to 10 recent runs; share observed. Best ranked bag in the retained recent preview when available; otherwise unranked previews." />
   {#if pages > 1}<p class="sr-only" role="status">Runs {current * RECENT_PAGE_SIZE + 1}–{Math.min((current + 1) * RECENT_PAGE_SIZE, rows.length)} / {rows.length}</p>{/if}
 </section>
 <style>
-  .recent-runs { min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
-  .recent-runs header, .recent-runs nav { display: flex; align-items: center; gap: 6px; }
-  .recent-runs header { margin-bottom: 8px; }
+  /* Same card and table style as DungeonBreakdown: 16px card, 12px muted headers, 36px hairline rows. */
+  .recent-runs { min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); }
+  .recent-runs header, .recent-runs nav { display: flex; align-items: center; gap: var(--space-1); }
+  .recent-runs header { gap: var(--space-2); min-height: var(--control-dense); margin-bottom: var(--space-2); }
   .recent-runs header > a { margin-left: auto; }
-  .recent-runs h2 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); }
-  .recent-runs .row { display: grid; grid-template-columns: minmax(0, 1fr) 58px 46px 42px 28px; gap: 8px; align-items: center; min-height: 30px; padding: 0 6px; border-radius: 5px; font-size: 12px; }
-  .recent-runs .labels { min-height: 22px; font-size: 10px; text-transform: uppercase; color: var(--text-secondary); }
+  .recent-runs h2 { margin: 0; color: var(--text-primary); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  .recent-runs .row { display: grid; grid-template-columns: minmax(0, 1fr) 60px 48px 44px 28px; gap: var(--space-2); align-items: center;
+    min-height: var(--row-default); padding: 0 var(--space-2); border-radius: var(--radius-tag); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .recent-runs .run + .run { border-top: 1px solid var(--hairline); }
+  .recent-runs .labels { min-height: var(--space-6); color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium);
+    border-bottom: 1px solid var(--hairline-strong); border-radius: 0; }
   .recent-runs .run { color: var(--text-primary); text-decoration: none; }
   .recent-runs .run:hover, .recent-runs .run:focus-visible { background: var(--surface-hover); }
   .recent-runs .name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .recent-runs .number { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .recent-runs .result { color: var(--text-secondary); font-size: 11px; line-height: 1.2; }
+  .recent-runs .result { color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); }
   .recent-runs .cleared { color: var(--success); }
   .recent-runs .died { color: var(--danger); }
   .recent-runs .bag { display: inline-flex; justify-content: center; }
-  .recent-runs nav { font-size: 11px; }
-  .recent-runs button { min-width: 24px; min-height: 24px; font: inherit; color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--border); border-radius: 4px; }
-  .recent-runs button[aria-disabled="true"] { color: var(--text-muted); }
-  .recent-runs .row-debug { font-size: 11px; overflow-wrap: anywhere; }
-  .recent-runs p { margin: 0; color: var(--text-secondary); }
+  .recent-runs nav { color: var(--text-muted); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
+  .recent-runs button { box-sizing: border-box; min-width: var(--space-6); min-height: var(--space-6); padding: 0; font: inherit; color: var(--text-primary);
+    background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-tag); }
+  .recent-runs button[aria-disabled="true"] { color: var(--text-disabled); }
+  .recent-runs .row-debug { font-size: var(--text-meta); overflow-wrap: anywhere; }
+  .recent-runs p { margin: 0; color: var(--text-muted); font-size: var(--text-caption); }
   @media (max-width: 900px) {
-    .recent-runs .row { gap: 4px; padding-inline: 2px; }
-    .recent-runs { padding: 8px; }
+    .recent-runs .row { gap: var(--space-1); padding-inline: 2px; }
+    .recent-runs { padding: var(--space-3); }
+    /* The narrow card cannot fit long dungeon names at 13px; wrap them rather than clip. */
+    .recent-runs .name { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
   }
 </style>

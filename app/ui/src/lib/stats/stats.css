@@ -1,23 +1,26 @@
 /* Stats uses the same compact controls, panels and KPI strip as the live areas. */
-.stats-page { min-width: 0; font-size: 12px; color: var(--text-primary); }
-.stats-page .bar { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
+.stats-page { min-width: 0; font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--text-primary); }
+.stats-page .bar { padding: var(--space-3) var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); }
+.stats-page .bar h2 { font-weight: var(--weight-medium); }
 .stats-page .filters, .stats-page .filters label { min-width: 0; max-width: 100%; }
+.stats-page .filters label, .stats-page .min-runs { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
 .stats-page select.ctl { max-width: 100%; text-overflow: ellipsis; }
-.stats-page .ctl { height: 30px; }
 .stats-page select.ctl { appearance: none; padding-right: 28px; cursor: pointer;
-  background: var(--surface-raised) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4 3 3 3-3' fill='none' stroke='%23c6bed5' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 9px center; }
-.stats-page a { color: var(--violet-text); text-decoration: none; }
-.stats-page a:hover { text-decoration: underline; }
-.stats-page h3 { font-size: 13px; font-weight: 600; margin: 16px 0 8px; }
-.stats-page .stats-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
+  background: var(--surface-raised) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4 3 3 3-3' fill='none' stroke='%23b4b4ba' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 8px center; }
+.stats-page a { color: var(--text-primary); text-decoration: none; }
+.stats-page a:hover, .stats-page a:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.stats-page h3 { font-size: var(--text-caption); line-height: var(--leading-label); font-weight: var(--weight-medium); color: var(--text-secondary); margin: var(--space-4) 0 var(--space-2); }
+.stats-page .stats-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); }
 .stats-page .stats-table-scroll table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-.stats-page .stats-table-scroll th, .stats-page .stats-table-scroll td { padding: 10px 12px; white-space: nowrap; }
-.stats-page .stats-table-scroll thead th { background: var(--surface-raised); font-size: 11px; color: var(--text-secondary); font-weight: 600; }
-.stats-page .stats-table-scroll tbody th { font-weight: 600; }
+.stats-page .stats-table-scroll th, .stats-page .stats-table-scroll td { height: var(--row-min); box-sizing: border-box; padding: 0 var(--space-3); white-space: nowrap; border-bottom: 1px solid var(--hairline); }
+.stats-page .stats-table-scroll thead th { height: var(--space-8); font-size: var(--text-meta); color: var(--text-muted); font-weight: var(--weight-medium); border-bottom-color: var(--hairline-strong); }
+.stats-page .stats-table-scroll thead th button { font-weight: inherit; }
+.stats-page .stats-table-scroll thead th button:hover { color: var(--text-primary); }
+.stats-page .stats-table-scroll tbody th { font-weight: var(--weight-normal); }
 .stats-page .stats-table-scroll tbody tr:last-child > * { border-bottom: 0; }
 .stats-page .stats-table-scroll tbody tr:hover { background: var(--surface-hover); }
-.stats-page .session-kpis { margin-bottom: 12px; }
-.stats-page input[type='checkbox'] { accent-color: var(--violet); }
+.stats-page .session-kpis { margin-bottom: var(--space-3); }
+.stats-page input[type='checkbox'] { accent-color: var(--text-primary); }
 @media (max-width: 1000px) {
   .stats-page .session-kpis .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .stats-page .session-kpis .kpi-strip > div { border: 0; }

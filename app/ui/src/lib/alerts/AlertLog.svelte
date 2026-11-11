@@ -26,7 +26,7 @@
       <article data-row-id={row.id} tabindex="-1" aria-label={alertKindLabels[row.kind]}>
         <div class="row-actions">
         <details>
-          <summary aria-label={`${alertKindLabels[row.kind]} Details`}><strong>{alertKindLabels[row.kind]}</strong> <span class="number" title={alertTime(row.at)}>{shortTime(row.at)}</span></summary>
+          <summary aria-label={`${alertKindLabels[row.kind]} details`}><strong>{alertKindLabels[row.kind]}</strong> <span class="number" title={alertTime(row.at)}>{shortTime(row.at)}</span></summary>
           <p>Time: <span class="number">{alertTime(row.at)}</span></p>
           <p>Presentation: {row.presentation ? loudnessLabels[row.presentation] : '—'}</p>
           {#if !detail}<DebugNote text="Legacy details unavailable. The saved explanation is retained." />
@@ -38,7 +38,7 @@
             {#if !detail.character_id}<DebugNote text="Character identity unavailable." />{/if}
           {:else if detail.type === 'white_bag'}
             <p><ObjectLabel type={detail.bag_type} kind="bag" {visuals} /></p>
-            {#if detail.ordinal !== null}<p>Weekly Count: {detail.ordinal}</p>{:else}<DebugNote text="Ordinal unavailable" />{/if}
+            {#if detail.ordinal !== null}<p>Weekly count: {detail.ordinal}</p>{:else}<DebugNote text="Ordinal unavailable" />{/if}
             {#if detail.window}<p>Week: {alertTime(detail.window.start)} – {alertTime(detail.window.end)}</p>
             {:else}<DebugNote text="Calendar window unavailable." />{/if}
             {#if detail.source_enemy !== null}<p>Source: <ObjectLabel type={detail.source_enemy} kind="enemy" {visuals} />.</p>
@@ -63,15 +63,16 @@
 
 <style>
   ul { list-style: none; padding: 0; margin: 0; }
-  article { border-bottom: 1px solid var(--border); padding: var(--space-2) 0; min-height: var(--row-min); overflow-wrap: anywhere; }
+  article { border-bottom: 1px solid var(--hairline); padding: var(--space-2) 0; min-height: var(--row-min); overflow-wrap: anywhere; }
   .row-actions { display: flex; flex-wrap: wrap; align-items: start; gap: var(--space-2); }
   .row-actions details { flex: 1; min-width: 0; }
   .row-actions details[open] { flex-basis: 100%; }
-  a { color: var(--violet-text); min-height: var(--target-min); display: inline-flex; align-items: center; }
+  a { color: var(--text-primary); min-height: var(--target-min); display: inline-flex; align-items: center; font-size: var(--text-label); text-decoration: none; text-underline-offset: 3px; }
+  a:hover, a:focus-visible { text-decoration: underline; }
   p { margin: var(--space-1) 0; }
   details { color: var(--text-secondary); font-size: var(--text-label); }
-  summary { min-height: var(--target-min); display: list-item; align-content: center; cursor: pointer; color: var(--violet-text); }
-  summary strong { color: var(--text-primary); }
-  summary .number { color: var(--text-secondary); }
+  summary { min-height: var(--target-min); display: list-item; align-content: center; cursor: pointer; color: var(--text-secondary); }
+  summary strong { color: var(--text-primary); font-weight: var(--weight-medium); }
+  summary .number { color: var(--text-muted); }
   .number { font-variant-numeric: tabular-nums; }
 </style>

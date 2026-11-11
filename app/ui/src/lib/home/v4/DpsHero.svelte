@@ -20,9 +20,9 @@
   const percent = (value: number) => Math.round(Math.abs(value) * 100);
 </script>
 
-<section class="dps-hero" aria-label={label}>
+<section class="dps-hero" aria-label={label} data-live={live}>
   <div class="summary">
-    <header><h2>{label}</h2>{#if live}<span class="live">Live</span>{/if}</header>
+    <header><h2>{label}</h2></header>
     {#if target}
       <div class="target">
         <SpriteImage sprite={target.sprite} sheetUrl={target.sprite && resolveSpriteUrl ? resolveSpriteUrl(target.sprite) : null}
@@ -52,23 +52,23 @@
 </section>
 
 <style>
+  /* The screen's one bright moment: your live DPS in gold on a quiet graphite card. */
   .dps-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); align-items: center;
-    gap: 20px; padding: 16px; min-width: 0; border: 1px solid var(--border); border-radius: 8px;
-    background: var(--surface-panel); color: var(--text-primary); font-family: var(--font-home);
-    font-variant-numeric: proportional-nums; }
+    gap: var(--space-5); padding: var(--space-5); min-width: 0; border: 1px solid var(--hairline); border-radius: var(--radius-card);
+    background: var(--surface-panel); color: var(--text-primary); font-family: var(--font-home); font-variant-numeric: tabular-nums; }
   .summary { min-width: 0; overflow-wrap: anywhere; }
-  header { display: flex; align-items: center; gap: 10px; }
-  h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
-  .live { flex: none; padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; }
-  .dps { margin: 6px 0; color: var(--text-primary); font: 600 48px/1.1 var(--font-home-display);
-    font-variant-numeric: proportional-nums; }
-  dl { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 10px 0; }
-  dt { color: var(--text-secondary); font-size: 11px; }
-  dd { margin: 2px 0 0; font-size: 14px; }
-  p { margin: 6px 0 0; font-size: 12px; }
+  header { display: flex; align-items: center; gap: var(--space-2); }
+  h2 { margin: 0; color: var(--text-secondary); font-size: var(--text-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); }
+  .dps { margin: var(--space-1) 0 var(--space-3); color: var(--gold); font-size: var(--text-number); line-height: var(--leading-number);
+    font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+  dl { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); margin: 0 0 var(--space-3); }
+  dt { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  dd { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); }
+  p { margin: var(--space-1) 0 0; color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); }
   .positive { color: var(--success); }
   .negative { color: var(--danger); }
-  .usual, .target-meta { color: var(--text-secondary); }
-  .target { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-size: 13px; }
-  .target-meta { display: flex; gap: 10px; margin-top: 3px; font-size: 11px; }
+  .usual, .target-meta { color: var(--text-muted); }
+  .target { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-3) 0; font-size: var(--text-caption); line-height: var(--leading-caption); }
+  .target strong { font-weight: var(--weight-medium); }
+  .target-meta { display: flex; gap: var(--space-3); font-size: var(--text-meta); line-height: var(--leading-meta); }
 </style>

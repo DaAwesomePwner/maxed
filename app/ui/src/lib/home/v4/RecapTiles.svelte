@@ -9,7 +9,7 @@
 
 <div class="recap-tiles">
   {#each tiles as tile}
-    <dl class="v4-card recap-tile" data-tone={tile.tone}>
+    <dl class="v4-card recap-tile" data-key={tile.key} data-tone={tile.tone}>
       <dt>{tile.label}{#if tile.partial}<span class="recap-partial"> · Partial</span>{/if}</dt>
       <dd>
         {#if tile.comparison === 'party' && tile.tone !== null}

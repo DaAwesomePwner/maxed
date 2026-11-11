@@ -42,7 +42,7 @@
   let totals = $state.raw<{ people: number; lines: number } | null>(null);
   let settings = $state.raw<ChatSettings | null>(null);
   let pages = $state.raw<ChatRow[][]>([]), next = $state.raw<ChatCursor | null>(null);
-  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading saved whispers.', retryAvailable: false });
+  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading saved whispers', retryAvailable: false });
   let controller = $state.raw<HistoryController>();
   let peopleController = $state.raw<HistoryController>();
   let request = $state.raw<HistoryQuery | null>(null);
@@ -182,12 +182,12 @@
       excludedPartner = selected;
       selected = partners.rows[index + 1]?.name ?? partners.rows[index - 1]?.name ?? null;
       pages = []; next = null; persist(); revision++;
-    } catch (reason) { error = reason instanceof Error && reason.message.startsWith('Could not hide sender.') ? reason.message : 'Could not hide sender. Retry.'; }
+    } catch (reason) { error = reason instanceof Error && reason.message.startsWith("Couldn't hide sender.") ? reason.message : "Couldn't hide sender. Retry."; }
   }
   async function enableStorage() {
     if (!client || !settings) return;
     try { const updated = { ...settings, store: { ...settings.store, whisper: true } }; await client.updateChatSettings(updated); settings = updated; (stage === 'people' ? peopleController : controller)?.retry(); }
-    catch { error = 'Could not update chat settings. Retry.'; }
+    catch { error = "Couldn't update chat settings. Retry."; }
   }
 </script>
 
@@ -212,10 +212,11 @@
   </div>{/if}
 </div>
 <style>
-  .whispers { --ch-guild: #75dfa1; --ch-party: #8de4e5; --ch-whisper: #f2a6cf; min-width: 0; display: grid; gap: 10px; }
-  .layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 12px; height: max(360px, calc(100dvh - 210px)); min-width: 0; }
+  .whispers { min-width: 0; display: grid; gap: var(--space-3); }
+  .layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--space-3); height: max(360px, calc(100dvh - 208px)); min-width: 0; }
   .thread-wrap { position: relative; display: grid; min-width: 0; min-height: 0; }
-  .empty { padding: 20px; border: 1px dashed var(--border); border-radius: 6px; font-size: 12px; } p { color: var(--text-secondary); font-size: 12px; }
+  .empty { padding: var(--space-5); border: 1px dashed var(--hairline-strong); border-radius: var(--radius-control); font-size: var(--text-caption); } .empty strong { font-weight: var(--weight-medium); }
+  p { color: var(--text-secondary); font-size: var(--text-caption); }
   @media (max-width: 1100px) { .layout { grid-template-columns: 240px minmax(0, 1fr); } }
   @media (max-width: 900px) { .layout { grid-template-columns: 200px minmax(0, 1fr); } }
 </style>

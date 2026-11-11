@@ -8,9 +8,9 @@ import DpsHero from '../../src/lib/home/v4/DpsHero.svelte';
 import { partyAverage, relative, usualFor } from '../../src/lib/home/v4/hero';
 
 afterEach(cleanup);
-it('hero_number_uses_primary_text_colour', () => {
+it('hero_number_uses_gold_because_it_is_your_figure', () => {
   const source = readFileSync('src/lib/home/v4/DpsHero.svelte', 'utf8');
-  expect(source).toMatch(/\.dps\s*\{[^}]*color:\s*var\(--text-primary\)/);
+  expect(source).toMatch(/\.dps\s*\{[^}]*color:\s*var\(--gold\)/);
 });
 const props: ComponentProps<typeof DpsHero> = { label: 'Your DPS · Synthetic boss', live: true,
   dps: 1380, rank: 2, players: 8, share: 0.25, bestHit: 12345,
@@ -97,11 +97,15 @@ it('relative_preserves_unknown_and_zero_baselines', () => {
 
 it('hero_renders_label_live_stats_and_optional_target_without_a_sprite_resolver', async () => {
   const page = render(DpsHero, { props: { ...props, target: { name: 'Synthetic target', kind: 'Boss', elapsed: '1:23', sprite: null } } });
-  for (const text of ['Your DPS · Synthetic boss', 'Live', '#2 of 8', '25%', '12,345', 'Synthetic target', 'Boss', '1:23']) {
+  for (const text of ['Your DPS · Synthetic boss', '#2 of 8', '25%', '12,345', 'Synthetic target', 'Boss', '1:23']) {
     expect(page.getByText(text)).toBeTruthy();
   }
+  // The screen header owns the one visible Live indicator; the hero only carries the state.
+  expect(page.queryByText('Live')).toBeNull();
+  expect(page.container.querySelector('.dps-hero')?.getAttribute('data-live')).toBe('true');
   expect(page.container.querySelector('.dps')?.textContent).toBe('1,380');
   await page.rerender({ live: false, target: null });
+  expect(page.container.querySelector('.dps-hero')?.getAttribute('data-live')).toBe('false');
   expect(page.queryByText('Live')).toBeNull();
   expect(page.queryByText('Synthetic target')).toBeNull();
 });

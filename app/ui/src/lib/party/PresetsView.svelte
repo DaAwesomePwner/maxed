@@ -21,7 +21,7 @@
     const owner = client, generation = ++lifetime; retry;
     settings = null; selected = null; error = ''; busy = false; deleting = false;
     void owner.querySettings().then(value => { if (lifetime === generation) settings = value.party; })
-      .catch(() => { if (lifetime === generation) error = 'Could not load presets. Retry to refresh them.'; });
+      .catch(() => { if (lifetime === generation) error = 'Couldn’t load presets. Retry to refresh them.'; });
     return () => { lifetime++; };
   });
   $effect(() => {
@@ -124,11 +124,19 @@
   </dialog>{/if}
 </section>
 <style>
-  .layout { display: grid; align-items: start; gap: var(--space-3); } .with-editor { grid-template-columns: minmax(0, 1fr) 340px; }
-  .panel { min-width: 0; padding: var(--space-3); background: var(--surface-panel); border: 1px solid var(--border); border-radius: var(--radius-card); }
-  header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); } h2 { font-size: 14px; margin: 0; }
-  .table-scroll { overflow-x: auto; } table { width: 100%; border-collapse: collapse; font-size: 12px; } th { text-align: left; color: var(--text-secondary); } th, td { padding: 6px; } td { border-top: 1px solid var(--border); } .selected { background: #f2c14e14; }
-  .edit { font: inherit; text-align: left; color: var(--text-primary); background: none; border: 0; min-height: var(--target-min); cursor: pointer; } .edit:hover { color: var(--gold); } .hint { color: var(--text-secondary); font-size: 12px; } [role=alert] { color: var(--danger); white-space: pre-wrap; }
-  dialog { max-width: 400px; background: var(--surface-panel); color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: var(--radius-card); padding: var(--space-4); } dialog::backdrop { background: #0009; } .actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+  .layout { display: grid; align-items: start; gap: var(--space-4); } .with-editor { grid-template-columns: minmax(0, 1fr) 340px; }
+  .panel { min-width: 0; padding: var(--space-4); background: var(--surface-panel); border: 1px solid var(--hairline); border-radius: var(--radius-card); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); }
+  h2 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  h3 { margin: 0 0 var(--space-2); font-size: var(--text-body); line-height: var(--leading-body); font-weight: var(--weight-medium); }
+  .table-scroll { overflow-x: auto; } table { width: 100%; border-collapse: collapse; font-size: var(--text-caption); line-height: var(--leading-caption); }
+  th { text-align: left; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); } th, td { padding: var(--space-2); } td { border-top: 1px solid var(--hairline); }
+  .selected { background: var(--surface-selected); box-shadow: var(--selected-edge); }
+  .edit { min-height: var(--target-min); padding: 0; font: inherit; text-align: left; color: var(--text-primary); background: none; border: 0; cursor: pointer; text-underline-offset: 3px; }
+  .edit:hover:enabled { background: none; text-decoration: underline; }
+  .hint { color: var(--text-muted); font-size: var(--text-meta); } [role=alert] { color: var(--danger); white-space: pre-wrap; }
+  dialog { max-width: 400px; background: var(--surface-raised); color: var(--text-primary); border: 1px solid var(--hairline-strong); border-radius: var(--radius-card); padding: var(--space-5); box-shadow: var(--elevation-popover); }
+  dialog::backdrop { background: rgb(0 0 0 / 60%); }
+  .actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
   @media (max-width: 900px) { .with-editor { grid-template-columns: minmax(0, 1fr); } }
 </style>

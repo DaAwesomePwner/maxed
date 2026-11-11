@@ -47,17 +47,17 @@ describe('P7 Settings lifecycle', () => {
     const f = setupFixture();
     f.client.queryUpdate = vi.fn(async (): Promise<UpdateStatus> => ({ ...status('failed'), failure: 'install_failed' }));
     render(Settings, { client: f.client });
-    await screen.findByText('Install failed. Check again.');
+    await screen.findByText('Install failed; check again');
     for (const state of ['Live', 'WaitingForGame', 'Recovering'] as const) {
       f.capture('Stopped');
-      await screen.findByRole('button', { name: 'Restart Capture' });
+      await screen.findByRole('button', { name: 'Restart capture' });
       f.capture(state);
-      await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Restart Capture' })).toBeNull());
+      await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Restart capture' })).toBeNull());
     }
     f.capture('Stopped');
-    await screen.findByRole('button', { name: 'Restart Capture' });
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Restart Capture' }));
-    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Restart Capture' })).toBeNull());
+    await screen.findByRole('button', { name: 'Restart capture' });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Restart capture' }));
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Restart capture' })).toBeNull());
     expect(f.client.startCapture).toHaveBeenCalledTimes(1);
   });
 
@@ -65,8 +65,8 @@ describe('P7 Settings lifecycle', () => {
     const client = createClient(createFixtureTransport(snapshot));
     client.queryUpdate = vi.fn(async (): Promise<UpdateStatus> => ({ ...status('failed'), failure: 'install_failed' }));
     render(UpdateControl, { client });
-    await screen.findByText('Install failed. Check again.');
-    expect(screen.queryByRole('button', { name: 'Restart Capture' })).toBeNull();
+    await screen.findByText('Install failed; check again');
+    expect(screen.queryByRole('button', { name: 'Restart capture' })).toBeNull();
   });
 
   it('offers restart after post-shutdown verification failure without a stale Download action', async () => {
@@ -74,23 +74,23 @@ describe('P7 Settings lifecycle', () => {
     client.queryUpdate = vi.fn(async (): Promise<UpdateStatus> => ({ ...status('failed'), failure: 'install_failed' }));
     client.startCapture = vi.fn(async () => {});
     render(UpdateControl, { client, capture: { ...snapshot.capture, state: 'Stopped' } });
-    await screen.findByText('Install failed. Check again.');
+    await screen.findByText('Install failed; check again');
     expect(screen.queryByRole('button', { name: 'Download' })).toBeNull();
     expect(client.startCapture).not.toHaveBeenCalled();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Restart Capture' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Restart capture' }));
     expect(client.startCapture).toHaveBeenCalledTimes(1);
     vi.mocked(client.startCapture).mockRejectedValueOnce(new Error('synthetic private failure'));
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Restart Capture' }));
-    await screen.findByText('Couldn’t restart capture. Retry.');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Restart capture' }));
+    await screen.findByText('Couldn’t restart capture');
     expect(screen.queryByText('synthetic private failure')).toBeNull();
-    expect((screen.getByRole('button', { name: 'Check Updates' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Check updates' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('queries status without checking at mount and preserves smaller recording quotas', async () => {
     const f = setupFixture(); f.setSettings({ recording_limit_bytes: 65_575 });
     f.client.checkForUpdates = vi.fn(async () => status());
     render(Settings, { client: f.client });
-    const channel = await screen.findByRole('combobox', { name: 'Update Channel' });
+    const channel = await screen.findByRole('combobox', { name: 'Update channel' });
     const user = userEvent.setup();
     await user.selectOptions(channel, 'beta');
     await user.click(screen.getByRole('button', { name: 'Apply' }));
@@ -98,8 +98,8 @@ describe('P7 Settings lifecycle', () => {
     expect((await f.client.querySettings()).recording_limit_bytes).toBe(65_575);
     expect(f.client.checkForUpdates).not.toHaveBeenCalled();
     await fireEvent.click(screen.getByRole('tab', { name: 'Data & history' }));
-    expect((screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement).disabled).toBe(false);
-    expect((screen.getByRole('checkbox', { name: 'Save Recordings' }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole('checkbox', { name: 'Save recordings' }) as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByRole('checkbox', { name: 'Save recordings' }) as HTMLInputElement).checked).toBe(false);
   });
 
   it('renders notes as plain text, leaves unknown totals honest, and disables preview actions', async () => {
@@ -109,7 +109,7 @@ describe('P7 Settings lifecycle', () => {
     await screen.findByText('<img src="https://example.invalid/private">');
     expect(document.querySelector('img')).toBeNull();
     expect((screen.getByRole('button', { name: 'Download' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: 'Check Updates' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Check updates' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('polls with one outstanding request and a non-resetting 250 ms delay; disposal leaves native work alive', async () => {
@@ -156,9 +156,9 @@ it('retains the shutdown-blocked offer for explicit install Retry and cancel', a
   client.queryUpdate = vi.fn(async (): Promise<UpdateStatus> => ({ ...status('failed'), failure: 'shutdown_blocked', offer: { request_id: '7', version: '2.0.0', channel: 'stable', notes: '' } }));
   client.installUpdate = vi.fn(async () => status('installing'));
   render(UpdateControl, { client });
-  await screen.findByText('Check storage. Retry Install.');
+  await screen.findByText('Check storage, then retry install');
   expect(screen.queryByRole('button', { name: 'Download' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Retry Install' }));
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Retry install' }));
   expect(client.installUpdate).toHaveBeenCalledWith('7');
 });

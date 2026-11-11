@@ -38,7 +38,7 @@ it.each(['banner', 'toast'] as const)('%s stays outside the scrolling route flow
   expect(shell).toMatch(/\.content-pane\s*\{[^}]*position:\s*relative/);
 });
 
-it.each(['banner', 'toast'] as const)('shows a known Key Popped portal in a %s', async presentation => {
+it.each(['banner', 'toast'] as const)('shows a known Key popped portal in a %s', async presentation => {
   const page = mountPhase2({ configure: client => {
     client.getDungeonPortalType = vi.fn(async () => 1234);
     client.getObjectVisuals = vi.fn(async () => ({ client_fingerprint: 'a'.repeat(64), objects: [
@@ -47,7 +47,7 @@ it.each(['banner', 'toast'] as const)('shows a known Key Popped portal in a %s',
   } }); await flush();
   page.event({ alert_fired: alert({ kind: 'key_popped', presentation,
     details: { type: 'key_popped', dungeon: 'Synthetic dungeon' } }) }, '13'); await flush();
-  const banner = screen.getByRole('region', { name: 'Key Popped' });
+  const banner = screen.getByRole('region', { name: 'Key popped' });
   expect(banner.querySelector('img')?.getAttribute('src')).toContain('/mapObjects.png');
   expect(banner.querySelector('[data-fallback="true"]')).toBeNull();
   expect(banner.querySelector('a')?.textContent).toBe('View');
@@ -67,7 +67,7 @@ it.each(['unknown', 'missing catalog', 'missing sprite'] as const)('omits the po
   } }); await flush();
   page.event({ alert_fired: alert({ kind: 'key_popped', presentation: 'toast',
     details: { type: 'key_popped', dungeon: 'Unknown dungeon' } }) }, '13'); await flush();
-  const banner = screen.getByRole('region', { name: 'Key Popped' });
+  const banner = screen.getByRole('region', { name: 'Key popped' });
   expect(banner.querySelector('[role="img"], .portal-icon, .fallback')).toBeNull();
 });
 

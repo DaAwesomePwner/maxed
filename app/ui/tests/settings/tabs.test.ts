@@ -17,7 +17,7 @@ it('groups settings and preserves app and child drafts through tab switches', as
   const alerts = createAlertSession(f.client);
   await alerts.refresh();
   const view = render(Settings, { props: { client: f.client }, context: new Map([[SHELL_CONNECTION, { alerts, capture: readable(null) }]]) });
-  const channel = await screen.findByRole('combobox', { name: 'Update Channel' }) as HTMLSelectElement;
+  const channel = await screen.findByRole('combobox', { name: 'Update channel' }) as HTMLSelectElement;
   await fireEvent.change(channel, { target: { value: 'beta' } });
   await select('Data & history');
   const retention = screen.getByLabelText('Keep chat for (days)') as HTMLInputElement;
@@ -27,10 +27,10 @@ it('groups settings and preserves app and child drafts through tab switches', as
   const volume = screen.getByRole('slider', { name: /^Volume/ }) as HTMLInputElement;
   await waitFor(() => expect(volume.disabled).toBe(false));
   await fireEvent.input(volume, { target: { value: '37' } });
-  expect(screen.queryByRole('combobox', { name: 'Update Channel' })).toBeNull();
+  expect(screen.queryByRole('combobox', { name: 'Update channel' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Apply' }).getAttribute('aria-disabled')).toBe('false');
   await select('General');
-  expect(screen.getByRole('combobox', { name: 'Update Channel' })).toBe(channel);
+  expect(screen.getByRole('combobox', { name: 'Update channel' })).toBe(channel);
   expect(channel.value).toBe('beta');
   await select('Data & history');
   expect(screen.getByLabelText('Keep chat for (days)')).toBe(retention);
@@ -98,7 +98,7 @@ it('remembers a selected tab and tolerates unavailable storage and unknown tabs'
 it('follows a changed route tab without remounting drafts or overriding manual selection', async () => {
   const client = setupFixture().client;
   const view = render(Settings, { client, tab: 'general' });
-  const channel = await screen.findByRole('combobox', { name: 'Update Channel' }) as HTMLSelectElement;
+  const channel = await screen.findByRole('combobox', { name: 'Update channel' }) as HTMLSelectElement;
   await fireEvent.change(channel, { target: { value: 'beta' } });
   await view.rerender({ tab: 'data' });
   expect(screen.getByRole('tabpanel', { name: 'Data & history' })).toBeTruthy();
@@ -108,7 +108,7 @@ it('follows a changed route tab without remounting drafts or overriding manual s
   await select('General');
   await view.rerender({ enabled: false, features: { ...productionFeatures } });
   expect(screen.getByRole('tabpanel', { name: 'General' })).toBeTruthy();
-  expect(screen.getByRole('combobox', { name: 'Update Channel' })).toBe(channel);
+  expect(screen.getByRole('combobox', { name: 'Update channel' })).toBe(channel);
   expect(channel.value).toBe('beta');
   expect(client.updateSettings).not.toHaveBeenCalled();
 });

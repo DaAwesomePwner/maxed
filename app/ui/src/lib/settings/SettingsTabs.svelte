@@ -72,8 +72,10 @@
 
 <style>
   [role="tablist"] { display: flex; flex-wrap: wrap; gap: var(--space-1); min-width: 0; }
-  button { min-height: var(--target-min); padding: var(--space-1) var(--space-2); font: inherit; }
-  button[aria-selected="true"] { color: var(--violet-text); background: var(--surface-raised); border-color: var(--violet); }
+  /* Tabs: unselected is a quiet ghost; selected is a neutral surface step, never gold or violet. */
+  button { border-color: transparent; background: transparent; color: var(--text-secondary); }
+  button:hover:not([aria-selected="true"]) { color: var(--text-primary); }
+  button[aria-selected="true"], button[aria-selected="true"]:hover { color: var(--text-primary); background: var(--surface-raised); border-color: transparent; box-shadow: var(--highlight-top); }
   [role="tabpanel"] { min-width: 0; }
   [role="tabpanel"]:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 </style>

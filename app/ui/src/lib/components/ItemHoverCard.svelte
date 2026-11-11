@@ -83,11 +83,11 @@
 
 <style>
   .item-hover-card { position: fixed; z-index: 30; pointer-events: none; max-width: 15rem; box-sizing: border-box; padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--elevation-popover); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-normal); overflow-wrap: anywhere; }
-  .name { font-weight: var(--weight-semibold); }
-  .ut { color: var(--violet-text); }
-  .st { color: var(--bag-orange); }
+  .name { font-weight: var(--weight-medium); }
+  .ut { color: var(--tier-ut); }
+  .st { color: var(--tier-st); }
   .meta, .note { color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
-  .section { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border); }
+  .section { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--hairline); }
   .message { color: var(--text-muted); font-style: italic; }
   .enchant-row { display: grid; grid-template-columns: 6px minmax(0, 1fr); gap: var(--space-2); margin-top: var(--space-1); }
   .dot { width: 6px; height: 6px; margin-top: var(--space-2); border-radius: var(--radius-pill); background: var(--text-muted); }

@@ -53,18 +53,19 @@
 </div>
 
 <style>
-  .you-vs-party-chart { min-width: 0; font: 11px/1.4 var(--font-home); color: var(--text-secondary); }
-  .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 4px; }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  i { width: 14px; height: 2px; background: var(--series); border-radius: 1px; }
-  .you { --series: var(--gold); } .party { --series: var(--party-avg); }
+  .you-vs-party-chart { min-width: 0; color: var(--chart-label); font: var(--text-meta)/var(--leading-meta) var(--font-home); }
+  .legend { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-1); }
+  .legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
+  i { width: 12px; height: 2px; background: var(--series); }
+  .you { --series: var(--chart-you); } .party { --series: var(--chart-party); }
   .plot { position: relative; width: 100%; }
   svg { display: block; position: absolute; inset: 0; width: 100%; height: 100%; font-variant-numeric: tabular-nums; }
-  line { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
-  text { fill: var(--text-secondary); }
+  line { stroke: var(--chart-grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  text { fill: var(--chart-label); }
   path { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
     vector-effect: non-scaling-stroke; }
+  path.party { stroke-width: 1.5; }
   circle { fill: var(--series); stroke: var(--surface-panel); stroke-width: 2; vector-effect: non-scaling-stroke; }
   .empty { display: grid; place-items: center; height: 100%; }
-  p { margin: 4px 0 0; }
+  p { margin: var(--space-1) 0 0; }
 </style>

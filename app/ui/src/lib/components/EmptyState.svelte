@@ -13,8 +13,8 @@
 </section>
 
 <style>
-  section { padding: var(--space-8); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-panel); color: var(--text-primary); overflow-wrap: anywhere; }
-  h2 { margin: 0; font-size: var(--text-title); line-height: var(--leading-title); font-weight: var(--weight-semibold); }
+  section { padding: var(--space-5); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); color: var(--text-primary); overflow-wrap: anywhere; }
+  h2 { margin: 0; font-size: var(--text-title); line-height: var(--leading-title); font-weight: var(--weight-medium); }
   .action { margin-top: var(--space-4); }
-  [data-state="error"] { border-inline-start: 3px solid var(--danger); }
+  [data-state="error"] h2 { color: var(--danger); }
 </style>

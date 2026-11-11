@@ -63,7 +63,7 @@ function chain(): NonNullable<RunRecapView['chain']> {
 it('renders_banner_tiles_fights_loot_chips_party', () => {
   const page = render(RecapScreen, props());
   expect(page.getByRole('region', { name: 'Recap' }).classList.contains('recap-screen')).toBe(true);
-  expect(page.getByRole('heading', { name: 'Synthetic Sanctum · CLEARED' })).toBeTruthy();
+  expect(page.getByRole('heading', { name: 'Synthetic Sanctum · Cleared' })).toBeTruthy();
   expect(page.container.querySelector('[data-outcome="cleared"]')).not.toBeNull();
   expect(page.getByText('1:00')).toBeTruthy();
   expect(page.getByText(/Clear #38 · 3rd Synthetic Sanctum in a row tonight/)).toBeTruthy();
@@ -95,8 +95,8 @@ it('pb_chip_only_when_pb', async () => {
 it('best_dps_tag_on_matching_row', () => {
   const input = props(); input.view.fights.push({ ...input.view.fights[0], fightId: 'other', name: 'Synthetic Other', best: false });
   const page = render(RecapScreen, input);
-  expect(within(page.getByRole('row', { name: /Synthetic Guardian/ })).getByText('BEST DPS')).toBeTruthy();
-  expect(within(page.getByRole('row', { name: /Synthetic Other/ })).queryByText('BEST DPS')).toBeNull();
+  expect(within(page.getByRole('row', { name: /Synthetic Guardian/ })).getByText('Best DPS')).toBeTruthy();
+  expect(within(page.getByRole('row', { name: /Synthetic Other/ })).queryByText('Best DPS')).toBeNull();
   expect(page.getAllByText('Party average', { exact: true })).toHaveLength(1);
 });
 
@@ -299,7 +299,7 @@ it('home_replaces_saved_visit_placeholder_with_visit_recap', async () => {
   expect(read).toHaveBeenCalledOnce(); expect(page.container.querySelector('.recap-placeholder')).toBeNull();
   expect(page.queryByText('Saving visit…')).toBeNull(); expect(page.queryByText('Partial')).toBeNull();
   expect(page.container.querySelector('.visit-recap-screen')).not.toBeNull();
-  expect(page.getByRole('heading', { name: 'Synthetic Realm · REALM VISIT' })).toBeTruthy();
+  expect(page.getByRole('heading', { name: 'Synthetic Realm · Realm visit' })).toBeTruthy();
 });
 
 it.each(['left', 'unknown'] as const)('outcome_tone_and_unknown_metrics: %s', outcome => {
@@ -324,7 +324,7 @@ it('last_recap_loads_the_remembered_saved_run_after_route_and_area_changes', asy
   expect(page.container.querySelector('.dungeon-screen')).toBeTruthy();
   expect(page.queryByRole('region', { name: 'Recap ready' })).toBeNull();
   await fireEvent.click(page.getByRole('button', { name: 'Last recap: Synthetic Sanctum' })); await settle();
-  expect(page.getByRole('heading', { name: 'Synthetic Sanctum · CLEARED' })).toBeTruthy();
+  expect(page.getByRole('heading', { name: 'Synthetic Sanctum · Cleared' })).toBeTruthy();
   expect(read).toHaveBeenCalledExactlyOnceWith(snapshot.run!.id);
   await fireEvent.click(within(page.getByRole('region', { name: 'Recap' })).getByRole('button', { name: 'Back' })); await settle();
   expect(within(page.getByRole('main')).getByRole('heading', { name: next.dungeon })).toBeTruthy();

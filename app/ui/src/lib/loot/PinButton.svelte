@@ -40,9 +40,11 @@
 </div>
 
 <style>
-  .pin { display: grid; gap: 4px; }
-  .ctl { color: var(--gold); justify-self: start; }
-  .ctl[aria-pressed="true"] { border-color: var(--gold); }
-  .ctl.sq { width: 22px; height: 22px; }
-  p { margin: 0; color: var(--warning); font-size: 12px; }
+  .pin { display: grid; gap: var(--space-1); }
+  .ctl { color: var(--text-secondary); justify-self: start; }
+  /* A chased item is yours, so its star is gold; the button frame stays neutral. */
+  .ctl[aria-pressed="true"] { color: var(--gold); border-color: var(--text-secondary); }
+  .ctl.ghost[aria-pressed="true"] { border-color: transparent; }
+  .ctl.sq { width: 24px; height: 24px; }
+  p { margin: 0; color: var(--warning); font-size: var(--text-meta); }
 </style>

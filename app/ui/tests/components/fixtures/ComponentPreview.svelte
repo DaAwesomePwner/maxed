@@ -35,8 +35,8 @@
     <p>These are visual categories, not tier rankings.</p>
   </Card>
   <div class="flow">
-    {#each ['neutral', 'gold', 'violet', 'success', 'danger', 'warning', 'information'] as tone}
-      <Badge label={tone} tone={tone as 'neutral' | 'gold' | 'violet' | 'success' | 'danger' | 'warning' | 'information'} />
+    {#each ['neutral', 'gold', 'success', 'danger', 'warning', 'information'] as tone}
+      <Badge label={tone} tone={tone as 'neutral' | 'gold' | 'success' | 'danger' | 'warning' | 'information'} />
     {/each}
     <button type="button" disabled>Capture unavailable</button>
     <Tooltip id="preview-tooltip" text="Evidence remains visible when moving the pointer here. Escape dismisses it.">

@@ -90,15 +90,15 @@
   <h2>Presentation</h2>
   {#if $sessionStatus === 'retired'}<p>Disconnected</p>{/if}
   {#if $sessionStatus === 'failed'}
-    <p>Couldn't load alert preferences. Retry.</p>
-    <button class="ctl" type="button" disabled={!enabled || preferencesState.busy} onclick={() => { void editor?.refresh(); }}>Retry Preferences</button>
+    <p>Couldn’t load alert preferences</p>
+    <button class="ctl" type="button" disabled={!enabled || preferencesState.busy} onclick={() => { void editor?.refresh(); }}>Retry preferences</button>
   {/if}
   {#if preview || demo === true}<p>Preview</p>
   {:else if demo === null}<p class="note">Disconnected</p>{/if}
   <form onsubmit={(event) => { event.preventDefault(); void editor?.apply(); }}>
     {#each supportedKinds as kind}
-      <section class:key-pop={kind === 'key_popped'} aria-label={kind === 'key_popped' ? 'Key Popped' : undefined}>
-        {#if kind === 'key_popped'}<h3>Key Popped</h3>{/if}
+      <section class:key-pop={kind === 'key_popped'} aria-label={kind === 'key_popped' ? 'Key popped' : undefined}>
+        {#if kind === 'key_popped'}<h3>Key popped</h3>{/if}
         <div class="kind-row">
           <label for={`alert-${kind}`}>{alertKindLabels[kind]}</label>
           <select class="ctl" id={`alert-${kind}`} value={preferencesState.draft?.[kind] ?? ''} disabled={!editable || !preferencesState.draft || kind === 'flawless_run'} onchange={(event) => choose(kind, event.currentTarget.value)}>
@@ -117,13 +117,13 @@
     {/each}
     <DebugNote text={delivery?.flawless_unavailable ?? 'Damage-taken evidence unavailable.'} />
     <p class="note">Sound: {delivery === null ? '—' : delivery.sound_available ? 'Available' : 'Unavailable'}{#if !live}<DebugNote inline>Tests require live capture.</DebugNote>{/if}</p>
-    <label class="mute"><input type="checkbox" checked={preferencesState.draft?.muted ?? false} disabled={!editable || !preferencesState.draft} onchange={(event) => editor?.edit({ muted: event.currentTarget.checked })} /> Mute Sounds</label>
+    <label class="mute"><input type="checkbox" checked={preferencesState.draft?.muted ?? false} disabled={!editable || !preferencesState.draft} onchange={(event) => editor?.edit({ muted: event.currentTarget.checked })} /> Mute sounds</label>
     <label class="volume">Volume<input type="range" min="0" max="100" step="1" value={preferencesState.draft?.volume_percent ?? 0} disabled={!editable || !preferencesState.draft} oninput={(event) => editor?.edit({ volume_percent: Number(event.currentTarget.value) })} /><span>{preferencesState.draft ? `${preferencesState.draft.volume_percent}%` : 'Unavailable'}</span></label>
     <div class="actions"><button class="ctl" type="submit" disabled={!editable || !preferencesState.saved || !preferencesState.dirty || preferencesState.busy}>Save</button><button class="ctl" type="button" disabled={!preferencesState.dirty} onclick={() => editor?.revert()}>Revert</button></div>
-    <p class="note" role="status">{(preferencesState.message === 'Saved' ? 'Alert preferences saved' : preferencesState.message) || (preferencesState.dirty ? 'Unsaved Changes' : '')}</p>
+    <p class="note" role="status">{(preferencesState.message === 'Saved' ? 'Alert preferences saved' : preferencesState.message) || (preferencesState.dirty ? 'Unsaved changes' : '')}</p>
   </form>
-  <div class="windows-row"><label><input type="checkbox" disabled={!editable || !preferencesState.draft || (delivery?.permission !== 'granted' && !preferencesState.draft.windows_notifications)} checked={preferencesState.draft?.windows_notifications ?? false} onchange={(event) => editor?.edit({ windows_notifications: event.currentTarget.checked })} /> Windows Notifications</label><Badge label={delivery?.permission === 'granted' ? 'Available' : 'Unavailable'} /></div>
-  <button class="ctl" type="button" disabled={!testAvailable || !notificationTestKind || delivery?.permission !== 'granted' || !preferencesState.saved?.windows_notifications} onclick={() => { if (notificationTestKind) void test(notificationTestKind); }}>Test Notification</button>
+  <div class="windows-row"><label><input type="checkbox" disabled={!editable || !preferencesState.draft || (delivery?.permission !== 'granted' && !preferencesState.draft.windows_notifications)} checked={preferencesState.draft?.windows_notifications ?? false} onchange={(event) => editor?.edit({ windows_notifications: event.currentTarget.checked })} /> Windows notifications</label><Badge label={delivery?.permission === 'granted' ? 'Available' : 'Unavailable'} /></div>
+  <button class="ctl" type="button" disabled={!testAvailable || !notificationTestKind || delivery?.permission !== 'granted' || !preferencesState.saved?.windows_notifications} onclick={() => { if (notificationTestKind) void test(notificationTestKind); }}>Test notification</button>
   <details>
     <summary>Delivery</summary>
     <p>Sound: {delivery === null ? '—' : delivery.sound_available ? 'Available' : 'Unavailable'}.</p>
@@ -131,32 +131,31 @@
     <DebugNote text={live ? 'Tests use saved preferences and the native live-capture guard.' : 'Sound tests require live capture and an observed capture clock.'} />
     {#if delivery}<p>Permission: {permissionLabels[delivery.permission]}</p>{/if}
     <div class="actions">
-      {#if client}<button class="ctl" type="button" disabled={checking || !enabled} onclick={() => { void refreshDelivery(); }}>{delivery === null || demo === null ? 'Retry Delivery' : 'Refresh Delivery'}</button>{/if}
-      {#if session && $sessionStatus !== 'failed'}<button class="ctl" type="button" disabled={preferencesState.busy || !enabled || $sessionStatus === 'retired' || $sessionStatus === 'loading' || $sessionStatus === 'saving'} onclick={() => { void editor?.refresh(); }}>{preferencesState.saved === null ? 'Retry Preferences' : 'Refresh Preferences'}</button>{/if}
+      {#if client}<button class="ctl" type="button" disabled={checking || !enabled} onclick={() => { void refreshDelivery(); }}>{delivery === null || demo === null ? 'Retry delivery' : 'Refresh delivery'}</button>{/if}
+      {#if session && $sessionStatus !== 'failed'}<button class="ctl" type="button" disabled={preferencesState.busy || !enabled || $sessionStatus === 'retired' || $sessionStatus === 'loading' || $sessionStatus === 'saving'} onclick={() => { void editor?.refresh(); }}>{preferencesState.saved === null ? 'Retry preferences' : 'Refresh preferences'}</button>{/if}
     </div>
   </details>
   <p class="note" role="status">{deliveryMessage}</p>
 </section>
 
 <style>
-  .key-pop { border: 1px solid var(--border); border-radius: var(--radius-card); padding: var(--space-2); margin: var(--space-2) 0; }
-  h3 { font-size: var(--text-body); margin: 0; }
-  .preferences { padding: var(--space-3); background: var(--surface-panel); border: 1px solid var(--border); border-radius: var(--radius-card); min-width: 0; overflow-wrap: anywhere; }
-  h2 { font-size: var(--text-body); margin: 0 0 var(--space-2); }
+  .key-pop { border: 1px solid var(--hairline); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-2) 0; }
+  h3 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  .preferences { padding: var(--space-5); background: var(--surface-panel); border: 1px solid var(--hairline); border-radius: var(--radius-card); min-width: 0; overflow-wrap: anywhere; }
+  h2 { margin: 0 0 var(--space-2); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); color: var(--text-secondary); }
   p { margin: var(--space-1) 0; }
   .note, details { font-size: var(--text-label); color: var(--text-secondary); }
-  .kind-row { display: grid; grid-template-columns: minmax(5rem, 1fr) minmax(0, 8rem) auto; gap: var(--space-2); align-items: center; padding: var(--space-1) 0; border-bottom: 1px solid var(--border); }
+  .kind-row { display: grid; grid-template-columns: minmax(5rem, 1fr) minmax(0, 8rem) auto; gap: var(--space-2); align-items: center; min-height: var(--row-default); padding: var(--space-1) 0; border-bottom: 1px solid var(--hairline); }
   .kind-row label { font-size: var(--text-label); }
-  button, select { color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-control); font: inherit; min-height: var(--target-min); padding: var(--space-1) var(--space-2); min-width: 0; max-width: 100%; }
-  select { font-size: var(--text-label); }
-  button:disabled, select:disabled { color: var(--text-disabled); }
+  select { min-width: 0; max-width: 100%; }
   button:not(:disabled), select:not(:disabled), summary { cursor: pointer; }
-  .mute, .volume { display: flex; gap: var(--space-2); align-items: center; min-height: var(--target-min); }
+  .mute, .volume, .windows-row label { display: flex; gap: var(--space-2); align-items: center; min-height: var(--target-min); font-size: var(--text-label); }
   .windows-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--target-min); margin-top: var(--space-2); }
-  .volume { font-size: var(--text-label); }
   .volume input { flex: 1; min-width: 0; min-height: var(--target-min); }
-  input { accent-color: var(--violet); }
+  input { accent-color: var(--text-secondary); }
+  input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; }
   .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
-  summary { min-height: var(--target-min); align-content: center; color: var(--violet-text); }
+  summary { min-height: var(--target-min); align-content: center; color: var(--text-secondary); }
+  summary:hover { color: var(--text-primary); }
   @media (max-width: 440px) { .kind-row { grid-template-columns: 1fr minmax(0, 8rem); } .kind-row button { grid-column: 2; } }
 </style>

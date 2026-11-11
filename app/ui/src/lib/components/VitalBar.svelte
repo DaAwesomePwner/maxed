@@ -14,16 +14,18 @@
 </div>
 
 <style>
-  .vbar { position: relative; box-sizing: border-box; width: 100%; min-width: 0; height: 21px; border: 2px solid #111; border-radius: 2px; background: #4a4650; isolation: isolate; }
-  .fill { position: absolute; inset: 0 auto 0 0; z-index: -1; }
-  [data-kind="hp"] .fill { background: linear-gradient(#8fd451, #6cb534); }
-  [data-kind="mp"] .fill { background: linear-gradient(#7193ea, #5677d6); }
-  [data-kind="fame"] { background: #4a2608; }
-  [data-kind="fame"] .fill { background: linear-gradient(#f4a24c, #e8842c 60%, #c9681a); }
-  .label, .value { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; white-space: nowrap; font: 700 var(--rail-vital-size, 11px)/1.2 var(--font-ui); color: #fff; text-shadow: 1px 0 #000, -1px 0 #000, 0 1px #000, 0 -1px #000; }
-  .label { left: 3px; font-size: var(--rail-label-size, 10px); }
-  .value { left: 22px; right: 22px; justify-content: center; font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
-  [data-kind="fame"] .value { left: 30px; right: 30px; }
-  [data-tone="max"] .value { color: #ffe04a; }
-  [data-tone="boosted"] .value { color: #5cff5c; }
+  /* Flat game hues, darkened enough to carry light text without an outline. */
+  .vbar { --hue: var(--text-muted); position: relative; box-sizing: border-box; width: 100%; min-width: 0; height: 21px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-tag); background: var(--bar-track); isolation: isolate; overflow: hidden; }
+  [data-kind="hp"] { --hue: #6cb534; }
+  [data-kind="mp"] { --hue: #5677d6; }
+  [data-kind="fame"] { --hue: #e8842c; }
+  .fill { position: absolute; inset: 0 auto 0 0; z-index: -1; background: color-mix(in srgb, var(--hue) 70%, #000); }
+  .label, .value { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; white-space: nowrap; font: var(--weight-semibold) var(--rail-vital-size, var(--text-meta))/1.2 var(--font-ui); color: var(--text-primary); text-shadow: 0 1px 0 rgb(0 0 0 / 50%); }
+  .label { left: var(--space-1); font-size: var(--rail-label-size, var(--text-meta)); font-weight: var(--weight-medium); }
+  .value { left: 24px; right: 24px; justify-content: center; font-variant-numeric: tabular-nums; }
+  [data-kind="fame"] .value { left: 32px; right: 32px; }
+  [data-tone="max"] .value { color: var(--stat-maxed); }
+  [data-tone="boosted"] .value { color: var(--stat-boosted); }
+  /* Narrow rail: keep 12px figures and give the value the bar's free width, right-aligned. */
+  @media (max-width: 900px) { .value, [data-kind="fame"] .value { right: var(--space-1); justify-content: flex-end; } }
 </style>

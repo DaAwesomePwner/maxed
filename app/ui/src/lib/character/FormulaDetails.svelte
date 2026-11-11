@@ -42,8 +42,9 @@
 </details>
 
 <style>
-  details { margin-block: 12px; overflow-wrap: anywhere; }
-  summary { cursor: pointer; min-height: var(--target-min, 32px); align-content: center; color: var(--violet-text); }
-  p, ul { margin-block: 8px; }
-  ul { padding-left: 20px; }
+  details { margin-block: var(--space-3); overflow-wrap: anywhere; color: var(--text-secondary); font-size: var(--text-label); line-height: var(--leading-label); }
+  summary { cursor: pointer; min-height: var(--target-min); align-content: center; color: var(--text-secondary); }
+  summary:hover { color: var(--text-primary); }
+  p, ul { margin-block: var(--space-2); }
+  ul { padding-left: var(--space-5); }
 </style>

@@ -99,8 +99,8 @@ it('reused_object_ids_show_separate_inline_sources_without_arbitrary_identity', 
     getFight: async () => ready(fight({ players: [first, second] })), getPlayerBreakdown: async () => ready(null),
   } }); await flush();
   expect(main().getByText(/ambiguous|reused object/i)).toBeTruthy();
-  expect(main().getByRole('region', { name: 'First incarnation Sources' }).textContent).toContain('111');
-  expect(main().getByRole('region', { name: 'Second incarnation Sources' }).textContent).toContain('222');
+  expect(main().getByRole('region', { name: 'First incarnation sources' }).textContent).toContain('111');
+  expect(main().getByRole('region', { name: 'Second incarnation sources' }).textContent).toContain('222');
   expect(main().queryByRole('button', { name: /Retry/i })).toBeNull();
   expect(page.queries.getFight).toHaveBeenCalledTimes(1);
 });
@@ -114,8 +114,8 @@ it('ambiguous_entries_keep_separate_full_tables_and_restore_a_long_entry_row', a
     getFight: async () => ready(fight({ players: [first, second] })),
     getPlayerBreakdown: async () => ready(null),
   } }); await flush();
-  const longer = () => region('Long incarnation Sources');
-  const shorter = () => region('Short incarnation Sources');
+  const longer = () => region('Long incarnation sources');
+  const shorter = () => region('Short incarnation sources');
   const rows = longer().getAllByRole('row').slice(1);
   expect(rows).toHaveLength(7);
   expect(shorter().getAllByRole('row').slice(1)).toHaveLength(2);
@@ -172,7 +172,7 @@ it.each(['-0', '01', '-01', '+1', '-2147483649', '2147483648', '1.5', 'NaN', 'In
 
 it('nested_run_mismatch_never_reads_or_links_the_wrong_player', async () => {
   const page = mountRuns({ hash: '#/runs/wrong-run/fights/fight-1/players/7' }); await flush();
-  expect(main().getByText(/Player Unavailable/i)).toBeTruthy();
+  expect(main().getByText(/Player unavailable/i)).toBeTruthy();
   expect(page.queries.getPlayerBreakdown).not.toHaveBeenCalled();
   expect(main().queryByRole('link', { name: /Invented Archer/ })).toBeNull();
   expect(page.queries.getFight).toHaveBeenCalledWith('fight-1');

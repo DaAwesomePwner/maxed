@@ -48,21 +48,24 @@
   {/if}
 </aside>
 <style>
-  aside { padding: 0; margin: 0; border: 0; background: none; display: grid; align-content: start; gap: 10px; min-width: 0; }
-  .card { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface-panel); }
-  h3 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
-  .bag { padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); display: flex; gap: 10px; align-items: center; } .bag > div { min-width: 0; }
-  .white { color: var(--bag-white); filter: drop-shadow(0 0 3px #ffffff30); }
-  p { margin: 4px 0; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  ul { list-style: none; margin: 12px 0; padding: 0; }
-  li { padding: 5px 0; border-top: 1px solid var(--border); }
-  li a { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } small { display: block; color: var(--text-muted); font-size: 11px; }
-  .tile { border: 1px solid currentColor; border-radius: 4px; display: inline-flex; }
-  .taken { opacity: .45; } .ut { color: var(--violet-text); } .st { color: var(--bag-orange); }
+  aside { padding: 0; margin: 0; border: 0; background: none; display: grid; align-content: start; gap: var(--space-3); min-width: 0; }
+  .card { min-width: 0; padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--surface-panel); font-size: var(--text-caption); line-height: var(--leading-caption); }
+  h3 { margin: 0; font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); color: var(--text-primary); margin-bottom: var(--space-3); }
+  .bag { padding: var(--space-2); border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-raised); display: flex; gap: var(--space-3); align-items: center; } .bag > div { min-width: 0; }
+  .bag strong { font-weight: var(--weight-medium); }
+  .white { color: var(--bag-white); }
+  p { margin: var(--space-1) 0; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  ul { list-style: none; margin: var(--space-3) 0; padding: 0; }
+  li { padding: var(--space-1) 0; border-top: 1px solid var(--hairline); }
+  li a { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+  .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } small { display: block; color: var(--text-muted); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  .tile { border: 1px solid currentColor; border-radius: var(--radius-sprite); display: inline-flex; }
+  .taken { opacity: .45; } .ut { color: var(--tier-ut); } .st { color: var(--tier-st); }
   a { color: inherit; text-decoration: none; } a:focus-visible { outline: 2px solid var(--focus-ring); }
-  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; margin: 10px 0 0; } dt { color: var(--text-muted); } dd { text-align: right; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  dd small { display: inline; } .tag { margin-left: 4px; border: 1px solid var(--border); border-radius: 3px; padding: 0 3px; } .other-list { min-width: 0; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2); margin: var(--space-3) 0 0; } dt { color: var(--text-muted); } dd { text-align: right; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  dd a { color: var(--text-secondary); text-decoration: none; } dd a:hover, dd a:focus-visible { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+  /* Mirrors the shared Badge; kept as one element so the debug evidence title stays on the tag itself. */
+  .tag { display: inline-flex; align-items: center; box-sizing: border-box; min-height: 18px; padding: 0 var(--space-1); border: 1px solid var(--hairline-strong); border-radius: var(--radius-tag); color: var(--text-secondary); font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); margin-left: var(--space-1); vertical-align: middle; } .other-list { min-width: 0; }
   .other-list :global(.bag-list-root), .other-list :global(.bag-list) { height: auto; }
   .other-list :global(.row) { grid-template-columns: 24px minmax(0, 1fr) 100px; }
 </style>

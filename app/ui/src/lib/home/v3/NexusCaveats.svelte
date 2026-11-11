@@ -31,5 +31,5 @@
   </aside>
 {/if}
 <style>
-  .caveats { grid-column: 1 / -1; min-width: 0; font-size: 11px; overflow-wrap: anywhere; }
+  .caveats { grid-column: 1 / -1; min-width: 0; font-size: var(--text-meta); overflow-wrap: anywhere; }
 </style>

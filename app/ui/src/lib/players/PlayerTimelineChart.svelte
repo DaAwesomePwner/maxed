@@ -4,8 +4,8 @@
   import { formatClock, formatDps } from '../styles/format';
   import { timestampMs } from './player-view';
   import './players.css';
-  let { timeline, bands, unavailable, note = null, missingText = 'Not recorded for this run' }: {
-    note?: string | null; missingText?: string; timeline: PlayerTimeline | null; bands: { from: number; until: number; label: string }[]; unavailable?: 'legacy' | 'limit';
+  let { timeline, bands, unavailable, note = null, missingText = 'Not recorded for this run', local = false }: {
+    local?: boolean; note?: string | null; missingText?: string; timeline: PlayerTimeline | null; bands: { from: number; until: number; label: string }[]; unavailable?: 'legacy' | 'limit';
   } = $props();
   const uid = $props.id();
   const W = 800, H = 200;
@@ -55,7 +55,7 @@
 </script>
 <section class="player-card player-timeline" aria-label="DPS over time">
   <h3>DPS over time {#if timeline?.compacted && !limited && valid && rates.some(Number.isFinite)}<span class="player-card-sub">approx.</span>{/if}
-    <span class="player-chart-legend"><span class="player-line-key">Player</span><span class="party-line-key">Party average</span>{#if bands.length}<span class="boss-band-key">Boss fight</span>{/if}</span>
+    <span class="player-chart-legend"><span class="player-line-key" class:local>Player</span><span class="party-line-key">Party average</span>{#if bands.length}<span class="boss-band-key">Boss fight</span>{/if}</span>
   </h3>
   {#if note}<p class="player-muted"><small>{note}</small></p>{/if}
   {#if limited}<p class="player-muted">Timeline unavailable (resource limit)</p>
@@ -65,10 +65,9 @@
     <div class="player-chart">
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Player and party average DPS" aria-describedby={`${uid}-description`} onpointermove={inspect} onpointerleave={() => { hovered = null; }}>
         {#each shaded as band}<rect x={x(band.from)} y="0" width={x(band.until) - x(band.from)} height={H} fill="var(--text-primary)" fill-opacity=".04" stroke="var(--border)" stroke-opacity=".4"><title>{band.label}</title></rect>{/each}
-        <path d={`M0 ${H / 3}H${W}M0 ${H * 2 / 3}H${W}`} stroke="var(--border)" vector-effect="non-scaling-stroke" />
-        {#each playerPaths as path}<path d={`${path.line}V${H}H${path.start}Z`} fill="var(--gold)" opacity=".1" />{/each}
-        {#each averagePaths as path}<path d={path.line} fill="none" stroke="var(--violet)" stroke-width="1.5" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" />{/each}
-        {#each playerPaths as path}<path d={path.line} fill="none" stroke="var(--gold)" stroke-width="2" vector-effect="non-scaling-stroke" />{/each}
+        <path d={`M0 ${H / 3}H${W}M0 ${H * 2 / 3}H${W}`} stroke="var(--chart-grid)" vector-effect="non-scaling-stroke" />
+        {#each averagePaths as path}<path d={path.line} fill="none" stroke="var(--chart-party)" stroke-width="1.5" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" />{/each}
+        {#each playerPaths as path}<path d={path.line} fill="none" stroke={local ? 'var(--chart-you)' : 'var(--series-1)'} stroke-width="2" vector-effect="non-scaling-stroke" />{/each}
         {#if selectedAt !== null}<line x1={x(selectedAt)} x2={x(selectedAt)} y1="0" y2={H} stroke="var(--border-strong)" vector-effect="non-scaling-stroke" />{/if}
       </svg>
       {#if selected && hovered !== null && selectedAt !== null}
@@ -82,7 +81,7 @@
         onfocus={() => { hovered = 0; }} oninput={event => { hovered = Number(event.currentTarget.value); }} onblur={() => { hovered = null; }} />
     </div>
     <div class="player-chart-axis"><span>{formatClock(buckets[0].from) ?? '—'}</span><span>{formatClock(buckets.at(-1)!.until) ?? '—'}</span></div>
-    <p class="sr-only" id={`${uid}-description`}>Gold shows player damage per second by interval. Violet dashes show party damage per second divided by the active player count in each interval. Shading marks boss fights. A dash means unknown.{#if timeline.compacted} Bucket resolution is approximate.{/if}</p>
+    <p class="sr-only" id={`${uid}-description`}>The solid line shows player damage per second by interval. Gray dashes show party damage per second divided by the active player count in each interval. Shading marks boss fights. A dash means unknown.{#if timeline.compacted} Bucket resolution is approximate.{/if}</p>
     <table class="sr-only" aria-label="DPS by interval"><thead><tr><th scope="col">Time</th><th scope="col">Player DPS</th><th scope="col">Party average DPS</th></tr></thead>
       <tbody>{#each buckets as bucket, i}<tr><th scope="row">{formatClock(bucket.from) ?? '—'} to {formatClock(bucket.until) ?? '—'}</th><td>{formatDps(rates[i])}</td><td>{formatDps(averages[i])}</td></tr>{/each}</tbody>
     </table>

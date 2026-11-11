@@ -14,7 +14,7 @@ it('keeps chart caveats out of accessible text even in debug mode', async () => 
     points: [{ at: '1000000', character_id: 'a', fame: 42 }],
     period: 'Session', partial: true, sampled: true,
   });
-  const chartName = 'Fame over Time Session Fame, 41 to 43. Triangles mark 0 retained recent run starts in this time range.';
+  const chartName = 'Fame over time Session fame, 41 to 43. Triangles mark 0 retained recent run starts in this time range.';
   const chart = screen.getByRole('img', { name: chartName });
   expect(page.container.textContent).not.toMatch(/partial|sampled|baseline/i);
   setDebugMode(true); await tick();
@@ -32,7 +32,7 @@ it('keeps session values and short titles while gating history and coverage deta
   });
   expect(screen.getByRole('heading', { name: homeSnapshot().map! })).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Best bag' })).toBeTruthy();
-  expect(screen.getByText("Couldn't load. Retry.")).toBeTruthy();
+  expect(screen.getByText("Couldn't load history")).toBeTruthy();
   expect(screen.getByText('+25')).toBeTruthy();
   expect(page.container.querySelector('[data-debug-note]')).toBeNull();
   expect(page.container.textContent).not.toMatch(/partial|sampled|estimated|baseline/i);

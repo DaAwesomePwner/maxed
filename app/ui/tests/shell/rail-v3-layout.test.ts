@@ -21,18 +21,18 @@ it('uses mockup text sizes at full width and readable minimums in the narrow rai
   const [wide, narrow] = hero.split('@media (max-width: 900px)');
   const heroRule = (css: string) => css.match(/\.compact-hero\s*\{([^}]+)\}/)![1];
   for (const [property, full, compact] of [
-    ['--rail-vital-size', 12, 10],
-    ['--rail-label-size', 12, 10],
-    ['--rail-stat-size', 14, 11],
+    ['--rail-vital-size', 12, 12],
+    ['--rail-label-size', 12, 12],
+    ['--rail-stat-size', 14, 12],
   ] as const) {
     expect(heroRule(wide)).toContain(`${property}: ${full}px`);
     expect(heroRule(narrow)).toContain(`${property}: ${compact}px`);
   }
   const bar = read('components/VitalBar.svelte');
-  expect(bar).toContain('font: 700 var(--rail-vital-size,');
+  expect(bar).toContain('font: var(--weight-semibold) var(--rail-vital-size,');
   expect(bar).toContain('font-size: var(--rail-label-size,');
   const stats = read('shell/StatPanel.svelte');
-  expect(stats).toContain('font: 700 var(--rail-stat-size, 14px)');
+  expect(stats).toContain('font: var(--weight-medium) var(--rail-stat-size, 14px)');
   expect(stats).toMatch(/@media \(max-width: 900px\)\s*\{\s*\.stat-panel \.stat\s*\{\s*padding-inline: 1px/);
 });
 
@@ -44,23 +44,23 @@ it('sizes stat values to their grid when a classic scrollbar consumes rail width
   expect(grid).toContain('container-type: inline-size');
   expect(grid).toContain('container-name: rail-stats');
   // The 197px grid at 1100px also needs the first step for long boosted stats.
-  for (const [width, size] of [[212, 13], [184, 12], [172, 11]]) {
+  for (const [width, size] of [[212, 13], [184, 12]]) {
     const query = new RegExp(`@container rail-stats \\(max-width: ${width}px\\)\\s*\\{\\s*dd\\s*\\{([^}]+)\\}`);
     expect(stats.match(query)?.[1]).toContain(`font-size: min(var(--rail-stat-size, 14px), ${size}px)`);
   }
-  // The narrow rail's readable minimum is 11px; no container step goes below it.
-  expect(stats).not.toMatch(/14px\), (?:[1-9]|10)px\)/);
+  // The narrow rail's readable minimum is the 12px meta size; no container step goes below it.
+  expect(stats).not.toMatch(/14px\), (?:[1-9]|1[01])px\)/);
   const value = stats.match(/\n  dd\s*\{([^}]+)\}/)![1];
   expect(value).toContain('overflow-wrap: anywhere');
   expect(value).not.toContain('white-space: nowrap');
   expect(value).not.toMatch(/overflow:|text-overflow:|line-clamp:/);
 });
 
-it('puts exalt on its own wrapping line with an 11px minimum, including below vital meters', () => {
+it('puts exalt on its own wrapping line at the 12px meta size, including below vital meters', () => {
   const stats = read('shell/StatPanel.svelte');
   const exalt = stats.match(/\.exalt\s*\{([^}]+)\}/)![1];
   expect(exalt).toContain('display: block');
-  expect(exalt).toContain('font-size: max(11px, .85em)');
+  expect(exalt).toContain('font-size: var(--text-meta)');
   expect(exalt).toContain('overflow-wrap: anywhere');
   expect(exalt).not.toContain('white-space: nowrap');
   expect(stats).toMatch(/<VitalBar[^]*?\/>\s*\{#if exalt !== null\}\s*<span class="exalt vital-exalt"/);

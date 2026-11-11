@@ -8,8 +8,8 @@
   {/each}
 </dl>
 <style>
-  .loot-tally { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; gap: 8px; font-size: 12px; }
-  .loot-tally div { display: flex; gap: 5px; min-width: 0; align-items: baseline; }
-  .loot-tally dt { color: var(--text-secondary); }
-  .loot-tally dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .loot-tally { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; gap: var(--space-2); font-size: var(--text-meta); line-height: var(--leading-meta); }
+  .loot-tally div { display: flex; gap: var(--space-1); min-width: 0; align-items: baseline; }
+  .loot-tally dt { color: var(--text-muted); }
+  .loot-tally dd { margin: 0; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 </style>

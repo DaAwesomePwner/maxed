@@ -73,3 +73,27 @@ it('exposes per-bucket plotted DPS and unknown gaps without debug mode', async (
   expect(table().queryByRole('columnheader', { name: 'Party DPS' })).toBeNull();
   expect(cells(/1: 0:00 – 0:02/)).toEqual(['123']);
 });
+it('colors you gold, Party as the dashed party line and others in neutral steps without bag or rarity colors', () => {
+  const value = sample(15);
+  const rows = seriesForChart(value, ['party', ...value.players.map(row => row.player_id)]);
+  expect(rows[0]).toMatchObject({ id: 'p-0', color: 'var(--chart-you)', dash: null, local: true });
+  expect(rows[1]).toMatchObject({ id: 'party', color: 'var(--chart-party)', dash: '6 4' });
+  const steps = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)'];
+  const patterns = [null, '2 3', '8 3 2 3'];
+  rows.slice(2).forEach((row, index) => {
+    expect(row.color).toBe(steps[index % 4]);
+    expect(row.dash).toBe(patterns[Math.floor(index / 4) % 3]);
+  });
+  // The ninth other player no longer repeats the fifth's color and pattern.
+  expect([rows[6].color, rows[6].dash]).not.toEqual([rows[10].color, rows[10].dash]);
+  expect(new Set(rows.slice(2, 14).map(row => `${row.color}|${row.dash}`)).size).toBe(12);
+  for (const row of rows) expect(row.color).not.toMatch(/--(bag|rarity|gold|violet)|#/);
+});
+it('draws each legend key with its series stroke and dash pattern', () => {
+  const value = sample(7);
+  const view = render(FightSeriesChart, { fight: value, plotted: defaultFightPlotted(value), onToggle: vi.fn() });
+  const key = (name: string) => view.getByRole('button', { name }).querySelector('line');
+  expect(key('TestMage')?.getAttribute('stroke')).toBe('var(--chart-you)');
+  expect(key('Party')?.getAttribute('stroke-dasharray')).toBe('6 4');
+  expect(key('DemoAlly1')?.hasAttribute('stroke-dasharray')).toBe(false);
+});

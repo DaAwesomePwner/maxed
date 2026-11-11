@@ -153,7 +153,7 @@
   <HistoryStatus {history} />
   {#if history.message && history.message !== HISTORY_CATCH_UP && !/^(Refreshing|Loading)\b/.test(history.message)}<DebugNote text={history.message} />{/if}
   {#if retryShown}<button class="ctl" type="button" aria-disabled={!history.retryAvailable} onclick={() => { if (history.retryAvailable) controller?.retry(); }}>Retry</button>{/if}
-  {#if !client}<EmptyState state="unavailable" heading="No Players" description="" />
+  {#if !client}<EmptyState state="unavailable" heading="No players" description="" />
   {:else if view && coherent}
     <div class="area-home run-player-screen">
       <div class="crumbs"><Breadcrumbs items={[{ label: 'Runs', href: '#/runs' },
@@ -166,7 +166,7 @@
       <div class="scope"><ScopeTabs {tabs} /></div>
       <div class="kpis"><KpiStrip {cells} /></div>
       <div class="main-column">
-        <PlayerTimelineChart {timeline} {bands} unavailable={timeline === null ? 'legacy' : timeline.disabled ? 'limit' : undefined} />
+        <PlayerTimelineChart {timeline} {bands} local={isLocal} unavailable={timeline === null ? 'legacy' : timeline.disabled ? 'limit' : undefined} />
         {#if damagePlayer}<SourceBreakdown player={damagePlayer} label="Damage by item" {visuals} rowPrefix={`source:${playerId}`} showEstimates />
         {:else}<section class="player-card" aria-label="Damage by item"><h3>Damage by item</h3><p class="player-muted">No damage observed</p></section>{/if}
         <BossFightsTable rows={fights} hrefFor={fightPlayerHref} />
@@ -177,8 +177,8 @@
         <ActivityCard items={activity} />
       </aside>
       {#if $debugMode}
-        <details class="area-debug" aria-label="Damage Evidence">
-          <summary>Damage Evidence</summary>
+        <details class="area-debug" aria-label="Damage evidence">
+          <summary>Damage evidence</summary>
           <p>{view.partial ? 'Partial capture; observations are incomplete' : 'Complete observed capture'}.</p>
           <p>Detailed reconstruction counts were not saved for this run.</p>
           <p>Lifetime diagnostic counters do not describe this run's hits or missing damage. Known observed zero remains zero; missing attribution is unavailable.</p>
@@ -188,19 +188,19 @@
                 {source.reasons.length ? reasonNotes(source.reasons).join('; ') : 'Estimated damage; reconstruction reasons unavailable.'}</p>
             {/if}
           {/each}
-          <details><summary>Reconstruction Defaults</summary>
+          <details><summary>Reconstruction defaults</summary>
             <p>These are documented defaults. Saved source reasons describe the retained evidence.</p>
             <ul>{#each reconstructionDefaults as explanation}<li>{explanation}</li>{/each}</ul>
           </details>
         </details>
       {/if}
     </div>
-  {:else if view}<EmptyState state="unavailable" heading="Player Unavailable" description="" />
-  {:else if history.value !== null}<EmptyState heading="Player Not Found" description="">
+  {:else if view}<EmptyState state="unavailable" heading="Player unavailable" description="" />
+  {:else if history.value !== null}<EmptyState heading="Player not found" description="">
     {#snippet action()}<a href="#/runs">Runs</a>{/snippet}
   </EmptyState>
-  {:else if history.phase === 'error'}<EmptyState state="error" heading="Player Error" description="" />
-  {:else}<EmptyState state="loading" heading="Loading Player" description="" />{/if}
+  {:else if history.phase === 'error'}<EmptyState state="error" heading="Player error" description="" />
+  {:else}<EmptyState state="loading" heading="Loading player" description="" />{/if}
 </div>
 
 <style>
@@ -211,8 +211,8 @@
   .scope { grid-area: scope; min-width: 0; }
   .kpis { grid-area: kpis; min-width: 0; overflow-x: auto; }
   .kpis :global(.kpi-strip) { min-width: 800px; }
-  .main-column { grid-area: main; display: grid; gap: 10px; min-width: 0; }
-  .side-column { grid-area: side; display: grid; gap: 10px; min-width: 0; }
+  .main-column { grid-area: main; display: grid; gap: var(--space-3); min-width: 0; }
+  .side-column { grid-area: side; display: grid; gap: var(--space-3); min-width: 0; }
   @media (max-width: 900px) {
     .run-player-screen { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'crumbs' 'head' 'scope' 'kpis' 'main' 'side' 'debug'; }
   }

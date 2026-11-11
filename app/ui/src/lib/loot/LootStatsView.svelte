@@ -43,7 +43,7 @@
   });
   let portals = $state.raw<Map<string, number>>(new Map());
   let filter = $derived<LootStatsFilter>({ range });
-  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading loot stats.', retryAvailable: false });
+  let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading loot stats', retryAvailable: false });
   let controller = $state.raw<HistoryController>();
   let visuals = $state.raw<HomeVisuals>(emptyHomeVisuals());
   let visualController = $state.raw<ReturnType<typeof createHomeVisuals>>();
@@ -56,7 +56,7 @@
     const owner = activeClient;
     if (!owner) {
       controller = undefined;
-      history = { phase: 'loading', value: null, message: 'Loading loot stats.', retryAvailable: false };
+      history = { phase: 'loading', value: null, message: 'Loading loot stats', retryAvailable: false };
       return;
     }
     const instance = createRunHistory(owner, next => { history = next; }, { cache: historyCache });
@@ -123,7 +123,7 @@
   {:else}
     {#if history.message && history.message !== HISTORY_CATCH_UP && !/^(Refreshing|Loading)\b/.test(history.message)}<p>{history.message}</p>{/if}
     {#if history.retryAvailable && (history.phase === 'error' || history.phase === 'busy')}<button class="ctl" type="button" onclick={() => controller?.retry()}>Retry</button>{/if}
-    {#if history.phase === 'error'}<EmptyState state="error" heading="Couldn't load bags." description="" />
+    {#if history.phase === 'error'}<EmptyState state="error" heading="Couldn't load drop rates" description="" />
     {:else if history.phase === 'busy' && history.retryAvailable}<EmptyState state="unavailable" heading="Loot history busy" description="" />
     {:else if !stats}<EmptyState state="loading" heading="Loading loot stats" description="" />{/if}
     {#if stats}
@@ -135,11 +135,11 @@
 </div>
 
 <style>
-  .loot-stats { overflow-anchor: none; display: grid; gap: 10px; min-width: 0; }
+  .loot-stats { overflow-anchor: none; display: grid; gap: var(--space-3); min-width: 0; }
   p { margin: 0; color: var(--text-secondary); }
   button { justify-self: start; }
   .loot-stats :global([data-kpi="dry"] .value) { color: var(--estimated); }
-  .loot-stats :global([data-kpi="best"] .value) { font-size: 20px; overflow: hidden; text-overflow: ellipsis; }
+  .loot-stats :global([data-kpi="best"] .value) { font-size: var(--text-title); line-height: var(--leading-title); overflow: hidden; text-overflow: ellipsis; }
   .loot-stats :global(.kpi-strip .sub) { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
   @media (max-width: 1000px) { .loot-stats :global(.kpi-strip) { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }
 </style>

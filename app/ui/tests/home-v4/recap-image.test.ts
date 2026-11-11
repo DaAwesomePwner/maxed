@@ -13,7 +13,7 @@ it('blocks_follow_spec_order', () => {
   expect(model.blocks[1]).toMatchObject({ items: [
     { value: '#2 of 8' }, { value: '1,234' }, { value: '25% of damage' }, { value: '+12' },
   ] });
-  expect(model.blocks.at(-1)).toMatchObject({ text: 'Synthetic Hero · Synthetic Knight · Oct 13, 2026 · MAXED' });
+  expect(model.blocks.at(-1)).toMatchObject({ text: 'Synthetic Hero · Synthetic Knight · Oct 13, 2026 · Maxed' });
 });
 it('fights_and_loot_toggles_remove_blocks', () => {
   const full = recapImageModel(runView(), options, context);
@@ -33,7 +33,7 @@ it('unknowns_are_dashes', () => {
   const model = recapImageModel(view, options, { ...context, character: null, className: null, date: '—' });
   expect(model.blocks.find(block => block.kind === 'stats')!.items.map(item => item.value)).toEqual(['—', '—', '—', '—']);
   expect(model.blocks.find(block => block.kind === 'fights')!.rows[0]).toMatchObject({ name: '—', time: '—', dps: '—', vsParty: '—', spriteUrl: null });
-  expect(model.blocks.at(-1)).toMatchObject({ text: '— · — · — · MAXED' });
+  expect(model.blocks.at(-1)).toMatchObject({ text: '— · — · — · Maxed' });
 });
 it('visit_model_uses_event_rows', () => {
   const view = visitView();
@@ -41,7 +41,7 @@ it('visit_model_uses_event_rows', () => {
     label: 'Unrelated', value: String(i), detail: null, tone: null, partial: false, comparison: null }));
   const model = recapImageModel(view, options, context);
   expect(model.blocks.map(block => block.kind)).toEqual(['banner', 'stats', 'fights', 'loot', 'footer']);
-  expect(model.blocks[0]).toMatchObject({ outcome: 'REALM VISIT', clearTime: '2:00', pb: false });
+  expect(model.blocks[0]).toMatchObject({ outcome: 'Realm visit', clearTime: '2:00', pb: false });
   expect(model.blocks.find(block => block.kind === 'stats')!.items.map(item => item.value)).toEqual(['3', '2', '1', '0']);
   expect(model.blocks.find(block => block.kind === 'fights')!.rows).toEqual([
     { name: 'Synthetic object 30', time: '0:45', dps: '100', vsParty: '−25%', spriteUrl: sprite },
@@ -176,11 +176,11 @@ it('partially_displayed_bag_counts_as_more_and_uses_singular', async () => {
 });
 
 it('death_image_uses_elapsed_death_time', async () => {
-  const view = runView(); view.outcome = 'died'; view.outcomeLabel = 'DIED'; view.clearTime = null; view.pb = false;
+  const view = runView(); view.outcome = 'died'; view.outcomeLabel = 'Died'; view.clearTime = null; view.pb = false;
   view.died = { at: '75000000', elapsed: '1:14' };
   const model = recapImageModel(view, options, context);
   const { ctx } = canvas(); await renderRecapImage(model, vi.fn());
-  expect(ctx.fillText.mock.calls.some(call => call[0] === 'DIED AT 1:14')).toBe(true);
+  expect(ctx.fillText.mock.calls.some(call => call[0] === 'Died at 1:14')).toBe(true);
 });
 
 it('party_bars_use_numeric_share_and_omit_unknowns', async () => {

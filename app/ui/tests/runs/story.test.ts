@@ -79,7 +79,7 @@ it('shows saved clear on the timeline without claiming an ended boss was killed'
 });
 it.each(['missing', 'absent', 'legacy'] as const)('keeps missing run and death states explicit (%s)', async kind => {
   mountRuns({ hash: '#/runs/run-1/death', queries: { getRun: async () => ready(kind === 'missing' ? null : story({ run: run({ died_at: kind === 'legacy' ? '10000000' : null }) })) } }); await flush();
-  if (kind === 'missing') expect(main().getByText('Run Not Found')).toBeTruthy();
+  if (kind === 'missing') expect(main().getByText('Run not found')).toBeTruthy();
   else expect(main().getByRole('region', { name: 'Death' }).textContent).toMatch(kind === 'legacy' ? /Saved death timestamp/ : /No death observation is saved/);
   expect(main().queryByRole('button', { name: 'Retry' })).toBeNull();
 });

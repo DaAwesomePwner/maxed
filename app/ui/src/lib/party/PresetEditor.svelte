@@ -91,9 +91,14 @@
   <p role="status">{copied}</p>
 </section>
 <style>
-  h3 { font-size: 14px; margin-top: 0; } fieldset { border: 0; margin: 0; padding: 0; min-width: 0; } .field { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 1fr); align-items: center; gap: var(--space-2); margin: var(--space-2) 0; font-size: 12px; }
-  input:not([type=checkbox]), select { min-width: 0; width: 100%; box-sizing: border-box; min-height: var(--target-min); font: inherit; color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: 4px 6px; }
-  input { accent-color: var(--violet); } .check { display: flex; gap: 6px; align-items: center; min-height: var(--target-min); font-size: 12px; } .hint, small { font-size: 12px; color: var(--text-secondary); } small { display: block; padding: 4px; }
-  .dungeons { border: 1px solid var(--border); border-radius: var(--radius-control); padding: var(--space-2); margin: var(--space-3) 0; } legend { font-size: 12px; } .results { max-height: 180px; overflow-y: auto; }
+  h3 { margin: 0 0 var(--space-3); font-size: var(--text-label); line-height: var(--leading-label); font-weight: var(--weight-medium); }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .field { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 1fr); align-items: center; gap: var(--space-2); margin: var(--space-2) 0; color: var(--text-secondary); font-size: var(--text-caption); }
+  input:not([type=checkbox]), select { min-width: 0; width: 100%; box-sizing: border-box; }
+  input[type=checkbox] { width: 1rem; height: 1rem; margin: 0; accent-color: var(--text-secondary); }
+  .check { display: flex; gap: var(--space-2); align-items: center; min-height: var(--target-min); font-size: var(--text-caption); }
+  .hint, small { font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); } small { display: block; padding: var(--space-1); }
+  .dungeons { border: 1px solid var(--hairline); border-radius: var(--radius-control); padding: var(--space-3); margin: var(--space-3) 0; }
+  legend { padding: 0 var(--space-1); color: var(--text-secondary); font-size: var(--text-caption); } .results { max-height: 180px; overflow-y: auto; }
   .chips, .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); } .chips button { white-space: normal; text-align: left; } [role=status]:empty { display: none; }
 </style>

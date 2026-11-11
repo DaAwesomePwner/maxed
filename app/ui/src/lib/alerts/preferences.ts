@@ -35,7 +35,7 @@ export function keyPopFilterWithinLimit(preferences: Pick<AlertPreferences, 'key
 }
 
 export const loudnessLabels: Record<AlertLoudness, string> = {
-  off: 'Off', quiet_log_only: 'Log Only', toast: 'Toast', banner: 'Banner',
+  off: 'Off', quiet_log_only: 'Log only', toast: 'Toast', banner: 'Banner',
 };
 export const loudnessChoices: AlertLoudness[] = ['off', 'quiet_log_only', 'toast', 'banner'];
 export interface AlertPreferencesState {

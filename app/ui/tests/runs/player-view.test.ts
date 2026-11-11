@@ -164,7 +164,7 @@ it.each(['busy', 'error'] as const)('keeps the player visible when the strip is 
   } } }); await flush();
   expect(region('Damage by item').getAllByRole('row')).toHaveLength(2);
   expect(region('Boss fights').getByText('No boss fights observed')).toBeTruthy();
-  expect(main().queryByText('Player Error')).toBeNull();
+  expect(main().queryByText('Player error')).toBeNull();
 });
 it('waits for player identity before fetching the strip and retires a pending strip on navigation', async () => {
   const detail = deferred<HistoryReply<PlayerDamage | null>>();
@@ -221,7 +221,7 @@ it('waits for the strip before fetching context and retires pending context on n
   expect(page.queries.getPlayerContext).not.toHaveBeenCalled();
   pendingStrip.resolve(ready(strip)); await flush();
   expect(page.queries.getPlayerContext).toHaveBeenCalledWith('run-1', 'p1', '2000000', '8000000');
-  expect(main().getByText('Loading Player')).toBeTruthy();
+  expect(main().getByText('Loading player')).toBeTruthy();
   await follow('#/runs', within(screen.getByRole('complementary', { name: 'Character' })));
   pendingContext.resolve(ready(context())); await flush();
   expect(page.browser.adapter.hash).toBe('#/runs'); expect(main().queryByRole('region', { name: 'Gear' })).toBeNull();
@@ -229,8 +229,8 @@ it('waits for the strip before fetching context and retires pending context on n
 it('keeps ambiguous entries separate without context calls', async () => {
   const page = mountRuns({ hash, queries: { getFight: async () => ready(fight({ scope_id: 'run-1', players: [players[0],
     { ...players[0], player_id: 'second', name: 'Demo Second', sources: [source({ damage: 222 })] }] })) } }); await flush();
-  expect(region('DemoPlayer 1 Sources').getAllByRole('row')).toHaveLength(3);
-  expect(region('Demo Second Sources').getByText('222', { exact: true })).toBeTruthy();
+  expect(region('DemoPlayer 1 sources').getAllByRole('row')).toHaveLength(3);
+  expect(region('Demo Second sources').getByText('222', { exact: true })).toBeTruthy();
   expect(page.queries.getPlayerContext).not.toHaveBeenCalled(); expect(page.queries.getPlayerBreakdown).not.toHaveBeenCalled();
 });
 it('links available boss scope, disables absent contributions and highlights the current fight', async () => {
@@ -263,7 +263,7 @@ it.each(['busy', 'error', 'limit', 'superseded'] as const)('keeps fight data vis
   expect(region('Stats').getByText('Stats unavailable')).toBeTruthy();
   expect(region('DPS over time').getByText('Timeline unavailable')).toBeTruthy();
   expect(main().queryByText('Not recorded for this run')).toBeNull();
-  expect(main().queryByText('Player Error')).toBeNull();
+  expect(main().queryByText('Player error')).toBeNull();
 });
 it.each(['joined mid-fight', 'empty gear log'])('keeps gear observation unknown at fight start with %s', async mode => {
   mountRuns({ hash, queries: {
@@ -286,9 +286,9 @@ it('shows estimates normally and retains debug Damage Evidence', async () => {
   setDebugMode(true);
   const p = { ...players[0], sources: [source({ estimated: true, reasons: ['inferred-equipped-weapon'] })] };
   mountRuns({ hash, queries: { getFight: async () => ready(fight({ players: [p] })), getPlayerBreakdown: async () => ready(p) } }); await flush();
-  expect(main().getByLabelText('Damage Evidence')).toBeTruthy();
+  expect(main().getByLabelText('Damage evidence')).toBeTruthy();
   setDebugMode(false); await flush();
-  expect(main().queryByLabelText('Damage Evidence')).toBeNull();
+  expect(main().queryByLabelText('Damage evidence')).toBeNull();
   expect(region('Damage by item').getByText('est.')).toBeTruthy(); expect(region('Damage by item').getByText('Inferred from the equipped weapon')).toBeTruthy();
 });
 

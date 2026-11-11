@@ -40,13 +40,13 @@ it.each(['#/runs', '#/runs/run-1', '#/runs/run-1/fights/fight-1', '#/runs/run-1/
   let estimate: HTMLElement | null = null;
   if (hash === '#/runs/run-1/fights/fight-1') {
     // Fight v3 retains quiet uncertainty tags while hiding evidence prose.
-    estimate = screen.getByText('~100% est.', { selector: '.tag' });
-    expect(estimate.getAttribute('title')).toBe("Estimated share of this item's damage");
-    expect(screen.getByText('partial', { selector: '.tag' })).toBeTruthy();
+    estimate = screen.getByText('~100% est.', { selector: '.tag .badge' }).closest<HTMLElement>('.tag');
+    expect(estimate?.getAttribute('title')).toBe("Estimated share of this item's damage");
+    expect(screen.getByText('partial', { selector: '.tag .badge' })).toBeTruthy();
     expect(view.textContent).not.toMatch(/provisional|partial capture|reconstruction|observed|unverified|coverage/i);
   } else if (hash === '#/runs/run-1/fights/fight-1/players/7') {
     // Shared player cards retain missing-data copy and quiet estimate tags.
-    expect(screen.getByText('partial', { selector: '.player-tag' })).toBeTruthy();
+    expect(screen.getByText('partial', { selector: '.badge' })).toBeTruthy();
     expect(screen.getByText('est.')).toBeTruthy();
     expect(screen.getByText('No boss fights observed')).toBeTruthy();
     expect(view.textContent).not.toMatch(/estimated|provisional|partial capture|reconstruction|unverified|coverage/i);

@@ -52,8 +52,9 @@
 {#if weapon.dps_total.exclusions.length}<p>Excluded: {reasonText(weapon.dps_total.exclusions)}</p>{/if}
 <style>
   table { width: 100%; table-layout: fixed; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
-  thead th { font-size: 12px; color: var(--text-secondary); }
-  small { display: block; font-size: 11px; color: var(--text-secondary); }
-  p { overflow-wrap: anywhere; }
+  th, td { text-align: left; padding: var(--space-2) var(--space-1); border-bottom: 1px solid var(--hairline); vertical-align: top; overflow-wrap: anywhere; font-size: var(--text-label); line-height: var(--leading-label); }
+  tbody th { font-weight: var(--weight-medium); }
+  thead th { font-size: var(--text-meta); line-height: var(--leading-meta); font-weight: var(--weight-medium); color: var(--text-muted); border-bottom-color: var(--hairline-strong); }
+  small { display: block; font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--text-muted); }
+  p { overflow-wrap: anywhere; color: var(--text-secondary); font-size: var(--text-label); }
 </style>

@@ -107,11 +107,11 @@ it('v4 recap comes from a saved run and dismisses to the session', async () => {
   await screen.findByText('PB');
   await fireEvent.click(screen.getByRole('button', { name: 'View recap' }));
   const recap = screen.getByRole('region', { name: 'Recap' });
-  expect(within(recap).getByRole('heading', { name: /CLEARED/ })).toBeTruthy();
+  expect(within(recap).getByRole('heading', { name: /Cleared/ })).toBeTruthy();
   expect(within(recap).getByText('4:09')).toBeTruthy();
   expect(within(recap.querySelector('.recap-tiles') as HTMLElement).getByText('#2 of 8')).toBeTruthy();
   expect(recap.querySelectorAll('.recap-fights-card tbody tr')).toHaveLength(3);
-  expect(recap.textContent).toContain('BEST DPS');
+  expect(recap.textContent).toContain('Best DPS');
   expect(recap.textContent).toContain('3rd Synthetic Moonlit Sanctum in a row tonight');
   expect(recap.textContent).toContain('38');
   expect(recap.textContent).toContain('23');

@@ -67,7 +67,7 @@ it('renders the full run view with eight KPIs, activity, source totals, gear and
   expect(kpi('Damage').textContent).toContain('600'); expect(kpi('DPS').textContent).toContain('+50% vs avg');
   expect(kpi('Best hit').textContent).toContain('200'); expect(kpi('Active').textContent).toContain('20%');
   expect(main().getByText('partial')).toBeTruthy(); expect(main().getByText('You')).toBeTruthy();
-  expect(main().queryByLabelText('Damage Evidence')).toBeNull();
+  expect(main().queryByLabelText('Damage evidence')).toBeNull();
   expect(region('DPS over time').getByRole('img', { name: 'Player and party average DPS' })).toBeTruthy();
   expect(region('DPS over time').getAllByText('Demo Sentinel').length).toBeGreaterThan(0);
   expect(region('Damage by item').getByText('1 source · 600 total')).toBeTruthy();
@@ -153,26 +153,26 @@ it('re-reads for a matching run event after its saved watermark, preserving the 
 it('waits for history and retires a pending read on navigation', async () => {
   const pending = deferred<HistoryReply<RunPlayerView | null>>();
   const page = mountRuns({ hash, queries: { getRunPlayer: () => pending.promise } }); await flush();
-  expect(page.queries.getRunPlayer).toHaveBeenCalledTimes(1); expect(main().getByText('Loading Player')).toBeTruthy();
+  expect(page.queries.getRunPlayer).toHaveBeenCalledTimes(1); expect(main().getByText('Loading player')).toBeTruthy();
   await follow('#/runs', within(screen.getByRole('complementary', { name: 'Character' }))); pending.resolve(ready(view())); await flush();
   expect(page.browser.adapter.hash).toBe('#/runs'); expect(main().queryByRole('region', { name: 'Gear' })).toBeNull();
 });
 it('shows a missing player state for a null history result', async () => {
   mountRuns({ hash, queries: { getRunPlayer: async () => ready(null) } }); await flush();
-  expect(main().getByText('Player Not Found')).toBeTruthy();
+  expect(main().getByText('Player not found')).toBeTruthy();
 });
 it('retries a failed read through the history controller', async () => {
   let fail = true;
   mountRuns({ hash, queries: { getRunPlayer: async () => { if (fail) throw new Error('Synthetic read failure'); return ready(view()); } } }); await flush();
-  expect(main().getByText('Player Error')).toBeTruthy(); fail = false;
+  expect(main().getByText('Player error')).toBeTruthy(); fail = false;
   await fireEvent.click(main().getByRole('button', { name: 'Retry' })); await flush();
   expect(region('Gear').getByText('Item 1001')).toBeTruthy();
 });
 it('keeps Damage Evidence and source reasons in debug mode', async () => {
   setDebugMode(true);
   mountRuns({ hash, queries: { getRunPlayer: async () => ready(view()) } }); await flush();
-  const details = main().getByLabelText('Damage Evidence');
-  await fireEvent.click(within(details).getByText('Damage Evidence')); await flush();
+  const details = main().getByLabelText('Damage evidence');
+  await fireEvent.click(within(details).getByText('Damage evidence')); await flush();
   expect(within(details).getByText(/Inferred from the equipped weapon/)).toBeTruthy();
   expect(within(details).getByText(/Partial capture/)).toBeTruthy();
 });

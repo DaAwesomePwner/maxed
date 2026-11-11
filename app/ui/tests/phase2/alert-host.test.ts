@@ -110,13 +110,13 @@ it('phase2_alert_host_focus_policy_and_namespace', async () => {
   dismiss.focus(); await fireEvent.focusIn(dismiss); await advance(9000);
   expect(document.activeElement).toBe(dismiss);
   expect(screen.queryByText('Invented personal best')).toBeNull();
-  expect(screen.getAllByText('Personal Best').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Personal best').length).toBeGreaterThan(0);
   await fireEvent.click(dismiss); await flush();
   expect(document.activeElement?.textContent).toMatch(/Alerts/i);
   expect(screen.queryByText('Second invented moment')).toBeNull();
-  expect(screen.getAllByText('Personal Best').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Personal best').length).toBeGreaterThan(0);
   const announcements = [...document.querySelectorAll('[aria-live="polite"]')]
-    .filter(node => node.textContent?.includes('Personal Best'));
+    .filter(node => node.textContent?.includes('Personal best'));
   expect(announcements).toHaveLength(1); expect(liveRegions).toContain(announcements[0]);
   expect(page.permission).not.toHaveBeenCalled(); expect(page.sound).not.toHaveBeenCalled();
   for (const listener of page.listeners) expect(listener).toHaveBeenCalledTimes(1);

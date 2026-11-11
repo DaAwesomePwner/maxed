@@ -23,7 +23,8 @@
   const at = (drop: DropView) => /^\d+$/.test(drop.at) ? BigInt(drop.at) : -1n;
   let ranked = $derived(newestFirst ? [...rankedDrops(drops)].sort((a, b) => at(a) < at(b) ? 1 : at(a) > at(b) ? -1 : 0)
     : rankedDrops(drops));
-  let slots = $derived(Math.max(0, Math.floor((height + 3) / 39)));
+  // One 36px row plus the 4px gap per slot; keep in step with .row and .bag-rows below.
+  let slots = $derived(Math.max(0, Math.floor((height + 4) / 40)));
   let capacity = $derived(scroll ? ranked.length : ranked.length <= slots ? slots : Math.max(0, slots - 1));
   let hidden = $derived(ranked.slice(capacity));
   const visual = (type: number) => objectVisual(visuals.objects, type);
@@ -69,7 +70,7 @@
         </button>
       {/snippet}
     </Tooltip>
-  {:else if !ranked.length}<p>No Bags</p>{/if}
+  {:else if !ranked.length}<p>No bags</p>{/if}
 </div>
 <!-- Out of flow and outside the measured flex area; debug notes get no flex share. -->
 <div class="bag-list-notes">
@@ -81,19 +82,19 @@
 </div>
 </div>
 <style>
-  .row.selected { outline: 2px solid var(--gold); outline-offset: -2px; }
+  .row.selected { background: var(--surface-selected); box-shadow: inset 2px 0 0 var(--text-secondary), inset 0 0 0 1px var(--hairline-strong); }
   .bag-list-root { position: relative; flex: 1; height: 100%; min-height: 36px; min-width: 0; }
   .bag-list-root .bag-list-notes { position: absolute; top: 100%; left: 0; right: 0; z-index: 1; max-height: 160px; overflow: auto; background: var(--surface-panel); }
-  .bag-list-root .bag-list { flex: 1; height: 100%; min-height: 36px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-  .bag-list-root .bag-rows { min-height: 0; display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
-  .bag-list-root .row { flex: none; height: 36px; display: grid; grid-template-columns: 24px minmax(0, 1fr) 68px; align-items: center; gap: 6px; padding: 0 5px; border-radius: 5px; background: var(--surface-raised); }
-  .bag-list-root .items { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
-  .bag-list-root .item { display: inline-flex; flex: none; border-radius: 3px; border: 1px solid transparent; }
-  .bag-list-root [data-tier="UT"] { border-color: var(--violet-text); box-shadow: 0 0 6px #a77bff44; }
-  .bag-list-root [data-tier="ST"] { border-color: var(--bag-orange); box-shadow: 0 0 6px #ffb34744; }
-  .bag-list-root time { text-align: right; white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
-  .bag-list-root .more { font-size: 10px; padding: 1px 3px; border: 1px solid var(--border); border-radius: 4px; }
-  .bag-list-root .overflow { display: flex; gap: 5px; align-items: center; height: 36px; min-width: 0; max-width: 100%; overflow: hidden; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; white-space: nowrap; font-size: 11px; cursor: help; }
-  .bag-list-root .hidden-type { flex: none; display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; }
+  .bag-list-root .bag-list { flex: 1; height: 100%; min-height: 36px; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+  .bag-list-root .bag-rows { min-height: 0; display: flex; flex-direction: column; gap: var(--space-1); overflow: hidden; }
+  .bag-list-root .row { flex: none; height: 36px; display: grid; grid-template-columns: 24px minmax(0, 1fr) 68px; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); border-radius: var(--radius-sprite); background: var(--surface-raised); }
+  .bag-list-root .items { display: flex; align-items: center; gap: var(--space-1); min-width: 0; overflow: hidden; }
+  .bag-list-root .item { display: inline-flex; flex: none; border-radius: var(--radius-sprite); border: 1px solid transparent; }
+  .bag-list-root [data-tier="UT"] { border-color: var(--tier-ut); }
+  .bag-list-root [data-tier="ST"] { border-color: var(--tier-st); }
+  .bag-list-root time { text-align: right; white-space: nowrap; font-size: var(--text-meta); font-variant-numeric: tabular-nums; color: var(--text-muted); }
+  .bag-list-root .more { display: inline-flex; align-items: center; box-sizing: border-box; height: 18px; padding: 0 var(--space-1); border: 1px solid var(--hairline-strong); border-radius: var(--radius-tag); font-size: var(--text-meta); font-weight: var(--weight-medium); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .bag-list-root .overflow { display: flex; gap: var(--space-2); align-items: center; height: 36px; min-width: 0; max-width: 100%; overflow: hidden; padding: 0; border: 0; background: transparent; color: var(--text-secondary); font: inherit; white-space: nowrap; font-size: var(--text-meta); cursor: help; }
+  .bag-list-root .hidden-type { flex: none; display: inline-flex; align-items: center; gap: var(--space-1); font-variant-numeric: tabular-nums; }
   .bag-list-root p { margin: 0; color: var(--text-secondary); }
 </style>

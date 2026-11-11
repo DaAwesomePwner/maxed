@@ -16,7 +16,7 @@ it.each(characterVariants)('mounts real Character and its visible exclusions: %s
     'Character', 'Stats', 'Weapon', 'Regeneration', 'Exalt damage',
   ]);
   expect(main.getByText(/Excludes exalt damage/).closest('details')).toBeNull();
-  expect(main.getByText('Unavailable — deferred pending verification')).toBeTruthy();
+  expect(main.getByText('Not available yet; pending verification')).toBeTruthy();
   if (variant === 'empty') expect(main.getByText('No character observed. Start capture and enter the game.')).toBeTruthy();
   else expect(main.getByText('SynthAster')).toBeTruthy();
   if (variant === 'partial') {

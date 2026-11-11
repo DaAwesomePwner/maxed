@@ -107,7 +107,8 @@ it('sorts dungeon rows by White rate in either direction without reading again',
 });
 it('renders an error with Retry and recovers when the read succeeds', async () => {
   const page = mount({ error: true }); await flush();
-  expect(screen.getByRole('heading', { name: "Couldn't load bags." })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: "Couldn't load drop rates" })).toBeTruthy();
+  expect(screen.getAllByText("Couldn't load drop rates")).toHaveLength(1);
   expect(screen.queryByText('No bags yet')).toBeNull();
   expect(screen.getByRole('button', { name: 'Retry' }).hasAttribute('disabled')).toBe(false);
   page.read.mockResolvedValue({ status: 'ready', value: fixture() });
@@ -206,7 +207,7 @@ it.each(['error', 'busy'] as const)('does not show a retained empty state after 
   if (phase === 'error') page.read.mockRejectedValue(new Error('synthetic refresh failure'));
   else page.read.mockResolvedValue({ status: 'busy' });
   await fireEvent.click(screen.getByRole('button', { name: 'Today' })); await flush(); await vi.advanceTimersByTimeAsync(1000); await flush();
-  expect(screen.getByRole('heading', { name: phase === 'error' ? "Couldn't load bags." : 'Loot history busy' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: phase === 'error' ? "Couldn't load drop rates" : 'Loot history busy' })).toBeTruthy();
   expect(screen.queryByRole('heading', { name: /^No bags/ })).toBeNull();
 });
 
