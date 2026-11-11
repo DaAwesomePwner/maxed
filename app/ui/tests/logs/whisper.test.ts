@@ -17,7 +17,7 @@ const row = (n: number, name = 'Vexlin'): ChatRow => ({ hidden: false, message: 
   sender_kind: 'player', is_local: n % 2 === 0, stars: 72, supporter: false, text: `message ${n}`, truncated: false,
 } });
 const people: WhisperPartner[] = ['Vexlin', 'Quenby'].map((name, i) => ({ name, lines: 650, last_at: String((650 - i) * 1_000_000), last_text: `latest from ${name}`, last_direction: 'incoming', stars: 72 }));
-function mount(options: { partner?: string; savedPartner?: string; count?: number; stored?: boolean; people?: WhisperPartner[]; runId?: string } = {}) {
+function mount(options: { partner?: string; savedPartner?: string; count?: number; stored?: boolean; people?: WhisperPartner[]; runId?: string; settingsFailures?: number } = {}) {
   const preview = createLogsPreview('default'), client = preview.client;
   let hidden: string[] = [], count = options.count ?? 650;
   const order: string[] = [];
@@ -33,8 +33,8 @@ function mount(options: { partner?: string; savedPartner?: string; count?: numbe
     return { status: 'ready' as const, value: { rows, next: last > 100 ? { at: rows.at(-1)!.message.at, id: rows.at(-1)!.message.id } : null } };
   });
   client.listWhisperPartners = listWhisperPartners; client.listChat = listChat;
-  const querySettings = client.querySettings;
-  client.querySettings = async () => { const settings = await querySettings(); settings.chat.store.whisper = options.stored ?? true; return settings; };
+  const querySettings = client.querySettings; let failures = options.settingsFailures ?? 0;
+  client.querySettings = vi.fn(async () => { if (failures-- > 0) throw new Error('synthetic settings failure'); const settings = await querySettings(); settings.chat.store.whisper = options.stored ?? true; return settings; });
   client.updateChatSettings = vi.fn(async settings => { hidden = settings.hidden_senders; });
   const savedState = { ...emptyListState(), logsPosition: { ...defaultLogsPosition(), whisper: { query: '', showHidden: false, partner: options.savedPartner ?? null } } };
   const pane = document.createElement('main'); pane.innerHTML = '<h1 tabindex="-1">Logs</h1>'; document.body.append(pane);
@@ -291,4 +291,30 @@ it('keeps filters on a failed people read and retries before reading the thread'
   expect(view.listChat).not.toHaveBeenCalled();
   await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
   expect(view.listChat).toHaveBeenCalledTimes(1);
+});
+
+it('says the chat settings are unavailable when the read fails and restores them on Retry', async () => {
+  const view = mount({ stored: false, settingsFailures: 1 }); await flush();
+  const error = screen.getByText("Couldn't load chat settings");
+  expect(error.closest('[role="alert"]')?.querySelector('button')?.textContent).toBe('Retry');
+  expect(screen.queryByText(/kept \d+ days/)).toBeNull();
+  expect(view.client.querySettings).toHaveBeenCalledTimes(1);
+  const reads = view.listWhisperPartners.mock.calls.length;
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
+  expect(view.client.querySettings).toHaveBeenCalledTimes(2);
+  expect(screen.queryByText("Couldn't load chat settings")).toBeNull();
+  expect(view.listWhisperPartners).toHaveBeenCalledTimes(reads);
+  expect(screen.getByRole('button', { name: /turn on/i })).toBeTruthy();
+});
+it('keeps the settings error visible when Retry fails again', async () => {
+  const view = mount({ settingsFailures: 2 }); await flush();
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await flush();
+  expect(view.client.querySettings).toHaveBeenCalledTimes(2);
+  expect(screen.getByText("Couldn't load chat settings")).toBeTruthy();
+});
+it('shows no settings error when the first read succeeds', async () => {
+  const view = mount({ stored: false }); await flush();
+  expect(view.client.querySettings).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText("Couldn't load chat settings")).toBeNull();
+  expect(screen.getByRole('button', { name: /turn on/i })).toBeTruthy();
 });
