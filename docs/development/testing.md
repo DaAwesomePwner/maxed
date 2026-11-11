@@ -40,7 +40,7 @@ Separate targets preserve existing commands or process isolation:
 - `maxed-cli`: `parity`, `domain_parity`, `demo`, `realm_focus`, `realm_kill_evidence` (parity and fixture commands).
 - `maxed-store`: `loot_performance`, `chat_performance`, `d_perf`, `stats_performance`, `retention_performance` (ignored performance suites).
 - `maxed-assets`: `oracle`, `unity` (installed-client checks), `tile_memory` (process-wide allocator measurements).
-- `maxed-stream`: `reassembly` (already one suite; automatic discovery stays enabled).
+- `maxed-stream`: `reassembly`, `driver` and the seeded property suite `reassembly_property` (plain files, so automatic discovery stays enabled).
 
 Phase 1 retention evidence has its own explicit ignored target:
 

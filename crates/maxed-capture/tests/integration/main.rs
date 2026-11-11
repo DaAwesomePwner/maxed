@@ -8,3 +8,5 @@ mod parse;
 
 #[path = "../native_loss.rs"]
 mod native_loss;
+#[path = "../parse_fuzz.rs"]
+mod parse_fuzz;
