@@ -340,15 +340,19 @@ fn bucket(
         b.others_damage = b.others_damage.zip(others_damage).map(|(a, b)| a + b);
         b.others_presence = b.others_presence.zip(others_presence).map(|(a, b)| a + b);
     } else {
-        v.buckets.push(DamageBucket {
-            from: Timestamp(at),
-            until: Timestamp(at.saturating_add(1_000_000)),
-            total: c.source.damage,
-            local: local_known.then_some(if local { c.source.damage } else { 0. }),
-            others_damage,
-            others_presence,
-        });
-        v.buckets.sort_by_key(|b| b.from);
+        // Same position a stable sort after pushing would give: after any equal `from`.
+        let insert = v.buckets.partition_point(|b| b.from.0 <= at);
+        v.buckets.insert(
+            insert,
+            DamageBucket {
+                from: Timestamp(at),
+                until: Timestamp(at.saturating_add(1_000_000)),
+                total: c.source.damage,
+                local: local_known.then_some(if local { c.source.damage } else { 0. }),
+                others_damage,
+                others_presence,
+            },
+        );
     }
     if v.buckets.len() > 1800 {
         v.buckets = v
@@ -1180,6 +1184,58 @@ mod tests {
                 }
             }
             assert_eq!(v.buckets, expected, "{label}");
+        }
+    }
+
+    #[test]
+    fn out_of_order_hits_keep_view_buckets_and_series_cells_aligned() {
+        const S: u64 = 1_000_000;
+        let mut v = maxed_types::demo::demo_snapshot().fights.remove(0);
+        let source = v.players[0].sources[0].clone();
+        let mut template = v.players[0].clone();
+        template.is_local = false;
+        v.players.clear();
+        v.buckets.clear();
+        let mut series = crate::engine::series::Series::default();
+        let mut hit = |v: &mut FightView, id: usize, at: u64, damage: f64| {
+            let mut p = template.clone();
+            p.player_id = format!("synthetic-{id}");
+            p.object_id = id as i32;
+            let c = Contribution {
+                player: Some(p),
+                source: SourceDamage {
+                    damage,
+                    ..source.clone()
+                },
+                at: Timestamp(at),
+                active_at: Timestamp(at),
+            };
+            add(v, &mut series, &c);
+        };
+        hit(&mut v, 1, 20 * S, 1.);
+        hit(&mut v, 1, 21 * S, 2.);
+        hit(&mut v, 2, 21 * S, 3.);
+        // Before every bucket, into a gap, into an existing bucket, after the last.
+        hit(&mut v, 2, 10 * S, 5.);
+        hit(&mut v, 1, 15 * S, 7.);
+        hit(&mut v, 2, 21 * S + 7, 6.);
+        hit(&mut v, 1, 30 * S, 8.);
+        let froms: Vec<_> = v.buckets.iter().map(|b| b.from.0 / S).collect();
+        assert_eq!(froms, vec![10, 15, 20, 21, 30]);
+        assert_eq!(
+            v.buckets.iter().map(|b| b.total).collect::<Vec<_>>(),
+            vec![5., 7., 1., 11., 8.]
+        );
+        assert_eq!(series.buckets.len(), v.buckets.len());
+        let rows = series.project().unwrap();
+        assert_eq!(rows[0].points, vec![0., 7., 1., 2., 8.]);
+        assert_eq!(rows[1].points, vec![5., 0., 0., 9., 0.]);
+        for (i, b) in v.buckets.iter().enumerate() {
+            assert_eq!(rows.iter().map(|r| r.points[i]).sum::<f64>(), b.total);
+            assert_eq!(
+                (series.buckets[i].0, series.buckets[i].1),
+                (b.from, b.until)
+            );
         }
     }
 }

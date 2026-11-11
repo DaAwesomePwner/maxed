@@ -367,4 +367,36 @@ mod tests {
             assert!(!budget.disabled, "{label}");
         }
     }
+    #[test]
+    fn out_of_order_insert_keeps_existing_cells_with_their_buckets() {
+        let (a, b) = (player(1), player(2));
+        let mut s = Series::default();
+        s.add(Timestamp(20 * S), Some(&a), 1.);
+        s.add(Timestamp(21 * S), Some(&a), 2.);
+        s.add(Timestamp(21 * S), Some(&b), 3.);
+        s.add(Timestamp(22 * S), Some(&b), 4.);
+        // Before every bucket, then into a gap, then into an existing bucket.
+        s.add(Timestamp(10 * S), Some(&b), 5.);
+        s.add(Timestamp(21 * S + 7), Some(&b), 6.);
+        s.add(Timestamp(15 * S), Some(&a), 7.);
+        assert_eq!(
+            s.buckets,
+            vec![
+                secs(10..11),
+                secs(15..16),
+                secs(20..21),
+                secs(21..22),
+                secs(22..23)
+            ]
+        );
+        let rows = s.project().unwrap();
+        assert_eq!(rows[0].player_id, "synthetic-1");
+        assert_eq!(rows[0].points, vec![0., 7., 1., 2., 0.]);
+        assert_eq!(rows[1].player_id, "synthetic-2");
+        assert_eq!(rows[1].points, vec![5., 0., 0., 9., 4.]);
+        assert_eq!(
+            s.bucket_totals().iter().map(|t| t.0).collect::<Vec<_>>(),
+            vec![5., 7., 1., 11., 4.]
+        );
+    }
 }
