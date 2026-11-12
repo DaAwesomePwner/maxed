@@ -977,6 +977,16 @@ async fn update_settings(
         .map_err(|_| "Settings worker failed.")?
 }
 #[tauri::command]
+async fn update_recap_image_settings(
+    settings: maxed_types::RecapImageSettings,
+    setup: tauri::State<'_, Arc<SetupService>>,
+) -> Result<(), String> {
+    let setup = setup.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || setup.settings.put_recap_image(settings))
+        .await
+        .map_err(|_| "Settings worker failed.")?
+}
+#[tauri::command]
 async fn search_items(
     query: String,
     limit: u8,
@@ -1456,6 +1466,7 @@ pub fn run() {
             set_assets_path,
             get_settings,
             update_settings,
+            update_recap_image_settings,
             search_items,
             set_chase_list,
             get_object_visuals,

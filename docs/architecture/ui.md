@@ -155,7 +155,9 @@ Journey, Progress and saved recap routes remain later work.
 
 Both saved screens offer **Copy recap image**. An explicit click draws a
 dedicated canvas card and writes a local PNG; it does not capture the DOM or
-upload anything. Names, loot and fights default on and are saved in Settings.
+upload anything. Names, loot and fights default on and save through the
+dedicated `update_recap_image_settings` command, which patches only those
+options; general settings saves cannot overwrite them.
 Unknown values stay “—”; failed sprites fall back to names, and a failed write
 says “Couldn't copy the image”. No raster work runs on mount or a live update.
 The isolated [clipboard spike](../development/recap-clipboard-spike.md) verified

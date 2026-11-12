@@ -29,8 +29,8 @@ export function createRecordingSession(client: Client, preview = false) {
   const releaseVisibility = observePresentationVisibility(visibilityChanged);
   async function refresh() {
     if (disposed) return;
-    if (!visible()) { pendingRefresh = true; return; }
-    if (busy) return;
+    // A request while hidden or mid-read is coalesced into one trailing refresh.
+    if (!visible() || busy) { pendingRefresh = true; return; }
     pendingRefresh = false;
     if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
     busy = true;

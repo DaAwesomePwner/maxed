@@ -6,7 +6,7 @@ afterEach(() => setDebugMode(false));
 import type { CaptureState } from '../../src/lib/bindings/CaptureState';
 import type { LiveSnapshot } from '../../src/lib/bindings/LiveSnapshot';
 import type { ObjectVisual } from '../../src/lib/bindings/ObjectVisual';
-import { captureLabels, railView, selectBossFight } from '../../src/lib/shell/rail';
+import { captureLabels, characterRailView, focusRailView, railView, selectBossFight } from '../../src/lib/shell/rail';
 import HeroCard from '../../src/lib/shell/HeroCard.svelte';
 import LiveStatusCard from '../../src/lib/shell/LiveStatusCard.svelte';
 import fixture from '../fixtures/t0-live';
@@ -88,6 +88,43 @@ describe('rail projection', () => {
   it('uses engine microseconds and freezes an ended run', () => {
     const snapshot = known(); snapshot.run!.ended = '4000000'; snapshot.at = '99999999999999999';
     expect(railView(snapshot).elapsed).toBe('0:03');
+  });
+});
+
+describe('rail projection split', () => {
+  // Counts reads of snapshot.fights, the input every fight-focus selection starts from.
+  const counted = (snapshot: LiveSnapshot) => {
+    const reads = { count: 0 }, fights = snapshot.fights;
+    const wrapped = Object.create(null) as LiveSnapshot;
+    for (const key of Object.keys(snapshot)) {
+      if (key !== 'fights') Object.defineProperty(wrapped, key, { value: snapshot[key as keyof LiveSnapshot], enumerable: true });
+    }
+    Object.defineProperty(wrapped, 'fights', { enumerable: true, get: () => { reads.count++; return fights; } });
+    return { snapshot: wrapped, reads };
+  };
+  it('selects fight focus once per snapshot: the character projection selects nothing', () => {
+    const { snapshot, reads } = counted(known());
+    const character = characterRailView(snapshot, [], false);
+    expect(reads.count).toBe(0);
+    expect(character).not.toHaveProperty('fight');
+    expect(character).not.toHaveProperty('wholeRun');
+    const focus = focusRailView(character, null, null);
+    expect(reads.count).toBe(1);
+    expect(focus.fight?.id).toBe(known().fights[0].id);
+  });
+  it('counts a fight toward stale in the focus projection only', () => {
+    const base = known(), fight = { ...base.fights[0], run_id: null, last_hit: String(BigInt(base.at) - 1000n), ended: null, kill: null };
+    const snapshot: LiveSnapshot = { ...base, area_kind: 'realm', run: null, run_totals: null, map: null, character: null, fights: [fight] };
+    const character = characterRailView(snapshot, [], true), focus = focusRailView(character);
+    expect(focus.fight?.id).toBe(fight.id); // the case under test: a fight and nothing else
+    expect(focus.stale).toBe(true);
+    expect(character.stale).toBe(false);
+    expect(railView(snapshot, [], true).stale).toBe(true);
+    expect(focusRailView(characterRailView(snapshot, [], false)).stale).toBe(false);
+  });
+  it('keeps the merged railView identical to its two projections', () => {
+    const snapshot = known(), character = characterRailView(snapshot, [], true);
+    expect(railView(snapshot, [], true)).toEqual({ ...character, ...focusRailView(character) });
   });
 });
 

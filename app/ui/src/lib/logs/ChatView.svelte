@@ -6,7 +6,7 @@
   import { serializeChatReads } from './chat-reader';
   import ChatStorageOff from './ChatStorageOff.svelte';
   import { presentChat } from './spam';
-  import { hideChatSender } from './chat-settings';
+  import { hideChatSender, SETTINGS_UNAVAILABLE, spamFilterFor } from './chat-settings';
   import { validHiddenTerm } from './validation';
   import { getContext, untrack } from 'svelte';
   import type { Client } from '../bridge/client';
@@ -78,7 +78,10 @@
   let selectedSender = $derived(selected?.message.sender ?? null);
   let settings = $state.raw<ChatSettings | null>(null);
   let spamSaving = $state(false);
-  let shown = $derived(presentChat(page?.rows ?? [], settings?.filter_spam ?? true));
+  let settingsFailed = $state(false), settingsRevision = $state(0), settingsClient: typeof client;
+  let settingsUnavailable = $derived(settingsFailed && settings === null);
+  let spamFilter = $derived(spamFilterFor(settings, settingsUnavailable));
+  let shown = $derived(presentChat(page?.rows ?? [], spamFilter ?? false));
   async function toggleSpam() {
     if (!client || !settings || spamSaving) return;
     spamSaving = true; hideError = '';
@@ -97,9 +100,19 @@
   let storageChannel = $derived(channel === 'all' ? null : channel);
   let storageOff = $derived(storageChannel !== null && settings?.store[storageChannel] === false);
   $effect(() => {
-    const owner = reader;
+    const owner = reader, source = client;
+    void settingsRevision;
     let current = true;
-    if (owner) void owner.querySettings().then(value => { if (current) settings = value.chat; }).catch(() => {});
+    untrack(() => {
+      // Settings belong to one client: a different client must not keep presenting another's settings or error,
+      // but disabling and re-enabling the same client keeps them while the re-read runs. Retry keeps the error
+      // (and the focused Retry control) mounted until its read resolves.
+      if (source !== settingsClient) { settingsClient = source; settings = null; settingsFailed = false; }
+    });
+    if (owner) {
+      void owner.querySettings().then(value => { if (current) { settings = value.chat; settingsFailed = false; } })
+        .catch(() => { if (current) settingsFailed = true; });
+    }
     return () => { current = false; };
   });
   $effect(() => {
@@ -208,12 +221,13 @@
   <HistoryStatus {history} />
   <p class="sr-only" role="status" aria-live="polite">{list.missingRow}</p>
   <ChatToolbar {channel} {runId} {filter} rows={knownRows} {partners} hiddenCount={page?.rows.filter(row => row.hidden).length ?? 0} latestAt={page?.rows[0]?.message.at ?? null} onApply={apply} onOpen={() => pickerOpened = true} />
-  <div class="spam-controls"><label><input type="checkbox" checked={settings?.filter_spam ?? true} disabled={!settings || spamSaving} onchange={event => { event.currentTarget.checked = settings?.filter_spam ?? true; void toggleSpam(); }} /> Filter spam</label>
+  <div class="spam-controls"><label><input type="checkbox" checked={spamFilter ?? false} indeterminate={settingsUnavailable} aria-describedby={settingsUnavailable ? 'chat-settings-reason' : undefined} disabled={!settings || spamSaving} onchange={event => { event.currentTarget.checked = spamFilter ?? false; void toggleSpam(); }} /> Filter spam</label>{#if settingsUnavailable}<span id="chat-settings-reason" class="sr-only">Chat settings are unavailable, so your spam filter choice is unknown.</span>{/if}
     {#if shown.hidden}<span role="status" title="Spam ads and repeated public messages hidden on this page. Turn off Filter spam to show them.">{shown.hidden} hidden</span>{/if}
   </div>
   {#if runId && client && firstReady}<RunScopeChip {runId} client={reader ?? client} removeHref={routeHref({ kind: 'logs', view: 'chat', channel })} links={[{ label: 'Events in this run ›', href: routeHref({ kind: 'logs', view: 'events', channel: 'all', runId }) }, { label: 'Run summary ›', href: routeHref({ kind: 'run', id: runId }) }]} />{/if}
   {#if validation}<p role="alert">{validation}</p>{/if}
   {#if hideError}<p role="alert">{hideError}</p>{/if}
+  {#if settingsUnavailable}<ErrorBar message={SETTINGS_UNAVAILABLE} onRetry={() => settingsRevision++} />{/if}
   {#if history.phase === 'error'}<ErrorBar message="Couldn't load chat. Your filters are kept." onRetry={() => controller?.retry()} />{/if}
   <div class="layout">
     <section class="list">

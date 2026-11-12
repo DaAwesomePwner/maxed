@@ -4,11 +4,11 @@
   import { debugMode } from '../debug/debug';
   import { untrack } from 'svelte';
   import type { CaptureStatus } from '../bindings/CaptureStatus';
-  import { captureGuidance, captureLabels, type RailView } from './rail';
+  import { captureGuidance, captureLabels, type FocusRailView } from './rail';
   import { liveDuration } from './live-duration';
   import { formatDps } from '../styles/format';
   let { view, capture, busy, error, preview = false, onStart, onStop, onRetry }: {
-    view: RailView; capture: CaptureStatus | null; busy: boolean; error: string; preview?: boolean;
+    view: FocusRailView; capture: CaptureStatus | null; busy: boolean; error: string; preview?: boolean;
     onStart: () => void; onStop: () => void; onRetry: () => void;
   } = $props();
   let active = $derived(capture !== null && ['WaitingForGame', 'Live', 'Recovering'].includes(capture.state));

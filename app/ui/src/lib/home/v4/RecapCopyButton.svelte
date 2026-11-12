@@ -9,7 +9,7 @@
   import { copyPng } from './clipboard';
 
   let { view, settings, visuals, context }: {
-    view: RunRecapView | VisitRecapView; settings: Pick<Client, 'querySettings' | 'updateSettings'>; visuals: HomeVisuals;
+    view: RunRecapView | VisitRecapView; settings: Pick<Client, 'querySettings' | 'updateRecapImageSettings'>; visuals: HomeVisuals;
     context: Pick<RecapImageContext, 'character' | 'className' | 'date'>;
   } = $props();
   let options = $state({ ...defaultRecapImageSettings });
@@ -44,7 +44,7 @@
     try {
       const current = await settings.querySettings();
       const next = { ...current.recap_image, [key]: checked };
-      await settings.updateSettings({ ...current, recap_image: next });
+      await settings.updateRecapImageSettings(next);
       if (!disposed) options = next;
     } catch {
       options = { ...options };

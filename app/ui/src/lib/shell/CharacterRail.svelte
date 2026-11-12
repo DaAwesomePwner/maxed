@@ -6,12 +6,12 @@
   import { readable } from 'svelte/store';
   import { SHELL_CONNECTION, type ShellConnection } from './context';
   import { emptyHomeLiveWindow } from '../home/v2/live';
-  import { railView, type RailView } from './rail';
+  import { focusRailView, type CharacterRailView } from './rail';
   import type { CaptureStatus } from '../bindings/CaptureStatus';
   import type { SpriteRef } from '../bindings/SpriteRef';
   import type { Features, Route } from '../navigation/routes';
   let { view, capture, route, features, preview, busy, error, snapshotError = '', missingCatalog = false, onStart, onStop, onRetry, resolveSpriteUrl, canBack = false, canForward = false, back = () => {}, forward = () => {}, statusExtra }: {
-    view: RailView; capture: CaptureStatus | null; route: Route; features: Features; preview: boolean;
+    view: CharacterRailView; capture: CaptureStatus | null; route: Route; features: Features; preview: boolean;
     busy: boolean; error: string; onStart: () => void; onStop: () => void; onRetry: () => void;
     resolveSpriteUrl?: (sprite: SpriteRef) => string | null;
     snapshotError?: string;
@@ -20,8 +20,7 @@
   } = $props();
   const connection = getContext<ShellConnection | undefined>(SHELL_CONNECTION);
   const homeWindow = connection?.homeWindow ?? readable(emptyHomeLiveWindow());
-  let focusedView = $derived(railView(view.snapshot, view.visuals, view.stale,
-    $homeWindow.focusedFightId ?? null, $homeWindow));
+  let focusedView = $derived(focusRailView(view, $homeWindow.focusedFightId ?? null, $homeWindow));
   let section = $derived(route.kind.startsWith('party-') ? 'party' : ['run', 'fight', 'player', 'run-player'].includes(route.kind) ? 'runs' : route.kind === 'item' ? 'loot' : route.kind);
 </script>
 

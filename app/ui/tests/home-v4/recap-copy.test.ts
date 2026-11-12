@@ -16,8 +16,13 @@ function clipboard() {
   vi.stubGlobal('navigator', { clipboard: { write } });
   return write;
 }
-function mount() {
+function recapFixture() {
   const f = setupFixture();
+  f.client.updateRecapImageSettings = vi.fn(async next => { f.setSettings({ recap_image: structuredClone(next) }); });
+  return f;
+}
+function mount() {
+  const f = recapFixture();
   const props = { view: runView(), settings: f.client, visuals: emptyHomeVisuals(), context };
   return { f, props, page: render(RecapCopyButton, { props }) };
 }
@@ -82,18 +87,36 @@ it('toggles_persist_through_settings', async () => {
   f.setSettings({ hardware_acceleration: true, recap_image: { names: true, loot: false, fights: true } });
   await fireEvent.click(page.getByRole('checkbox', { name: 'Names' })); await settle();
   expect(f.client.querySettings).toHaveBeenCalledTimes(2);
-  expect(f.client.updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ hardware_acceleration: true,
-    recap_image: { names: false, loot: false, fights: true } }));
+  expect(f.client.updateRecapImageSettings).toHaveBeenLastCalledWith({ names: false, loot: false, fights: true });
+  expect(f.client.updateSettings).not.toHaveBeenCalled();
+  expect(await f.client.querySettings()).toMatchObject({ hardware_acceleration: true,
+    recap_image: { names: false, loot: false, fights: true } });
   expect((page.getByRole('checkbox', { name: 'Loot' }) as HTMLInputElement).checked).toBe(false);
 });
 it('failed_initial_read_defaults_true_and_failed_save_keeps_preferences', async () => {
-  const f = setupFixture(); vi.mocked(f.client.querySettings).mockRejectedValue(new Error('Synthetic unavailable'));
+  const f = recapFixture(); vi.mocked(f.client.querySettings).mockRejectedValue(new Error('Synthetic unavailable'));
   const page = render(RecapCopyButton, { props: { view: runView(), settings: f.client, visuals: emptyHomeVisuals(), context } });
   await settle(); await fireEvent.click(page.getByRole('button', { name: 'Recap image options' }));
   expect(page.getAllByRole('checkbox').every(input => (input as HTMLInputElement).checked)).toBe(true);
   await fireEvent.click(page.getByRole('checkbox', { name: 'Names' })); await settle();
+  expect(f.client.updateRecapImageSettings).not.toHaveBeenCalled();
   expect(f.client.updateSettings).not.toHaveBeenCalled();
   expect((page.getByRole('checkbox', { name: 'Names' }) as HTMLInputElement).checked).toBe(true);
+});
+it('rejected_patch_keeps_preferences_and_reports_failure', async () => {
+  const { page, f } = mount(); await settle();
+  vi.mocked(f.client.updateRecapImageSettings).mockRejectedValue(new Error('Update operation is busy.'));
+  await fireEvent.click(page.getByRole('button', { name: 'Recap image options' }));
+  const names = page.getByRole('checkbox', { name: 'Names' }) as HTMLInputElement;
+  await fireEvent.click(names); await settle();
+  expect(f.client.updateRecapImageSettings).toHaveBeenCalledWith({ names: false, loot: true, fights: true });
+  expect(f.client.updateSettings).not.toHaveBeenCalled();
+  expect(names.checked).toBe(true);
+  expect(page.getByRole('status').textContent).toBe("Couldn't save image options");
+  expect((await f.client.querySettings()).recap_image).toEqual({ names: true, loot: true, fights: true });
+  vi.mocked(f.client.updateRecapImageSettings).mockResolvedValue(undefined);
+  await fireEvent.click(names); await settle();
+  expect(names.checked).toBe(false);
 });
 it('render_failure_reports_failure_without_writing', async () => {
   const write = clipboard(); vi.spyOn(images, 'renderRecapImage').mockRejectedValue(new Error('Synthetic null blob'));
@@ -136,12 +159,12 @@ it('copy_and_options_keep_focus_while_busy_and_ignore_repeated_activation', asyn
   expect(document.activeElement).toBe(copy); expect(raster).toHaveBeenCalledOnce();
   rendering.resolve(new Blob()); await settle();
   await fireEvent.click(page.getByRole('button', { name: 'Recap image options' }));
-  const saving = deferred<void>(); vi.mocked(f.client.updateSettings).mockReturnValue(saving.promise);
+  const saving = deferred<void>(); vi.mocked(f.client.updateRecapImageSettings).mockReturnValue(saving.promise);
   const names = page.getByRole('checkbox', { name: 'Names' }) as HTMLInputElement; names.focus();
   await fireEvent.click(names); await settle();
   expect(names.matches(':disabled')).toBe(false); expect(names.getAttribute('aria-disabled')).toBe('true');
   expect(document.activeElement).toBe(names);
-  await fireEvent.click(names); await settle(); expect(f.client.updateSettings).toHaveBeenCalledOnce();
+  await fireEvent.click(names); await settle(); expect(f.client.updateRecapImageSettings).toHaveBeenCalledOnce();
   expect(names.checked).toBe(true);
   saving.resolve(); await settle(); expect(names.checked).toBe(false);
 });

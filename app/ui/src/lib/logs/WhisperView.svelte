@@ -23,7 +23,7 @@
   import WhisperThread from './WhisperThread.svelte';
   import ErrorBar from './ErrorBar.svelte';
   import NewDataPill from './NewDataPill.svelte';
-  import { hideChatSender } from './chat-settings';
+  import { hideChatSender, SETTINGS_UNAVAILABLE } from './chat-settings';
   import { serializeChatReads } from './chat-reader';
   import { appendNewest, newestRows, reachesLoadedRows } from './whisper-screen';
 
@@ -41,6 +41,8 @@
   let partners = $state.raw<WhisperPartners>({ rows: [], people: 0, lines: 0 });
   let totals = $state.raw<{ people: number; lines: number } | null>(null);
   let settings = $state.raw<ChatSettings | null>(null);
+  let settingsFailed = $state(false), settingsRevision = $state(0), settingsClient: typeof client;
+  const settingsUnavailable = $derived(settingsFailed && settings === null);
   let pages = $state.raw<ChatRow[][]>([]), next = $state.raw<ChatCursor | null>(null);
   let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading saved whispers', retryAvailable: false });
   let controller = $state.raw<HistoryController>();
@@ -77,10 +79,24 @@
     pages = Array.from({ length: Math.ceil(rows.length / 100) }, (_, i) => rows.slice(i * 100, (i + 1) * 100));
   }
   $effect(() => {
+    const owner = reader, source = client;
+    void settingsRevision;
+    let current = true;
+    untrack(() => {
+      // Settings belong to one client: a different client must not keep presenting another's settings or error,
+      // but disabling and re-enabling the same client keeps them while the re-read runs. Retry keeps the error
+      // (and the focused Retry control) mounted until its read resolves.
+      if (source !== settingsClient) { settingsClient = source; settings = null; settingsFailed = false; }
+    });
+    if (owner) {
+      void owner.querySettings().then(value => { if (current) { settings = value.chat; settingsFailed = false; } })
+        .catch(() => { if (current) settingsFailed = true; });
+    }
+    return () => { current = false; };
+  });
+  $effect(() => {
     const owner = reader;
     if (!owner) return;
-    let current = true;
-    void owner.querySettings().then(value => { if (current) settings = value.chat; }).catch(() => {});
     const receive = (state: HistoryState) => untrack(() => {
       history = state;
       if (state.phase !== 'ready' || !state.value || state.value === handled) {
@@ -116,7 +132,7 @@
     const instance = createRunHistory(owner, receive, { cache: historyCache });
     const people = createRunHistory(owner, receive, { cache: historyCache });
     controller = instance; peopleController = people;
-    return () => { current = false; instance.dispose(); people.dispose(); };
+    return () => { instance.dispose(); people.dispose(); };
   });
   $effect(() => {
     const latest = required, bottom = isBottom, matching = pendingCount, scope = `${scopeKey}:${streamId}`;
@@ -198,6 +214,7 @@
   <p class="sr-only" role="status" aria-live="polite">{missingRow}</p>
   <ChatToolbar whisper channel="whisper" {runId} filter={{ ...filter, query }} rows={[]} partners={partners.rows} hiddenCount={pages.flat().filter(row => row.hidden).length} latestAt={null} onApply={apply} onOpen={() => {}} />
   {#if error}<p role="alert">{error}</p>{/if}
+  {#if settingsUnavailable}<ErrorBar message={SETTINGS_UNAVAILABLE} onRetry={() => settingsRevision++} />{/if}
   {#if history.phase === 'error'}<ErrorBar message="Couldn't load whispers. Your filters are kept." onRetry={() => { loading = true; (stage === 'people' ? peopleController : controller)?.retry(); }} />{/if}
   {#if !client}<p>Chat unavailable</p>
   {:else if settings?.store.whisper === false}<ChatStorageOff channel="whisper" onEnable={enableStorage} />
