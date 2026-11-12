@@ -8,7 +8,7 @@ import type { ChatFilter } from '../../src/lib/bindings/ChatFilter';
 import type { ChatMessageView } from '../../src/lib/bindings/ChatMessageView';
 import { defaultLogsPosition, emptyListState, type ListState } from '../../src/lib/navigation/state';
 import type { LogsFixtureQueries } from '../../src/lib/bridge/fixture';
-import { advance, flush } from '../runs/fixtures';
+import { advance, deferred, flush } from '../runs/fixtures';
 import { chatLineLabel, chatTime } from '../../src/lib/logs/presentation';
 afterEach(cleanup);
 const row = (n: number, text: string, extra: Partial<ChatMessageView> = {}) => ({ hidden: false, message: {
@@ -36,7 +36,7 @@ it('reads the selected channel with NPC lines hidden by default', async () => {
 
 const cursor = { at: '1000', id: 'live-1:chat:1' };
 const defaultFilter = (): ChatFilter => ({ channel: null, sender: null, query: '', run_id: null, show_npc: false, show_hidden: false, cursor: null, limit: 100 });
-function mount(options: { savedState?: ListState; channel?: 'all' | 'guild' | 'party'; runId?: string; seedSender?: string; hiddenKeywords?: string[]; settingsFailures?: number; listChat?: LogsFixtureQueries['listChat'] } = {}) {
+function mount(options: { savedState?: ListState; channel?: 'all' | 'guild' | 'party'; runId?: string; seedSender?: string; hiddenKeywords?: string[]; settingsFailures?: number; gate?: { wait?: Promise<unknown> }; listChat?: LogsFixtureQueries['listChat'] } = {}) {
   const listChat = vi.fn(options.listChat ?? (filter => ({ rows: [row(1, filter.cursor ? 'older' : 'latest')], next: filter.cursor ? null : cursor })));
   const client = createClient(createFixtureTransport(fixture, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { listChat }));
   if (options.hiddenKeywords) {
@@ -45,7 +45,7 @@ function mount(options: { savedState?: ListState; channel?: 'all' | 'guild' | 'p
   }
   if (options.settingsFailures) {
     const settings = client.querySettings; let failures = options.settingsFailures;
-    client.querySettings = vi.fn(async () => { if (failures-- > 0) throw new Error('synthetic settings failure'); return settings(); });
+    client.querySettings = vi.fn(async () => { if (failures-- > 0) { await options.gate?.wait; throw new Error('synthetic settings failure'); } return settings(); });
   }
   const pane = document.createElement('main'); document.body.append(pane);
   const onStateChange = vi.fn(), onRowsReady = vi.fn();
@@ -398,6 +398,52 @@ describe('stable selection and reversible spam presentation', () => {
       expect(view.client.querySettings).toHaveBeenCalledTimes(2);
       expect(screen.getByText("Couldn't load chat settings")).toBeTruthy();
       expect((screen.getByRole('checkbox', { name: 'Filter spam' }) as HTMLInputElement).disabled).toBe(true);
+    });
+    it('keeps loaded settings while the same client is disabled, re-enabled and re-read', async () => {
+      const view = mount({ listChat: ad }); await flush();
+      const real = view.client.querySettings, reread = deferred<Awaited<ReturnType<typeof real>>>();
+      view.client.querySettings = vi.fn(async () => { const value = await real(); return { ...value, chat: { ...value.chat, filter_spam: false } }; });
+      await view.rerender({ enabled: false }); await flush(); await view.rerender({ enabled: true }); await flush();
+      expect(screen.getByText('synthgold-shop.com delivery')).toBeTruthy();
+      view.client.querySettings = vi.fn(() => reread.promise);
+      await view.rerender({ enabled: false }); await flush(); await view.rerender({ enabled: true }); await flush();
+      const toggle = screen.getByRole('checkbox', { name: 'Filter spam' }) as HTMLInputElement;
+      expect(toggle.disabled).toBe(false); expect(toggle.checked).toBe(false); expect(toggle.indeterminate).toBe(false);
+      expect(screen.getByText('synthgold-shop.com delivery')).toBeTruthy();
+      expect(screen.queryByText("Couldn't load chat settings")).toBeNull();
+    });
+    it('does not present the previous client\'s settings when a different client fails to read', async () => {
+      const view = mount({ listChat: ad }); await flush();
+      expect(screen.queryByText('synthgold-shop.com delivery')).toBeNull();
+      const other = createClient(createFixtureTransport(fixture, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { listChat: ad }));
+      other.querySettings = vi.fn(async () => { throw new Error('synthetic settings failure'); });
+      await view.rerender({ client: other }); await flush();
+      const error = screen.getByText("Couldn't load chat settings");
+      expect(error.closest('[role="alert"]')?.querySelector('button')?.textContent).toBe('Retry');
+      const toggle = screen.getByRole('checkbox', { name: 'Filter spam' }) as HTMLInputElement;
+      expect(toggle.indeterminate).toBe(true); expect(toggle.disabled).toBe(true);
+      expect(screen.getByText('synthgold-shop.com delivery')).toBeTruthy();
+    });
+    it('shows no settings error without a client', async () => {
+      const view = mount({ settingsFailures: 1, listChat: ad }); await flush();
+      expect(screen.getByText("Couldn't load chat settings")).toBeTruthy();
+      await view.rerender({ client: undefined }); await flush();
+      expect(screen.queryByText("Couldn't load chat settings")).toBeNull();
+    });
+    it('keeps Retry mounted and focused until the retried read resolves, and describes the disabled filter', async () => {
+      const gate: { wait?: Promise<unknown> } = {};
+      mount({ settingsFailures: 2, gate, listChat: ad }); await flush();
+      const toggle = screen.getByRole('checkbox', { name: 'Filter spam' }) as HTMLInputElement;
+      expect(document.getElementById(toggle.getAttribute('aria-describedby')!)?.textContent).toMatch(/unavailable/);
+      const retried = deferred<void>(); gate.wait = retried.promise;
+      const retry = screen.getByRole('button', { name: 'Retry' }); retry.focus();
+      await fireEvent.click(retry); await flush();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBe(retry); expect(document.activeElement).toBe(retry);
+      retried.resolve(); await flush();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBe(retry);
+      await fireEvent.click(retry); await flush();
+      expect(screen.queryByText("Couldn't load chat settings")).toBeNull();
+      expect(toggle.hasAttribute('aria-describedby')).toBe(false);
     });
     it('behaves as before when the first read succeeds', async () => {
       mount({ listChat: ad }); await flush();

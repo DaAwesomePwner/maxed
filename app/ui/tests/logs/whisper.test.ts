@@ -17,7 +17,7 @@ const row = (n: number, name = 'Vexlin'): ChatRow => ({ hidden: false, message: 
   sender_kind: 'player', is_local: n % 2 === 0, stars: 72, supporter: false, text: `message ${n}`, truncated: false,
 } });
 const people: WhisperPartner[] = ['Vexlin', 'Quenby'].map((name, i) => ({ name, lines: 650, last_at: String((650 - i) * 1_000_000), last_text: `latest from ${name}`, last_direction: 'incoming', stars: 72 }));
-function mount(options: { partner?: string; savedPartner?: string; count?: number; stored?: boolean; people?: WhisperPartner[]; runId?: string; settingsFailures?: number } = {}) {
+function mount(options: { partner?: string; savedPartner?: string; count?: number; stored?: boolean; people?: WhisperPartner[]; runId?: string; settingsFailures?: number; gate?: { wait?: Promise<unknown> } } = {}) {
   const preview = createLogsPreview('default'), client = preview.client;
   let hidden: string[] = [], count = options.count ?? 650;
   const order: string[] = [];
@@ -34,7 +34,7 @@ function mount(options: { partner?: string; savedPartner?: string; count?: numbe
   });
   client.listWhisperPartners = listWhisperPartners; client.listChat = listChat;
   const querySettings = client.querySettings; let failures = options.settingsFailures ?? 0;
-  client.querySettings = vi.fn(async () => { if (failures-- > 0) throw new Error('synthetic settings failure'); const settings = await querySettings(); settings.chat.store.whisper = options.stored ?? true; return settings; });
+  client.querySettings = vi.fn(async () => { if (failures-- > 0) { await options.gate?.wait; throw new Error('synthetic settings failure'); } const settings = await querySettings(); settings.chat.store.whisper = options.stored ?? true; return settings; });
   client.updateChatSettings = vi.fn(async settings => { hidden = settings.hidden_senders; });
   const savedState = { ...emptyListState(), logsPosition: { ...defaultLogsPosition(), whisper: { query: '', showHidden: false, partner: options.savedPartner ?? null } } };
   const pane = document.createElement('main'); pane.innerHTML = '<h1 tabindex="-1">Logs</h1>'; document.body.append(pane);
@@ -317,4 +317,40 @@ it('shows no settings error when the first read succeeds', async () => {
   expect(view.client.querySettings).toHaveBeenCalledTimes(1);
   expect(screen.queryByText("Couldn't load chat settings")).toBeNull();
   expect(screen.getByRole('button', { name: /turn on/i })).toBeTruthy();
+});
+it('keeps loaded settings while the same client is disabled, re-enabled and re-read', async () => {
+  const view = mount({ stored: false }); await flush();
+  expect(screen.getByRole('button', { name: /turn on/i })).toBeTruthy();
+  const reread = deferred<Awaited<ReturnType<typeof view.client.querySettings>>>();
+  view.client.querySettings = vi.fn(() => reread.promise);
+  await view.rerender({ enabled: false }); await flush(); await view.rerender({ enabled: true }); await flush();
+  expect(screen.getByRole('button', { name: /turn on/i })).toBeTruthy();
+  expect(screen.queryByText("Couldn't load chat settings")).toBeNull();
+});
+it('does not present the previous client\'s settings when a different client fails to read', async () => {
+  const view = mount({ stored: false }); await flush();
+  const other = createLogsPreview('default').client;
+  other.querySettings = vi.fn(async () => { throw new Error('synthetic settings failure'); });
+  await view.rerender({ client: other }); await flush();
+  const error = screen.getByText("Couldn't load chat settings");
+  expect(error.closest('[role="alert"]')?.querySelector('button')?.textContent).toBe('Retry');
+  expect(screen.queryByRole('button', { name: /turn on/i })).toBeNull();
+});
+it('shows no settings error without a client', async () => {
+  const view = mount({ settingsFailures: 1 }); await flush();
+  expect(screen.getByText("Couldn't load chat settings")).toBeTruthy();
+  await view.rerender({ client: undefined }); await flush();
+  expect(screen.queryByText("Couldn't load chat settings")).toBeNull();
+});
+it('keeps Retry mounted and focused until the retried read resolves', async () => {
+  const gate: { wait?: Promise<unknown> } = {};
+  mount({ settingsFailures: 2, gate }); await flush();
+  const retried = deferred<void>(); gate.wait = retried.promise;
+  const retry = screen.getByRole('button', { name: 'Retry' }); retry.focus();
+  await fireEvent.click(retry); await flush();
+  expect(screen.getByRole('button', { name: 'Retry' })).toBe(retry); expect(document.activeElement).toBe(retry);
+  retried.resolve(); await flush();
+  expect(screen.getByRole('button', { name: 'Retry' })).toBe(retry);
+  await fireEvent.click(retry); await flush();
+  expect(screen.queryByText("Couldn't load chat settings")).toBeNull();
 });
