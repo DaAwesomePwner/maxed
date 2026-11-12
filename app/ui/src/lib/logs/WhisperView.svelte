@@ -41,7 +41,7 @@
   let partners = $state.raw<WhisperPartners>({ rows: [], people: 0, lines: 0 });
   let totals = $state.raw<{ people: number; lines: number } | null>(null);
   let settings = $state.raw<ChatSettings | null>(null);
-  let settingsFailed = $state(false), settingsRevision = $state(0);
+  let settingsFailed = $state(false), settingsRevision = $state(0), settingsClient: typeof client;
   const settingsUnavailable = $derived(settingsFailed && settings === null);
   let pages = $state.raw<ChatRow[][]>([]), next = $state.raw<ChatCursor | null>(null);
   let history = $state.raw<HistoryState>({ phase: 'loading', value: null, message: 'Loading saved whispers', retryAvailable: false });
@@ -79,13 +79,19 @@
     pages = Array.from({ length: Math.ceil(rows.length / 100) }, (_, i) => rows.slice(i * 100, (i + 1) * 100));
   }
   $effect(() => {
-    const owner = reader;
+    const owner = reader, source = client;
     void settingsRevision;
-    if (!owner) return;
     let current = true;
-    untrack(() => { settingsFailed = false; });
-    void owner.querySettings().then(value => { if (current) { settings = value.chat; settingsFailed = false; } })
-      .catch(() => { if (current) settingsFailed = true; });
+    untrack(() => {
+      // Settings belong to one client: a different client must not keep presenting another's settings or error,
+      // but disabling and re-enabling the same client keeps them while the re-read runs. Retry keeps the error
+      // (and the focused Retry control) mounted until its read resolves.
+      if (source !== settingsClient) { settingsClient = source; settings = null; settingsFailed = false; }
+    });
+    if (owner) {
+      void owner.querySettings().then(value => { if (current) { settings = value.chat; settingsFailed = false; } })
+        .catch(() => { if (current) settingsFailed = true; });
+    }
     return () => { current = false; };
   });
   $effect(() => {

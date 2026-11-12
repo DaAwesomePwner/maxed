@@ -78,7 +78,7 @@
   let selectedSender = $derived(selected?.message.sender ?? null);
   let settings = $state.raw<ChatSettings | null>(null);
   let spamSaving = $state(false);
-  let settingsFailed = $state(false), settingsRevision = $state(0);
+  let settingsFailed = $state(false), settingsRevision = $state(0), settingsClient: typeof client;
   let settingsUnavailable = $derived(settingsFailed && settings === null);
   let spamFilter = $derived(spamFilterFor(settings, settingsUnavailable));
   let shown = $derived(presentChat(page?.rows ?? [], spamFilter ?? false));
@@ -100,11 +100,16 @@
   let storageChannel = $derived(channel === 'all' ? null : channel);
   let storageOff = $derived(storageChannel !== null && settings?.store[storageChannel] === false);
   $effect(() => {
-    const owner = reader;
+    const owner = reader, source = client;
     void settingsRevision;
     let current = true;
+    untrack(() => {
+      // Settings belong to one client: a different client must not keep presenting another's settings or error,
+      // but disabling and re-enabling the same client keeps them while the re-read runs. Retry keeps the error
+      // (and the focused Retry control) mounted until its read resolves.
+      if (source !== settingsClient) { settingsClient = source; settings = null; settingsFailed = false; }
+    });
     if (owner) {
-      untrack(() => { settingsFailed = false; });
       void owner.querySettings().then(value => { if (current) { settings = value.chat; settingsFailed = false; } })
         .catch(() => { if (current) settingsFailed = true; });
     }
@@ -216,7 +221,7 @@
   <HistoryStatus {history} />
   <p class="sr-only" role="status" aria-live="polite">{list.missingRow}</p>
   <ChatToolbar {channel} {runId} {filter} rows={knownRows} {partners} hiddenCount={page?.rows.filter(row => row.hidden).length ?? 0} latestAt={page?.rows[0]?.message.at ?? null} onApply={apply} onOpen={() => pickerOpened = true} />
-  <div class="spam-controls"><label><input type="checkbox" checked={spamFilter ?? false} indeterminate={settingsUnavailable} disabled={!settings || spamSaving} onchange={event => { event.currentTarget.checked = spamFilter ?? false; void toggleSpam(); }} /> Filter spam</label>
+  <div class="spam-controls"><label><input type="checkbox" checked={spamFilter ?? false} indeterminate={settingsUnavailable} aria-describedby={settingsUnavailable ? 'chat-settings-reason' : undefined} disabled={!settings || spamSaving} onchange={event => { event.currentTarget.checked = spamFilter ?? false; void toggleSpam(); }} /> Filter spam</label>{#if settingsUnavailable}<span id="chat-settings-reason" class="sr-only">Chat settings are unavailable, so your spam filter choice is unknown.</span>{/if}
     {#if shown.hidden}<span role="status" title="Spam ads and repeated public messages hidden on this page. Turn off Filter spam to show them.">{shown.hidden} hidden</span>{/if}
   </div>
   {#if runId && client && firstReady}<RunScopeChip {runId} client={reader ?? client} removeHref={routeHref({ kind: 'logs', view: 'chat', channel })} links={[{ label: 'Events in this run ›', href: routeHref({ kind: 'logs', view: 'events', channel: 'all', runId }) }, { label: 'Run summary ›', href: routeHref({ kind: 'run', id: runId }) }]} />{/if}
