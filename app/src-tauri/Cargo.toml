@@ -73,7 +73,7 @@ bytes = "=1.12.1"
 thiserror.workspace = true
 tempfile = "=3.27.0"
 rodio = { version = "=0.22.2", default-features = false, features = ["playback", "wav"] }
-tauri-plugin-notification = { version = "=2.8.0", default-features = false }
+tauri-plugin-notification = { version = "=2.8.1", default-features = false }
 tauri-plugin-dialog = "=2.8.4"
 sha2.workspace = true
 
